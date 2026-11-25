@@ -599,7 +599,7 @@ fn window_contents(app: &FontCraftApp) -> Map<String, Value> {
     out.insert("text".into(), json!(format!("/{}", glyph.name)));
     if let Some(master) = crate::shell::masters::current_master(font, &app.view.layers) {
         out.insert("master".into(), json!(master.id));
-        if let Some(layer) = crate::shell::masters::shown_layer(font, &app.view.layers, glyph).filter(|l| l.id != master.id) {
+        if let Some(layer) = crate::shell::masters::panel_layer(font, &app.view).filter(|l| l.id != master.id) {
             let mut picks = Map::new();
             picks.insert(glyph.name.clone(), json!(layer.id));
             out.insert("layers".into(), Value::Object(picks));

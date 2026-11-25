@@ -162,7 +162,9 @@ pub const MAX_TARGETS: usize = 100_000;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum TargetKind {
-    /// `glyphs`: the same layer of several glyphs.
+    /// `glyphs`: the same layer of several glyphs. The window gives a command without [`TargetKind::Layer`] the layer it
+    /// shows too, as the `layer?` (`layers?`, `master?`) parameter its params doc names, unless the doc states that the
+    /// default is every layer or master.
     Glyphs,
     /// `glyph`, `layer?`, `side?`: one layer.
     Layer,

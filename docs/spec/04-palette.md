@@ -111,7 +111,7 @@ backup layer is deleted. Dragging a backup row onto a master row does the same.
   layers in file order. Kinds: `master`, `backup` (no special attributes), `intermediate`,
   `alternate`, `color`, `other`.
 - A new backup copies the master layer (or the layer named by `from`) and goes after that
-  master's other layers. Its default name is the date and time in UTC (`2026-10-10 14:05`). Its
+  master's other layers. Its default name is the date and time (`2026-10-10 14:05`): local from the section, UTC from the command alone. Its
   id has the usual 8-4-4-4-12 hex form and is the same in every targeted glyph. The id depends
   only on the glyphs and their layers, so replaying a journal gives the same id.
 - `layers.reorder` counts `toIndex` among the master's other layers; 0 is right under the master
@@ -130,9 +130,15 @@ backup layer is deleted. Dragging a backup row onto a master row does the same.
 - A plain click makes the row active and the only selected row. Shift+click selects the rows
   from the active layer to the clicked one, in the order the section lists them; Cmd+click adds
   or removes one row. Neither changes the active layer. Minus deletes the selected rows that are
-  not master layers; Use as Master needs exactly one selected backup.
+  not master layers; Use as Master needs one selected backup of each master.
 - Plus copies the active layer into a backup of the active layer's master.
 - In Font View there is no active layer: a click picks the row the buttons act on.
+- With several glyphs selected, in Font View or in the text, a row is a layer all of them have: the same master's layer, the
+  same id, or the same name and special attributes under the same master. Buttons, eye, rename, drag and the row menu change
+  all of them in one undo step; a click in the text shows each of them in the row's layer. With Font View in front and
+  nothing selected the section is empty (guesses, `palette.layers`).
+- The row menu acts on every selected row when the clicked one is selected. When the active layer is deleted, its master
+  layer becomes active.
 
 ## Transformations (`palette.transformations`)
 

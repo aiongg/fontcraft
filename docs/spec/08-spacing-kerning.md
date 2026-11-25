@@ -61,7 +61,9 @@ the text cursor (`spacing.currentGlyphFollowsCursor`).
 - In top-to-bottom text (`vertical: true`) the left-side shortcuts act on TSB and the right-side
   ones on BSB; a shift moves the outline up (Left) or down (Right) inside the vertical width by
   changing the vertical origin, so the outline's coordinates and the horizontal metrics stay.
-  Our guess; no source says (`spacing.shortcutModifierScheme`).
+  The keys are Up for Left and Down for Right, so the arrow still shows which way the edge moves; Cmd with Right or Left
+  goes to the start or the end of the text there. Our guess; no source says (`spacing.shortcutModifierScheme`).
+- The keys act on the layer the current glyph's text item shows.
 - Text tool required; disabled in locked-kerning mode (`spacing.shortcutsNeedTextTool`).
 - macOS reserves Ctrl+Left/Right for Mission Control by default (`spacing.ctrlArrowSystemConflict`).
 
@@ -196,7 +198,11 @@ ending alignment; meant for composites whose marks reach outside the glyph box.
 
 - "Left side" = the pair (previous glyph, current glyph); "right side" = (current glyph, next
   glyph). Ctrl picks the left pair, Cmd the right pair, Alt distinguishes kerning from spacing,
-  Shift = ×10 (`kerning.shortcutModifierScheme`).
+  Shift = ×10 (`kerning.shortcutModifierScheme`). In top-to-bottom text Up stands for Left and Down for Right: the pair
+  with the glyph above, the pair with the glyph below, among the vertical pairs (guess).
+- The line kerns a pair in the master both items show (an item's own layer, a layer picked in the Layers section), else in
+  the tab's master; the keys write that value (guess, `kerning.increaseLeft`). The Info box has no kern field between
+  glyphs of different masters (`infoBox.kerning`).
 - Step sizes are 1 and 10 only.
 - The sign of "increase" is not defined in the text, and the highlight colours do not settle
   it. The key layout mirrors the spacing shortcuts, where the same arrows add space, so we take
@@ -471,8 +477,8 @@ step in `observe`.
 18. Vertical kerning: storage, shortcuts, Kerning window listing, and the feature generated.
    **Partly answered (oracles), the rest our decision (M5):** neither fontc nor fontmake exports
    vertical kerning (no `vkrn` from a `kerningVertical` pair). M5 stores and edits vertical pairs
-   and shows them in top-to-bottom text; there are no vertical kerning shortcuts in M5. For the
-   export see question 22.
+   and shows them in top-to-bottom text, and the kerning keys act there with Up and Down (guess). For
+   the export see question 22.
 19. Implicit `kern` feature: lookup structure, script/language handling, interaction with a
     hand-written `kern` feature, and any value or size limits.
    **Answered for M5 (oracle):** M5.17 builds the lookups as fontc's kern writer does: both

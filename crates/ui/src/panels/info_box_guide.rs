@@ -117,7 +117,10 @@ mod tests {
 
     fn guide_box() -> GuideBox {
         GuideBox {
-            target: Targets { json: json!({"glyph": "A", "layer": "m01", "guide": {"scope": "local", "index": 0}}).to_string() },
+            target: Targets {
+                json: json!({"glyph": "A", "layer": "m01", "guide": {"scope": "local", "index": 0}}).to_string(),
+                ..Default::default()
+            },
             x: 100.0,
             y: 200.0,
             angle: 90.0,

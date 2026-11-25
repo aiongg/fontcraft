@@ -114,7 +114,7 @@ pub enum State {
 }
 
 pub fn project(model: &mut Tracked<CanvasModel>, files: &mut crate::canvas::color::ColorFiles, cx: &mut ProjectCx<'_>) {
-    let glyph = super::glyph::shown_glyph(cx);
+    let glyph = cx.session.font().ok().and_then(|font| crate::canvas::tools::edited_glyph(font, cx.view)).map(str::to_string);
     let side = if cx.view.edit_background { LayerSide::Background } else { LayerSide::Foreground };
     let data = cx.session.glyph_data().ok();
     let edited = cx.session.font().ok().and_then(|font| Some((font, font.glyph(glyph.as_deref()?)?))).and_then(|(font, glyph)| {

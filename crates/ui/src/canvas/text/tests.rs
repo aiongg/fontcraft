@@ -456,6 +456,102 @@ fn a_kerning_key_in_text_mode_kerns_the_pair_at_the_cursor() {
     assert!(try_post(&mut app, Msg::Tool(ToolInput::Key(KeyEvent::press(Key::Left, mods)))).is_err(), "off without kerning");
 }
 
+/// A kerning key changes the value the line shows and the Info box reads: in the master both glyphs of the pair are shown
+/// in, else in the tab's.
+#[test]
+fn a_kerning_key_writes_to_the_master_the_pair_is_kerned_in() {
+    let mut app = text_app();
+    app.session
+        .edit("setup", |font| {
+            let mut m = font.default_master().unwrap().clone();
+            m.id = "m02".into();
+            m.name = "Bold".into();
+            Arc::make_mut(&mut font.masters).push(m);
+            for name in ["A", "V"] {
+                font.glyph_mut(name)?.layers.push(fontcraft_engine::model::Layer::new("m02", 600.0));
+            }
+            Ok(())
+        })
+        .unwrap();
+    let first = app.session.font().unwrap().masters[0].id.clone();
+    shell(&mut app, "editView.setText", json!({"glyphs": ["A", "V"]}));
+    shell(&mut app, "editView.toggleTextMode", json!({"mode": "text"}));
+    assert!(app.view.text.text.set_layer(0, Some("m02")) && app.view.text.text.set_layer(1, Some("m02")));
+    shell(&mut app, "editView.setCursor", json!({"index": 1}));
+    let pair = |app: &mut FontCraftApp, master: &str| {
+        app.session.query("kerning.getPair", &json!({"left": "A", "right": "V", "master": master})).unwrap()["value"].as_f64()
+    };
+    let shown = |app: &FontCraftApp| app.models.text.layout.as_ref().unwrap().placed[1].kern;
+    let field = |app: &FontCraftApp| app.models.palette.info_box.kerning.as_ref().unwrap().edges[0].pair.as_ref().and_then(|p| p.value);
+    let before = pair(&mut app, &first);
+    key(&mut app, Key::Left, Modifiers { ctrl: true, alt: true, shift: true, ..Modifiers::NONE });
+    assert_eq!(pair(&mut app, &first), before, "the tab's master keeps its kerning");
+    let bold = pair(&mut app, "m02").unwrap();
+    assert_eq!((shown(&app), field(&app)), (bold, Some(bold)));
+    assert_ne!(Some(bold), before);
+
+    // V shown in the tab's master: the line kerns the two in it, and so does the key; the Info box has no field.
+    assert!(app.view.text.text.set_layer(1, None));
+    shell(&mut app, "editView.setCursor", json!({"index": 1}));
+    key(&mut app, Key::Right, Modifiers { ctrl: true, alt: true, ..Modifiers::NONE });
+    assert_eq!(pair(&mut app, "m02"), Some(bold));
+    assert_ne!(pair(&mut app, &first), before);
+    assert_eq!(Some(shown(&app)), pair(&mut app, &first));
+    assert!(app.models.palette.info_box.kerning.as_ref().unwrap().edges[0].pair.is_none());
+}
+
+/// In top-to-bottom text Up and Down with Ctrl and Cmd change the sidebearings above and below, with Alt the kerning
+/// above and below; Cmd with an arrow across the column goes to the ends of the text.
+#[test]
+fn the_spacing_and_kerning_keys_act_along_the_column_in_top_to_bottom_text() {
+    let mut app = text_app();
+    run(&mut app, "path.addRectangle", json!({"glyph": "V", "x": 100, "y": 100, "width": 200, "height": 200}));
+    shell(&mut app, "editView.setText", json!({"glyphs": ["A", "V", "A"]}));
+    shell(&mut app, "editView.toggleTextMode", json!({"mode": "text"}));
+    shell(&mut app, "editView.setWritingDirection", json!({"direction": "ttb"}));
+    shell(&mut app, "editView.setCursor", json!({"index": 1}));
+    let sides = |app: &mut FontCraftApp| {
+        let m = app.session.query("spacing.getMetrics", &json!({"glyph": "V"})).unwrap();
+        let side = |key: &str| m[key].as_f64().unwrap_or_else(|| panic!("{key} in {m}"));
+        (side("top"), side("bottom"), side("left"))
+    };
+    let ctrl = Modifiers { ctrl: true, ..Modifiers::NONE };
+    let cmd = Modifiers { cmd: true, ..Modifiers::NONE };
+    let start = sides(&mut app);
+    for (k, mods, top, bottom) in [
+        (Key::Up, ctrl, 1.0, 0.0),
+        (Key::Down, ctrl, -1.0, 0.0),
+        (Key::Down, cmd, 0.0, 1.0),
+        (Key::Up, cmd, 0.0, -1.0),
+        (Key::Down, Modifiers { shift: true, ..ctrl }, -10.0, 0.0),
+    ] {
+        let before = sides(&mut app);
+        key(&mut app, k, mods);
+        assert_eq!(sides(&mut app), (before.0 + top, before.1 + bottom, before.2), "{k:?} {mods:?}");
+    }
+    assert_eq!(sides(&mut app).2, start.2, "the horizontal metrics stay");
+
+    let kern = |app: &mut FontCraftApp, left: &str, right: &str| {
+        let query = json!({"left": left, "right": right, "direction": "vertical"});
+        app.session.query("kerning.getPair", &query).unwrap()["value"].as_f64().unwrap_or(0.0)
+    };
+    for (k, mods, above, below) in [
+        (Key::Up, Modifiers { alt: true, ..ctrl }, 1.0, 0.0),
+        (Key::Down, Modifiers { alt: true, ..ctrl }, -1.0, 0.0),
+        (Key::Down, Modifiers { alt: true, ..cmd }, 0.0, 1.0),
+        (Key::Up, Modifiers { alt: true, ..cmd }, 0.0, -1.0),
+    ] {
+        let before = (kern(&mut app, "A", "V"), kern(&mut app, "V", "A"));
+        key(&mut app, k, mods);
+        assert_eq!((kern(&mut app, "A", "V"), kern(&mut app, "V", "A")), (before.0 + above, before.1 + below), "{k:?} {mods:?}");
+    }
+
+    key(&mut app, Key::Left, cmd);
+    assert_eq!(get(&app)["cursor"], json!(3));
+    key(&mut app, Key::Right, cmd);
+    assert_eq!(get(&app)["cursor"], json!(0));
+}
+
 #[test]
 fn the_measurement_line_measures_each_glyph_in_text_mode_and_moves_with_cmd_ctrl_alt() {
     let mut app = text_app();

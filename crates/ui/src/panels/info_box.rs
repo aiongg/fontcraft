@@ -425,7 +425,7 @@ mod tests {
             y: Some(50.0),
             width: Some(200.0),
             height: Some(100.0),
-            place: Targets { json: json!({"glyph": "A", "layer": "m01", "points": [[0, 0]]}).to_string() },
+            place: Targets { json: json!({"glyph": "A", "layer": "m01", "points": [[0, 0]]}).to_string(), ..Default::default() },
             ..Default::default()
         };
         let model = InfoBoxModel { glyph: Some(glyph(false)), selection: Some(selection), ..Default::default() };

@@ -148,7 +148,7 @@ pub fn show(ui: &mut Ui, cx: &mut BodyCx<'_>, app: &mut FontCraftApp) {
                 app.sent.extend(steps);
             }
             Some(Pick::CopyNames(format)) => {
-                let target = glyph_menu::GlyphMenu { glyphs: vec![menu.glyph.clone()], ..Default::default() };
+                let target = glyph_menu::GlyphMenu { glyphs: menu.glyphs(), ..Default::default() };
                 app.sent.extend(glyph_menu::steps(&target, &GlyphAction::CopyNames(format)));
             }
             _ => {}

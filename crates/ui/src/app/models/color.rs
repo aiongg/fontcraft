@@ -121,7 +121,7 @@ pub fn project(models: &mut AttributesModels, cx: &mut ProjectCx<'_>, tools: &To
 }
 
 fn attributes(cx: &ProjectCx<'_>, selection: &Selection) -> Option<AttributesModel> {
-    if cx.view.edit_background {
+    if cx.view.edit_background || cx.view.tabs.font_view_shows() {
         return None;
     }
     let font = cx.session.font().ok()?;
@@ -158,7 +158,7 @@ fn attributes(cx: &ProjectCx<'_>, selection: &Selection) -> Option<AttributesMod
     let shadow = |s: Option<&fontcraft_engine::model::Shadow>| s.map(|s| ShadowLine { blur: s.blur, x: s.offset[0], y: s.offset[1] });
     let first = attrs.first();
     Some(AttributesModel {
-        targets: Some(Targets { json: Value::Object(t).to_string() }),
+        targets: Some(Targets { json: Value::Object(t).to_string(), ..Default::default() }),
         stroke_width: common(&attrs, |a| match a.stroke_width {
             Some(Dimension::Number(n)) => Some(n),
             _ => None,

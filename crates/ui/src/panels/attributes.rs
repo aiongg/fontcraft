@@ -339,7 +339,7 @@ mod tests {
     }
 
     fn targets() -> Option<Targets> {
-        Some(Targets { json: json!({"glyph": "A", "layer": "color", "shapes": [0]}).to_string() })
+        Some(Targets { json: json!({"glyph": "A", "layer": "color", "shapes": [0]}).to_string(), ..Default::default() })
     }
 
     /// A typed fill colour and Remove Stroke run their commands on the selected paths.

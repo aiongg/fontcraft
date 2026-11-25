@@ -42,6 +42,7 @@ pub mod import;
 pub mod interp;
 pub mod kerning_audit;
 pub mod kerning_questions;
+pub mod layers;
 pub mod loss_question;
 pub mod master_color;
 pub mod open_report;
@@ -137,6 +138,7 @@ pub const SPECS: &[&[DialogSpec]] = &[
     add_pixel_glyph::SPECS,
     rename_by_namelist::SPECS,
     status_definitions::SPECS,
+    layers::SPECS,
 ];
 
 /// Runs every dialog module for this pass.

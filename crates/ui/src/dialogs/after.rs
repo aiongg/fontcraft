@@ -24,6 +24,7 @@ pub fn after(command: &str, request: &Value, result: &Value) -> Option<(DialogSp
 pub fn after_run(app: &mut FontCraftApp, command: &str, request: &Value, result: &Value) {
     crate::shell::components::after_run(app, command, result);
     crate::shell::font_info::after_run(app, command, result);
+    super::layers::after_run(app, command, result);
     if app.dialogs.open.is_some() {
         return;
     }

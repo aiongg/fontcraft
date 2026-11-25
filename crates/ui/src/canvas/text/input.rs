@@ -1,6 +1,6 @@
 //! The Text tool's input, run in `drain`: a click places the cursor, a drag selects, Shift with a click extends the
 //! selection, a double-click on a glyph edits it; letters type, the deletes delete, the arrows move the cursor (with
-//! Alt by word, Cmd+Up and Cmd+Down to the text's start and end), and the spacing and kerning shortcuts (`when = textMode`) act on the glyphs at the cursor.
+//! Alt by word, with Cmd across the line to the text's start and end), and the spacing and kerning shortcuts (`when = textMode`) act on the glyphs at the cursor.
 
 use std::sync::Arc;
 
@@ -157,14 +157,29 @@ fn key(app: &mut FontCraftApp, ev: KeyEvent) -> Result<(), String> {
             };
             shell(app, id, json!({}))
         }
-        Key::Left | Key::Right | Key::Up | Key::Down => match text_mode_command(ev.key, m) {
+        Key::Left | Key::Right | Key::Up | Key::Down => match shortcut_key(app.view.text.direction, ev.key).and_then(|key| text_mode_command(key, m))
+        {
             Some(id) => shortcut(app, id),
             None if plain => move_cursor(app, ev.key, m.shift),
             None if m.alt && !m.cmd && !m.ctrl => move_by_word(app, ev.key, m.shift),
-            None if m.cmd && !m.alt && !m.ctrl && matches!(ev.key, Key::Up | Key::Down) => to_text_end(app, ev.key == Key::Down, m.shift),
+            None if m.cmd && !m.alt && !m.ctrl && along_line(app.view.text.direction, ev.key).is_none() => {
+                to_text_end(app, next_line(ev.key), m.shift)
+            }
             None => Ok(()),
         },
         Key::Return | Key::Backspace | Key::Delete | Key::Home | Key::End | Key::Tab | Key::Escape => Ok(()),
+    }
+}
+
+/// The arrow a spacing or kerning shortcut is written with when `key` is pressed in `direction`: in top-to-bottom text Up
+/// stands for Left and Down for Right, as the top sidebearing stands for the left one. `None` for an arrow across the
+/// line, which has no such shortcut.
+fn shortcut_key(direction: WritingDirection, key: Key) -> Option<Key> {
+    match (direction, key) {
+        (WritingDirection::Ttb, Key::Up) => Some(Key::Left),
+        (WritingDirection::Ttb, Key::Down) => Some(Key::Right),
+        (WritingDirection::Ttb, _) => None,
+        (WritingDirection::Ltr | WritingDirection::Rtl, key) => Some(key),
     }
 }
 
@@ -274,8 +289,8 @@ fn move_by_word(app: &mut FontCraftApp, key: Key, extend: bool) -> Result<(), St
     shell(app, "editView.setCursor", json!({"index": target, "anchor": anchor}))
 }
 
-/// Cmd+Up and Cmd+Down: the cursor to the start (`end` false) or the end of the text, in every writing direction.
-/// With Shift the selection runs from where it was anchored to there.
+/// Cmd with an arrow across the line (Up and Down; in top-to-bottom text Right and Left): the cursor to the start (`end`
+/// false) or the end of the text. With Shift the selection runs from where it was anchored to there.
 fn to_text_end(app: &mut FontCraftApp, end: bool, extend: bool) -> Result<(), String> {
     let text = &app.view.text.text;
     let (cursor, selection) = (text.cursor(), text.selection());
@@ -312,6 +327,11 @@ fn move_cursor(app: &mut FontCraftApp, key: Key, extend: bool) -> Result<(), Str
     shell(app, "editView.setCursor", json!({"index": target, "anchor": anchor}))
 }
 
+/// Whether an arrow across the line goes forward in the text: lines follow downwards, columns leftwards.
+fn next_line(key: Key) -> bool {
+    matches!(key, Key::Down | Key::Left)
+}
+
 /// The cursor place on the next line (`Down`; in vertical text the next column, `Left`) or the previous one nearest
 /// to the cursor along the line. Past the last line: the end of the text; before the first: its start.
 fn across_lines(app: &mut FontCraftApp, key: Key) -> Option<usize> {
@@ -322,8 +342,7 @@ fn across_lines(app: &mut FontCraftApp, key: Key) -> Option<usize> {
         Some(p) => p.line,
         None => layout.lines.len().checked_sub(1)?,
     };
-    // Lines follow downwards; columns leftwards.
-    let next = matches!(key, Key::Down | Key::Left);
+    let next = next_line(key);
     let target = if next { line.checked_add(1).filter(|l| *l < layout.lines.len()) } else { line.checked_sub(1) };
     let Some(to) = target.and_then(|l| layout.lines.get(l)) else { return Some(if next { state.text.len() } else { 0 }) };
     let (x, y) = layout.caret(cursor);
@@ -336,34 +355,43 @@ fn across_lines(app: &mut FontCraftApp, key: Key) -> Option<usize> {
 
 /// A spacing or kerning shortcut in text mode. A spacing key acts on the current glyph in its shown layer; it is off
 /// in locked kerning mode. A kerning key acts on the pair on the current glyph's left (`…Left`) or right (`…Right`)
-/// as the text shows it, so in right-to-left text the left pair is the current glyph and the one after it; it is off
-/// in no-kerning mode. Top-to-bottom text has no shortcuts (`docs/spec/08`, question 2).
+/// as the text shows it, so in right-to-left text the left pair is the current glyph and the one after it, and in
+/// top-to-bottom text the glyph above and the current one; it is off in no-kerning mode. The pair is kerned in the
+/// master the line kerns it in ([`super::EditText::pair_master`]).
 fn shortcut(app: &mut FontCraftApp, id: &'static str) -> Result<(), String> {
     let state = &app.view.text;
     let font = app.session.font().map_err(|e| e.to_string())?;
     let kerning = id.starts_with("kerning.");
-    match (kerning, state.kerning, state.direction) {
-        (_, _, WritingDirection::Ttb) => return Err("The spacing and kerning keys do not work in top-to-bottom text".into()),
-        (true, KerningMode::None, _) => return Err("The kerning keys are off in the no-kerning mode".into()),
-        (false, KerningMode::Locked, _) => return Err("The spacing keys are off in the locked kerning mode".into()),
+    match (kerning, state.kerning) {
+        (true, KerningMode::None) => return Err("The kerning keys are off in the no-kerning mode".into()),
+        (false, KerningMode::Locked) => return Err("The spacing keys are off in the locked kerning mode".into()),
         _ => {}
     }
-    let master = crate::shell::masters::current_master(font, &app.view.layers).map(|m| m.id.clone()).ok_or("the font has no master")?;
     let params = if kerning {
         let current = state.edited_index().ok_or("the edit view has no current glyph")?;
-        let before = current.checked_sub(1).and_then(|i| state.item_glyph(i));
-        let at = state.item_glyph(current);
-        let next = current.checked_add(1).and_then(|i| state.item_glyph(i));
         let rtl = state.direction == WritingDirection::Rtl;
-        let (left, right) = if id.contains("Left") != rtl { (before, at) } else { (at, next) };
-        let (Some(left), Some(right)) = (left, right) else {
+        let first = if id.contains("Left") != rtl { current.checked_sub(1) } else { Some(current) };
+        let pair = first.and_then(|first| Some((first, first.checked_add(1)?)));
+        let glyphs = pair.and_then(|(first, second)| state.item_glyph(first).zip(state.item_glyph(second)));
+        let (Some((first, second)), Some((left, right))) = (pair, glyphs) else {
             return Err("A kerning key needs a glyph on each side of the pair".into());
         };
-        json!({"left": left, "right": right, "master": master, "direction": if rtl { "rtl" } else { "ltr" }})
+        let master = state.pair_master(font, &app.view.layers, first, second).ok_or("the font has no master")?;
+        json!({"left": left, "right": right, "master": master.id, "direction": state.direction.layout().name()})
     } else {
-        let glyph = state.current().ok_or("the edit view has no current glyph")?;
-        let layer = font.glyph(glyph).and_then(|g| crate::shell::masters::shown_layer(font, &app.view.layers, g)).map_or(master, |l| l.id.clone());
-        json!({"glyphs": [glyph], "layer": layer})
+        let name = state.current().ok_or("the edit view has no current glyph")?;
+        let glyph = font.glyph(name).ok_or_else(|| format!("there is no glyph `{name}`"))?;
+        let layer = crate::shell::masters::shown_layer(font, &app.view.layers, glyph)
+            .map(|l| l.id.clone())
+            .or_else(|| crate::canvas::tools::active_master(font, &app.view).map(|m| m.id.clone()))
+            .ok_or("the font has no master")?;
+        let mut params = json!({"glyphs": [name], "layer": layer});
+        if state.direction == WritingDirection::Ttb
+            && let Some(m) = params.as_object_mut()
+        {
+            m.insert("vertical".into(), json!(true));
+        }
+        params
     };
     app.apply_msg(Msg::run(id, params))
 }

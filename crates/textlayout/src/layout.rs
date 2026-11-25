@@ -2,11 +2,12 @@
 //! and hit testing.
 
 use std::collections::BTreeMap;
+use std::collections::btree_map::Entry;
 use std::ops::Range;
 use std::sync::Arc;
 
 use fontcraft_model::plist::Value;
-use fontcraft_model::{Font, Glyph, Master, metric};
+use fontcraft_model::{Font, Glyph, Layer, Master, metric};
 use fontcraft_spacing::kerning::{Direction, KernError, KernIndex, Table};
 use fontcraft_spacing::metrics_source;
 
@@ -73,7 +74,8 @@ pub struct Options<'a> {
     /// The kerning index of this font revision; `None` builds one when kerning is shown.
     pub index: Option<&'a KernIndex>,
     /// Glyphs shown in another layer than their layer of the master: glyph name → layer id. The
-    /// width and vertical metrics come from that layer; a layer the glyph lacks is ignored.
+    /// width and vertical metrics come from that layer, and its master decides the kerning as
+    /// [`kerning_master`] says; a layer the glyph lacks is ignored.
     pub layers: Option<&'a BTreeMap<String, String>>,
     /// Horizontal text only: order runs of the other direction by the Unicode Bidirectional
     /// Algorithm ([`crate::bidi`]), so a left-to-right word in right-to-left text keeps its
@@ -249,6 +251,9 @@ struct Metrics {
     /// side); they differ only when shaping made the item several glyphs.
     kern_id: Option<usize>,
     kern_last: Option<usize>,
+    /// The masters, as indexes, that the first and the last glyph are shown in.
+    master: usize,
+    master_last: usize,
     /// The glyphs after the first and their advances, when shaping made the item several glyphs.
     extra: Vec<(Arc<str>, f64)>,
     /// Shaping merged the item's glyph into an earlier item's.
@@ -267,6 +272,49 @@ struct Metrics {
 
 fn finite_or_zero(v: f64) -> f64 {
     if v.is_finite() { v } else { 0.0 }
+}
+
+/// The layer item `item` of `text` shows `glyph` in when it is picked: the item's own ([`Text::layer_of`]), else the one
+/// `layers` names for the glyph. A layer the glyph lacks is ignored.
+fn picked_layer<'f>(glyph: &'f Glyph, text: &Text, item: usize, layers: Option<&BTreeMap<String, String>>) -> Option<&'f Layer> {
+    let find = |id: &str| glyph.layers.iter().find(|l| l.id == id);
+    let own = text.layer_of(item, &glyph.name).and_then(find);
+    own.or_else(|| layers.and_then(|l| l.get(&*glyph.name)).and_then(|id| find(id)))
+}
+
+/// The index of the master a picked layer belongs to, else `home`.
+fn layer_home(font: &Font, layer: Option<&Layer>, home: usize) -> usize {
+    layer.and_then(|l| font.masters.iter().position(|m| m.id == l.master)).unwrap_or(home)
+}
+
+/// The master item `item` of `text` shows its glyph in, when the text is laid out in `master` with [`Options::layers`]
+/// `layers`. `None` when the font lacks `master`.
+pub fn item_master<'f>(font: &'f Font, master: &str, text: &Text, layers: Option<&BTreeMap<String, String>>, item: usize) -> Option<&'f Master> {
+    let home = font.masters.iter().position(|m| m.id == master)?;
+    let name = match text.items().get(item) {
+        Some(Item::Glyph { name, .. }) => Some(&**name),
+        Some(Item::Placeholder) => text.current_glyph(),
+        Some(Item::Missing(_) | Item::LineBreak) | None => None,
+    };
+    let shown = name.and_then(|n| font.glyph(n)).map_or(home, |g| layer_home(font, picked_layer(g, text, item, layers), home));
+    font.masters.get(shown)
+}
+
+/// The master whose kerning [`layout()`] applies between the neighbouring items `first` and `second` of `text` (logical
+/// order): the [`item_master`] of both when it is the same, else `master`. `None` when the font lacks `master`.
+pub fn kerning_master<'f>(
+    font: &'f Font,
+    master: &str,
+    text: &Text,
+    layers: Option<&BTreeMap<String, String>>,
+    first: usize,
+    second: usize,
+) -> Option<&'f Master> {
+    let of = |item| item_master(font, master, text, layers, item);
+    match (of(first), of(second)) {
+        (Some(a), Some(b)) if a.id == b.id => Some(a),
+        _ => font.masters.iter().find(|m| m.id == master),
+    }
 }
 
 /// Lays `text` out in `master`. Widths and vertical metrics come from an item's own layer
@@ -294,20 +342,22 @@ pub fn layout(font: &Font, master: &str, text: &Text, options: &Options<'_>) -> 
             Some(&built)
         }
     };
+    let home = font.masters.iter().position(|m| m.id == master).unwrap_or(0);
     let table: Option<Table<'_>> = index.map(|i| i.table(direction, master)).transpose()?;
     let mut levels = (options.bidi && direction != Direction::Vertical)
         .then(|| bidi::levels(text.items(), direction == Direction::Rtl, options.embeddings))
         .flatten();
     // A run of the other direction kerns from that direction's table.
+    let opposite = if direction == Direction::Rtl { Direction::Ltr } else { Direction::Rtl };
     let other: Option<Table<'_>> = match (&levels, index) {
-        (Some(_), Some(i)) => Some(i.table(if direction == Direction::Rtl { Direction::Ltr } else { Direction::Rtl }, master)?),
+        (Some(_), Some(i)) => Some(i.table(opposite, master)?),
         _ => None,
     };
 
     let current = text.current_glyph().and_then(|n| font.glyph(n).map(|g| (Arc::<str>::from(n), g)));
     let metrics_of = |name: Arc<str>, glyph: &Glyph, item: usize| {
-        let own = text.layer_of(item, &name).and_then(|id| glyph.layers.iter().find(|l| l.id == id));
-        let picked = own.or_else(|| options.layers.and_then(|l| l.get(&*name)).and_then(|id| glyph.layers.iter().find(|l| l.id == *id)));
+        let picked = picked_layer(glyph, text, item, options.layers);
+        let home = layer_home(font, picked, home);
         let layer = picked.or_else(|| glyph.layer(&source.id)).or_else(|| glyph.layer(master));
         let width = finite_or_zero(layer.map_or(0.0, |l| l.width));
         let vo = finite_or_zero(layer.and_then(|l| l.info.vert_origin).unwrap_or(0.0));
@@ -320,6 +370,8 @@ pub fn layout(font: &Font, master: &str, text: &Text, options: &Options<'_>) -> 
             glyph: Some(name),
             kern_id,
             kern_last: kern_id,
+            master: home,
+            master_last: home,
             extra: Vec::new(),
             merged: false,
             entry,
@@ -335,6 +387,8 @@ pub fn layout(font: &Font, master: &str, text: &Text, options: &Options<'_>) -> 
         glyph: None,
         kern_id: None,
         kern_last: None,
+        master: home,
+        master_last: home,
         extra: Vec::new(),
         merged: false,
         entry: None,
@@ -383,6 +437,7 @@ pub fn layout(font: &Font, master: &str, text: &Text, options: &Options<'_>) -> 
             for more in found {
                 first.advance += more.advance;
                 first.kern_last = more.kern_id;
+                first.master_last = more.master_last;
                 first.exit = more.exit;
                 if let Some(name) = more.glyph {
                     first.extra.push((name, more.advance));
@@ -423,6 +478,14 @@ pub fn layout(font: &Font, master: &str, text: &Text, options: &Options<'_>) -> 
             last = Some(i);
         }
     }
+    // Items shown in another master than the text's kern among themselves in that master.
+    let mut tables: BTreeMap<usize, [Option<Table<'_>>; 2]> = BTreeMap::from([(home, [table, other])]);
+    for m in &items {
+        if let (Some(index), Entry::Vacant(free), Some(master)) = (index, tables.entry(m.master), font.masters.get(m.master)) {
+            let of = |d: Direction| index.table(d, &master.id).ok();
+            free.insert([of(direction), other.and_then(|_| of(opposite))]);
+        }
+    }
     let attaches = options.cursive && direction == Direction::Rtl;
 
     // The cursive attachment of item `i` to the item before it: the shift along the line that
@@ -448,6 +511,9 @@ pub fn layout(font: &Font, master: &str, text: &Text, options: &Options<'_>) -> 
         if measured.get(i).copied().unwrap_or(false) && measured.get(p).copied().unwrap_or(false) {
             return 0.0;
         }
+        let (Some(first), Some(second)) = (items.get(p), items.get(i)) else { return 0.0 };
+        let shown = if first.master_last == second.master { second.master } else { home };
+        let Some([table, other]) = tables.get(&shown).copied() else { return 0.0 };
         let table = match levels {
             None => table,
             Some(levels) => {
@@ -461,7 +527,7 @@ pub fn layout(font: &Font, master: &str, text: &Text, options: &Options<'_>) -> 
                 }
             }
         };
-        match (table, items.get(p).and_then(|m| m.kern_last), items.get(i).and_then(|m| m.kern_id)) {
+        match (table, first.kern_last, second.kern_id) {
             (Some(t), Some(a), Some(b)) => t.lookup(a, b).map_or(0.0, |applied| finite_or_zero(applied.value)),
             _ => 0.0,
         }

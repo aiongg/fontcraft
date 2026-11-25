@@ -15,6 +15,8 @@ pub mod overlays;
 pub mod targets;
 pub mod tokens;
 
+use std::collections::{BTreeMap, BTreeSet};
+
 use fontcraft_engine::Session;
 use fontcraft_engine::model::glyphdata::GlyphData;
 use fontcraft_engine::model::{Font, Layer, LayerSide, Master};
@@ -92,9 +94,15 @@ pub struct Tools {
     pub cloud: crate::canvas::mark_cloud::CloudCache,
     /// What [`ToolView::marks`] was worked out from.
     pub marks_key: Option<crate::canvas::bounding_box::MarksKey>,
+    /// The nodes last selected on the foreground of each glyph that has some, by document and glyph
+    /// ([`Tools::remembered`]).
+    nodes: BTreeMap<(u64, String), BTreeSet<(usize, usize)>>,
     /// What the tool layers paint; [`Tools::refresh`] copies it from the state above.
     pub view: ToolView,
 }
+
+/// Most glyphs whose last node selection is remembered.
+const MAX_REMEMBERED: usize = 4096;
 
 impl Default for Tools {
     fn default() -> Self {
@@ -112,6 +120,7 @@ impl Default for Tools {
             smart: crate::canvas::smart::SmartCache::default(),
             cloud: crate::canvas::mark_cloud::CloudCache::default(),
             marks_key: None,
+            nodes: BTreeMap::new(),
             view: ToolView::default(),
         }
     }
@@ -156,9 +165,35 @@ fn rename_target(target: &mut Option<Target>, old: &str, new: &str) {
 }
 
 impl Tools {
+    /// The nodes last selected in the edit view in `glyph` of document `document`, by shape and node; `None` when none
+    /// were, or when the selection was last cleared there.
+    pub fn remembered(&self, document: u64, glyph: &str) -> Option<&BTreeSet<(usize, usize)>> {
+        let shown = self.target.as_ref().filter(|t| t.glyph == glyph && t.side == LayerSide::Foreground);
+        let points = match shown.filter(|_| self.checked.is_some_and(|(id, _)| id == document)) {
+            Some(_) => Some(&self.selection.points),
+            None => self.nodes.get(&(document, glyph.to_string())),
+        };
+        points.filter(|points| !points.is_empty())
+    }
+
+    /// Remembers the nodes selected in the glyph the selection belongs to, before it leaves that glyph.
+    fn remember(&mut self) {
+        let (Some(target), Some((document, _))) = (&self.target, self.checked) else { return };
+        if target.side != LayerSide::Foreground {
+            return;
+        }
+        let key = (document, target.glyph.clone());
+        if self.selection.points.is_empty() {
+            self.nodes.remove(&key);
+        } else if self.nodes.len() < MAX_REMEMBERED || self.nodes.contains_key(&key) {
+            self.nodes.insert(key, self.selection.points.clone());
+        }
+    }
+
     /// Takes the selection out, leaving none: its tab goes behind another. A running interaction is not cancelled
     /// here; tabs switch between messages, when none runs.
     pub fn park(&mut self) -> ParkedSelection {
+        self.remember();
         self.checked = None;
         self.before = None;
         // A tab's image selection is not kept: the image is selected again with a click.
@@ -169,6 +204,10 @@ impl Tools {
     /// Keeps the selection on glyph `old` after it was renamed `new`.
     pub fn rename_glyph(&mut self, old: &str, new: &str) {
         rename_target(&mut self.target, old, new);
+        let Some((document, _)) = self.checked else { return };
+        if let Some(points) = self.nodes.remove(&(document, old.to_string())) {
+            self.nodes.insert((document, new.to_string()), points);
+        }
     }
 
     /// Puts a tab's selection back: the tab shows again.

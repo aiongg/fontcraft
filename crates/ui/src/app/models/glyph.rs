@@ -21,13 +21,9 @@ pub struct GlyphMetrics {
     pub right: Option<f64>,
 }
 
-/// The glyph the glyph panels show: the selected one, else the font's first.
+/// The name of the glyph the glyph panels show ([`masters::shown_glyph`]).
 pub fn shown_glyph(cx: &ProjectCx<'_>) -> Option<String> {
-    let font = cx.session.font().ok()?;
-    match &cx.view.glyph {
-        Some(name) if font.glyphs.get(name).is_some() => Some(name.clone()),
-        _ => font.glyphs.first().map(|g| g.name.clone()),
-    }
+    masters::shown_glyph(cx.session.font().ok()?, cx.view).map(|g| g.name.clone())
 }
 
 pub fn project(model: &mut Tracked<GlyphMetrics>, cx: &mut ProjectCx<'_>) {
@@ -35,10 +31,7 @@ pub fn project(model: &mut Tracked<GlyphMetrics>, cx: &mut ProjectCx<'_>) {
         super::set(model, GlyphMetrics::default());
         return;
     };
-    let layer = cx.session.font().ok().and_then(|font| {
-        let shown = font.glyph(&glyph)?;
-        masters::shown_layer(font, &cx.view.layers, shown).map(|l| l.id.clone())
-    });
+    let layer = cx.session.font().ok().and_then(|font| masters::panel_layer(font, cx.view)).map(|l| l.id.clone());
     let mut params = json!({ "glyph": glyph });
     if let Some(id) = &layer
         && let Some(map) = params.as_object_mut()

@@ -213,7 +213,7 @@ mod tests {
     /// The Stroke section over one open stroked path, recording what it posts.
     fn open_path(posted: &Rc<RefCell<Vec<Msg>>>) -> Fixture {
         let model = Tracked::new(StrokeModel {
-            targets: Some(Targets { json: json!({"glyph": "l", "layer": "m01", "shapes": [0]}).to_string() }),
+            targets: Some(Targets { json: json!({"glyph": "l", "layer": "m01", "shapes": [0]}).to_string(), ..Default::default() }),
             stroked: true,
             any_open: true,
             width: Some(40.0),
@@ -264,7 +264,7 @@ mod tests {
     #[test]
     fn an_emptied_width_removes_the_stroke() {
         let model = Tracked::new(StrokeModel {
-            targets: Some(Targets { json: json!({"glyph": "l", "layer": "m01", "shapes": [0]}).to_string() }),
+            targets: Some(Targets { json: json!({"glyph": "l", "layer": "m01", "shapes": [0]}).to_string(), ..Default::default() }),
             stroked: true,
             any_open: true,
             width: Some(40.0),

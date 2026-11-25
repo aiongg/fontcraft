@@ -925,11 +925,11 @@ guesses = [
 
 [[command]]
 id = "path.assignBackground"
-label = "Assign Background"
+label = "Assign Background…"
 menu = ["Path"]
 shortcut = ""
 kind = "engine"
-params = "{file?: path (default: this font), glyphs?: [names], master?: id} → {glyphs: [names], skipped: [{glyph, layer?, reason}]}"
+params = "{file?: path | font?: index|title|path (default: this font), glyphs?: [names], master?: id, masterMap?: {id: source master}, onUnmatchedMaster?: position | ask} → {glyphs: [names], skipped: [{glyph, layer?, reason}], unmatched?: [{master, name, source}]}"
 area = "layers"
 milestone = "M3"
 summary = "Copies outlines from another font file into the background of every selected glyph. Glyphs are matched by name and masters by name, then by position; glyphs the source lacks are skipped and listed. Choosing the font itself as the source snapshots the current outlines so later edits can be compared against them."
@@ -938,6 +938,40 @@ status = "handbook"
 notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:24–11:30: the Path menu lists Assign Background… without a shortcut. Not run."
 guesses = [
   "Glyphs are matched by name and masters by name, then by position; a source with fewer masters gives its first (03b question 3).",
+  "From the menu the command asks for its source, this font first, then the open documents and a font file; when a master has no source master of its name, a second dialog asks which one it takes. Path › Assign Background… in the reference app, with a second font open whose masters have other names, settles both.",
+]
+observe = [
+  "Open two fonts whose masters have different names and choose Path › Assign Background… with two glyphs selected: which sources are offered, and what happens to the masters?",
+]
+
+[[panel]]
+id = "dialog.assignBackground"
+label = "Assign Background"
+location = "dialog"
+controls = ["Source: pop-up menu of this font, a font file and the other open documents", "File: the font file", "Assign / Cancel"]
+area = "layers"
+milestone = "M3"
+summary = "Asks where Path › Assign Background takes its outlines from."
+ref = "Edit View › Background"
+status = "inferred"
+notes = "M3.90 (`crates/ui/src/dialogs/layers.rs`). Assign runs path.assignBackground once, as one undo step, on the selected glyphs (every glyph when none is chosen)."
+guesses = [
+  "The dialog's controls; the handbook says only that another font or the font itself can be the source.",
+]
+
+[[panel]]
+id = "dialog.assignBackgroundMasters"
+label = "Assign Background: Masters"
+location = "dialog"
+controls = ["one pop-up menu of the source's masters per master without one of its name", "Assign / Cancel"]
+area = "layers"
+milestone = "M3"
+summary = "Pairs the masters the source has no master of the same name for, before Assign Background changes anything."
+ref = "Edit View › Background"
+status = "inferred"
+notes = "M3.90. Opens on the pairing by position; Cancel changes nothing."
+guesses = [
+  "That the pairing is asked, and that it opens on the masters at the same positions.",
 ]
 
 [[behavior]]
@@ -1007,7 +1041,7 @@ gestures = [
   "type: insert the glyphs for the typed characters at the cursor",
   "Left / Right / Up / Down: move the text cursor",
   "Alt+Left / Alt+Right: move the text cursor by word; Shift extends the selection",
-  "Cmd+Up / Cmd+Down: move the text cursor to the start / end of the text; Shift extends the selection",
+  "Cmd+Up / Cmd+Down: move the text cursor to the start / end of the text (in top-to-bottom text Cmd+Right / Cmd+Left); Shift extends the selection",
   "Escape: toggle between text mode and editing the current glyph",
   "Home / End: replace the current glyph with the previous / next glyph of the font",
   "Shift+Home / Shift+End: same, stepping through the glyphs currently listed in Font View",
@@ -1025,7 +1059,7 @@ guesses = [
   "Return types a line break; the handbook allows several lines but does not name the key.",
   "Up and Down move to the nearest place on the line above or below, and to the start or the end of the text from the first or the last line; in right-to-left text Left steps forward in the text; in top-to-bottom text Up and Down step along the column and Left and Right move between columns. Moving the cursor in such texts in the reference app settles it.",
   "Backspace and Delete with Alt or Cmd do nothing (no word or line deletion); no source names them.",
-  "The word and document keys follow the system's text conventions (Alt+Left/Right by word, Cmd+Up/Down to the ends of the text); the handbook only says that standard text editing applies.",
+  "The word and document keys follow the system's text conventions (Alt+Left/Right by word, Cmd+Up/Down to the ends of the text, Cmd+Right/Left in top-to-bottom text, where Up and Down are the spacing keys); the handbook only says that standard text editing applies.",
   "A word ends at a space, any other typed white space or a line break; Alt+Right goes past them to the end of the next word and Alt+Left to the start of the word before. Without Shift the move starts from the selection's edge on the arrow's side. In right-to-left text Alt+Left steps forward, in top-to-bottom text Alt+Up/Down move by word and Alt+Left/Right do nothing.",
   "Typing or moving the cursor past the canvas's edge scrolls the canvas sideways, the zoom kept, so the cursor stays in view; typing past the window's edge in the reference app settles it.",
   "A tab whose text holds several glyphs fits the whole text in the canvas the first time it draws, and so does a text that replaces the whole text (editView.setText, a sample string); typing keeps the zoom. Opening several glyphs in a new tab of the reference app settles it.",
@@ -1899,12 +1933,33 @@ notes = "Documented, not yet observed. Built in M5.11b: drawn while the Text too
 id = "text.selectionTargets"
 area = "spacing-kerning"
 milestone = "M5"
-summary = "In text mode a glyph command run from a menu or a shortcut (Update Metrics, Locked, Transform Metrics…) acts on every glyph of the text selection, each once, in the layer of the tab's master; with nothing selected it acts on the current glyph."
+summary = "In text mode a glyph command run from a menu or a shortcut (Update Metrics, Locked, Transform Metrics…) acts on every glyph of the text selection, each once, in the layer its text item shows; with nothing selected it acts on the current glyph, in the layer the canvas shows."
 ref = "Font View › Batch-Processing › Batch Commands; Edit View › Entering Text"
 status = "inferred"
-notes = "Built in M5.11b (`tools_glue::selection_targets`): the shell fills `glyphs` from the selected items, placeholders as the current glyph, and `layer` with the tab's master when the command takes one. The Info box's group and metric fields take the same targets (M5.22)."
+notes = "M5.50 and M5.41 (`crates/ui/src/app/targets.rs`): every command whose targets include `glyphs`, fired from a menu, a key, a dialog or the canvas menu, gets the selected glyphs, placeholders as the current glyph; the layer parameter its params doc names (`layer?`, `layers?`, `master?`) is the layer each item shows, and glyphs in several layers run as one step per layer inside one undo step. Commands whose default is every master keep it. Commands that act on nodes, paths or one layer keep the current glyph. Locked glyphs are skipped by the commands and named in the status line. The Info box's group and metric fields take the same glyphs, in the edited glyph's master (M5.22)."
 guesses = [
-  "Glyph commands in text mode take the glyphs of the text selection in the tab's master, as Font View's batch commands take the selected glyphs; the handbook does not say, and the reference app with a selected text would settle it.",
+  "Every glyph command in text mode, not only filters, takes the glyphs of the text selection, as Font View's batch commands take the selected glyphs; the handbook says so for filters only, and the reference app with a selected text would settle it.",
+  "A selected glyph changes in the layer its own text item shows (Show All Masters), not in the tab's master; a glyph that appears in two layers of the selection changes in both.",
+  "A text selection shown in several layers changes as one step per layer, all or none: a command that refuses one layer's glyphs changes no glyph, and the message names the step.",
+]
+observe = [
+  "In text mode select three of five glyphs and run Tidy up Paths, Correct Path Direction, Update Metrics and a colour label: note which glyphs change, and how many undo steps it makes.",
+]
+
+[[behavior]]
+id = "text.commandsActOnSelection"
+area = "edit-text"
+milestone = "M5"
+summary = "In text mode a right-click opens the canvas menu with the glyph items only; its items, colour swatches and Copy Glyph Names act on the selected glyphs, and the Palette's Transformations change the whole layers of the selected glyphs, as one undo step."
+ref = "Filters › Applying Filters › Filter Menu; Font View › Batch-Processing › Palette"
+status = "inferred"
+notes = "M5.41: `context_menu::open_on_text`, `palette::transform`. Which glyphs and layers: text.selectionTargets."
+guesses = [
+  "The canvas menu in text mode lists no node, path or guide items; right-clicking a glyph of a text selection in the reference app settles it.",
+  "Align in the Palette is off while several glyphs are chosen, since it lines up the objects of one layer.",
+]
+observe = [
+  "In text mode with three glyphs selected, right-click and note the items; press Mirror in the Palette and note which glyphs change.",
 ]
 
 # ───────────────────────────── Annotating ─────────────────────────────

@@ -30,7 +30,7 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
 
 fn reveal(app: &mut FontCraftApp, p: &Value) -> Result<(), String> {
     let given = params::string(p, "glyph")?;
-    let target = tools::target(&app.session, &app.view);
+    let target = tools::target(&app.session, &app.view).filter(|_| !app.font_view_shows());
     let glyph = match given {
         Some(g) => g.to_string(),
         None => target.as_ref().map(|t| t.glyph.clone()).ok_or("give `glyph`: no glyph is being edited")?,

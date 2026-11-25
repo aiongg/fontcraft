@@ -15,6 +15,71 @@ pub(crate) fn takes_param(spec: &CommandSpec, param: &str) -> bool {
     spec.params.split('→').next().is_some_and(|given| given.contains(param))
 }
 
+/// The parameter that says which layer of each glyph a command changes, when it changes the first master's layer
+/// without it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum LayerParam {
+    /// `layer?`: a layer id.
+    Layer,
+    /// `layers?`: a list of layer ids.
+    Layers,
+    /// `layer?: master id`: the id of the layer's master.
+    LayerMaster,
+    /// `master?`: the id of the layer's master.
+    Master,
+}
+
+impl LayerParam {
+    /// The parameter for layer `layer` of master `master`: its key and its value.
+    pub(crate) fn entry(self, layer: &str, master: &str) -> (&'static str, Value) {
+        match self {
+            LayerParam::Layer => ("layer", json!(layer)),
+            LayerParam::Layers => ("layers", json!([layer])),
+            LayerParam::LayerMaster => ("layer", json!(master)),
+            LayerParam::Master => ("master", json!(master)),
+        }
+    }
+}
+
+/// Which parameter of `spec` names the shown layer, read from its params doc: `layer?`, else `layers?` or `master?` when
+/// its stated default is the first master. A command that acts on every master by default keeps that default, unless it
+/// declares [`TargetKind::Layer`]; the All Masters forms take no such parameter.
+pub(crate) fn layer_param(spec: &CommandSpec) -> Option<LayerParam> {
+    let doc = spec.params.split('→').next().unwrap_or_default();
+    if let Some(part) = param_doc(doc, "layer?") {
+        let every = ["default: every", "default every", "default: all"].iter().any(|d| part.contains(d));
+        if every && !spec.targets.contains(&TargetKind::Layer) {
+            return None;
+        }
+        return Some(if part.starts_with("layer?: master id") { LayerParam::LayerMaster } else { LayerParam::Layer });
+    }
+    let first = |key: &str| param_doc(doc, key).is_some_and(|part| part.contains("default: the first master"));
+    if first("layers?") {
+        Some(LayerParam::Layers)
+    } else if first("master?") {
+        Some(LayerParam::Master)
+    } else {
+        None
+    }
+}
+
+/// The part of params doc `doc` about the parameter `key` (`layer?`): from its name to the comma after it, commas inside
+/// brackets left out.
+fn param_doc<'d>(doc: &'d str, key: &str) -> Option<&'d str> {
+    let at = doc.match_indices(key).find(|(i, _)| doc.get(..*i).and_then(|d| d.chars().next_back()).is_none_or(|c| !c.is_alphanumeric()))?.0;
+    let rest = doc.get(at..)?;
+    let mut depth = 0i32;
+    for (i, c) in rest.char_indices() {
+        match c {
+            '(' | '[' | '{' => depth = depth.saturating_add(1),
+            ')' | ']' | '}' => depth = depth.saturating_sub(1),
+            ',' if depth <= 0 => return rest.get(..i),
+            _ => {}
+        }
+    }
+    Some(rest)
+}
+
 /// `command` with its targets filled from the selection, when it takes targets and was given no parameters.
 pub fn with_targets(app: &mut FontCraftApp, command: CommandRef) -> CommandRef {
     let empty = command.params.is_null() || command.params.as_object().is_some_and(Map::is_empty);
@@ -46,7 +111,8 @@ pub fn with_targets(app: &mut FontCraftApp, command: CommandRef) -> CommandRef {
 /// The target parameters of `spec` that `selection` supplies: `glyph`, `layer`, `side` while the background is
 /// edited (when the command's params doc names `side`), and each list the command takes that the selection fills.
 ///
-/// A command whose targets include `glyphs` but not `layer` gets the edited glyph as `glyphs`. A command that takes
+/// A command whose targets include `glyphs` but not `layer` gets the edited glyph as `glyphs`. Either way a command that
+/// changes the first master's layer by default gets the shown layer ([`layer_param`]). A command that takes
 /// `segments` but not `points` gets the selected segments ([`selected_segments`]); one that takes `shapes` but not
 /// `points` also gets the paths whose on-curve nodes are all selected, which is what a selected path is.
 pub fn selection_targets(scene: &Scene, selection: &Selection, spec: &CommandSpec) -> Map<String, Value> {
@@ -95,6 +161,10 @@ pub fn selection_targets(scene: &Scene, selection: &Selection, spec: &CommandSpe
     }
     if spec.targets.contains(&TargetKind::Glyphs) && !m.contains_key("glyph") {
         m.insert("glyphs".into(), json!([scene.glyph]));
+        if let Some(param) = layer_param(spec) {
+            let (key, value) = param.entry(&scene.layer_id, &scene.layer.master);
+            m.insert(key.into(), value);
+        }
     }
     if spec.id == "cornerComponent.add" {
         let extra = selected_extra_nodes(scene, selection);

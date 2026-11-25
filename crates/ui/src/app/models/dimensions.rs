@@ -33,14 +33,16 @@ pub fn project(model: &mut Tracked<DimensionsModel>, cx: &mut ProjectCx<'_>) {
     if cx.view.workspace.layout.panel_state(&PanelId::Dimensions) == PanelState::Hidden {
         return;
     }
-    let master = cx.session.font().ok().and_then(|font| crate::canvas::tools::active_master(font, cx.view).map(|m| m.id.clone()));
+    let master = cx.session.font().ok().and_then(|font| crate::shell::masters::panel_master(font, cx.view).map(|m| m.id.clone()));
     let Some(master) = master else {
         super::set(model, DimensionsModel::default());
         return;
     };
     let mut query = Map::new();
     query.insert("master".into(), json!(master));
-    if let Some(glyph) = shown_glyph(cx) {
+    // Several glyphs selected in Font View share the notepad of the first one's script.
+    let font_view = cx.view.tabs.font_view_shows();
+    if let Some(glyph) = shown_glyph(cx).or_else(|| cx.view.font_view.selected.first().filter(|_| font_view).cloned()) {
         query.insert("glyph".into(), json!(glyph));
     }
     let Ok(reply) = cx.session.query("dimensions.getValues", &Value::Object(query)) else {

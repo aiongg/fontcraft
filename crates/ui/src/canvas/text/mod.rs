@@ -29,12 +29,12 @@ pub mod paint;
 pub mod tokens;
 pub mod tool;
 
-use craft::ui::runtime::commands::CommandRef;
-use fontcraft_engine::model::Font;
+use fontcraft_engine::model::{Font, Master};
 use fontcraft_textlayout::{Direction, Item, KerningMode, Text};
 use serde_json::{Map, Value, json};
 
 use crate::app::{FontCraftApp, ViewState};
+use crate::shell::masters::{self, LayersView};
 
 /// The id of the Text tool (`fontcraft_tools::TOOLS`), which stands for text mode.
 pub const TEXT_TOOL: &str = "text";
@@ -146,6 +146,19 @@ impl EditText {
             Item::Placeholder => self.text.current_glyph(),
             Item::Missing(_) | Item::LineBreak => None,
         }
+    }
+
+    /// The master item `index` shows its glyph in.
+    pub fn item_master<'f>(&self, font: &'f Font, layers: &LayersView, index: usize) -> Option<&'f Master> {
+        let tab = masters::current_master(font, layers)?;
+        fontcraft_textlayout::item_master(font, &tab.id, &self.text, Some(&layers.layers), index)
+    }
+
+    /// The master whose kerning the line shows between the items `first` and `second`, and the kerning keys and the Info
+    /// box edit: that of both items, else the tab's.
+    pub fn pair_master<'f>(&self, font: &'f Font, layers: &LayersView, first: usize, second: usize) -> Option<&'f Master> {
+        let tab = masters::current_master(font, layers)?;
+        fontcraft_textlayout::kerning_master(font, &tab.id, &self.text, Some(&layers.layers), first, second)
     }
 
     /// The glyphs the text selection shows, each once, in text order and at most `limit`; empty with only a cursor.
@@ -260,23 +273,6 @@ pub fn shown_glyphs(text: &Text, shown: Option<&str>) -> Vec<String> {
 /// Whether the edit view is in text mode: the Text tool is the current tool.
 pub fn text_mode(view: &ViewState) -> bool {
     view.tool == TEXT_TOOL
-}
-
-/// The glyphs a filter or a hint command on glyphs fired in text mode acts on: those the text selection shows
-/// (`filter.target.editViewTextSelection`). `None` outside text mode, without a selection, for any other command and
-/// one given parameters.
-pub fn selection_glyphs(view: &ViewState, command: &CommandRef) -> Option<Vec<String>> {
-    let empty = command.params.is_null() || command.params.as_object().is_some_and(Map::is_empty);
-    let takes = command.id.starts_with("filter.") || crate::canvas::hinting::GLYPH_COMMANDS.contains(&command.id.as_str());
-    if !text_mode(view) || !empty || !takes {
-        return None;
-    }
-    let spec = fontcraft_engine::find_command(&command.id)?;
-    if !spec.targets.contains(&fontcraft_engine::params::TargetKind::Glyphs) {
-        return None;
-    }
-    let glyphs = view.text.selected_glyphs(crate::app::font_view::MAX_BATCH_GLYPHS);
-    (!glyphs.is_empty()).then_some(glyphs)
 }
 
 /// Whether the canvas shows the text around the edited glyph: the text's current glyph is the shown glyph.
@@ -426,6 +422,7 @@ fn edited_item_layer(font: &Font, view: &ViewState) -> Option<(String, String)> 
 /// Makes the edited text item's own layer the active layer, or the glyph's shown layer again once no edited item has
 /// its own: after the cursor, the text or the shown glyph changed, before the tools read their target.
 pub fn sync_layer(app: &mut FontCraftApp) {
+    masters::follow_deleted(app);
     let item = app.session.font().ok().and_then(|font| edited_item_layer(font, &app.view));
     if app.view.layers.item != item {
         app.view.layers.item = item;
@@ -443,6 +440,20 @@ pub fn set_item_layer(app: &mut FontCraftApp, layer: Option<&str>) {
         app.view.text.touch();
     }
     sync_layer(app);
+}
+
+/// Gives items of the text their own layers (`layers.select` on a text selection).
+pub fn set_item_layers(app: &mut FontCraftApp, layers: &[(usize, String)]) {
+    let mut changed = false;
+    for (index, layer) in layers {
+        changed |= app.view.text.text.set_layer(*index, Some(layer));
+    }
+    if changed {
+        app.view.text.touch();
+    }
+    if !layers.is_empty() {
+        sync_layer(app);
+    }
 }
 
 /// Makes the shown glyph follow the text's current glyph, after a text command.

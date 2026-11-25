@@ -24,7 +24,7 @@ use super::masters::shown_layer;
 use super::params::{flag, quoted, string};
 use crate::app::FontCraftApp;
 use crate::app::models::components::{MAX_SMART_COMPONENTS, smart_model};
-use crate::canvas::tools::{edited_glyph, scene};
+use crate::canvas::tools::scene;
 
 /// Most composites `glyph.showGlyphsUsingAsComponent` opens.
 const MAX_SHOWN: usize = 10_000;
@@ -267,7 +267,7 @@ fn show_smart_glyph(app: &mut FontCraftApp, p: &Value) -> Result<(), String> {
     let font = app.session.font().map_err(|e| e.to_string())?;
     let name = match string(p, "glyph")? {
         Some(n) => n.to_string(),
-        None => edited_glyph(font, &app.view).map(str::to_string).ok_or("no glyph is being edited: give `glyph`")?,
+        None => super::masters::shown_glyph(font, &app.view).map(|g| g.name.clone()).ok_or("no glyph is being edited: give `glyph`")?,
     };
     let g = font.glyph(&name).ok_or_else(|| format!("there is no glyph `{}`", quoted(&name)))?;
     let tab = match string(p, "tab")? {

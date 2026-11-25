@@ -33,7 +33,7 @@ pub struct TextClipboard {
 /// An Edit command fired from a menu or a shortcut in text mode: the messages that do it on the text, or why it does
 /// nothing. `None` outside text mode or for another command, which then runs as usual.
 pub fn fired(app: &mut FontCraftApp, command: &CommandRef) -> Option<Result<Vec<Msg>, String>> {
-    if !super::text_mode(&app.view) {
+    if !super::text_mode(&app.view) || app.font_view_shows() {
         return None;
     }
     Some(match command.id.as_str() {

@@ -117,8 +117,8 @@ pub use bidi::Embedding;
 pub use fontcraft_shaping as shaping;
 pub use fontcraft_spacing::kerning::Direction;
 pub use layout::{
-    DEFAULT_LINE_WIDTH, KerningMode, LENGTH_RANGE, LINE_HEIGHT_PARAM, Layout, LayoutError, Line, MISSING_ADVANCE_RANGE, Options, Placed, layout,
-    line_height,
+    DEFAULT_LINE_WIDTH, KerningMode, LENGTH_RANGE, LINE_HEIGHT_PARAM, Layout, LayoutError, Line, MISSING_ADVANCE_RANGE, Options, Placed, item_master,
+    kerning_master, layout, line_height,
 };
 pub use line_shape::{ShapedLine, shape_line, vertical_features};
 pub use linebreak::Break;

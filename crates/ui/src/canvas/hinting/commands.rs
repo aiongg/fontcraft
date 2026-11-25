@@ -254,7 +254,7 @@ fn select_instructions(app: &mut FontCraftApp, params: &Value) -> Result<(), Str
     if app.view.edit_background {
         return Err("instructions belong to the foreground; the background is being edited".into());
     }
-    let target = crate::canvas::tools::target(&app.session, &app.view).ok_or("no glyph is being edited")?;
+    let target = crate::canvas::tools::target(&app.session, &app.view).filter(|_| !app.font_view_shows()).ok_or("no glyph is being edited")?;
     let font = app.session.font().map_err(|e| e.to_string())?;
     let layer = font.glyph(&target.glyph).and_then(|g| g.layers.iter().find(|l| l.id == target.layer)).ok_or("the edited layer is gone")?;
     let list = tt_instructions(layer).map_err(|e| e.to_string())?;
@@ -315,8 +315,8 @@ fn review(app: &mut FontCraftApp, params: &Value) -> Result<(), String> {
         return Ok(());
     }
     let previous = app.view.hinting.review.clone();
-    let edited = crate::canvas::tools::target(&app.session, &app.view).map(|t| t.glyph);
     let font = app.session.font().map_err(|e| e.to_string())?;
+    let edited = crate::shell::masters::shown_glyph(font, &app.view).map(|g| g.name.clone());
     let glyph = match text(params, "glyph")? {
         Some(g) => g.to_string(),
         None if previous.open && ["step", "direction", "hint"].iter().any(|k| params.get(k).is_some()) => previous.glyph.clone(),

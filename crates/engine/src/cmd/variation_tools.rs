@@ -73,7 +73,8 @@ pub fn specs() -> Vec<CommandSpec> {
             "{glyphs?: [name], master?: id|name|index, location: {axisTag: number}, relative?: bool = false} replace each glyph's master layer with the glyph interpolated, or extrapolated, at another design location: absolute coordinates, or offsets from the master's own location when `relative`; axes left out keep the master's value. The width, shapes, anchors and vertical metrics change; the layer keeps everything else. `master` defaults to the first master; without `glyphs`, every glyph with a layer for it. Locked glyphs, glyphs without a layer for the master and glyphs whose layers cannot interpolate are skipped with the reason; when none is left the command is refused → {master, location: {tag: number}, glyphs: [name], skipped: [{glyph, reason}]}",
             has_doc,
             replace_with_instance
-        ),
+        )
+        .targets(&[crate::params::TargetKind::Glyphs]),
         cmd!(
             "font.addVariation",
             "Add Variation…",
