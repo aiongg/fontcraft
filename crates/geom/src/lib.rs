@@ -13,6 +13,7 @@ pub mod fit;
 pub mod qu2cu;
 pub mod segment;
 pub mod spiro;
+pub mod stop;
 pub mod variation;
 
 pub use kurbo::{

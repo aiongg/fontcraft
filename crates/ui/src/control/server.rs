@@ -111,6 +111,7 @@ pub struct Server {
 /// A parked `ui.wait`: where the reply goes, what it waits for, when it arrived and the frames drawn since.
 struct Waiting {
     reply: Sender<Value>,
+    token: Arc<Token>,
     wait: Wait,
     since: Instant,
     frames: u64,
@@ -325,7 +326,8 @@ pub fn logic(app: &mut FontCraftApp, ctx: &egui::Context) {
                 server.channel.settle(incoming.request, Reply::screenshot(server.next_token, path, ViewportId::ROOT), None, settle);
             }
             Answer::Wait(wait) => {
-                server.waits.push(Waiting { reply: request.reply.clone(), wait, since: motion::now(), frames: 0 });
+                let token = Arc::clone(&incoming.token);
+                server.waits.push(Waiting { reply: request.reply.clone(), token, wait, since: motion::now(), frames: 0 });
             }
         }
     }
@@ -346,22 +348,37 @@ fn settle(server: &mut Server, request: ControlRequest, result: Result<Value, St
 /// Runs the requests that read the windows' elements and whose frames have been drawn. One at a time: the input a
 /// click or a change queues runs before the next one looks for its element.
 fn answer_elements(app: &mut FontCraftApp, server: &mut Server) {
-    while let Some((_, since, frames)) = server.elements.first() {
-        if *frames < elements::FRAMES && motion::now().saturating_duration_since(*since) < ELEMENTS_TIMEOUT {
+    while let Some((incoming, since, frames)) = server.elements.first() {
+        let cancelled = incoming.token.is_cancelled();
+        let late = motion::now().saturating_duration_since(*since) >= ELEMENTS_TIMEOUT;
+        let drawn = *frames >= elements::FRAMES;
+        let idle = app.control.window.as_ref().is_none_or(WindowHost::injected_idle);
+        if !(cancelled || late || drawn && idle) {
             return;
         }
         if !server.after_input.is_empty() {
             return;
         }
-        let drawn = *frames >= elements::FRAMES;
+        let dropped = super::unfinished(app) && app.control.window.as_ref().is_some_and(WindowHost::take_injected_withdrawn);
         let (incoming, ..) = server.elements.remove(0);
         let request = &incoming.request;
         app.control.queued = 0;
-        let result = if drawn {
+        let result = if cancelled {
+            Err("cancelled".into())
+        } else if dropped {
+            Err(INPUT_CANCELLED.into())
+        } else if drawn {
             super::run(app, &request.method, &request.params)
         } else {
             Err(format!("{}: the window draws no frames (it is hidden or minimized)", request.method))
         };
+        if cancelled || dropped || !drawn {
+            app.control.stage = None;
+        }
+        if super::unfinished(app) {
+            server.elements.insert(0, (incoming, motion::now(), 0));
+            return;
+        }
         settle(server, incoming.request, result, app.control.queued);
     }
 }
@@ -393,6 +410,10 @@ pub fn after_ui(app: &mut FontCraftApp, ctx: &egui::Context) {
         let now = motion::now();
         server.waits.retain_mut(|waiting| {
             waiting.frames = waiting.frames.saturating_add(1);
+            if waiting.token.is_cancelled() {
+                let _ = waiting.reply.send(reply(Err("cancelled".into())));
+                return false;
+            }
             let elapsed = now.saturating_duration_since(waiting.since);
             let settled = waiting.wait.settled(waiting.frames, idle);
             if settled || elapsed >= waiting.wait.timeout {

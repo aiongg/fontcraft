@@ -785,6 +785,7 @@ mod staged {
                 }
                 return Err(EngineError::Io(format!("cannot write {}: {e} ({i} of {} files were written)", target.display(), staged.len())));
             }
+            fontcraft_format::written::record(target);
         }
         Ok(())
     }

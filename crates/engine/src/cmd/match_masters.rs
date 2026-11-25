@@ -122,6 +122,7 @@ fn takes_part(l: &Layer, masters: Option<&[String]>) -> bool {
 fn each_glyph(font: &mut Font, glyphs: &[String], single: bool, mut f: impl FnMut(&str, &Glyph, &mut Outcome) -> Result<Changes>) -> Result<Outcome> {
     let mut out = Outcome::default();
     for name in glyphs {
+        crate::work::check()?;
         let Some(g) = font.glyph(name) else { continue };
         let g: &Glyph = g;
         if g.info.locked {

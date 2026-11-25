@@ -290,6 +290,7 @@ pub fn build_gvar(axis_count: u16, glyphs: &[SourceOutlines], options: &GvarOpti
     let mut models = Models::default();
     let mut variations = Vec::with_capacity(glyphs.len());
     for (gid, glyph) in glyphs.iter().enumerate() {
+        crate::check_stop()?;
         let gid = u32::try_from(gid).map_err(|_| CompileError::TooManyGlyphs(glyphs.len()))?;
         variations.push(GlyphVariations::new(GlyphId::new(gid), glyph_variations(glyph, axis_count, options, &mut models)?));
     }

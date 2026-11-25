@@ -431,6 +431,7 @@ pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, 
     let prepared: &Font = &prepared;
     let mut glyph_sources: HashMap<String, fontcraft_interp::GlyphSources> = HashMap::new();
     for g in prepared.glyphs.iter() {
+        crate::check_stop()?;
         glyph_sources.insert(g.name.clone(), fontcraft_interp::GlyphSources::of(prepared, &designspace, &g.name)?);
     }
 
@@ -448,6 +449,7 @@ pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, 
         Ok(())
     };
     for m in designspace.masters().iter().filter(|m| m.id != origin.id) {
+        crate::check_stop()?;
         add(Some(m.id.clone()), m.location.clone(), source_glyphs(font, prepared, &Target::Master(m.id.clone()), flavour, &options)?)?;
     }
     let samples = hoi::Samples::plan(prepared, &designspace, &glyph_sources, &mut notes)?;
@@ -465,6 +467,7 @@ pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, 
     intermediate.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
     let mut drawn: Vec<fontcraft_interp::Location> = Vec::with_capacity(intermediate.len());
     for location in intermediate {
+        crate::check_stop()?;
         // An intermediate layer beyond the axes of this font (a setting that disables masters
         // can narrow them) is no source of it.
         if designspace.to_normalized(&location)?.0.iter().any(|v| !(-1.0..=1.0).contains(v)) {

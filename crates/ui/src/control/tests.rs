@@ -480,3 +480,33 @@ fn the_menu_list_reports_option_alternates() {
     t.ok("ui.menu.invoke", json!({"command": "view.reopenLastClosedTab"}));
     assert_eq!(t.ok("ui.inspect", json!({}))["tabs"].as_array().map_or(0, Vec::len), tabs, "the alternate reopened the closed tab");
 }
+
+/// The question about unsaved changes has the keyboard: what is typed reaches no dialog and no tool behind it, Tab
+/// moves among its buttons and Escape cancels it.
+#[test]
+fn the_save_question_takes_the_keys() {
+    let mut t = TestApp::new();
+    t.ok("engine.execute", json!({"command": "glyph.newGlyph", "params": {"name": "unsaved"}}));
+    let tool = t.app.view.tool;
+    assert!(crate::app::close::fired(&mut t.app, &craft::ui::runtime::commands::CommandRef::with_params("file.close", json!({}))));
+    t.frames(4);
+    assert!(t.app.closing.is_open());
+    let focused = |t: &mut TestApp| {
+        let all = t.ok("ui.elements", json!({}));
+        let all = all["elements"].as_array().cloned().unwrap_or_default();
+        all.into_iter().find(|e| e["focused"] == true && e["role"] == "button").map(|e| e["label"].clone())
+    };
+    let before = focused(&mut t);
+    let reply = t.ok("ui.key", json!({"key": "Tab"}));
+    assert_eq!((&reply["handled"], &reply["closePrompt"]), (&json!(true), &json!(true)));
+    t.frames(2);
+    let after = focused(&mut t);
+    assert!(after.is_some() && after != before, "{before:?} {after:?}");
+    assert_eq!(t.ok("ui.text", json!({"text": "p"}))["typed"], false);
+    t.ok("ui.key", json!({"key": "p"}));
+    assert_eq!(t.app.view.tool, tool, "a tool letter selects no tool");
+    assert!(t.app.closing.is_open());
+    t.ok("ui.key", json!({"key": "Escape"}));
+    t.frames(3);
+    assert!(!t.app.closing.is_open() && t.app.session.documents().len() == 1);
+}

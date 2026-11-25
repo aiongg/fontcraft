@@ -605,6 +605,7 @@ fn auto_space(s: &mut Session, v: &Value) -> Result<Value> {
             }
         }
         for (g, capital) in &glyphs {
+            crate::work::check()?;
             if g.info.locked {
                 skip(&mut skipped, Some(&g.name), Some(id), "the glyph is locked");
                 continue;

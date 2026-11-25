@@ -81,7 +81,7 @@ fn names(font: &Font, title: &str, source: &MasterSource, req: &Request) -> Resu
     let target = Target::Master(source.master.clone());
     let resolved = fontcraft_compile::drawing::resolve(font, &target)?;
     let label = font.masters.iter().find(|m| m.id == source.master).map(|m| m.name.clone()).unwrap_or_default();
-    let stem = stem(font, &resolved, &req.options, title, req.naming.postscript_names);
+    let stem = stem(font, &target, &resolved, &req.options, title, req.naming.postscript_names);
     Ok(match &source.intermediate {
         None => (label, stem, "master"),
         Some(at) => (format!("{label} {at}"), format!("{stem}-{at}"), "intermediate"),

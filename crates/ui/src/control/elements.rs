@@ -6,16 +6,18 @@
 //! window's pass. It keeps them for [`KEEP_PASSES`] passes after the last request, then drops them.
 //!
 //! A click or a change goes through the window's input at the element's visible place, so it does what the mouse and
-//! the keyboard do there: nothing reaches an element that is disabled, hidden or scrolled out of view.
+//! the keyboard do there: nothing reaches an element that is disabled, hidden or scrolled out of view. A change that
+//! needs to see what its first input did (the list a select opened, the value a slider was dragged to) runs again after
+//! [`FRAMES`] frames, with a [`Stage`] kept on the app between the rounds.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use craft::behavior::PointerButton;
 use craft::keymap::{Key, Mods};
-use craft::ui::runtime::windows::WindowHost;
+use craft::ui::runtime::windows::{Released, WindowHost};
 use egui::accesskit::{Action, Node, NodeId, Role, Toggled};
-use egui::{Context, IdMap, Plugin, Pos2, Rect, Ui, Vec2, ViewportId, WidgetRects, vec2};
+use egui::{Context, IdMap, Plugin, Pos2, Rect, Ui, Vec2, ViewportId, WidgetRects, pos2, vec2};
 use serde_json::{Map, Value, json};
 
 use super::window_input::{focus_on_press, queued, window, window_name};
@@ -40,6 +42,16 @@ const MAX_LIMIT: u64 = 2_000;
 const MAX_ELEMENT_TEXT: usize = 500;
 /// Most characters `ui.set` types into a field.
 const MAX_SET_TEXT: usize = 4_096;
+/// Most options an error names.
+const MAX_NAMED_OPTIONS: usize = 20;
+/// Most drags that bring a slider to its value.
+const MAX_SLIDES: u32 = 4;
+/// How far from its value a slider may stay, as a share of its range.
+const SLIDE_SHARE: f64 = 0.001;
+/// The thumb of a slider, in points: only as exact as a press that grabs it needs.
+const THUMB: f32 = 16.0;
+/// How far a drag goes first, so that a correction shorter than a click's slack is a drag too.
+const DRAG_START: f32 = 12.0;
 
 /// Whether the request is answered from the trees, so it waits for frames ([`FRAMES`]).
 pub fn reads(method: &str, params: &Value) -> bool {
@@ -76,6 +88,9 @@ pub struct Element {
     toggled: Option<Toggled>,
     selected: Option<bool>,
     expanded: Option<bool>,
+    /// The smallest and largest number, and what one key press changes it by.
+    range: Option<(f64, f64)>,
+    step: Option<f64>,
     /// The element says it takes typed text.
     types: bool,
 }
@@ -87,6 +102,42 @@ enum Set {
     Toggle,
     /// A text or a number, typed.
     Text,
+    /// The label of an option, picked from the list that opens.
+    Choice,
+    /// A number, dragged to.
+    Number,
+}
+
+impl Set {
+    fn name(self) -> &'static str {
+        match self {
+            Set::Toggle => "bool",
+            Set::Text => "text",
+            Set::Choice => "choice",
+            Set::Number => "number",
+        }
+    }
+}
+
+/// A `ui.set` that goes on once the frames after its first input have been drawn.
+#[derive(Debug)]
+pub struct Stage {
+    element: u64,
+    value: Value,
+    /// Rounds run so far, and window input steps queued in them.
+    round: u32,
+    queued: usize,
+    next: Next,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum Next {
+    /// A field's text was typed; `options` showed in a list under the same label before.
+    Commit { options: bool },
+    /// The list of a select is open, or opening; `typed` once the option's label was typed into it.
+    Pick { typed: bool },
+    /// The slider was dragged from this value.
+    Slide { from: f64 },
 }
 
 impl Element {
@@ -106,6 +157,8 @@ impl Element {
             | Role::SpinButton
             | Role::EditableComboBox => Some(Set::Text),
             _ if self.types => Some(Set::Text),
+            Role::ComboBox => Some(Set::Choice),
+            Role::Slider => self.range.zip(self.number).map(|_| Set::Number),
             _ if self.toggled.is_some() => Some(Set::Toggle),
             _ => None,
         }
@@ -154,7 +207,14 @@ impl Element {
             }
         }
         if let Some(set) = self.set() {
-            out.insert("set".into(), json!(if set == Set::Toggle { "bool" } else { "text" }));
+            out.insert("set".into(), json!(set.name()));
+            if let (Set::Number, Some((min, max))) = (set, self.range) {
+                out.insert("min".into(), json!(min));
+                out.insert("max".into(), json!(max));
+                if let Some(step) = self.step {
+                    out.insert("step".into(), json!(step));
+                }
+            }
         }
         Value::Object(out)
     }
@@ -278,6 +338,8 @@ fn read(nodes: &IdMap<Node>, widgets: &WidgetRects, root: NodeId, focus: Option<
                 toggled: node.toggled(),
                 selected: node.is_selected(),
                 expanded: node.is_expanded(),
+                range: node.min_numeric_value().zip(node.max_numeric_value()).filter(|(lo, hi)| lo.is_finite() && hi.is_finite() && lo < hi),
+                step: node.numeric_value_step().filter(|n| n.is_finite()),
                 types: node.supports_action(Action::ReplaceSelectedText),
             });
         }
@@ -383,71 +445,231 @@ impl Element {
     }
 }
 
+/// The options that show in lists labelled `label`, which is how the list of a select or a field's suggestions is.
+fn options(app: &FontCraftApp, method: &str, viewport: ViewportId, label: &str) -> Result<Vec<Element>, String> {
+    with_windows(app, method, |windows| {
+        let elements = windows.iter().filter(|w| w.viewport == viewport).flat_map(|w| &w.elements);
+        elements.filter(|e| e.role == Role::ListBoxOption && e.within.as_deref().unwrap_or_default() == label).cloned().collect()
+    })
+}
+
+/// What a round of `ui.set` came to.
+enum Round {
+    Done(Value),
+    /// The next round runs once frames have been drawn.
+    More(Next),
+}
+
+/// The window and the element a round of `ui.set` acts on.
+struct Target {
+    host: WindowHost,
+    viewport: ViewportId,
+    element: Element,
+}
+
+impl Target {
+    /// Clicks the middle of what shows of `element`; its window input steps.
+    fn click(&self, method: &str, element: &Element) -> Result<usize, String> {
+        let at = element.press_point(method)?;
+        focus_on_press(&self.host, self.viewport);
+        self.host.inject_click(self.viewport, at, PointerButton::Primary, 1, Mods::NONE, false);
+        Ok(3)
+    }
+
+    /// Presses `key`; its window input steps.
+    fn key(&self, key: Key, mods: Mods) -> usize {
+        self.host.inject_key(self.viewport, key, mods, false);
+        2
+    }
+}
+
 /// `ui.set {element, value}`: a check box, switch or toggle takes `true` or `false` and is clicked when it is not
 /// there already; a text or number field takes a text or a number: it is clicked, its text selected and replaced, and
-/// Tab commits it. The reply is `{changed: false}` or the window input's `{queued, window}` with `changed: true`.
+/// Tab commits it, after Escape has closed the suggestions that would take the Tab; a select takes the label of an
+/// option, which is picked from its list; a slider takes a number and is dragged there. The reply is
+/// `{changed: false}`, or `{queued, window, changed: true}` with the `value` a slider reached.
 pub fn set(app: &mut FontCraftApp, params: &Value) -> Result<Value, String> {
     const M: &str = "ui.set";
+    let earlier = app.control.stage.take();
     let params = object(M, params)?.into_owned();
     if let Some(key) = params.keys().find(|k| !matches!(k.as_str(), "element" | "value")) {
         return Err(format!("{M}: `{}` does not go with `element`, which takes `value` alone", cut(key)));
     }
     let value = params.get("value").ok_or_else(|| format!("{M}: `value` is required with `element`"))?;
     let (viewport, element) = find(app, M, params.get("element").unwrap_or(&Value::Null))?;
-    let at = element.press_point(M)?;
-    let label = &element.label;
-    let host = window(app, M)?;
-    let steps = match element.set() {
-        None if element.read_only => return Err(format!("{M}: `{label}` is read-only")),
+    let id = element.id;
+    let earlier = earlier.filter(|stage| stage.element == id && stage.value == *value);
+    let target = Target { host: window(app, M)?, viewport, element };
+    let next = earlier.as_ref().map(|stage| stage.next);
+    let round = earlier.as_ref().map_or(0, |stage| stage.round);
+    let before = earlier.map_or(0, |stage| stage.queued);
+    let came_to = match target.element.set() {
+        None if target.element.read_only => return Err(format!("{M}: `{}` is read-only", target.element.label)),
         None => {
-            let role = role_name(element.role);
-            return Err(format!("{M}: `{label}` is a {role}, which takes no value; use ui.click, ui.drag or ui.key"));
+            let role = role_name(target.element.role);
+            return Err(format!("{M}: `{}` is a {role}, which takes no value; use ui.click, ui.drag or ui.key", target.element.label));
         }
-        Some(Set::Toggle) => {
-            let want = value.as_bool().ok_or_else(|| format!("{M}: `{label}` takes true or false"))?;
-            match element.toggled {
-                Some(Toggled::Mixed) | None => return Err(format!("{M}: `{label}` is mixed; click it with ui.click and look again")),
-                Some(now) if (now == Toggled::True) == want => return Ok(json!({"changed": false})),
-                Some(_) if !want && matches!(element.role, Role::RadioButton | Role::MenuItemRadio) => {
-                    return Err(format!("{M}: `{label}` is turned off by choosing another option"));
-                }
-                Some(_) => {}
-            }
-            focus_on_press(&host, viewport);
-            host.inject_click(viewport, at, PointerButton::Primary, 1, Mods::NONE, false);
-            3
-        }
-        Some(Set::Text) => {
-            let text = match value {
-                Value::String(text) => text.clone(),
-                Value::Number(n) => n.to_string(),
-                _ => return Err(format!("{M}: `{label}` takes a text or a number")),
-            };
-            if text.chars().nth(MAX_SET_TEXT).is_some() {
-                return Err(format!("{M}: a value holds at most {MAX_SET_TEXT} characters"));
-            }
-            let lines = element.role == Role::MultilineTextInput;
-            if text.chars().any(|c| c.is_control() && !(lines && c == '\n')) {
-                return Err(format!("{M}: `{label}` takes no control characters"));
-            }
-            focus_on_press(&host, viewport);
-            host.inject_click(viewport, at, PointerButton::Primary, 1, Mods::NONE, false);
-            let mut command = Mods::NONE;
-            command.cmd = true;
-            host.inject_key(viewport, Key::A, command, false);
-            if text.is_empty() {
-                host.inject_key(viewport, Key::Backspace, Mods::NONE, false);
-            } else {
-                host.inject_text(viewport, &text);
-            }
-            host.inject_key(viewport, Key::Tab, Mods::NONE, false);
-            // The click's three steps, two for each key and one for a text.
-            if text.is_empty() { 9 } else { 8 }
-        }
+        Some(Set::Toggle) => toggle(app, &target, value)?,
+        Some(Set::Text) => type_text(app, &target, value, next)?,
+        Some(Set::Choice) => choose(app, &target, value, next)?,
+        Some(Set::Number) => slide(app, &target, value, round, next)?,
     };
-    let mut reply = queued(app, steps, viewport);
-    super::set(&mut reply, "changed", json!(true));
-    Ok(reply)
+    let steps = before.saturating_add(app.control.queued);
+    match came_to {
+        Round::Done(mut reply) => {
+            if steps > 0 {
+                super::set(&mut reply, "queued", json!(steps));
+                super::set(&mut reply, "window", json!(window_name(viewport)));
+            }
+            Ok(reply)
+        }
+        Round::More(next) => {
+            app.control.stage = Some(Stage { element: id, value: value.clone(), round: round.saturating_add(1), queued: steps, next });
+            Ok(json!({"unfinished": true}))
+        }
+    }
+}
+
+fn toggle(app: &mut FontCraftApp, target: &Target, value: &Value) -> Result<Round, String> {
+    const M: &str = "ui.set";
+    let (element, label) = (&target.element, &target.element.label);
+    let want = value.as_bool().ok_or_else(|| format!("{M}: `{label}` takes true or false"))?;
+    match element.toggled {
+        Some(Toggled::Mixed) | None => return Err(format!("{M}: `{label}` is mixed; click it with ui.click and look again")),
+        Some(now) if (now == Toggled::True) == want => return Ok(Round::Done(json!({"changed": false}))),
+        Some(_) if !want && matches!(element.role, Role::RadioButton | Role::MenuItemRadio) => {
+            return Err(format!("{M}: `{label}` is turned off by choosing another option"));
+        }
+        Some(_) => {}
+    }
+    let steps = target.click(M, element)?;
+    queued(app, steps, target.viewport);
+    Ok(Round::Done(json!({"changed": true})))
+}
+
+/// The text a value stands for, for an element that takes one.
+fn text_of(label: &str, value: &Value) -> Result<String, String> {
+    let text = match value {
+        Value::String(text) => text.clone(),
+        Value::Number(n) => n.to_string(),
+        _ => return Err(format!("ui.set: `{label}` takes a text or a number")),
+    };
+    if text.chars().nth(MAX_SET_TEXT).is_some() {
+        return Err(format!("ui.set: a value holds at most {MAX_SET_TEXT} characters"));
+    }
+    Ok(text)
+}
+
+fn type_text(app: &mut FontCraftApp, target: &Target, value: &Value, next: Option<Next>) -> Result<Round, String> {
+    const M: &str = "ui.set";
+    let (element, label) = (&target.element, &target.element.label);
+    let showing = !options(app, M, target.viewport, label)?.is_empty();
+    if let Some(Next::Commit { options }) = next {
+        // Escape closes the suggestions and nothing else while they show; without them it would restore the text.
+        let mut steps = if showing && !options { target.key(Key::Escape, Mods::NONE) } else { 0 };
+        steps += target.key(Key::Tab, Mods::NONE);
+        queued(app, steps, target.viewport);
+        return Ok(Round::Done(json!({"changed": true})));
+    }
+    let text = text_of(label, value)?;
+    let lines = element.role == Role::MultilineTextInput;
+    if text.chars().any(|c| c.is_control() && !(lines && c == '\n')) {
+        return Err(format!("{M}: `{label}` takes no control characters"));
+    }
+    let mut steps = target.click(M, element)?;
+    let mut command = Mods::NONE;
+    command.cmd = true;
+    steps += target.key(Key::A, command);
+    if text.is_empty() {
+        steps += target.key(Key::Backspace, Mods::NONE);
+    } else {
+        target.host.inject_text(target.viewport, &text);
+        steps += 1;
+    }
+    queued(app, steps, target.viewport);
+    Ok(Round::More(Next::Commit { options: showing }))
+}
+
+fn choose(app: &mut FontCraftApp, target: &Target, value: &Value, next: Option<Next>) -> Result<Round, String> {
+    const M: &str = "ui.set";
+    let (element, label) = (&target.element, &target.element.label);
+    let want = cut(text_of(label, value)?.trim());
+    if want.is_empty() || want.chars().any(char::is_control) {
+        return Err(format!("{M}: `{label}` takes the label of one of its options"));
+    }
+    let open = element.expanded == Some(true);
+    let typed = match next {
+        Some(Next::Pick { typed }) => typed,
+        _ if !open && element.value.as_deref() == Some(want.as_str()) => return Ok(Round::Done(json!({"changed": false}))),
+        _ if !open => {
+            let steps = target.click(M, element)?;
+            queued(app, steps, target.viewport);
+            return Ok(Round::More(Next::Pick { typed: false }));
+        }
+        _ => false,
+    };
+    if !open {
+        return Err(format!("{M}: the list of `{label}` did not open"));
+    }
+    let options = options(app, M, target.viewport, label)?;
+    let folded = want.to_lowercase();
+    let mut alike = options.iter().filter(|o| o.label.to_lowercase() == folded);
+    let found = options.iter().find(|o| o.label == want).or_else(|| alike.next().filter(|_| alike.next().is_none()));
+    if let Some(option) = found.filter(|o| o.enabled && o.visible.is_some()) {
+        let steps = target.click(M, option)?;
+        queued(app, steps, target.viewport);
+        return Ok(Round::Done(json!({"changed": true})));
+    }
+    if found.is_none_or(|o| o.enabled) && !typed {
+        // Typing moves the list to the options that start with the text, and narrows one with a filter field.
+        target.host.inject_text(target.viewport, &want);
+        queued(app, 1, target.viewport);
+        return Ok(Round::More(Next::Pick { typed: true }));
+    }
+    // Escape puts back the value the list opened with.
+    let steps = target.key(Key::Escape, Mods::NONE);
+    queued(app, steps, target.viewport);
+    if found.is_some() {
+        return Err(format!("{M}: `{want}` cannot be chosen in `{label}`"));
+    }
+    let names: Vec<&str> = options.iter().take(MAX_NAMED_OPTIONS).map(|o| o.label.as_str()).collect();
+    Err(format!("{M}: `{label}` shows no option `{want}`; it shows {}", names.join(", ")))
+}
+
+fn slide(app: &mut FontCraftApp, target: &Target, value: &Value, round: u32, next: Option<Next>) -> Result<Round, String> {
+    const M: &str = "ui.set";
+    let (element, label) = (&target.element, &target.element.label);
+    let want = value.as_f64().filter(|n| n.is_finite()).ok_or_else(|| format!("{M}: `{label}` takes a number"))?;
+    let (Some((min, max)), Some(now)) = (element.range, element.number) else {
+        return Err(format!("{M}: `{label}` says no value to set"));
+    };
+    if want < min || want > max {
+        return Err(format!("{M}: `{label}` takes a number from {min} to {max}"));
+    }
+    let span = max - min;
+    let reached = (want - now).abs() <= span * SLIDE_SHARE;
+    // A slider that stops at its own values stays where the last drag left it.
+    let stuck = matches!(next, Some(Next::Slide { from }) if from == now);
+    if reached || stuck || round >= MAX_SLIDES {
+        return Ok(Round::Done(json!({"changed": next.is_some(), "value": now})));
+    }
+    let at = element.press_point(M)?;
+    let rect = element.rect.filter(|r| r.is_finite() && r.width() > 0.0).ok_or_else(|| format!("{M}: `{label}` has no place in the window"))?;
+    let thumb = THUMB.min(rect.width() / 2.0);
+    let x = |v: f64| rect.left() + thumb / 2.0 + ((v - min) / span).clamp(0.0, 1.0) as f32 * (rect.width() - thumb);
+    let (from, to) = (pos2(x(now), at.y), pos2(x(want), at.y));
+    if element.visible.is_none_or(|r| !r.contains(from)) {
+        return Err(format!("{M}: the thumb of `{label}` is scrolled out of view"));
+    }
+    let aside = if from.x + DRAG_START <= rect.right() { DRAG_START } else { -DRAG_START };
+    focus_on_press(&target.host, target.viewport);
+    target.host.inject_click(target.viewport, from, PointerButton::Primary, 1, Mods::NONE, true);
+    for place in [from + vec2(aside, 0.0), to] {
+        target.host.inject_move(target.viewport, place, Mods::NONE, 0.0);
+    }
+    target.host.inject_release(target.viewport, Some(to), Released::Button(PointerButton::Primary));
+    queued(app, 5, target.viewport);
+    Ok(Round::More(Next::Slide { from: now }))
 }
 
 #[cfg(test)]
@@ -503,5 +725,45 @@ mod tests {
         ] {
             assert!(!t.error(method, bad).is_empty());
         }
+    }
+
+    /// A select takes the label of an option, a slider a number, and a field keeps the text it was given while its
+    /// suggestions show.
+    #[test]
+    fn a_select_a_slider_and_a_field_with_suggestions_are_set() {
+        let mut t = TestApp::new();
+        let one = |t: &mut TestApp, prefix: &str, role: &str| {
+            let all = named(t, prefix);
+            all.iter().find(|e| e["role"] == role && e["visible"] == true).cloned().unwrap_or_else(|| panic!("no {role} {prefix}: {all:?}"))
+        };
+        let size = one(&mut t, "cell size", "slider");
+        assert_eq!((&size["set"], &size["min"]), (&json!("number"), &json!(crate::app::font_view::MIN_CELL_SIZE)));
+        for want in [200.0, 203.0] {
+            let reply = t.ok("ui.set", json!({"element": size["id"], "value": want}));
+            t.frames(3);
+            let now = one(&mut t, "cell size", "slider")["value"].as_f64().unwrap_or_default();
+            assert!((now - want).abs() < 1.0, "{want}: {now}, {reply}");
+        }
+        assert!(t.error("ui.set", json!({"element": size["id"], "value": 1.0e9})).contains("from"));
+
+        t.ok("engine.execute", json!({"command": "font.info", "params": {}}));
+        t.ok("engine.execute", json!({"command": "font.info.selectTab", "params": {"tab": "other"}}));
+        t.frames(3);
+        let kind = one(&mut t, "font type", "comboBox");
+        assert_eq!(kind["set"], "choice");
+        assert!(t.error("ui.set", json!({"element": kind["id"], "value": "Sideways"})).contains("Variable"));
+        t.frames(3);
+        assert_eq!(t.ok("ui.set", json!({"element": kind["id"], "value": "Variable"}))["changed"], true);
+        t.frames(3);
+        assert_eq!(one(&mut t, "font type", "comboBox")["value"], "Variable");
+        assert_eq!(t.ok("ui.set", json!({"element": kind["id"], "value": "Variable"}))["changed"], false);
+        t.ok("engine.execute", json!({"command": "font.info", "params": {}}));
+
+        t.ok("ui.set", json!({"commandConsole": true}));
+        t.frames(3);
+        let line = one(&mut t, "command", "textInput");
+        t.ok("ui.set", json!({"element": line["id"], "value": "glyph.new"}));
+        t.frames(3);
+        assert_eq!(one(&mut t, "command", "textInput")["value"], "glyph.new", "the Tab took no suggestion");
     }
 }

@@ -113,7 +113,7 @@ is checked for.
 | `ui.resize` | `{width, height}` | the window's inner size in points, width 640 to 16,384 and height 400 to 16,384, at the next frame. A size larger than the monitor, or than the graphics device can draw (8,192 points at most), is clamped; `{width, height, clamped}` has the size asked of the window |
 | `ui.focus` | | brings the window to the front with the keyboard, at the next frame; `{focus: true}` |
 | `ui.contextMenu.list` | `{x?, y?, space?}` | the open canvas context menu: `{open, glyph, screen, at, hit, sections: [{context, items: [{command, label, enabled, disabled_reason?, checked?, alternate?, choices?: [{value, label, checked}]}]}]}`; `{open: false}` when none is. With `x` and `y` it first opens the menu there, as a right-click does (`space` as in `ui.pointer`, default `font`); that is refused while a tool is dragging or a dialog is open |
-| `ui.contextMenu.invoke` | `{command, value?}` | runs an item of the open canvas context menu as a click on it does, and closes the menu; the item's result. A submenu item (one `ui.contextMenu.list` shows with `choices`) needs `value`, one of its choices' values; a plain item takes none. The item is checked as the menu would show it now: a disabled or missing item is refused and the menu stays open; a menu whose tab or glyph changed, or that a dialog covers, closes and the request is refused. Refused while the question about unsaved changes is open |
+| `ui.contextMenu.invoke` | `{command, value?}` | runs an item of the open canvas context menu as a click on it does, and closes the menu; the item's result. A submenu item (one `ui.contextMenu.list` shows with `choices`) needs `value`, one of its choices' values; a plain item takes none. The item is checked as the menu would show it now: a disabled or missing item is refused and the menu stays open; a menu whose tab, glyph, layer or side changed, or that a dialog covers, closes and the request is refused. Refused while the question about unsaved changes is open |
 | `ui.wait` | `{frames?, idle?, timeoutMs?}` | the reply waits until `frames` frames (at most 3,600) have been drawn, or until the window is idle, or both: `{frames, idle, timedOut, elapsedMs}`. Without `frames` it waits for idle; with `frames` alone only for the frames. Idle means no window input queued or running, no screenshot or input reply waiting, and at least two frames drawn since the request, so what the request before it fired has been applied and drawn. `timeoutMs` (default 5,000, at most 30,000) ends the wait with `timedOut: true`. Headless hosts answer with an error |
 | `control.cancel` | `{key}` | cancels the request with that `cancelKey`: `{cancelled}`; see the top of this page. Headless hosts answer with an error |
 | `events.list` | `{since?}` | what happened, oldest first: `{events: [{seq, kind, …}], last, dropped}`; see [Events](#events) |
@@ -272,16 +272,26 @@ and values are cut at 500 characters.
 | `visible` | whether part of it shows: `false` when it is scrolled or clipped away |
 | `enabled`, `focused`, `selected`, `expanded` | its states; the last three only where they apply |
 | `toggled` | `true`, `false` or `"mixed"`, for what can be on or off |
-| `set` | what `ui.set` takes for it: `"bool"` or `"text"`; absent when it cannot be set |
+| `set` | what `ui.set` takes for it: `"bool"`, `"text"`, `"choice"` or `"number"`; absent when it cannot be set |
+| `min`, `max`, `step` | for `"number"`: the smallest and largest value, and what one key press changes it by |
 
 `ui.click {element}` clicks the middle of the part that shows, and `ui.set {element, value}` sets
-the element through the window's input, as a person does:
+the element through the window's input, as a person does. A change that needs to see what its first
+input did takes several rounds of frames and is answered after the last:
 
 - `set: "bool"`: `value` is `true` or `false`; the element is clicked unless it is there already
   (`{changed: false}`). A radio button is turned off by choosing another one.
 - `set: "text"`: `value` is a text of at most 4,096 characters or a number. The field is clicked,
-  its text selected and replaced, and Tab commits it. Line breaks are taken by multi-line fields
+  its text selected and replaced, and Tab commits it; a list of suggestions the typing opened is
+  closed first with Escape, so the text stays as given. Line breaks are taken by multi-line fields
   only; other control characters are refused.
+- `set: "choice"`: `value` is the label of an option, in any case where only one matches. The list
+  opens and the option is clicked; one that is not in view is typed first, which brings it there.
+  `{changed: false}` when it is chosen already. A label the list does not show is refused with the
+  ones it shows, and the list is closed without a change.
+- `set: "number"`: `value` is a number from `min` to `max`. The slider is dragged there, up to four
+  times until it is within a thousandth of its range; each drag is a change of its own. The reply
+  has the `value` it reached, which is another one where the slider keeps to its own stops.
 
 An element that is disabled, read-only or out of view is refused. What covers an element at that
 point takes the click, as it takes the mouse's. The replies are those of
@@ -327,6 +337,12 @@ in `ui.dialog.inspect` is what OK runs: the same command with those parameters g
 font. While a dialog is open, `ui.key` goes to it (`Return`, `Escape`, `Tab`, `ArrowUp`,
 `ArrowDown`, the rules of `dialog.fieldKeys`), `ui.text` types into its focused field, and
 editing commands fail with "an interaction is running".
+
+While the question about unsaved changes is open (`closePrompt` of `ui.inspect`), it has the keyboard:
+`ui.key` goes to the window as the keyboard sends it, so Tab moves among its buttons, Return and
+Escape answer it and no tool letter or shortcut runs (`{queued, handled, closePrompt: true}`);
+`ui.text` types nothing (`{typed: false, closePrompt: true}`), and `ui.dialog.key` and
+`ui.dialog.text` do not reach a dialog behind it. `window.closePrompt` answers it by command.
 
 A dialog in `runOnOk` mode (the tabs of `dialog.export`, opened by `file.export`) previews
 nothing, because its command writes files: `ui.dialog.confirm` runs the command once, and a

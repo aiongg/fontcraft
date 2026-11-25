@@ -388,6 +388,7 @@ pub fn commit(staged: &[Staged]) -> Result<()> {
             let before = if i == 0 { String::new() } else { format!("; the {i} outputs before it were written") };
             return Err(EngineError::Io(format!("cannot write {}: {e}{before}", s.target.display())));
         }
+        fontcraft_format::written::record(&s.target);
     }
     Ok(())
 }

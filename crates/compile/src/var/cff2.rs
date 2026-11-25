@@ -570,6 +570,7 @@ pub fn cff2_font(
     let mut models = Models::default();
     let mut out = Vec::with_capacity(glyphs.len());
     for g in glyphs {
+        crate::check_stop()?;
         let ops = source_ops(g)?;
         let shape = ops.first().map_or(&[][..], Vec::as_slice);
         if g.locations.len() < 2 {

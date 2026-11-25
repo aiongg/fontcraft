@@ -16,7 +16,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Run Commands as One Step",
             [],
             None,
-            "{label?: string, steps: [{command: id, params?: object}]} run the steps in order as one transaction: if one fails, none takes effect. The edits are one undo step per document, labelled `label` (default \"Batch\"); undo and redo cannot be steps → {results: [value]}",
+            "{label?: string, steps: [{command: id, params?: object}]} run the steps in order as one transaction: if one fails, none takes effect (files the steps before it wrote stay, and the error names them). The edits are one undo step per document, labelled `label` (default \"Batch\"); undo and redo cannot be steps → {results: [value]}",
             always,
             batch
         ),
@@ -41,8 +41,31 @@ fn batch(s: &mut Session, p: &Value) -> Result<Value> {
     }
     // A batch inside a batch is part of the outer one.
     let mut results = Vec::with_capacity(steps.len());
-    s.one_step(label, |s| run_steps(s, &p, steps, &mut results))?;
-    Ok(json!({ "results": results }))
+    let (outcome, written) = fontcraft_format::written::collect(|| s.one_step(label, |s| run_steps(s, &p, steps, &mut results)));
+    // Documents are put back, files are not; a cancel after the last step is either noticed here or too late.
+    match outcome.and_then(|()| if written.count > 0 { crate::work::seal() } else { Ok(()) }) {
+        Ok(()) => Ok(json!({ "results": results })),
+        Err(e) if written.count > 0 => {
+            let why = match e {
+                crate::EngineError::BadParams { message, .. } => message,
+                e => e.to_string(),
+            };
+            Err(p.bad(format!("{why}; the files its steps wrote stay: {}", files_named(&written))))
+        }
+        Err(e) => Err(e),
+    }
+}
+
+/// The names of the files written, and how many more there are.
+fn files_named(written: &fontcraft_format::written::Written) -> String {
+    /// Most files named.
+    const MAX_NAMED: usize = 20;
+    let mut names: Vec<String> = written.files.iter().take(MAX_NAMED).map(|f| f.display().to_string()).collect();
+    match written.count.saturating_sub(names.len()) {
+        0 => {}
+        more => names.push(format!("{more} more")),
+    }
+    names.join(", ")
 }
 
 fn run_steps(s: &mut Session, p: &Params, steps: &[Value], results: &mut Vec<Value>) -> Result<()> {

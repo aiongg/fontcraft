@@ -875,6 +875,7 @@ fn detect_composites(s: &mut Session, value: &Value) -> Result<Value> {
     let mut bases: HashMap<String, Bases<'_>> = HashMap::new();
     let mut anchors = AnchorCache::new();
     for name in &glyphs {
+        crate::work::check()?;
         if work == 0 {
             stopped = Some(format!("the work limit was reached before glyph `{name}`; the glyphs from there on were not searched"));
             break;

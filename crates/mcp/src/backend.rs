@@ -180,7 +180,7 @@ impl Remote {
 
 /// The methods a request makes before the one it is for.
 #[cfg(not(target_arch = "wasm32"))]
-const READS: &[&str] = &["engine.commands", "document.inspect", "ui.dialog.inspect"];
+const READS: &[&str] = &["engine.commands", "document.inspect", "ui.dialog.inspect", "ui.elements"];
 /// Most bytes of one reply, so a wrong peer cannot fill memory.
 #[cfg(not(target_arch = "wasm32"))]
 const MAX_REPLY: u64 = 64 << 20;

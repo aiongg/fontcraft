@@ -19,6 +19,7 @@ mod gzip;
 mod layout;
 pub mod project;
 mod v1;
+pub mod written;
 
 use fontcraft_model::Font;
 use serde::Deserialize;

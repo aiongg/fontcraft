@@ -278,6 +278,8 @@ pub struct Section {
 pub struct CanvasMenu {
     /// The glyph it was opened on; it closes when the edited glyph changes.
     pub glyph: String,
+    /// The layer and the side it was opened on; it closes when the canvas edits another one (a master switch).
+    pub target: Option<tools::Target>,
     /// Where it opens, in window points.
     pub screen: [f32; 2],
     /// The click in the edited glyph's font units.
@@ -405,7 +407,8 @@ pub fn open_canvas(app: &mut FontCraftApp, at: Point, space: Space) -> Result<()
         app.tools.refresh();
         let glyph = scene_glyph(app).ok_or("no glyph is being edited")?;
         let sections = sections(app, &[HOI, CANVAS]);
-        app.context_menus.canvas = Some(CanvasMenu { glyph, screen, at: [pos.x, pos.y], hit: None, sections, alt: false });
+        let target = tools::target(&app.session, &app.view);
+        app.context_menus.canvas = Some(CanvasMenu { glyph, screen, at: [pos.x, pos.y], hit: None, sections, alt: false, target });
         return Ok(());
     }
     if let Some(index) = crate::canvas::hinting::badges::badge_at(app, egui::pos2(screen[0], screen[1])) {
@@ -442,7 +445,8 @@ pub fn open_canvas(app: &mut FontCraftApp, at: Point, space: Space) -> Result<()
         (scene.glyph.clone(), kinds)
     };
     let sections = sections(app, &with_instructor(app, kinds));
-    app.context_menus.canvas = Some(CanvasMenu { glyph, screen, at: [pos.x, pos.y], hit, sections, alt: false });
+    let target = tools::target(&app.session, &app.view);
+    app.context_menus.canvas = Some(CanvasMenu { glyph, screen, at: [pos.x, pos.y], hit, sections, alt: false, target });
     Ok(())
 }
 
@@ -478,7 +482,8 @@ fn open_on_instruction(app: &mut FontCraftApp, index: usize, screen: [f32; 2], p
         app.view_changed();
     }
     let sections = sections(app, &with_instructor(app, vec![TT_INSTRUCTION, CANVAS]));
-    app.context_menus.canvas = Some(CanvasMenu { glyph, screen, at: [pos.x, pos.y], hit: None, sections, alt: false });
+    let target = tools::target(&app.session, &app.view);
+    app.context_menus.canvas = Some(CanvasMenu { glyph, screen, at: [pos.x, pos.y], hit: None, sections, alt: false, target });
     Ok(())
 }
 
@@ -1068,10 +1073,11 @@ pub fn invoke_choice(
     run: fn(&mut FontCraftApp, Msg) -> Result<Value, String>,
 ) -> Result<Value, String> {
     let menu = app.context_menus.canvas.clone().ok_or("no context menu is open")?;
-    let same = scene_of(app).is_some_and(|(scene, _)| scene.glyph == menu.glyph);
+    let same = still(app, &menu);
     if !same || app.dialogs.open.is_some() {
         app.context_menus.canvas = None;
-        return Err(if same { "a dialog is open; the context menu closed" } else { "the edited glyph changed; the context menu closed" }.into());
+        let why = if same { "a dialog is open" } else { "the edited glyph or layer changed" };
+        return Err(format!("{why}; the context menu closed"));
     }
     if app.closing.is_open() {
         return Err("the question about unsaved changes is open".into());
@@ -1096,12 +1102,38 @@ pub fn invoke_choice(
         Some(steps) => steps,
         None => steps_for(app, &menu, item.command),
     };
+    let (first, steps) = one_transaction(steps, item.label);
     let mut result = None;
     for msg in steps {
         let value = run(app, msg)?;
-        result.get_or_insert(value);
+        result.get_or_insert(if first { value.pointer("/results/0").cloned().unwrap_or(value) } else { value });
     }
     Ok(result.unwrap_or(Value::Null))
+}
+
+/// `steps` with the engine commands they start with as one `command.batch` labelled `label`, so that they are one undo
+/// step and all or none take effect; and whether there were several.
+fn one_transaction(mut steps: Vec<Msg>, label: &str) -> (bool, Vec<Msg>) {
+    let runs = steps.iter().take_while(|msg| matches!(msg, Msg::Run(_))).count();
+    if runs < 2 {
+        return (false, steps);
+    }
+    let rest = steps.split_off(runs);
+    let batch: Vec<Value> = steps
+        .iter()
+        .filter_map(|msg| match msg {
+            Msg::Run(command) if command.params.is_null() => Some(json!({"command": command.id})),
+            Msg::Run(command) => Some(json!({"command": command.id, "params": command.params})),
+            _ => None,
+        })
+        .collect();
+    let batch = Msg::run("command.batch", json!({"label": label, "steps": batch}));
+    (true, std::iter::once(batch).chain(rest).collect())
+}
+
+/// Whether the canvas still edits what `menu` was opened on.
+pub fn still(app: &FontCraftApp, menu: &CanvasMenu) -> bool {
+    scene_of(app).is_some_and(|(scene, _)| scene.glyph == menu.glyph) && tools::target(&app.session, &app.view) == menu.target
 }
 
 /// The messages a submenu item posts for `value`: its command with the value under the key the submenu chooses. The

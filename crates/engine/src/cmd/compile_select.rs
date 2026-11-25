@@ -448,6 +448,7 @@ pub(super) fn build_variable(
     for pick in picks {
         let containers = crate::export_steps::setting_containers(font, pick.setting, &req.containers, &mut report.warnings);
         for &flavour in flavours {
+            crate::work::check()?;
             let mut stem = String::new();
             let mut built = ByContainer::new(fontcraft_compile::export_params::may_differ_by_container(font));
             let mut files = Vec::with_capacity(containers.len());

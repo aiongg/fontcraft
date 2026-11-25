@@ -19,6 +19,10 @@ fn text(app: &mut FontCraftApp, params: &Value) -> Result<Value, String> {
     if text.chars().nth(MAX_CHARS).is_some() {
         return Err(format!("{M}: `text` holds at most {MAX_CHARS} characters"));
     }
+    // The question about unsaved changes is a modal with no text field: nothing behind it is typed into.
+    if app.closing.is_open() {
+        return Ok(json!({"typed": false, "closePrompt": true}));
+    }
     if app.dialogs.open.is_some() {
         let reply = super::dialogs::text(app, params).map_err(|e| format!("{M}: {e}"))?;
         if reply.get("field").and_then(Value::as_bool) == Some(true) {

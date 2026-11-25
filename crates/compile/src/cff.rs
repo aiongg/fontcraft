@@ -91,6 +91,7 @@ pub(crate) fn build(
     }
     let mut glyphs = Vec::with_capacity(order.len());
     for (gid, ((g, prepared), name)) in order.iter().zip(outlines).zip(names).enumerate() {
+        crate::check_stop()?;
         let mut path = match prepared {
             Prepared::Empty => Vec::new(),
             // The reference's converter also keeps each contour's line back to its start.

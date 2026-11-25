@@ -173,6 +173,44 @@ fn a_cancelled_request_stops_and_changes_nothing() {
     assert!(work::with(token, Some(report), || s.execute("command.batch", &steps)).is_err());
     assert_eq!(s.inspect(), before);
 
+    // A step of a batch wrote files before the cancel: they stay, and the error says which.
+    let token = work::Token::new();
+    let stop = token.clone();
+    let report: work::Report = Rc::new(move |_, _, _: &str| {
+        stop.cancel();
+    });
+    let dir = std::env::temp_dir().join(format!("fontcraft-batch-cancel-{}", std::process::id()));
+    let written = dir.join("kept.fontcraft");
+    std::fs::create_dir_all(&dir).unwrap();
+    let saving = json!({"steps": [
+        {"command": "file.saveAs", "params": {"path": written}},
+        {"command": "glyph.newGlyph", "params": {"name": "two.test"}},
+    ]});
+    let refused = work::with(token, Some(report), || s.execute("command.batch", &saving)).unwrap_err().to_string();
+    assert!(refused.contains("stay: ") && refused.contains("kept.fontcraft"), "{refused}");
+    assert!(written.exists());
+    assert_eq!(s.inspect(), before);
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    // A compile stops inside its one font: between two glyphs.
+    let token = work::Token::new();
+    let asked = Rc::new(RefCell::new(0usize));
+    let (count, stop) = (Rc::clone(&asked), token.clone());
+    let stopping: fontcraft_compile::stop::Ask = Rc::new(move || {
+        *count.borrow_mut() += 1;
+        if *count.borrow() == 6 {
+            stop.cancel();
+        }
+        stop.is_cancelled()
+    });
+    let font = s.font().unwrap().clone();
+    let compile = || fontcraft_compile::compile_ttf(&font, &fontcraft_compile::Options::default()).map(|_| ());
+    assert!(matches!(fontcraft_compile::stop::with(Some(stopping), compile), Err(fontcraft_compile::CompileError::Cancelled)));
+    assert_eq!(*asked.borrow(), 6, "it asked no further");
+    assert!(compile().is_ok());
+    let cancelled = fontcraft_compile::stop::with(Some(Rc::new(|| true)), || s.execute("font.compile", &json!({})));
+    assert!(matches!(cancelled, Err(EngineError::Cancelled)), "{cancelled:?}");
+
     // A command that ended cannot be cancelled any more.
     let token = work::Token::new();
     work::with(token.clone(), None, || s.execute("command.batch", &steps)).unwrap();
