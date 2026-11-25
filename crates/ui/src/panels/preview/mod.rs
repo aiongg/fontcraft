@@ -45,6 +45,8 @@ craft::ui::words! {
         instance_tip: "fontcraftPreview.instanceTip" = "The instance the preview shows";
         /// The pop-up entry that shows every visible instance.
         show_all: "fontcraftPreview.showAll" = "Show All Instances";
+        /// The pop-up entry that follows the location sliders.
+        location: "fontcraftPreview.location" = "Location";
         /// The heading over the instances' eyes in the pop-up.
         eyes: "fontcraftPreview.eyes" = "In Show All Instances";
         /// An instance's eye row.
@@ -209,6 +211,7 @@ fn controls(ui: &mut Ui, model: &PreviewModel, target: Target, sent: &mut Vec<Ms
 fn instance_menu(ui: &mut Ui, model: &PreviewModel, target: Target, words: &PreviewWords, sent: &mut Vec<Msg>) {
     let t = target.name();
     let shown = match (&model.instance_label, model.all_chosen) {
+        _ if model.location_chosen => words.location.clone(),
         (Some(name), _) => name.clone().into(),
         (None, true) => words.show_all.clone(),
         (None, false) => words.dash.clone(),
@@ -225,6 +228,9 @@ fn instance_menu(ui: &mut Ui, model: &PreviewModel, target: Target, words: &Prev
             if MenuItem::new(entry.name.clone()).radio_mark(entry.chosen).show(ui).ran {
                 set(sent, json!(entry.index));
             }
+        }
+        if (model.location_offered || model.location_chosen) && MenuItem::new(words.location.clone()).radio_mark(model.location_chosen).show(ui).ran {
+            set(sent, json!("location"));
         }
         if MenuItem::new(words.show_all.clone()).radio_mark(model.all_chosen).show(ui).ran {
             sent.push(Msg::Shell(CommandRef::with_params("preview.showAllInstances", json!({ "target": t }))));

@@ -116,6 +116,9 @@ craft::ui::words! {
 pub struct StatusProps<'a> {
     /// The last error or notice; empty when there is none.
     pub status: &'a str,
+    /// The difference between the layers under the pointer, else why the edited or selected glyph cannot interpolate:
+    /// shown while there is no error or notice. Empty when there is neither.
+    pub reason: &'a str,
     /// The Features menu, at the bar's start.
     pub features: &'a craft::ui::contract::Tracked<crate::app::models::text::FeaturesModel>,
     /// The Edit View's controls; `None` while Font View shows.
@@ -164,7 +167,9 @@ fn status_view(props: &mut StatusProps<'_>, ui: &mut Ui) {
         if let Some(edit) = edit {
             edit_bar::preview_button(ui, edit_bar::Props { bar: edit, sent: props.sent });
         }
-        if props.status.is_empty() {
+        if props.status.is_empty() && !props.reason.is_empty() {
+            Text::new(props.reason.to_string()).show(ui);
+        } else if props.status.is_empty() {
             Text::new(words.ready.clone()).show(ui);
         } else {
             Text::new(props.status.to_string()).show(ui);

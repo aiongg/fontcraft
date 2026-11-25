@@ -2218,6 +2218,47 @@ observe = [
   "Press the play button of an axis in the Variations panel and time one sweep; note whether it eases at the ends and which views follow it.",
 ]
 
+[[command]]
+id = "view.setLocation"
+label = "Set Preview Location"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{location?: {tag: number}, reset?: bool | tag, target?: 'area'|'panel'}"
+area = "interpolation"
+milestone = "M9"
+summary = "Shows a location of the design space in a preview and the views that follow it, in external coordinates; the sliders of the Glyph Sources panel run it."
+ref = "Fontra reference › Editor › Panels › Designspace"
+status = "docs"
+origin = "fontra"
+notes = "Built (M9.52) in crates/ui/src/shell/axis_sweep.rs. The location is kept per window, as internal coordinates by axis tag; the preview's choice becomes Location (preview.setInstance). A location may lie between instances and masters; the line draws at most 200 different glyphs, as while an axis is animated. The Text Preview has no such choice: it draws built fonts."
+guesses = [
+  "A slider runs over the axis' external range, and a typed coordinate beyond it is held to its end; the secondary reference's sliders would settle both.",
+  "Without a target the preview the Glyph Sources panel follows changes: the Preview Area, or the Preview Panel while only that is open.",
+  "Setting the axis that is being animated ends its sweep.",
+]
+observe = [
+  "Type a coordinate beyond an axis' range into the Designspace panel's field: note whether it is accepted.",
+]
+
+[[command]]
+id = "view.showOutlineAtLocation"
+label = "Show Outline at Location"
+menu = ["View"]
+shortcut = ""
+kind = "ui"
+params = "{on?: bool}"
+area = "interpolation"
+milestone = "M9"
+summary = "Draws the edited glyph as it interpolates at the location the previews show, behind the edited layer."
+ref = "Fontra reference › Editor › Panels › Designspace"
+status = "docs"
+origin = "fontra"
+notes = "Built (M9.52): a paint layer of the canvas (outlineAtLocation) and the Show Outline button of the Glyph Sources panel."
+guesses = [
+  "A thin orange outline, off at first; the secondary reference edits the interpolated glyph itself instead of drawing it behind a layer.",
+]
+
 # =====================================================================================================
 # FontLab — TrueType hinting extras
 # =====================================================================================================
@@ -4815,9 +4856,9 @@ summary = "Treats every glyph as having its own list of sources in the design sp
 ref = "Fontra reference › Editor › Panels › Designspace"
 status = "docs"
 origin = "fontra"
-notes = "Built (M9.37) as the dock panel `glyphSources` (crates/ui/src/panels/glyph_sources.rs): each axis' previewed coordinate with an Animate button, each source's name, location, on checkbox and influence bar with its share in percent, and the masters the glyph has no layer for. The bars are for the location the Preview Area shows (the Preview Panel while only that is open): its instance's, else the current master's, and the animated axis where the sweep is. Not built: axis sliders, glyph axes, show-in-background, multi-source editing, and adding or deleting a source here (the Layers palette does both)."
+notes = "Built (M9.37) as the dock panel `glyphSources` (crates/ui/src/panels/glyph_sources.rs): each axis' previewed coordinate with an Animate button, each source's name, location, on checkbox and influence bar with its share in percent, and the masters the glyph has no layer for. The bars are for the location the Preview Area shows (the Preview Panel while only that is open): its instance's, else the current master's, and the animated axis where the sweep is. Each axis has a slider, a number field in external coordinates with the internal one beside it, and a reset button (view.setLocation); Add Source adds an intermediate layer at the location (layers.addIntermediate), Delete removes a source that is no master layer (layers.delete), a source that cannot interpolate names its first difference, and Show Outline draws the outline at the location on the canvas (view.showOutlineAtLocation) (M9.52). Not built: glyph axes, show-in-background per source and multi-source editing."
 guesses = [
-  "The influence bars follow the preview's instance, since there is no location slider; the secondary reference's bars follow its axis sliders.",
+  "The location is the followed preview's: its instance's, its master's, or the sliders' once one is moved; the secondary reference has one location per editor.",
 ]
 
 [[command]]

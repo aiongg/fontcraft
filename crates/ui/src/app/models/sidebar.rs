@@ -107,6 +107,8 @@ pub fn project(model: &mut Tracked<SidebarModel>, cx: &mut ProjectCx<'_>) {
     let master = crate::shell::masters::current_master(font, &cx.view.layers).map(|m| m.id.clone());
     let mut params = Map::new();
     params.insert("sidebar".into(), json!(true));
+    // `incompatibility::scan` checks a large font in slices and projects again when it is through.
+    params.insert("knownCompatibility".into(), json!(true));
     if let Some(m) = master {
         params.insert("master".into(), json!(m));
     }

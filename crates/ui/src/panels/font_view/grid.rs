@@ -5,22 +5,25 @@
 //! tile go on that glyph as Glyph › Add Image… places them (`canvas::images::drop::cell_params`). A glyph in a status
 //! (`glyph.setStatus`, or the font's default status) has a thin bar of the status colour along the tile's foot. With a
 //! strike shown (`view.setFontViewStrike`) a tile draws its glyph's bitmap in that strike instead of the outline and
-//! image, and always shows the name, so a glyph without a bitmap is an empty tile with its name.
+//! image, and always shows the name, so a glyph without a bitmap is an empty tile with its name. A glyph whose layers
+//! cannot interpolate has a red top-left corner, and the reason as its tooltip; a tile drawn before its glyph was checked
+//! asks for the answer (`ViewMsg::UncheckedCells`).
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use craft::behavior::{DisplayOrder, ItemSource};
-use craft::ui::contract::{Bind, CollectionEvent, DropAt, DropKind, DropPlace, OsFiles, ShowCollection as _};
+use craft::ui::contract::{Bind, CollectionEvent, DropAt, DropKind, DropPlace, OsFiles, Props as _, ShowCollection as _};
 use craft::ui::list::ThumbAspect;
 use craft::ui::runtime::env::Env;
 use craft::ui::tile_grid::{CaptionPlace, Tile, TileGrid};
 use egui::Ui;
 
 use super::{FontViewWords, cells, keys};
-use crate::app::Msg;
 use crate::app::font_view::LABEL_MIN_CELL;
 use crate::app::models::font_view::FontViewModel;
+use crate::app::models::incompatibility::{CellCompat, MAX_CELLS};
+use crate::app::{Msg, ViewMsg};
 use crate::canvas::images::cells::CellImages;
 use crate::canvas::images::drop;
 
@@ -73,6 +76,7 @@ pub fn show(ui: &mut Ui, model: &FontViewModel, images: &CellImages, sent: &mut 
     let (ascender, descender) = (model.ascender, model.descender);
     let mut selection = keys::selection(model);
     let source = Shown::new(model);
+    let mut unchecked = Vec::new();
     let out = TileGrid::<usize>::new(words.glyphs.clone())
         .empty(words.no_glyphs.clone())
         .zoom(zoom)
@@ -94,7 +98,20 @@ pub fn show(ui: &mut Ui, model: &FontViewModel, images: &CellImages, sent: &mut 
             let image = if strike.is_some() { None } else { images.by_glyph.get(&glyph.name).map(Arc::clone) };
             let bitmap = strike.zip(glyph.bitmap.as_ref().map(Arc::clone));
             let status = glyph.status_color;
-            if art.is_some() || image.is_some() || bitmap.is_some() || status.is_some() {
+            let incompatible = match &glyph.compat {
+                CellCompat::Fine => false,
+                CellCompat::Unchecked => {
+                    if unchecked.len() < MAX_CELLS {
+                        unchecked.push(glyph.name.clone());
+                    }
+                    false
+                }
+                CellCompat::Differs(reason) => {
+                    tile = tile.tooltip(reason.to_string()).accessible_name(format!("{}, {}", glyph.name, words.incompatible.as_str()));
+                    true
+                }
+            };
+            if art.is_some() || image.is_some() || bitmap.is_some() || status.is_some() || incompatible {
                 tile = tile.thumb(ThumbAspect::SQUARE, move |cx, rect| {
                     let width = art.as_ref().map_or(0.0, |a| a.width);
                     if let Some(image) = &image {
@@ -109,10 +126,16 @@ pub fn show(ui: &mut Ui, model: &FontViewModel, images: &CellImages, sent: &mut 
                     if let Some(color) = status {
                         cells::paint_status(cx, rect, color);
                     }
+                    if incompatible {
+                        cells::paint_incompatible(cx, rect);
+                    }
                 });
             }
             tile
         });
+    if !unchecked.is_empty() {
+        sent.push(Msg::View(ViewMsg::UncheckedCells(unchecked)));
+    }
     for event in &out.response.events {
         if let CollectionEvent::Dropped { at: DropAt::Onto(row), payload, .. } = event
             && let Some(files) = payload.get::<OsFiles>()

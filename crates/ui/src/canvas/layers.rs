@@ -64,8 +64,10 @@ pub const LAYERS: &[PaintLayer] = &[
     PaintLayer { id: "guides", paint: overlays::guides::guides },
     PaintLayer { id: "powerGuides", paint: overlays::power_guides::power_guides },
     PaintLayer { id: "psHintBars", paint: hinting::ps::bars },
+    PaintLayer { id: "incompatible", paint: super::compatibility::paint_bars },
     PaintLayer { id: "textBehind", paint: super::text::paint::behind },
     PaintLayer { id: "otherLayers", paint: paint::background::paint },
+    PaintLayer { id: "outlineAtLocation", paint: paint::background::at_location },
     PaintLayer { id: "textColor", paint: color::paint::text },
     PaintLayer { id: "textGlyphs", paint: super::text::paint::glyphs },
     PaintLayer { id: "markCloud", paint: super::mark_cloud::paint },
@@ -100,6 +102,7 @@ pub const LAYERS: &[PaintLayer] = &[
     PaintLayer { id: "textCursor", paint: super::text::paint::cursor },
     PaintLayer { id: "measurementLine", paint: super::text::paint::measurement },
     PaintLayer { id: "textMetricsLabels", paint: super::text::paint::metrics_labels },
+    PaintLayer { id: "incompatibleReason", paint: super::compatibility::paint_reason },
 ];
 
 /// Paints every layer.

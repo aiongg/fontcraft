@@ -45,6 +45,7 @@ pub const SWITCHES: &[&str] = &[
     "view.showAnchors",
     "view.fillPreview",
     "view.showImage",
+    "view.showOutlineAtLocation",
     "view.showMasterCompatibility",
     "edit.keepLayerSelectionInSync",
     "edit.toggleMatchWhenEditing",

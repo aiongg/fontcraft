@@ -68,6 +68,15 @@ pub fn special_label(font: &Font, layer: &Layer) -> Option<String> {
     }
 }
 
+/// What `layer` is called in a message: its master's name, with the label of a special layer (`Light`, `Light {400}`).
+pub fn layer_title(font: &Font, layer: &Layer) -> String {
+    let master = font.masters.iter().find(|m| m.id == layer.master).map_or(layer.master.as_str(), |m| m.name.as_str());
+    match special_label(font, layer) {
+        Some(label) => format!("{master} {label}"),
+        None => master.to_string(),
+    }
+}
+
 /// The short form of `axis` used in alternate-layer labels.
 pub fn axis_abbreviation(axis: &Axis) -> String {
     match axis.tag.as_str() {

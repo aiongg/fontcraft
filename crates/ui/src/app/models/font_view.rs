@@ -21,6 +21,7 @@ use fontcraft_engine::model::{ColorLabel, Font, Glyph, GlyphProps, Prop, Shape, 
 use serde_json::Value;
 
 use super::ProjectCx;
+use super::incompatibility::{self, CellCompat};
 use crate::app::font_view::{Column, Sort, ViewMode};
 use crate::canvas::color;
 
@@ -129,6 +130,8 @@ pub struct GlyphRow {
     pub status_color: Option<[u8; 4]>,
     /// Grid View with a strike shown: the glyph's bitmap in it, if it has one.
     pub bitmap: Option<Arc<StrikeCell>>,
+    /// Whether the glyph's layers can interpolate: the cell's red corner.
+    pub compat: CellCompat,
 }
 
 /// A cell outline: the closed contours, flattened, in font units.
@@ -281,6 +284,7 @@ pub fn project(model: &mut Tracked<FontViewModel>, cache: &mut OutlineCache, fil
         glyphs.push(glyph);
         rows.push(row);
     }
+    incompatibility::mark(cx.session, &mut rows);
     let index: HashMap<&str, usize> = rows.iter().enumerate().map(|(i, r)| (r.name.as_str(), i)).collect();
     let mut error = None;
     let mut visible: Vec<usize> = match state.query() {
@@ -348,6 +352,8 @@ fn run_query(cx: &mut ProjectCx<'_>, query: Value, master: &str, index: &HashMap
     if !master.is_empty() {
         params.entry("master").or_insert_with(|| Value::String(master.to_string()));
     }
+    // `incompatibility::scan` checks a large font in slices and projects again when it is through.
+    params.entry("knownCompatibility").or_insert(Value::Bool(true));
     let result = cx.session.query("fontView.queryGlyphs", &Value::Object(params)).map_err(|e| e.to_string())?;
     let names = result.get("glyphs").and_then(Value::as_array).ok_or("the query gave no glyph list")?;
     Ok(names.iter().filter_map(Value::as_str).filter_map(|n| index.get(n).copied()).collect())

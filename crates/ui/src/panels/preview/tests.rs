@@ -12,6 +12,7 @@ use craft::ui::runtime::commands::CommandRef;
 use craft::ui::testing::Fixture;
 use egui::Vec2;
 use fontcraft_engine::Session;
+use fontcraft_engine::prelude::SessionInterpExt as _;
 use fontcraft_model::{Axis, Glyph, GlyphTable, Instance, Layer, Path, Shape};
 use serde_json::{Value, json};
 
@@ -106,6 +107,38 @@ fn an_animated_axis_moves_the_line_and_ends_with_its_preview() {
     assert!(run(&mut app, shell("view.animateAxis", json!({"axis": "opsz"}))).is_err());
 }
 
+/// The choice Location follows `view.setLocation`; an axis is reset to its origin, and the other choices come back.
+#[test]
+fn the_location_choice_follows_the_sliders() {
+    let mut app = instance_app();
+    let external = app.session.designspace().unwrap().axes()[0].external;
+    let middle = (external.minimum + external.maximum) / 2.0;
+    run(&mut app, shell("view.setLocation", json!({"location": {"wght": middle}}))).unwrap();
+    assert_eq!(app.view.preview.area_shows, Shows::Location);
+    let area = &app.models.preview_area;
+    assert!(area.location_chosen && !area.master_chosen && area.location_offered);
+    assert_eq!(advances(area), [300.0, 500.0], "halfway along the axis");
+    run(&mut app, shell("view.setLocation", json!({"location": {"wght": 1.0e9}}))).unwrap();
+    assert_eq!(advances(&app.models.preview_area), [400.0, 700.0], "held to the axis range");
+    run(&mut app, shell("view.setLocation", json!({"reset": "wght"}))).unwrap();
+    assert_eq!(advances(&app.models.preview_area), [200.0, 300.0], "the origin");
+    assert!(run(&mut app, shell("view.setLocation", json!({"location": {"opsz": 1}}))).is_err());
+    assert!(run(&mut app, shell("view.setLocation", json!({}))).is_err());
+
+    // The canvas draws the outline there behind the edited layer.
+    run(&mut app, shell("view.setLocation", json!({"location": {"wght": middle}}))).unwrap();
+    assert!(app.models.canvas.at_location.is_none());
+    run(&mut app, shell("view.showOutlineAtLocation", json!({"on": true}))).unwrap();
+    assert!(app.models.canvas.at_location.is_some());
+
+    // Moving an axis by hand ends its sweep.
+    run(&mut app, shell("view.animateAxis", json!({"axis": "wght"}))).unwrap();
+    run(&mut app, shell("view.setLocation", json!({"location": {"wght": middle}}))).unwrap();
+    assert!(app.view.preview.sweep.is_none());
+    run(&mut app, shell("preview.setInstance", json!({"instance": "master"}))).unwrap();
+    assert!(app.models.preview_area.master_chosen);
+}
+
 #[test]
 fn set_instance_lays_the_line_out_at_the_instance_and_the_panel_keeps_its_own_choice() {
     let mut app = instance_app();
@@ -194,6 +227,8 @@ fn line_model(options: PreviewOptions) -> PreviewModel {
         instances: vec![InstanceEntry { index: 0, name: "Light".into(), visible: true, chosen: false }],
         master_chosen: true,
         all_chosen: false,
+        location_chosen: false,
+        location_offered: false,
         instance_label: None,
     }
 }

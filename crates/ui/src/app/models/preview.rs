@@ -8,6 +8,7 @@
 //! |---|---|
 //! | the dash (`master`) | the text in the current master and the picked layers, following every master switch |
 //! | an instance | the text laid out in the document's instance view: the instance's widths and kerning |
+//! | Location (`location`) | the text interpolated at the location the sliders set (`view.setLocation`) |
 //! | Show All Instances (`all`) | the edited glyph once for each static instance whose eye is on |
 //! | any, while Animate Axis runs (`shell::axis_sweep`) | the text interpolated at the choice's location, its axis where the sweep is |
 //!
@@ -85,6 +86,9 @@ pub struct PreviewModel {
     pub instances: Vec<InstanceEntry>,
     pub master_chosen: bool,
     pub all_chosen: bool,
+    pub location_chosen: bool,
+    /// The font has axes: the pop-up offers Location.
+    pub location_offered: bool,
     /// The chosen instance's name; `None` for the dash and Show All Instances.
     pub instance_label: Option<String>,
 }
@@ -131,9 +135,10 @@ pub enum Drawn {
     Location(Vec<u64>),
 }
 
+/// [`Shows::Location`] draws the master here: [`build`] puts the location in its place when the font has a designspace.
 pub fn drawn(font: &Font, shows: &Shows) -> Drawn {
     match shows {
-        Shows::Master => Drawn::Master,
+        Shows::Master | Shows::Location => Drawn::Master,
         Shows::Instance(key) => instance_index(font, key).filter(|i| is_static(font, *i)).map_or(Drawn::Master, Drawn::Instance),
         Shows::All => {
             Drawn::All((0..font.instances.len()).filter(|i| is_static(font, *i) && font.instances.get(*i).is_some_and(|x| x.visible)).collect())
@@ -167,7 +172,8 @@ fn build(session: &mut Session, view: &ViewState, target: Target) -> Option<Prev
     let options = *state.options(target);
     let index = if view.text.kerning.shows_kerning() { session.kern_index().ok() } else { None };
     let doc = session.active().map(|d| (d.id, d.revision))?;
-    let designspace = if state.sweep.is_some() { session.designspace().ok() } else { None };
+    let at_location = shows == Shows::Location;
+    let designspace = if state.sweep.is_some() || at_location { session.designspace().ok() } else { None };
     let font = session.font().ok()?;
     let master = crate::shell::masters::current_master(font, &view.layers)?;
     let (low, high) = preview_range(font, master);
@@ -207,7 +213,9 @@ fn build(session: &mut Session, view: &ViewState, target: Target) -> Option<Prev
         range: [low, high],
         options,
         instances,
-        master_chosen: chosen == Drawn::Master,
+        master_chosen: chosen == Drawn::Master && !at_location,
+        location_chosen: at_location,
+        location_offered: !font.axes.is_empty(),
         all_chosen: matches!(chosen, Drawn::All(_)),
         instance_label,
         ..PreviewModel::default()

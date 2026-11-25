@@ -352,9 +352,13 @@ milestone = "M9"
 summary = "In Edit View a glyph whose layers are incompatible shows a red bar above its ascender line."
 ref = "Interpolation › Outline Compatibility › Identifying Incompatible Outlines"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft: crates/ui/src/canvas/compatibility.rs, over every glyph of the tab whose layers cannot interpolate, hidden while Enforce Compatibility Check is present and off."
+notes = "Documented, not yet observed. FontCraft: crates/ui/src/canvas/compatibility.rs (paint_bars) from crates/ui/src/app/models/incompatibility.rs, over every glyph of the tab whose layers cannot interpolate, hidden while Enforce Compatibility Check is present and off. The first difference of each pair of layers, with the layers' names, shows beside the pointer over the bar, and in the status line while that glyph is edited and there is no error or notice to show. A click on the bar edits its glyph and turns Show Master Compatibility on, under the Select and Text tools; under the others the press is the tool's."
 guesses = [
   "The bar spans the glyph's advance a few screen points above the ascender, a few points high. Settle by measuring it in a screenshot of the reference app.",
+  "The reason under the pointer, in the status line, and the click on the bar are ours; the handbook gives the bar no action. Settle by hovering and clicking the bar in the reference app.",
+]
+observe = [
+  "In F5 (incompatible), hover and click the red bar: note any text or action; repeat with two incompatible glyphs in one tab.",
 ]
 
 [[behavior]]
@@ -439,7 +443,7 @@ kind = "engine"
 params = "{glyph: name, layer: id, a: int, b: int}"
 area = "interpolation"
 milestone = "M9"
-summary = "Exchanges two shapes in the order of one non-current layer. This is what dragging the end of a connecting line onto the end of another line does in Master Compatibility view; the same gesture applies to start nodes and anchors, whose headless forms need their own parameters."
+summary = "Exchanges two shapes in the order of one non-current layer. This is what dragging the end of a connecting line onto the end of another line does in Master Compatibility view; the same gesture applies to start nodes and anchors, whose headless forms need their own parameters. Hints follow their shapes, as in Set Shape Order."
 ref = "Interpolation › Outline Compatibility › Master Compatibility"
 status = "inferred"
 guesses = [
@@ -517,7 +521,7 @@ status = "handbook"
 notes = "Documented, not yet observed. FontCraft: crates/ui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph."
 guesses = [
   "The edited layer stays in place and every other source layer is drawn beside it in source order (master layers, then intermediate layers), each starting a quarter em after the previous layer's advance and a twelfth of an em higher, so the connecting lines slant. Settle by opening the view on a glyph with three masters.",
-  "Shape tints are drawn as wide translucent strokes along each shape's outline and components get a dashed tint in place of a checkered fill. Settle by comparing a screenshot of the reference app's view.",
+  "Shape tints are drawn as wide translucent strokes along each shape's outline and components also get a checkered fill. Settle by comparing a screenshot of the reference app's view.",
 ]
 observe = [
   "In F5 (incompatible), open a glyph with three masters and choose Show Master Compatibility: note where the other masters are drawn relative to the current one.",
@@ -530,7 +534,10 @@ milestone = "M9"
 summary = "Each path and component is tinted according to its position in the shape order, so the shape with index n has the same colour on every master; components additionally get a checkered pattern. The palette itself is not specified."
 ref = "Interpolation › Outline Compatibility › Master Compatibility"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft: crates/ui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph."
+notes = "Documented, not yet observed. FontCraft: crates/ui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph. A component's fill is a checkered pattern in its tint (crates/ui/src/canvas/paint/checker.rs)."
+guesses = [
+  "The checkered squares are 8 screen points wide and do not scale with the glyph. Settle by zooming in on a component in the reference app's view.",
+]
 
 [[behavior]]
 id = "masterCompatibility.indexLabels"
@@ -553,7 +560,7 @@ ref = "Interpolation › Outline Compatibility › Master Compatibility"
 status = "handbook"
 notes = "Documented, not yet observed. FontCraft: crates/ui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph. Start nodes are each path's first on-curve node; a component's centre is the centre of its outline's bounds."
 guesses = [
-  "Lines join the layers of one group in the order they are drawn, one segment between each neighbouring pair. Settle by watching the lines with three masters.",
+  "Lines join the layers of one group in the order they are drawn, one segment between each neighbouring pair; at most 4,000 segments are drawn. Settle by watching the lines with three masters.",
 ]
 
 [[behavior]]
@@ -593,9 +600,13 @@ milestone = "M9"
 summary = "The ends of connecting lines on layers other than the current one can be dragged onto the end of another line; the two correspondences swap, which reorders shapes (or start nodes) on that layer."
 ref = "Interpolation › Outline Compatibility › Master Compatibility"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft: crates/ui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph. Dropping an end within three end radii of another shape's line end on the same layer runs glyph.swapShapes on that layer with the two shapes' indices."
+notes = "Documented, not yet observed. FontCraft: crates/ui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph. The draggable ends are dots, the one under the pointer has a ring, and the press goes to the view before the tool. Dropping an end within three end radii of another shape's line end on the same layer runs glyph.swapShapes on that layer with the two shapes' indices, one undo step; Escape ends the drag, as another glyph, layer or document and an edit do. Under the tools other than Select and Text the press is the tool's."
 guesses = [
   "Only the ends of shape lines (start nodes and component centres) can be dragged; anchor and selected-point lines cannot, and start nodes are not moved within a path. Settle by dragging an anchor line's end in the reference app.",
+]
+observe = [
+  "In F5 (incompatible), in Show Master Compatibility, drag the end of an anchor's line onto another anchor's: note whether anything swaps.",
+  "In the same view, drag the end of a start node's line along its own path on another master: note whether the start node moves.",
 ]
 
 [[behavior]]
@@ -605,7 +616,10 @@ milestone = "M9"
 summary = "Selecting nodes on the current layer shows where the corresponding nodes fall on the other masters, the stated way to locate the cause of a segment mismatch. No command adds or removes the missing node automatically."
 ref = "Interpolation › Outline Compatibility › Master Compatibility"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft: crates/ui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph. Each selected point of the edited layer gets a line to the node with the same shape and node index on the other layers of its group."
+notes = "Documented, not yet observed. FontCraft: crates/ui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph. Each selected point of the edited layer gets a line to the node with the same shape and node index on the other layers of its group, to (0, 0) where a layer lacks it; at most 4,000 lines (project_probe in crates/ui/src/app/models/compatibility.rs). The status line names the difference of the segment or line end under the pointer, while it has no error or notice to show."
+guesses = [
+  "The status line's text is ours. Settle by pointing at a red segment in the reference app's view.",
+]
 
 [[behavior]]
 id = "masterCompatibility.shapeShifters"
@@ -614,7 +628,7 @@ milestone = "M9"
 summary = "Layers can be formally compatible yet interpolate badly when same-index shapes sit in different places on different masters; the view exposes this as crossing connecting lines. Fixes: Correct Path Direction, the Shape Order window, or dragging a line end to the right shape."
 ref = "Interpolation › Outline Compatibility › Master Compatibility"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft: crates/ui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph."
+notes = "Documented, not yet observed. FontCraft: crates/ui/src/canvas/compatibility.rs, drawn over Edit View for the edited glyph. The lines of same-index shapes cross; dragging an end to the right shape (masterCompatibility.dragLineEnds) uncrosses them."
 
 [[behavior]]
 id = "masterCompatibility.alternateLayersOffset"
@@ -1053,6 +1067,24 @@ status = "handbook"
 notes = "Documented, not yet observed. FontCraft: crates/ui/src/canvas/tools/apply.rs, run before the tools see each frame; crates/ui/src/shell/compatibility.rs (carried), run when the tools' target layer changes."
 guesses = [
   "The selection is carried only from one master layer to another of the same glyph, when the glyph is compatible; nodes, shapes and anchors that resolve on the new layer are kept, guides and annotations are dropped. Settle by switching from a master to an intermediate layer with the option on.",
+]
+
+[[command]]
+id = "layers.addIntermediate"
+label = "Add Source"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{glyph: name, location: {tag: number}, master?: id} → {glyph, layer, master, coordinates: {tag: number}, label}"
+area = "interpolation"
+milestone = "M9"
+summary = "Adds an intermediate layer to a glyph at a location in internal coordinates, drawn as the glyph interpolates there, as one undo step; instances at that location stay as they were. Our own command: the headless form of adding a source in the Glyph Sources panel (palette.glyphSources)."
+ref = "FontCraft (no counterpart in the handbook)"
+status = "inferred"
+own = true
+notes = "crates/engine/src/cmd/special_layers.rs. A location beyond the masters and virtual masters, or where a source of the glyph already is (an inactive one included), is refused. The new layer holds every axis' coordinate and goes after the last layer of its master; hints, guides and the background are not copied."
+guesses = [
+  "Without `master` the layer goes under the master nearest to the location in normalized coordinates, the first one on a tie; the secondary reference has no layers under masters to compare with.",
 ]
 
 [[command]]

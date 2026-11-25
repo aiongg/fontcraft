@@ -97,6 +97,19 @@ impl fmt::Display for Mismatch {
     }
 }
 
+impl Mismatch {
+    /// The difference as a person reads it, with the layers' names: `Light and Bold differ: shape 2 has 12 nodes
+    /// against 13`. A layer the font does not have keeps its id.
+    pub fn describe(&self, font: &Font) -> String {
+        let glyph = font.glyph(&self.glyph);
+        let name = |id: &str| match glyph.and_then(|g| g.layers.iter().find(|l| l.id == id)) {
+            Some(layer) => crate::labels::layer_title(font, layer),
+            None => id.to_string(),
+        };
+        format!("{} and {} differ: {}", name(&self.layer_a), name(&self.layer_b), self.kind)
+    }
+}
+
 /// Corresponding segments of two compatible layers that turn by more than
 /// [`crate::ANGLE_WARNING_DEGREES`].
 #[derive(Clone, Debug, PartialEq)]

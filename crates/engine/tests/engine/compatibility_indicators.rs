@@ -56,6 +56,12 @@ fn query(s: &mut Session, params: Value) -> Vec<String> {
 #[test]
 fn smart_filter_incompatible_masters_and_the_master_compatible_rule_follow_the_check() {
     let mut s = session();
+    let known = json!({"entries": ["filters/Incompatible masters"], "knownCompatibility": true});
+    let r = s.execute("fontView.queryGlyphs", &known).unwrap();
+    assert_eq!((r["count"].as_u64(), r["compatibilityPending"].as_u64()), (Some(0), Some(2)), "nothing is checked for this query");
+    assert!(!s.check_some_compat(&[], true, usize::MAX));
+    let r = s.execute("fontView.queryGlyphs", &known).unwrap();
+    assert_eq!((r["count"].as_u64(), r["compatibilityPending"].as_u64()), (Some(1), Some(0)));
     assert!(!s.glyph_compat("e").unwrap().ok);
     assert!(s.glyph_compat("o").unwrap().ok);
     assert!(s.glyph_compat("missing").is_none());

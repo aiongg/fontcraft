@@ -40,6 +40,14 @@ pub fn paint(cx: &PaintCx<'_>) {
     cx.painter.extend(shapes(cx));
 }
 
+/// The edited glyph at the previews' location (`view.showOutlineAtLocation`).
+pub fn at_location(cx: &PaintCx<'_>) {
+    if let Some(outline) = &cx.model.at_location {
+        let t = cx.tokens;
+        cx.painter.extend(outline_shapes(cx, outline, Stroke::new(t.compat.line_width, t.compat.probe)));
+    }
+}
+
 /// The other visible layers, then the other side of the layer and, under Show Nodes › In Background, its nodes.
 pub fn shapes(cx: &PaintCx<'_>) -> Vec<Shape> {
     let Some(glyph) = cx.glyph() else { return Vec::new() };

@@ -10,7 +10,7 @@
 //! - After the edit every matched layer must have the edited layer's shapes and node types again;
 //!   otherwise, as when one layer refuses the edit, the whole edit is refused.
 
-use fontcraft_interp::labels::special_label;
+use fontcraft_interp::labels::layer_title;
 use fontcraft_model::{Font, Layer, LayerPartsMut, LayerSide, Shape};
 use serde_json::{Value, json};
 
@@ -54,7 +54,7 @@ impl Plan {
             if signature(layer.parts(LayerSide::Foreground)) == sig {
                 plan.layers.push(layer.id.clone());
             } else if layer.info.attrs.axis_rules.is_empty() {
-                let name = layer_name(font, layer);
+                let name = layer_title(font, layer);
                 plan.skipped.push(json!({
                     "glyph": plan.glyph,
                     "layer": layer.id,
@@ -72,7 +72,7 @@ impl Plan {
         }
         let names: Vec<(String, String)> = {
             let g = font.glyph(&self.glyph).ok_or_else(|| p.bad(format!("there is no glyph `{}`", self.glyph)))?;
-            g.layers.iter().filter(|l| self.layers.contains(&l.id)).map(|l| (l.id.clone(), layer_name(font, l))).collect()
+            g.layers.iter().filter(|l| self.layers.contains(&l.id)).map(|l| (l.id.clone(), layer_title(font, l))).collect()
         };
         let mut g = font.glyph_mut(&self.glyph)?;
         let edited: Option<Vec<Sig>> = g.layers.iter().find(|l| l.id == self.source).map(|l| signature(l.parts(LayerSide::Foreground)));
@@ -92,14 +92,6 @@ impl Plan {
         let matched: Vec<Value> = plans.iter().flat_map(|plan| plan.layers.iter().map(move |id| json!({"glyph": plan.glyph, "layer": id}))).collect();
         out.insert("matched".into(), Value::Array(matched));
         out.insert("skipped".into(), Value::Array(plans.into_iter().flat_map(|plan| plan.skipped).collect()));
-    }
-}
-
-fn layer_name(font: &Font, layer: &Layer) -> String {
-    let master = font.masters.iter().find(|m| m.id == layer.master).map_or(layer.master.as_str(), |m| m.name.as_str());
-    match special_label(font, layer) {
-        Some(label) => format!("{master} {label}"),
-        None => master.to_string(),
     }
 }
 

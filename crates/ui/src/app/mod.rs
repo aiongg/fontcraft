@@ -240,6 +240,15 @@ pub struct FontCraftApp {
     pub tools: crate::canvas::tools::Tools,
     /// The gradient knob drag in progress (`canvas::color::knobs`).
     pub knobs: crate::canvas::color::knobs::KnobDrag,
+    /// The press on an incompatibility bar or a line end of the Master Compatibility view (`canvas::compatibility`).
+    pub compat_press: Option<crate::canvas::compatibility::Press>,
+    /// The last press on the canvas was such a one: what follows it up to the next press is not the tool's.
+    pub compat_taken: bool,
+    /// Where the pointer last was over the canvas, in the edited glyph's font units, while the Master Compatibility view
+    /// is on.
+    pub compat_pointer: Option<fontcraft_geom::Point>,
+    /// The mouse was over the canvas at the last projection, by the window.
+    pub compat_hovered: bool,
     /// The decoded image files and the image drag in progress (`canvas::images`).
     pub images: crate::canvas::images::Images,
     /// Moves with every applied [`ViewMsg`] and every view change a projection reads; part of the projection
@@ -338,6 +347,10 @@ impl FontCraftApp {
             bitmap_canvas: Default::default(),
             tools: crate::canvas::tools::Tools::default(),
             knobs: Default::default(),
+            compat_press: None,
+            compat_taken: false,
+            compat_pointer: None,
+            compat_hovered: false,
             images: Default::default(),
             view_revision: 0,
             enabled_at: None,
@@ -599,9 +612,12 @@ impl FontCraftApp {
         crate::canvas::images::refresh(self);
         crate::canvas::bounding_box::refresh(self);
         crate::canvas::mark_cloud::refresh(self);
+        // Before the stamp: the last answer of several passes projects the models again.
+        models::incompatibility::scan(self);
         let stamp = Stamp::of(&self.session, self.view_revision);
         let mut cx = ProjectCx { session: &mut self.session, view: &self.view };
-        self.models.project(stamp, &mut cx);
+        let projected = self.models.project(stamp, &mut cx);
+        self.models.project_indicators(projected, &mut cx);
         self.models.project_sweep(&mut cx);
         models::console::project(&mut self.models.console, &mut cx);
         self.models.project.project(&mut cx);
@@ -610,6 +626,13 @@ impl FontCraftApp {
         models::compare::project_fonts(&mut self.models.compare_fonts, &mut cx);
         models::text_preview::project(&mut self.models.text_preview, &mut cx, &self.host);
         models::color::project(&mut self.models.color, &mut cx, &self.tools, stamp);
+        self.models.project_probe(&self.tools.selection, stamp, &cx);
+        crate::canvas::compatibility::refresh(self);
+        if self.models.compat_scan.waiting()
+            && let Some(ctx) = &self.window
+        {
+            ctx.request_repaint();
+        }
         // Last: it takes the whole app, so `cx` must be done.
         crate::canvas::overlays::refresh(self);
         crate::canvas::reporters::refresh(self);
@@ -640,6 +663,11 @@ impl FontCraftApp {
     }
 
     fn apply_view(&mut self, msg: ViewMsg) -> Result<(), String> {
+        // Which cells are in view changes no model by itself.
+        if let ViewMsg::UncheckedCells(glyphs) = msg {
+            self.models.compat_scan.ask(glyphs);
+            return Ok(());
+        }
         self.view_revision += 1;
         match msg {
             ViewMsg::SelectTool(tool) => {
@@ -664,6 +692,7 @@ impl FontCraftApp {
             ViewMsg::FeaturePreview(ask) => self.view.font_info.features.preview = ask,
             ViewMsg::FeatureFind(find) => self.view.font_info.features.find = find,
             ViewMsg::FontViewSearchFocused => self.view.font_view.focus_search = false,
+            ViewMsg::UncheckedCells(_) => {}
             ViewMsg::Bitmap(input) => return crate::shell::bitmap_editor::input(self, input),
         }
         Ok(())

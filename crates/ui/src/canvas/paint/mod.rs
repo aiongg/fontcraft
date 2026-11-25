@@ -13,6 +13,7 @@
 
 pub mod anchors;
 pub mod background;
+pub mod checker;
 pub mod components;
 pub mod fill;
 pub mod metrics;
