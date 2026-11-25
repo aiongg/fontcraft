@@ -361,6 +361,20 @@ fn cells_are_edited_in_place() {
     fixture.key(Key::ArrowUp, Modifiers::SHIFT).settle();
     assert!(posted.borrow().contains(&set(-70.0)), "{:?}", posted.borrow());
 
+    // A draft is not stepped: Return stores it, once.
+    let (mut fixture, posted) = editing_fixture(Column::Value);
+    fixture.key(Key::A, Modifiers::COMMAND).type_text("-72").key(Key::ArrowUp, Modifiers::NONE).key(Key::Enter, Modifiers::NONE).settle();
+    let runs: Vec<Msg> = posted.borrow().iter().filter(|m| matches!(m, Msg::Run(_))).cloned().collect();
+    assert_eq!(runs, [set(-72.0)]);
+
+    // A press elsewhere closes the field, typed into or not.
+    let (mut fixture, posted) = editing_fixture(Column::Value);
+    assert!(!posted.borrow().contains(&close));
+    let search = fixture.by_label("Search").expect("the search field");
+    fixture.click(&search).settle();
+    assert!(posted.borrow().contains(&close), "{:?}", posted.borrow());
+    assert!(!posted.borrow().iter().any(|m| matches!(m, Msg::Run(_))), "{:?}", posted.borrow());
+
     let (mut fixture, posted) = editing_fixture(Column::Value);
     fixture.key(Key::A, Modifiers::COMMAND).type_text("5").key(Key::Escape, Modifiers::NONE).settle();
     assert!(!posted.borrow().iter().any(|m| matches!(m, Msg::Run(_))), "{:?}", posted.borrow());

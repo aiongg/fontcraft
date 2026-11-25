@@ -267,9 +267,11 @@ fn count(font: &Font, direction: Direction, master: &str) -> usize {
     direction.table(&font.kerning).0.iter().filter(|m| m.master == master).flat_map(|m| &m.firsts).map(|f| f.seconds.len()).sum()
 }
 
-/// Brings the list up to date while the window shows; the selection keeps the rows still listed.
+/// Brings the list up to date while the window shows; the selection keeps the rows still listed. A hidden window holds
+/// no list: what it listed may belong to another document by the time a command reads it.
 pub fn project(model: &mut Tracked<KerningWindowModel>, cx: &mut ProjectCx<'_>) {
     if cx.view.workspace.layout.panel_state(&PanelId::KerningWindow) == craft::behavior::dock::PanelState::Hidden {
+        super::set(model, KerningWindowModel::default());
         return;
     }
     let direction = direction(cx.view);
@@ -330,7 +332,8 @@ pub fn project(model: &mut Tracked<KerningWindowModel>, cx: &mut ProjectCx<'_>) 
         next.picked = Arc::clone(&kerning.selected);
     }
     next.current = kerning.current.as_ref().and_then(|id| next.rows.walk(id));
-    next.editing = kerning.editing.as_ref().and_then(|(id, column)| Some((next.rows.walk(id)?, *column)));
+    let edited = kerning.editing.as_ref().filter(|_| kerning.editing_in == Some(document));
+    next.editing = edited.and_then(|(id, column)| Some((next.rows.walk(id)?, *column)));
     let tokens = Tokens::from_settings(cx.session.settings(), cx.view.system_dark);
     next.group_color = tokens.kerning_group_text.to_srgba_unmultiplied();
     next.glyph_color = tokens.kerning_glyph_text.to_srgba_unmultiplied();

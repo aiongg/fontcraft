@@ -241,11 +241,10 @@ pub fn paste_msg(app: &mut FontCraftApp, text: &str, kind: PasteKind) -> Result<
         return Ok(Msg::Shell(CommandRef::with_params(crate::shell::project::PASTE, params)));
     }
     if kind == PasteKind::KerningPairs {
-        let window = &app.models.kerning_window;
         let mut params = Map::new();
         params.insert("text".into(), json!(text));
-        params.insert("direction".into(), json!(window.direction));
-        if let Some(master) = &window.master {
+        params.insert("direction".into(), json!(crate::app::models::kerning_window::direction(&app.view).name()));
+        if let Some(master) = crate::shell::kerning_window::listed_master(app) {
             params.insert("master".into(), json!(master));
         }
         return Ok(Msg::Shell(CommandRef::with_params("dialog.pasteKerningConflict", Value::Object(params))));

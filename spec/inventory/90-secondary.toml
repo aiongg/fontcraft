@@ -1780,6 +1780,7 @@ own = true
 notes = "`crates/ui/src/dialogs/kerning_batch.rs`. Its menu row takes the place of kerning.autoKern's. Apply does what the preview showed: it is off until a preview ran with the settings as they are, and refused when the font changed since."
 guesses = [
   "The pairs come from the Kerning window's selected rows, the Font View selection with itself or with a typed list, the Pairs & Phrases list, or every stored pair; the defaults are the command's, for the master shown.",
+  "At most 20,000 pairs at once, since they are measured on the window's thread. One kerning dialog is open at a time: asking for another is refused.",
 ]
 
 [[command]]

@@ -93,7 +93,8 @@ craft::ui::words! {
 }
 
 /// Most pairs the dialogs hand to a command.
-const MAX_PAIRS: usize = 200_000;
+/// They are measured on the window's thread, twice: for the preview and for Apply.
+const MAX_PAIRS: usize = 20_000;
 /// Most rows a dialog lists; the rest are applied with the ticked ones.
 const MAX_ROWS: usize = 20_000;
 /// Most characters of the typed list.
@@ -299,6 +300,9 @@ pub fn pairs(app: &mut FontCraftApp, kind: Batch, settings: &Settings) -> Result
     let mut out: Vec<(String, String)> = Vec::new();
     match settings.source {
         Source::Window => {
+            if !crate::shell::kerning_window::shows(app) {
+                return Err("show the Kerning window and select rows in it first".into());
+            }
             let model = &app.models.kerning_window;
             if model.direction != settings.direction {
                 return Err("the Kerning window lists another writing direction".into());
@@ -430,6 +434,17 @@ fn changes(kind: Batch, reply: &Value) -> (Vec<Change>, usize) {
     (rows, reply.get("skipped").and_then(Value::as_array).map_or(0, Vec::len))
 }
 
+/// The vertical pairs each master stores itself; a linked master stores none of its own.
+fn count_vertical(app: &mut FontCraftApp, choices: &[MasterChoice]) -> Vec<(String, usize)> {
+    let count = |m: &MasterChoice| {
+        let listed = app.session.query("kerning.listPairs", &json!({"master": m.id, "direction": "vertical"})).ok();
+        let own = listed.as_ref().filter(|v| v.get("source").and_then(Value::as_str).is_none_or(|source| source == m.id));
+        let total = own.and_then(|v| v.get("total")).and_then(Value::as_u64).and_then(|n| usize::try_from(n).ok());
+        (m.id.clone(), total.unwrap_or(0))
+    };
+    choices.iter().map(count).collect()
+}
+
 impl BatchDialog {
     pub fn new(kind: Batch, app: &mut FontCraftApp) -> BatchDialog {
         let choices: Vec<MasterChoice> = app
@@ -437,9 +452,8 @@ impl BatchDialog {
             .font()
             .map(|f| f.masters.iter().map(|m| MasterChoice { id: m.id.clone(), name: m.name.clone() }).collect())
             .unwrap_or_default();
-        let window = &app.models.kerning_window;
-        let rows_selected = !window.selected.is_empty();
-        let direction = match window.direction.as_str() {
+        let rows_selected = crate::shell::kerning_window::shows(app) && !app.models.kerning_window.selected.is_empty();
+        let direction = match crate::app::models::kerning_window::direction(&app.view).name() {
             "rtl" => "rtl",
             "vertical" if kind == Batch::Remove => "vertical",
             _ => "ltr",
@@ -451,16 +465,8 @@ impl BatchDialog {
         } else {
             Source::All
         };
-        let shown = app.session.font().ok().and_then(|f| crate::shell::masters::current_master(f, &app.view.layers)).map(|m| m.id.clone());
-        let vertical_pairs = choices
-            .iter()
-            .filter(|_| kind == Batch::Vertical)
-            .map(|m| {
-                let listed = app.session.query("kerning.listPairs", &json!({"master": m.id, "direction": "vertical"})).ok();
-                let total = listed.as_ref().and_then(|v| v.get("total")).and_then(Value::as_u64).and_then(|n| usize::try_from(n).ok());
-                (m.id.clone(), total.unwrap_or(0))
-            })
-            .collect();
+        let shown = crate::shell::kerning_window::listed_master(app);
+        let vertical_pairs = if kind == Batch::Vertical { count_vertical(app, &choices) } else { Vec::new() };
         let settings = Settings {
             source,
             direction: direction.into(),
@@ -544,6 +550,9 @@ impl BatchDialog {
             Ok(_) => words.done.as_str().to_string(),
             Err(e) => e,
         };
+        if self.kind == Batch::Vertical {
+            self.vertical_pairs = count_vertical(app, &self.choices);
+        }
     }
 
     fn summary(&self, words: &KerningBatchWords) -> String {
@@ -750,7 +759,11 @@ pub fn run(host: &mut DialogHost, app: &mut FontCraftApp) {
     {
         host.open(BatchDialog::new(kind, app));
     }
-    let Some(dialog) = host.get_mut::<BatchDialog>() else { return };
+    let Some(dialog) = host.get_mut::<BatchDialog>() else {
+        app.view.kerning.batch_open = None;
+        return;
+    };
+    app.view.kerning.batch_open = Some(dialog.kind);
     match dialog.request.take() {
         Some(Ask::Preview) => dialog.preview(app),
         Some(Ask::Apply) => dialog.apply(app),
@@ -881,8 +894,33 @@ mod tests {
         assert_eq!(stored(&mut app), vec![("A".to_string(), "V".to_string(), -100.0)]);
 
         app.session.execute("kerning.setPair", &json!({"left": "A", "right": "V", "value": 3, "direction": "vertical"})).unwrap();
-        let vertical = BatchDialog::new(Batch::Vertical, &mut app);
+        let mut vertical = BatchDialog::new(Batch::Vertical, &mut app);
         assert_eq!(vertical.vertical_pairs.iter().map(|(_, n)| *n).sum::<usize>(), 1);
         assert!(vertical.can_apply());
+        vertical.apply(&mut app);
+        assert_eq!(vertical.vertical_pairs.iter().map(|(_, n)| *n).sum::<usize>(), 0, "counted again: {}", vertical.note);
+    }
+
+    /// A hidden Kerning window's rows are not kerned, a paste goes to the master and direction the window would list,
+    /// and a second dialog is refused while one waits.
+    #[test]
+    fn a_hidden_window_and_a_second_dialog() {
+        let mut app = app();
+        shell(&mut app, "window.kerning", json!({"select": [{"left": "T", "right": "@o"}]}));
+        app.project();
+        assert!(!app.models.kerning_window.selected.is_empty());
+        shell(&mut app, "window.kerning", json!({"open": false}));
+        app.project();
+        assert!(pairs(&mut app, Batch::AutoKern, &Settings::default()).unwrap_err().contains("show the Kerning window"));
+        assert_ne!(BatchDialog::new(Batch::AutoKern, &mut app).settings.source, Source::Window);
+        assert_eq!(crate::shell::kerning_window::listed_master(&app), app.session.font().unwrap().masters.first().map(|m| m.id.clone()));
+        shell(&mut app, "kerning.makeException", json!({"left": "T", "right": "@o"}));
+        assert!(stored(&mut app).iter().any(|(l, r, _)| l == "T" && r == "o"), "into the master shown: {:?}", stored(&mut app));
+
+        shell(&mut app, "dialog.autoKern", json!({}));
+        app.sent.push(Msg::Shell(CommandRef::with_params("dialog.kernToDistance", json!({}))));
+        app.drain();
+        assert!(app.status.contains("another kerning dialog"), "{}", app.status);
+        assert_eq!(app.view.kerning.batch, Some(Batch::AutoKern));
     }
 }

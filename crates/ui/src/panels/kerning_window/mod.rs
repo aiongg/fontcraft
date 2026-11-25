@@ -23,7 +23,7 @@
 use std::borrow::Cow;
 use std::cell::RefCell;
 
-use craft::behavior::{ColumnKey, ColumnWidth, DisplayOrder, EditEvent, IconId, ItemSource, Selection};
+use craft::behavior::{ColumnKey, ColumnWidth, DisplayOrder, EditEvent, IconId, ItemSource, Mixed, Selection};
 use craft::ui::buttons::{Button, IconButton};
 use craft::ui::choice::{Checkbox, Segmented};
 use craft::ui::contract::{
@@ -265,6 +265,7 @@ fn pair_table(ui: &mut Ui, words: &KerningWindowWords, model: &KerningWindowMode
         let color = DataColor::new(egui::Color32::from_rgba_unmultiplied(r, g, b, a));
         Text::spans(&[DocRun::new(name.to_string(), FontRef::proportional(), size, color)]).elide(Elide::End)
     };
+    let typing = brings_text(ui);
     let edited: RefCell<Option<EditResponse<String>>> = RefCell::new(None);
     let out = Table::<usize>::new(words.pairs.clone(), columns)
         .empty(words.empty.clone())
@@ -311,7 +312,7 @@ fn pair_table(ui: &mut Ui, words: &KerningWindowWords, model: &KerningWindowMode
                 _ => shown,
             }
         });
-    cell_edit(ui, model, edited.take(), sent);
+    cell_edit(ui, model, edited.take(), typing, sent);
     if after.items != before.items || after.lead != before.lead {
         let mut picked: Vec<usize> = after.items.clone();
         // The lead goes last: it is the row the steps go from.
@@ -367,7 +368,17 @@ fn pair_table(ui: &mut Ui, words: &KerningWindowWords, model: &KerningWindowMode
             }
             // The menu acts on the row pressed, with the other selected rows when it is one of them.
             CollectionEvent::ContextMenu(request) if model.current != Some(request.key) => {
-                let mut picked = if model.selected.contains(&request.key) { model.selected.to_vec() } else { Vec::new() };
+                let within = model.selected.contains(&request.key);
+                // Every row stays selected as one query, whatever their number.
+                if within
+                    && model.selected.len() == rows.len()
+                    && model.scope.is_some()
+                    && let Some(row) = rows.get(request.key)
+                {
+                    sent.push(shell("window.kerning", json!({ "select": "all", "current": pair_json(row) })));
+                    continue;
+                }
+                let mut picked = if within { model.selected.to_vec() } else { Vec::new() };
                 picked.retain(|i| *i != request.key);
                 picked.push(request.key);
                 sent.push(shell("window.kerning", json!({ "select": pairs_json(model, &picked) })));
@@ -378,21 +389,52 @@ fn pair_table(ui: &mut Ui, words: &KerningWindowWords, model: &KerningWindowMode
     row_menu(ui, words, model, &out.response, sent);
 }
 
+/// The cell edited in place, as the last pass left it.
+#[derive(Clone)]
+struct EditedCell {
+    cell: String,
+    /// Its text has had the focus.
+    focused: bool,
+    /// Its text may differ from the stored value.
+    drafted: bool,
+}
+
+/// Whether the pass brings something that changes a focused text.
+fn brings_text(ui: &Ui) -> bool {
+    use egui::{Event, Key};
+    ui.input(|i| {
+        i.events.iter().any(|e| {
+            matches!(
+                e,
+                Event::Text(_) | Event::Paste(_) | Event::Cut | Event::Ime(_) | Event::Key { key: Key::Backspace | Key::Delete, pressed: true, .. }
+            )
+        })
+    })
+}
+
 /// What the cell edited in place did this pass: a new value or group name is sent, and the field closes with Return,
 /// Escape, Tab or a press elsewhere.
-fn cell_edit(ui: &Ui, model: &KerningWindowModel, out: Option<EditResponse<String>>, sent: &mut Vec<Msg>) {
+///
+/// `typing`: the pass brings text, which the field may hold as a draft.
+fn cell_edit(ui: &Ui, model: &KerningWindowModel, out: Option<EditResponse<String>>, typing: bool, sent: &mut Vec<Msg>) {
     let focused = egui::Id::unique("fontcraftKerningWindow.cellFocused");
     let Some((at, column)) = model.editing else {
-        ui.data_mut(|d| d.remove::<String>(focused));
+        ui.data_mut(|d| d.remove::<EditedCell>(focused));
         return;
     };
     let (Some(out), Some(row)) = (out, model.rows.get(at)) else { return };
     let cell = format!("{}\t{}\t{}", row.left, row.right, column.id());
-    if ui.data(|d| d.get_temp::<String>(focused)).as_ref() != Some(&cell) {
+    let Some(before) = ui.data(|d| d.get_temp::<EditedCell>(focused)).filter(|kept| kept.cell == cell) else {
         let _ = focus::request(ui.ctx(), FocusTarget::Id(out.response.id));
-        ui.data_mut(|d| d.insert_temp(focused, cell));
+        ui.data_mut(|d| d.insert_temp(focused, EditedCell { cell, focused: false, drafted: false }));
         return;
-    }
+    };
+    // The focus is on the field's text, not on the component.
+    let has_focus = craft_ext::ui::text::text_focused(ui.ctx(), out.response.id);
+    let left = before.focused && !has_focus;
+    let shown = matches!(&out.shown, Some(Mixed::Same(text)) if column == Column::Value && **text != format_value(row.value));
+    let drafted = before.drafted || shown || (has_focus && typing);
+    ui.data_mut(|d| d.insert_temp(focused, EditedCell { cell, focused: before.focused || has_focus, drafted }));
     let committed = out.events.committed().cloned();
     match (column, &committed) {
         (Column::Value, Some(text)) => {
@@ -404,12 +446,14 @@ fn cell_edit(ui: &Ui, model: &KerningWindowModel, out: Option<EditResponse<Strin
         (Column::Right, Some(text)) => ask_rename(model, row, Column::Right, Some(text.trim()), sent),
         _ => {}
     }
+    // The stored value steps, so a typed draft is left to Return, which would store it over the step.
     if column == Column::Value
         && let Some(delta) = out.arrow_steps(ui, ArrowSteps::UNITS)
+        && !drafted
     {
         sent.push(set_pair(model, row, row.value + delta));
     }
-    if committed.is_some() || out.submitted || out.escaped || out.left_by_tab.is_some() || out.response.lost_focus() {
+    if committed.is_some() || out.submitted || out.escaped || out.left_by_tab.is_some() || left {
         sent.push(shell("window.kerning", json!({ "edit": null })));
     }
 }

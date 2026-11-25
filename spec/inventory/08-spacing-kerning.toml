@@ -1487,13 +1487,13 @@ label = "Kerning"
 menu = ["Window"]
 shortcut = "Cmd+Alt+K"
 kind = "ui"
-params = '{open?: bool, select?: [{left: name|"@group", right: name|"@group"}]|"all", direction?: "ltr"|"rtl"|"vertical"|null, edit?: {left, right, column: "value"|"right"}|null}'
+params = '{open?: bool, select?: [{left: name|"@group", right: name|"@group"}]|"all", current?: {left, right}, direction?: "ltr"|"rtl"|"vertical"|null, edit?: {left, right, column: "value"|"right"}|null}'
 area = "spacing-kerning"
 milestone = "M5"
 summary = "Opens the Kerning window, a table of every stored kerning pair of the current master in the currently selected writing direction."
 ref = "Spacing & Kerning › Kerning › Kerning Window"
 status = "handbook"
-notes = "`select` is our addition for agents: it selects rows as clicks do and shows the last one in Edit View; `\"all\"` selects every listed row. Release notes (\"What's new in Glyphs\", updates.glyphsapp.com/Glyphs4.0-4000.html): the window has a writing direction control (4.0, build 3807). `direction` is that control; null follows the Edit View tab."
+notes = "`select` is our addition for agents: it selects rows as clicks do and shows the last one in Edit View; `\"all\"` selects every listed row of the window that shows, with `current` as the row the steps go from. Release notes (\"What's new in Glyphs\", updates.glyphsapp.com/Glyphs4.0-4000.html): the window has a writing direction control (4.0, build 3807). `direction` is that control; null follows the Edit View tab."
 guesses = [
   "While Font View shows, the window keeps Font View's master, and the direction of the tab shown last.",
   "The direction control has an entry that follows the Edit View tab, which is the default; choosing a direction lists its pairs and leaves the tab's direction alone.",
@@ -1514,6 +1514,7 @@ controls = [
   "group entries in blue with a leading @, glyph entries in gold",
   "double-click a cell to edit a value or a group name",
   "minus button (bottom left): delete the selected pairs; with Option, from all masters",
+  "Delete key: delete the selected pairs; with Option on a Mac, from all masters (elsewhere the key with Alt does nothing: use the button or the row's menu)",
   "actions menu: Show All Glyphs, Clean Up, Compress",
 ]
 area = "spacing-kerning"
