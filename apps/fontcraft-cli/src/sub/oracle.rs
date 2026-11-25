@@ -35,7 +35,8 @@ const USAGE: &str = "\
                       [--differences N] [--match TEXT] [--variable | --instances] [--json]
       Development aid: compile each source with FontCraft and with a reference compiler (fontc
       for .ttf, fontmake for .otf), read both fonts back and report per table whether they are
-      identical, equivalent, allowed or different. --corpus runs over the comparison set in DIR
+      identical, equivalent, allowed or different. Against fontc a .glyphs source with several
+      masters is compared by its variable font at the default location. --corpus runs over the comparison set in DIR
       (default ./corpus). Exit status 1 when a table differs or a build fails.
       --variable compares the variable fonts of sources with two masters or more (fontc or
       fontmake): outlines, advances, MVAR, GSUB feature variations, GPOS kerning and marks at the
@@ -45,6 +46,21 @@ const USAGE: &str = "\
       static comparison. In both, a font FontCraft does not build yet counts as not built and
       does not set the exit status.
 ";
+
+/// `font`'s variable font with the master `origin` at its default, where fontc's has it: fontc
+/// takes the master that the words all master names share name, FontCraft the first.
+fn variable_at(
+    font: &fontcraft_engine::model::Font,
+    origin: &str,
+    options: &fontcraft_engine::compile::Options,
+) -> Result<fontcraft_engine::compile::Compiled, fontcraft_engine::compile::CompileError> {
+    use fontcraft_engine::compile::var;
+    use fontcraft_engine::model::{axes, plist};
+    let mut font = font.clone();
+    std::sync::Arc::make_mut(&mut font.info).params.set(axes::ORIGIN, plist::Value::String(plist::Str::new(origin)));
+    let setting = var::variable_targets(&font).first().copied().flatten();
+    var::compile_variable(&font, setting, options, &var::VariableOptions::default()).map(|v| v.compiled)
+}
 
 fn oracle(args: &[String]) -> Outcome {
     use fontcraft_oracle::{Flavour, Oracle, OursError, Settings};
@@ -144,9 +160,9 @@ fn oracle(args: &[String]) -> Outcome {
     let ours = |path: &Path| -> Result<fontcraft_oracle::Ours, OursError> {
         let built = fontcraft_engine::guard::catch_panic(|| -> Result<Result<fontcraft_oracle::Ours, OursError>, String> {
             let (font, warnings) = fontcraft_engine::io::open(path, None).map_err(|e| e.to_string())?;
-            // The compiler builds one master. For a .glyphs source the reference compilers take
-            // the variable font origin as the default: compile that master, so both sides build
-            // the same one. Otherwise the first master (a designspace's first source).
+            // The static comparison builds one master. For a .glyphs source the reference
+            // compilers take the variable font origin as the default: compile that master, so both
+            // sides build the same one. Otherwise the first master (a designspace's first source).
             let glyphs = matches!(
                 fontcraft_oracle::tools::SourceKind::of(path),
                 Some(fontcraft_oracle::tools::SourceKind::Glyphs | fontcraft_oracle::tools::SourceKind::GlyphsPackage)
@@ -167,6 +183,17 @@ fn oracle(args: &[String]) -> Outcome {
                 feature_dir: fontcraft_engine::io::feature_dir(path),
                 ..Default::default()
             };
+            // fontc builds the variable font of a .glyphs source with several masters: compare
+            // FontCraft's at the same default location.
+            if against == Oracle::Fontc && glyphs && font.masters.len() > 1 {
+                match variable_at(&font, &master.id, &options) {
+                    Ok(compiled) => {
+                        warnings.extend(compiled.warnings);
+                        return Ok(Ok(fontcraft_oracle::Ours { bytes: compiled.bytes, warnings, hint }));
+                    }
+                    Err(e) => warnings.push(format!("compiled master `{}` alone, as the variable font cannot be built: {e}", master.name)),
+                }
+            }
             let target = fontcraft_engine::model::Target::Master(master.id.clone());
             let outlines = match flavour {
                 Flavour::TrueType => fontcraft_engine::compile::Flavour::TrueType,
