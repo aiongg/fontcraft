@@ -497,7 +497,7 @@ mod tests {
             kind: SelectionKind::Box,
             reference: "center".into(),
             anchor: Some("top".into()),
-            rename: Targets { json: json!({"glyph": "A", "layer": "m01"}).to_string() },
+            rename: Targets { json: json!({"glyph": "A", "layer": "m01"}).to_string(), ..Default::default() },
             ..Default::default()
         };
         let model = InfoBoxModel { glyph: Some(glyph(false)), selection: Some(selection), ..Default::default() };

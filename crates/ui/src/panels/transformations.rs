@@ -381,7 +381,7 @@ mod tests {
                 metric: "baseline".into(),
                 point: Some([10.0, 20.0]),
                 origin: json!({"mode": "box", "boxPoint": "center"}).to_string(),
-                targets: Some(Targets { json: json!({"glyph": "A", "layer": "m01"}).to_string() }),
+                targets: Some(Targets { json: json!({"glyph": "A", "layer": "m01"}).to_string(), ..Default::default() }),
                 ..Default::default()
             });
             let posted = Rc::new(RefCell::new(Vec::new()));

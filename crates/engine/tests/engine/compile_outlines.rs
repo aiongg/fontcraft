@@ -170,7 +170,7 @@ fn variable_fonts_take_the_options_of_static_ones() {
     std::fs::write(&path, text).unwrap();
     let mut s = Session::new();
     run(&mut s, "file.open", json!({ "path": path }));
-    s.edit("Add", |font| font.add_glyph("second", vec![0xE000], 500.0).map(|_| ())).unwrap();
+    s.edit("Add", |font| font.add_glyph("second", vec![0xE000], 500.0).map(|_| ()).map_err(Into::into)).unwrap();
     let options = json!({
         "formats": ["variable", "variable-cff2"], "destination": dir.join("out"), "timestamp": 0, "postFormat": 3,
         "excludeTables": ["STAT"], "tables": ["fvar"], "stubDsig": true, "containers": ["plain", "woff2"],

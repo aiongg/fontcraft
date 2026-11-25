@@ -3,7 +3,7 @@
 use super::Subcommand;
 use super::completion;
 use crate::args::{self, GLOBAL, OptSpec};
-use crate::io::{Outcome, execute, out, out_json, usage};
+use crate::io::{Failure, Outcome, execute, out, usage};
 use fontcraft_engine::Session;
 use serde_json::{Value, json};
 

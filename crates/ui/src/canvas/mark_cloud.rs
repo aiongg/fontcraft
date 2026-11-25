@@ -189,7 +189,7 @@ fn shape(font: &Font, data: &GlyphData, listed: Option<&[String]>, anchor: &str,
     if outline.elements().is_empty() {
         return None;
     }
-    let scale = FILL_UNITS / f64::from(font.info.units_per_em.max(1));
+    let scale = FILL_UNITS / f64::from(font.units_per_em.max(1));
     let contours: Vec<Vec<Pos2>> = flatten(&outline, Affine::scale(scale)).into_iter().filter(|c| c.first() == c.last()).collect();
     let mut fill = fill::nonzero(&contours, Rect::EVERYTHING, Color32::WHITE);
     let back = (1.0 / scale) as f32;

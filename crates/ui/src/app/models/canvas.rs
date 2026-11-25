@@ -138,6 +138,7 @@ pub fn project_location(model: &mut Tracked<CanvasModel>, cx: &mut ProjectCx<'_>
 }
 
 fn location_outline(cx: &mut ProjectCx<'_>) -> Option<BezPath> {
+    use fontcraft_engine::interp_cache::SessionInterpExt as _;
     let designspace = cx.session.designspace().ok()?;
     let name = super::glyph::shown_glyph(cx)?;
     let font = cx.session.font().ok()?;

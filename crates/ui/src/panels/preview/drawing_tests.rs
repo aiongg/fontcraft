@@ -88,10 +88,10 @@ fn the_line_is_shaped_with_the_tabs_features_and_an_instance_with_its_own() {
     assert_eq!(app.models.preview_panel.hits.len(), 1, "in the panel too");
     let line = shown_line(&app.session, &app.view).expect("a line is shown");
     assert_eq!((line.glyphs.as_slice(), line.features.as_slice()), (&["a".to_string(), "b".into()][..], &["liga".to_string()][..]));
-    let mut view = app.view.clone();
-    view.text.features.active.extend(["toolong".to_string(), String::new()]);
-    let line = shown_line(&app.session, &view).expect("a line is shown");
+    app.view.text.features.active.extend(["toolong".to_string(), String::new()]);
+    let line = shown_line(&app.session, &app.view).expect("a line is shown");
     assert_eq!(line.features, ["liga"], "a tag Edit View cannot take is left out");
+    app.view.text.features.active.retain(|tag| tag == "liga");
 
     // An instance whose parameter replaces the feature: shaped with the document's font until its own is built.
     run(

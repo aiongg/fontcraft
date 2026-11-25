@@ -4,7 +4,7 @@
 //! list, a title naming the base path and the time, a header line, then one row per value; an
 //! empty list writes no file.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use fontcraft_engine::Session;
 use fontcraft_engine::format::write_atomic;

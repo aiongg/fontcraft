@@ -23,7 +23,7 @@ use craft::ui::dialog::{DialogHost, DialogId, DialogResult, DialogStack, StackDi
 use craft::ui::display::{Shade, Text};
 use craft::ui::layout_components::Row;
 use craft::ui::runtime::commands::CommandRef;
-use craft::ui::runtime::env::Env;
+use craft::ui::runtime::env::{Env, WordSet as _};
 use craft::ui::style::TypeRole;
 use egui::Ui;
 use fontcraft_engine::shortcuts::{Chord, system};

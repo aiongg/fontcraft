@@ -107,7 +107,7 @@ impl Plan {
             let mut at = t.clone();
             at.layer = Some(id.clone());
             if let Err(e) = f(font, &at) {
-                let name = font.glyph(&self.glyph).and_then(|g| g.layers.iter().find(|l| l.id == *id)).map(|l| layer_name(font, l));
+                let name = font.glyph(&self.glyph).and_then(|g| g.layers.iter().find(|l| l.id == *id)).map(|l| layer_title(font, l));
                 return Err(p.bad(format!("matching layer {}: {}", name.unwrap_or_else(|| id.clone()), message(e))));
             }
         }

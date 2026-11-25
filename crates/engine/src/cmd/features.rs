@@ -16,7 +16,7 @@ use std::sync::Arc;
 
 use fontcraft_features::auto::{self, AutoContext};
 use fontcraft_features::{EntryKind, EntryRef, FeatureError, MAX_ENTRIES, MAX_ENTRY_BYTES, registry};
-use fontcraft_model::{DEFAULT_LANGUAGE, Extra, Features, Font, Localized, MAX_NAME_LEN, Snippet, language_id};
+use fontcraft_model::{DEFAULT_LANGUAGE, Extra, Features, Localized, MAX_NAME_LEN, Snippet, language_id};
 use serde_json::{Value, json};
 
 use super::*;

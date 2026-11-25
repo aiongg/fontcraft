@@ -218,6 +218,7 @@ fn line_model(options: PreviewOptions) -> PreviewModel {
         shown: true,
         key: 1,
         outline: fontcraft_geom::BezPath::new(),
+        colors: Vec::new(),
         extent: [0.0, 1000.0],
         focus: Some(250.0),
         rtl: false,

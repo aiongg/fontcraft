@@ -213,6 +213,7 @@ fn with_layer(p: &Params, mut font: Font, name: &str) -> Result<Font> {
     for i in 0..font.glyphs.len() {
         let others: Vec<fontcraft_model::Layer> = font
             .glyphs
+            .as_arcs()
             .get(i)
             .map(|g| g.layers.iter().filter(|l| !l.is_master_layer() && l.info.name.as_deref() == Some(wanted)).cloned().collect())
             .unwrap_or_default();

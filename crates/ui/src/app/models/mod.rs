@@ -266,7 +266,7 @@ impl Models {
     }
 
     /// Projects the Selections panel; outside [`Models::project`], since it reads the canvas's selection.
-    pub fn project_selections(&mut self, cx: &mut ProjectCx<'_>, tools: &Tools, stamp: Stamp) {
+    pub fn project_selections(&mut self, cx: &mut ProjectCx<'_>, tools: &crate::canvas::tools::Tools, stamp: Stamp) {
         glyph_sections::project_selections(&mut self.selections, &mut self.selections_seen, cx, tools, stamp);
     }
 

@@ -221,12 +221,13 @@ fn token_problems(font: &Font, master: &str, instance: Option<usize>) -> Vec<Tok
         if tokens.is_empty() {
             return;
         }
+        let full = out.len() >= MAX_TOKEN_PROBLEMS;
         match out.iter_mut().find(|p| p.scope == scope && p.param == param && p.key == key && p.index == index) {
             Some(problem) => {
                 let new: Vec<String> = tokens.into_iter().filter(|t| !problem.tokens.contains(t)).collect();
                 problem.tokens.extend(new);
             }
-            None if out.len() < MAX_TOKEN_PROBLEMS => out.push(TokenProblem { scope, param, key: key.to_string(), index, tokens }),
+            None if !full => out.push(TokenProblem { scope, param, key: key.to_string(), index, tokens }),
             None => {}
         }
     };

@@ -195,7 +195,7 @@ fn map(ui: &mut Ui, model: &DesignspaceModel, words: &DesignspaceWords, axes: (u
     let width = ui.available_width().max(MARGIN * 4.0);
     let (rect, response) = ui.allocate_exact_size(Vec2::new(width, height), Sense::click_and_drag());
     let name = words.map.as_str().to_string();
-    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Other, true, name.clone()));
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Image, true, name.clone()));
     let Some(frame) = Frame::new(model, rect, axes) else { return };
     let memory = response.id.with("drag");
     let mut dragged: Option<PointKind> = ui.data(|d| d.get_temp(memory));

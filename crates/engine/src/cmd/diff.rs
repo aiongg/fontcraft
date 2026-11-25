@@ -326,7 +326,7 @@ fn font_names(dir: &Path) -> Result<std::collections::BTreeSet<String>> {
 fn write_texts(dir: &Path, texts: &[(String, String)]) -> Result<Vec<PathBuf>> {
     let request = super::file_io::OutputRequest { output_dir: Some(dir.to_path_buf()), ..Default::default() };
     let created = super::file_io::create_output_dir(&request)?;
-    let mut written = Vec::with_capacity(texts.len());
+    let mut written: Vec<PathBuf> = Vec::with_capacity(texts.len());
     for (name, text) in texts {
         let path = dir.join(name);
         let result =

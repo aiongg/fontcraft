@@ -16,7 +16,9 @@ use std::collections::HashSet;
 
 use craft::behavior::{ColumnKey, ColumnWidth, GesturePhase, keyed};
 use craft::ui::choice::{Checkbox, Segmented};
-use craft::ui::contract::{Bind, CollectionEvent, ColumnSpec, Entry, PlainData, Show as _, ShowCollection as _, ShowContainer as _, ToggleColumn};
+use craft::ui::contract::{
+    Bind, CollectionEvent, ColumnSpec, Entry, PlainData, Props as _, Show as _, ShowCollection as _, ShowContainer as _, ToggleColumn,
+};
 use craft::ui::dialog::{DialogHost, DialogId, DialogResult, DialogStack, StackDialog, dialog_id};
 use craft::ui::display::{Shade, Text};
 use craft::ui::form::Field;

@@ -260,14 +260,14 @@ fn the_special_layer_editors_act_on_the_selected_rows_and_on_all_masters() {
     assert_eq!(model.selection, [one.clone(), other.clone()]);
     assert_eq!(
         row_command(&model, row(&model, &two), "layers.setAlternate"),
-        super::edit_special("A", &[two.as_str()], super::Part::Alternate),
+        Some(super::edit_special("A", &[two.as_str()], super::Part::Alternate)),
         "a row outside the selection stands alone"
     );
     let call = |app: &mut FontCraftApp, method: &str, params: Value| crate::control::dispatch(app, method, &params).unwrap();
     let label = |app: &FontCraftApp, id: &str| app.models.layers.row(id).and_then(|r| r.bracket.clone());
     let steps = |app: &FontCraftApp| app.session.doc().unwrap().history.undo.len();
 
-    app.sent.push(row_command(&model, row(&model, &one), "layers.setAlternate"));
+    app.sent.extend(row_command(&model, row(&model, &one), "layers.setAlternate"));
     app.drain();
     let opened = call(&mut app, "ui.dialog.inspect", json!({}));
     assert_eq!((&opened["dialog"], &opened["params"]["layers"]), (&json!("popover.alternateLayer"), &json!([one, other])), "{opened}");
@@ -276,7 +276,7 @@ fn the_special_layer_editors_act_on_the_selected_rows_and_on_all_masters() {
     call(&mut app, "ui.dialog.cancel", json!({}));
     assert_eq!(app.session.doc().unwrap().font.glyphs, before.glyphs, "Cancel");
 
-    app.sent.push(row_command(&model, row(&model, &one), "layers.setAlternate"));
+    app.sent.extend(row_command(&model, row(&model, &one), "layers.setAlternate"));
     app.drain();
     let count = steps(&app);
     call(&mut app, "ui.dialog.set", json!({"field": "wght.min", "value": "600"}));
@@ -299,7 +299,7 @@ fn the_special_layer_editors_act_on_the_selected_rows_and_on_all_masters() {
     let of = |master: &str| app.models.layers.all.iter().filter(|r| r.master == master && r.bracket.as_deref() == Some("[700‹wg]")).count();
     assert_eq!((of("m01"), of("m02")), (1, 1), "a layer under the other master");
 
-    app.sent.push(row_command(&model, row(&model, &one), "layers.setAlternate"));
+    app.sent.extend(row_command(&model, row(&model, &one), "layers.setAlternate"));
     app.drain();
     assert!(app.status.is_empty(), "{}", app.status);
     assert_eq!((label(&app, &one), label(&app, &other)), (None, None), "unticked on both");
@@ -308,5 +308,5 @@ fn the_special_layer_editors_act_on_the_selected_rows_and_on_all_masters() {
     let mut model = (*app.models.layers).clone();
     model.selection = vec!["m01".into(), one.clone(), other.clone()];
     let msg = row_command(&model, row(&model, &one), "layers.setIntermediate");
-    assert_eq!(msg, super::edit_special("A", &[one.as_str(), other.as_str()], super::Part::Intermediate));
+    assert_eq!(msg, Some(super::edit_special("A", &[one.as_str(), other.as_str()], super::Part::Intermediate)));
 }

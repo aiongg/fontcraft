@@ -498,7 +498,7 @@ pub(super) fn close(path: &Path, merge: bool) -> Result<Path, String> {
     }
     let mut out = path.clone();
     out.closed = true;
-    let (Some(first), Some(last)) = (path.nodes.first(), path.nodes.last()) else { return Err(malformed()) };
+    let Some(last) = path.nodes.last() else { return Err(malformed()) };
     if merge {
         let kind = last.kind;
         out.nodes.pop();

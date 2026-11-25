@@ -15,7 +15,7 @@
 use std::borrow::Cow;
 
 use craft::behavior::keyed;
-use craft::ui::contract::{Bind, CollectionEvent, Scroll, SelectMode, Show as _, ShowCollection as _, ShowContainer as _};
+use craft::ui::contract::{Bind, CollectionEvent, Props as _, Scroll, SelectMode, Show as _, ShowCollection as _, ShowContainer as _};
 use craft::ui::display::{Shade, Text};
 use craft::ui::layout_components::Stack;
 use craft::ui::list::ThumbAspect;
