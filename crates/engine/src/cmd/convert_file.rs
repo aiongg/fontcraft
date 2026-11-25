@@ -1093,6 +1093,7 @@ impl Staging {
         for (_, aside) in asides {
             let _ = std::fs::remove_dir_all(aside);
         }
+        self.staged.iter().for_each(|s| fontcraft_format::written::record(&s.target));
         self.staged.clear();
         self.created.clear();
         Ok(())

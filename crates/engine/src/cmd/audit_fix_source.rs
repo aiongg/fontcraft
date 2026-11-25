@@ -68,6 +68,7 @@ pub(super) fn fix_source(s: &mut Session, p: &Params, target: &str) -> Result<Va
     let doc = own.doc()?;
     let changed = !dry && doc.modified() && !doc.font.same_as(&doc.saved);
     if changed {
+        crate::work::check()?;
         file_io::check_write(&output)?;
         if req.no_clobber && !req.in_place && output.exists() {
             return Err(EngineError::Io(format!("{} exists and noClobber is set", output.display())));

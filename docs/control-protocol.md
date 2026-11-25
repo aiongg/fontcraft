@@ -272,16 +272,26 @@ and values are cut at 500 characters.
 | `visible` | whether part of it shows: `false` when it is scrolled or clipped away |
 | `enabled`, `focused`, `selected`, `expanded` | its states; the last three only where they apply |
 | `toggled` | `true`, `false` or `"mixed"`, for what can be on or off |
-| `set` | what `ui.set` takes for it: `"bool"` or `"text"`; absent when it cannot be set |
+| `set` | what `ui.set` takes for it: `"bool"`, `"text"`, `"choice"` or `"number"`; absent when it cannot be set |
+| `min`, `max`, `step` | for `"number"`: the smallest and largest value, and what one key press changes it by |
 
 `ui.click {element}` clicks the middle of the part that shows, and `ui.set {element, value}` sets
-the element through the window's input, as a person does:
+the element through the window's input, as a person does. A change that needs to see what its first
+input did takes several rounds of frames and is answered after the last:
 
 - `set: "bool"`: `value` is `true` or `false`; the element is clicked unless it is there already
   (`{changed: false}`). A radio button is turned off by choosing another one.
 - `set: "text"`: `value` is a text of at most 4,096 characters or a number. The field is clicked,
-  its text selected and replaced, and Tab commits it. Line breaks are taken by multi-line fields
+  its text selected and replaced, and Tab commits it; a list of suggestions the typing opened is
+  closed first with Escape, so the text stays as given. Line breaks are taken by multi-line fields
   only; other control characters are refused.
+- `set: "choice"`: `value` is the label of an option, in any case where only one matches. The list
+  opens and the option is clicked; one that is not in view is typed first, which brings it there.
+  `{changed: false}` when it is chosen already. A label the list does not show is refused with the
+  ones it shows, and the list is closed without a change.
+- `set: "number"`: `value` is a number from `min` to `max`. The slider is dragged there, up to four
+  times until it is within a thousandth of its range; each drag is a change of its own. The reply
+  has the `value` it reached, which is another one where the slider keeps to its own stops.
 
 An element that is disabled, read-only or out of view is refused. What covers an element at that
 point takes the click, as it takes the mouse's. The replies are those of

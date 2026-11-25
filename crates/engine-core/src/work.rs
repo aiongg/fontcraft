@@ -8,11 +8,15 @@
 //! that ran to its end [`seal`]s the token before its change is kept, so a cancel either undoes the command whole or
 //! comes too late. Work inside other work (a step of a batch, a filter of an export) can be cancelled too, but only
 //! the outermost command reports progress and seals ([`enter`]).
+//!
+//! The compiler, below this crate, asks through [`fontcraft_compile::stop`] whether the work was cancelled.
 
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, Ordering};
+
+use fontcraft_compile::stop;
 
 use crate::{EngineError, Result};
 
@@ -81,8 +85,9 @@ impl Drop for Restore {
 }
 
 fn swap<T>(scope: Option<Scope>, f: impl FnOnce() -> T) -> T {
+    let ask = scope.as_ref().map(|scope| Arc::clone(&scope.token)).map(|token| -> stop::Ask { Rc::new(move || token.is_cancelled()) });
     let _restore = Restore(CURRENT.with(|current| current.replace(scope)));
-    f()
+    stop::with(ask, f)
 }
 
 /// Runs `f` as the work `token` cancels, reporting its progress to `report`.
@@ -197,7 +202,8 @@ mod tests {
             advance(1, "");
             assert!(token.cancel(), "an inner command seals nothing");
             assert!(matches!(check(), Err(EngineError::Cancelled)) && seal().is_err());
-            shielded(|| assert!(check().is_ok()));
+            assert!(stop::requested());
+            shielded(|| assert!(check().is_ok() && !stop::requested()));
             assert!(cancelled());
         });
         assert_eq!(*seen.borrow(), [(1, 3), (2, 3)]);

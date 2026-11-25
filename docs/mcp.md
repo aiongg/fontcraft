@@ -53,8 +53,10 @@ here. Headless, they are not listed, and a call answers that the tool needs the 
 |---|---|---|---|
 | `screenshot` | `{}` | `ui.screenshot` | the window as a PNG image, then `{width, height, pixelsPerPoint}` as text |
 | `render` | `{glyphs?, text?, master?, layer?, size?, scale?}` | `ui.render` | the glyphs filled black on white as a PNG image, then `{width, height, glyphs, master?}` as text |
+| `elements` | `{prefix?, role?, window?, offset?, limit?}` | `ui.elements` | what the windows show: `{elements, total, truncated}` |
 | `pointer` | `{events}` | `ui.pointer` | the active tool's state, selection and errors |
-| `click` | `{id}` or `{x, y, button?, count?, mods?, shift?, alt?, cmd?, ctrl?}` | `ui.click` | a dialog control's result, or `{queued, pending}` for a window click |
+| `click` | `{id}`; or `{element}` or `{x, y}`, with `button?, count?, mods?, shift?, alt?, cmd?, ctrl?` | `ui.click` | a dialog control's result, or `{queued, window}` for a window click |
+| `set` | `{element, value}` | `ui.set` | `{changed, queued?, window?}`, and the `value` a slider reached |
 | `key` | `{key, shift?, alt?, cmd?, ctrl?, action?}` | `ui.key` | whether anything took the key; the command and result of a menu shortcut |
 | `text` | `{text}` | `ui.text` | `{field}`, or `{keys, handled}` |
 | `menu` | `{}` | `ui.menu.list` | the menu tree |
@@ -68,12 +70,14 @@ here. Headless, they are not listed, and a call answers that the tool needs the 
   `render` take no `path`: the server writes no file.
 - A window click is handed to the window over the next frames. Take a `screenshot` to see the
   result.
+- `elements` gives the ids that `click` and `set` take; [Control protocol](control-protocol.md#elements)
+  has the fields of an element and what each kind of element takes.
 - Open a dialog with `run_command` and the UI command `dialog.open`.
 - Under `--read-only`, `--allow` or `--deny` the server cannot see in advance which command a
-  click or key will run. So `pointer`, `click`, `key` and `text` are not listed and are refused.
+  click or key will run. So `pointer`, `click`, `set`, `key` and `text` are not listed and are refused.
   `menu` checks its command, and `dialog_set` and `dialog_confirm` check the open dialog's
   command and parameters, before they act; a dialog that names no command is refused.
-  `screenshot`, `render`, `dialog_inspect` and `dialog_cancel` always run.
+  `screenshot`, `render`, `elements`, `dialog_inspect` and `dialog_cancel` always run.
 
 ## Permissions
 
@@ -267,7 +271,7 @@ commands report:
 | Command | Unit |
 |---|---|
 | `audit.run` | a layer examined, a layer run through a check module, and the stages compiling, source checks and binary checks |
-| `font.compile`, the static exports | a font built; `font.compilePlan`: an instance planned |
+| `font.compile`, the static and variable exports | a font built; `font.compilePlan`: an instance planned |
 | `command.batch` | a step |
 
 `notifications/cancelled {requestId}` cancels a request that runs or waits, on stdio and over HTTP
@@ -275,14 +279,22 @@ commands report:
 `initialize` is never cancelled.
 
 - A cancelled request changes nothing. A command stops between its units of work, or before its
-  next step, and is undone whole; one without such places runs to its end and is then undone.
+  next step, and is undone whole; one without such places runs to its end and is then undone. A
+  compile and a variable export stop between two glyphs or tables of one font; the commands that
+  work through glyphs (overlap removal and the other path filters, autohinting, auto-spacing,
+  auto-kerning, detecting composites, tracing, the audit's fixes) stop between two glyphs or pairs.
+  One glyph's overlap removal runs to its end or its time limit.
+- A `command.batch` that fails or is cancelled after a step wrote files undoes the documents; the
+  files stay, and the error names them. A client that cancelled reads it in the
+  [logging](#logging) message, as its request gets no reply of its own.
 - Exported files are written under temporary names and moved into place at the end. A cancel
   before that removes them. Once files are written the request stands.
 - A cancelled request gets no reply on stdio, and error `-32800` over HTTP. A cancel that comes
   after the change was kept is too late: the request is answered as usual.
 - Attached to a running app, the server passes both on ([Control protocol](control-protocol.md)):
-  commands of `run_command` report progress and can be cancelled while they run; the window tools
-  only before they start.
+  commands of `run_command` report progress and can be cancelled while they run. A window tool can
+  be cancelled before it starts, `elements`, `click` and `set` also while they wait for frames; what
+  `set` did before that stays.
 
 ## Protocol behaviour
 

@@ -602,6 +602,7 @@ fn each_glyph(
 ) -> Result<Outcome> {
     let mut out = Outcome::default();
     for name in glyphs {
+        crate::work::check()?;
         if font.glyph(name).is_some_and(|g| g.info.locked) {
             if single {
                 return Err(EngineError::Locked(name.clone()));

@@ -978,6 +978,7 @@ fn swap(stages: &mut [Stage]) -> Result<()> {
         }
     }
     let Some(failure) = failure else {
+        stages.iter().flat_map(|stage| &stage.staged).for_each(|(_, target)| fontcraft_format::written::record(target));
         for (backup, _) in &aside {
             let _ = std::fs::remove_file(backup);
         }
@@ -1582,7 +1583,9 @@ fn export_variable(s: &mut Session, p: &Value) -> Result<Value> {
     let kept = super::export_settings::ran_with(&p, super::export_settings::Tab::Variable, outlines, &containers, &[], &dest)?;
     let mut sink = Sink::new(&dest, true, outside)?;
     let mut fonts = Vec::with_capacity(picked.len());
+    work::plan(picked.len());
     for setting in picked {
+        work::check()?;
         let built = var::compile_variable(&linked, setting, &options, &var_options)?;
         let mut files = Vec::with_capacity(containers.len());
         for &container in &containers {
@@ -1609,7 +1612,9 @@ fn export_variable(s: &mut Session, p: &Value) -> Result<Value> {
             "setting": label, "fileName": built.file_stem, "glyphs": built.compiled.glyph_order.len(),
             "warnings": built.compiled.warnings, "files": files,
         }));
+        work::advance(1, &built.file_stem);
     }
+    work::check()?;
     sink.commit()?;
     if let Some(warning) = super::export_settings::remember(s, super::export_settings::Tab::Variable, kept) {
         warnings.push(warning);

@@ -615,6 +615,7 @@ fn auto_kern(s: &mut Session, v: &Value) -> Result<Value> {
         }
         let stored = stored_by_sides(font, direction, id);
         for j in &jobs {
+            crate::work::check()?;
             let (bl, br) = (band_of_glyph(&j.left), band_of_glyph(&j.right));
             let shared = if bl == CAPS && br == CAPS { CAPS } else { LOWER };
             let gap = if touching { kit.closest(&j.left, &j.right) } else { kit.optical(&j.left, &j.right, shared) };
@@ -713,6 +714,7 @@ fn kern_to_distance(s: &mut Session, v: &Value) -> Result<Value> {
         let kit = Kit::new(font, m, None, None, KERN_DEPTH_SHARE, &needs, true).map_err(|e| p.bad(e))?;
         let table = index.table(direction, id).map_err(|e| p.bad(e.to_string()))?;
         for j in &jobs {
+            crate::work::check()?;
             let gap = match kit.closest(&j.left, &j.right) {
                 Ok(g) => g,
                 Err(reason) => {
@@ -847,6 +849,7 @@ fn build_groups(s: &mut Session, v: &Value) -> Result<Value> {
     for side in &sides {
         let mut candidates: Vec<Candidate> = Vec::new();
         for (name, band) in &usable {
+            crate::work::check()?;
             if !replace && let Some(existing) = font.glyph(name).and_then(|g| side.of(&g.kern_groups)) {
                 skipped.push(json!({"glyph": name, "side": side.name(), "reason": format!("it keeps its {} group `{existing}`", side.name())}));
                 continue;
@@ -874,6 +877,7 @@ fn build_groups(s: &mut Session, v: &Value) -> Result<Value> {
         // Clusters of candidate indices, in glyph order.
         let mut clusters: Vec<(usize, Vec<usize>)> = Vec::new();
         for (ci, cand) in candidates.iter().enumerate() {
+            crate::work::check()?;
             let mut best: Option<(f64, usize)> = None;
             for (k, (band, members)) in clusters.iter().enumerate() {
                 if *band != cand.band {

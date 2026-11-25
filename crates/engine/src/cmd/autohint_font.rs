@@ -122,6 +122,8 @@ fn run_font(_: &mut Session, v: &Value) -> Result<Value> {
         Setup::Cff2(setup) => hint_cff2(&run, &loaded.font, setup, &mut warnings)?,
     };
 
+    crate::work::check()?;
+
     let output = if dry_run {
         file_io::output_path(&loaded.path, &OutputRequest::from_params(&p)?, SUFFIX, None)?
     } else {
@@ -201,6 +203,9 @@ fn hint_cff(run: &Run<'_, '_>, font: &SfntFont, setup: &patch::CffHintSetup, war
         sets.push(with_overrides(base, run.fontinfo, &setup.names, setup.y_range).map_err(|e| run.p.bad(e))?);
     }
     patch::autohint_cff(font, setup, run.cff, run.select, &mut |g| {
+        if crate::work::cancelled() {
+            return Err("cancelled".to_string());
+        }
         let Some(dict) = sets.get(g.fd).and_then(|s| dict_for(s, g.name)) else {
             return Err("the alignment zones and standard stems of its Private DICT cannot be used".to_string());
         };
@@ -230,6 +235,9 @@ fn hint_cff2(run: &Run<'_, '_>, font: &SfntFont, setup: &patch::Cff2HintSetup, w
     let mut notes: Vec<String> = Vec::new();
     let mut cache: HashMap<(usize, u16), Vec<FontDictSets>> = HashMap::new();
     let r = patch::autohint_cff2(font, setup, run.cff, run.select, &mut |g| {
+        if crate::work::cancelled() {
+            return Err("cancelled".to_string());
+        }
         if let Entry::Vacant(slot) = cache.entry((g.fd, g.vsindex)) {
             let mut list = Vec::with_capacity(g.privates.len());
             for (m, private) in g.privates.iter().enumerate() {

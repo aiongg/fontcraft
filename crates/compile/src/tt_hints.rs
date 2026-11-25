@@ -314,6 +314,7 @@ pub fn tt_hinting(
     let mut glyphs = Vec::new();
     let mut deltas_dropped = false;
     for (gid, instructions) in &instructed {
+        crate::check_stop()?;
         let (Some(g), Some(prepared)) = (order.get(*gid), outlines.get(*gid)) else { continue };
         if matches!(prepared, Prepared::Empty | Prepared::Composite(_)) {
             continue;

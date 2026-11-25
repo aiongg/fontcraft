@@ -90,6 +90,8 @@ pub struct Control {
     window: Option<WindowHost>,
     /// Window input steps queued by the request being answered.
     queued: usize,
+    /// A `ui.set` whose next round runs once frames have been drawn.
+    stage: Option<elements::Stage>,
     /// Where the window input requests queued stands; while it is not idle, `drain` runs confined.
     input: Input,
     /// What cancels the command of the request being answered and takes its progress.
@@ -150,7 +152,8 @@ enum Answer {
     /// A `ui.wait`: the reply goes out once the frames have passed or the window is idle. Only the listener reads it.
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     Wait(wait::Wait),
-    /// A request that reads the windows' elements: it runs ([`run`]) once [`elements::FRAMES`] frames have been drawn.
+    /// A request that reads the windows' elements: it runs ([`run`]) once [`elements::FRAMES`] frames have been drawn,
+    /// and again after as many while it is [`unfinished`].
     Elements,
 }
 
@@ -233,6 +236,13 @@ pub(crate) fn frames_before(app: &FontCraftApp, method: &str, params: &Value) ->
         }
         _ => 0,
     }
+}
+
+/// Whether the request answered last has another round to run once frames have been drawn. Its reply is the last
+/// round's.
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+pub(crate) fn unfinished(app: &FontCraftApp) -> bool {
+    app.control.stage.is_some()
 }
 
 /// Runs a request [`answer`] put off, with the automation roots in force.

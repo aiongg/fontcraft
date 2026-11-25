@@ -2115,6 +2115,7 @@ struct How {
 /// Repairs one layer: checks it before each fix step and runs that fix's command on what the
 /// check reports now. On failure the layer is left as it was.
 fn fix_layer(s: &mut Session, run: &Run, group: &Group, how: &How, report: &mut FixReport) -> Result<()> {
+    work::check()?;
     let How { safe_only, dry, backup, facts } = *how;
     let (g, l) = (group.glyph.as_str(), group.layer.as_str());
     let font = s.font()?;

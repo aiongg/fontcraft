@@ -470,6 +470,10 @@ pub(super) fn fix_file(s: &mut Session, v: &Value) -> Result<Value> {
                 "checks": call.checks,
                 "result": result,
             })),
+            Err(EngineError::Cancelled) => {
+                discard(&staged);
+                return Err(EngineError::Cancelled);
+            }
             Err(e) => {
                 discard(&staged);
                 return Err(EngineError::Io(format!("the fix {} ({}) failed, so nothing was written: {e}", call.fix, call.command)));
@@ -719,6 +723,10 @@ fn fix_family(s: &mut Session, p: &Params) -> Result<Value> {
                     "checks": call.checks,
                     "result": result,
                 })),
+                Err(EngineError::Cancelled) => {
+                    super::file_io::discard(&staged);
+                    return Err(EngineError::Cancelled);
+                }
                 Err(e) => {
                     super::file_io::discard(&staged);
                     let file = f.input.display();

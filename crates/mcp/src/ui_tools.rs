@@ -1,11 +1,11 @@
-//! The window tools: `screenshot`, `render`, `pointer`, `click`, `key`, `text`, `menu` and
-//! `dialog_*`. Each one calls a control method of the running app (`docs/control-protocol.md`),
+//! The window tools: `screenshot`, `render`, `elements`, `pointer`, `click`, `set`, `key`, `text`,
+//! `menu` and `dialog_*`. Each one calls a control method of the running app (`docs/control-protocol.md`),
 //! so they are listed only when the server is attached ([`crate::Backend::has_app`]). Called
 //! without an app, a window tool answers that it needs one.
 //!
 //! The policy decides commands by id, and the mouse and keyboard can reach any command. So under
 //! `--read-only`, `--allow` or `--deny`, the tools that act like the mouse and keyboard
-//! (`pointer`, `click`, `key`, `text`) are not listed and are refused; `menu` and the dialog tools
+//! (`pointer`, `click`, `set`, `key`, `text`) are not listed and are refused; `menu` and the dialog tools
 //! check the command they would run before they run it.
 
 use serde_json::{Map, Value, json};
@@ -28,8 +28,10 @@ enum Reach {
 const TOOLS: &[(&str, Reach)] = &[
     ("screenshot", Reach::Safe),
     ("render", Reach::Safe),
+    ("elements", Reach::Safe),
     ("pointer", Reach::Input),
     ("click", Reach::Input),
+    ("set", Reach::Input),
     ("key", Reach::Input),
     ("text", Reach::Input),
     ("menu", Reach::Checked),
@@ -43,7 +45,9 @@ const TOOLS: &[(&str, Reach)] = &[
 /// `render` take no `path`: the image comes back in the reply, and no file is written.
 const RENDER_KEYS: &[&str] = &["glyphs", "text", "master", "layer", "size", "scale"];
 const POINTER_KEYS: &[&str] = &["events"];
-const CLICK_KEYS: &[&str] = &["id", "x", "y", "button", "count", "mods", "shift", "alt", "cmd", "ctrl"];
+const ELEMENTS_KEYS: &[&str] = &["prefix", "role", "window", "offset", "limit"];
+const CLICK_KEYS: &[&str] = &["id", "element", "x", "y", "button", "count", "mods", "shift", "alt", "cmd", "ctrl"];
+const SET_KEYS: &[&str] = &["element", "value"];
 const KEY_KEYS: &[&str] = &["key", "shift", "alt", "cmd", "ctrl", "action"];
 const TEXT_KEYS: &[&str] = &["text"];
 const DIALOG_SET_KEYS: &[&str] = &["field", "value"];
@@ -59,9 +63,9 @@ pub(crate) fn list(restricted: bool) -> Vec<Value> {
 
 /// One sentence for `initialize`'s instructions when the server is attached.
 pub(crate) fn describe(restricted: bool) -> String {
-    let mut text = "The window tools (screenshot, render, pointer, click, key, text, menu, dialog_inspect, dialog_set, dialog_confirm, dialog_cancel) show and drive the app's window.".to_string();
+    let mut text = "The window tools (screenshot, render, elements, pointer, click, set, key, text, menu, dialog_inspect, dialog_set, dialog_confirm, dialog_cancel) show and drive the app's window.".to_string();
     if restricted {
-        text.push_str(" Because this server is restricted, pointer, click, key and text are refused, and menu and the dialog tools run only commands the restrictions admit.");
+        text.push_str(" Because this server is restricted, pointer, click, set, key and text are refused, and menu and the dialog tools run only commands the restrictions admit.");
     }
     text
 }
@@ -117,8 +121,15 @@ fn run(server: &mut Server, name: &str, reach: Reach, args: &Value) -> Result<Ve
     match name {
         "screenshot" => image("ui.screenshot", server.backend.control("ui.screenshot", &empty)?),
         "render" => image("ui.render", server.backend.control("ui.render", &pick(&args, RENDER_KEYS))?),
+        "elements" => text(server.backend.control("ui.elements", &pick(&args, ELEMENTS_KEYS))?),
         "pointer" => text(server.backend.control("ui.pointer", &pick(&args, POINTER_KEYS))?),
         "click" => text(server.backend.control("ui.click", &pick(&args, CLICK_KEYS))?),
+        "set" => {
+            if !args.get("element").is_some_and(Value::is_string) {
+                return Err(Failure::Failed("`set`: `element` (the id of an element; see elements) is required".into()));
+            }
+            text(server.backend.control("ui.set", &pick(&args, SET_KEYS))?)
+        }
         "key" => text(server.backend.control("ui.key", &pick(&args, KEY_KEYS))?),
         "text" => text(server.backend.control("ui.text", &pick(&args, TEXT_KEYS))?),
         "menu" => match args.get("command") {
@@ -208,6 +219,17 @@ fn definition(name: &str) -> Value {
             }),
             &[],
         ),
+        "elements" => (
+            "List what the app's windows show, panel fields included: each element's id, window, role, label, value, the labelled element around it (in), its rectangle in window points, whether it shows and is enabled, its states, and what set takes for it (bool, text, choice or number). Click one with click, change one with set.",
+            json!({
+                "prefix": {"type": "string", "description": "Only elements whose label starts with this, in any case."},
+                "role": {"type": "string", "description": "Only elements of this role, such as button, textInput, spinButton, checkBox, comboBox, slider or tab."},
+                "window": {"type": "string", "description": "Only elements of this window: main, or the id of a floating panel's window."},
+                "offset": {"type": "integer", "description": "How many matching elements to pass over first (default 0)."},
+                "limit": {"type": "integer", "description": "How many to list (default 500, at most 2,000)."}
+            }),
+            &[],
+        ),
         "pointer" => (
             "Drive the active pointer tool like the mouse (run_command tool.select chooses the tool). Events run in order; a drag is one undo step. Positions are font units of the edited glyph, or window points with space: screen. Returns the tool, whether a gesture is unfinished (busy), the selection, what the canvas draws for the tool, and the errors of commands that failed.",
             json!({
@@ -222,9 +244,10 @@ fn definition(name: &str) -> Value {
             &["events"],
         ),
         "click" => (
-            "Press a control of the open dialog by its id (ok, cancel, another button, a tab, an action or a field, as dialog_inspect lists them), or click at a window point given as x and y in points from the top left. A window click reaches any widget and is handed to the window over the next frames: take a screenshot afterwards to see the result.",
+            "Press a control of the open dialog by its id (ok, cancel, another button, a tab, an action or a field, as dialog_inspect lists them), click an element of a window (see elements), or click at a window point given as x and y in points from the top left. A window click reaches any widget and is handed to the window over the next frames: take a screenshot afterwards to see the result.",
             json!({
-                "id": {"type": "string", "description": "A dialog control. Give id, or x and y."},
+                "id": {"type": "string", "description": "A dialog control. Give one of id, element, or x and y."},
+                "element": {"type": "string", "description": "An element id from elements; the middle of what shows of it is clicked."},
                 "x": {"type": "number", "description": "Window points from the left."},
                 "y": {"type": "number", "description": "Window points from the top."},
                 "button": {"type": "string", "enum": ["left", "right", "middle"], "description": "Default left; right opens the canvas context menu."},
@@ -236,6 +259,14 @@ fn definition(name: &str) -> Value {
                 "ctrl": flag("Control")
             }),
             &[],
+        ),
+        "set" => (
+            "Give an element a value, through the mouse and the keyboard. What it takes is the element's set (see elements): bool takes true or false, text a text or a number, choice the label of an option, number a number between the element's min and max, reached as closely as a drag of the slider can. Returns changed, and for a slider the value reached.",
+            json!({
+                "element": {"type": "string", "description": "An element id from elements."},
+                "value": {"description": "true or false, a text, a number, or the label of an option."}
+            }),
+            &["element", "value"],
         ),
         "key" => (
             "Press a key as the keyboard does: the active tool's keys first (V Select, P Draw, H Hand, arrows nudge, Delete, Escape), then the menu shortcuts. While a dialog is open the key goes to it. Returns whether anything took the key and, when a menu shortcut ran, its command and result.",
@@ -371,7 +402,9 @@ mod tests {
         let all = names(&mut s);
         assert_eq!(all.len(), 3 + TOOLS.len());
         assert!(
-            ["screenshot", "render", "pointer", "click", "key", "text", "menu", "dialog_confirm"].iter().all(|t| all.iter().any(|n| n == t)),
+            ["screenshot", "render", "elements", "pointer", "click", "set", "key", "text", "menu", "dialog_confirm"]
+                .iter()
+                .all(|t| all.iter().any(|n| n == t)),
             "{all:?}"
         );
         for tool in ask(&mut s, "tools/list", json!({}))["result"]["tools"].as_array().unwrap() {
@@ -381,7 +414,7 @@ mod tests {
         let (mut s, _) = attached(Policy::unrestricted().deny("glyph.*").unwrap(), None);
         let restricted = names(&mut s);
         assert!(restricted.iter().any(|n| n == "screenshot") && restricted.iter().any(|n| n == "menu"), "{restricted:?}");
-        assert!(!restricted.iter().any(|n| ["pointer", "click", "key", "text"].contains(&n.as_str())), "{restricted:?}");
+        assert!(!restricted.iter().any(|n| ["pointer", "click", "set", "key", "text"].contains(&n.as_str())), "{restricted:?}");
     }
 
     #[test]
@@ -418,6 +451,10 @@ mod tests {
         let (mut s, calls) = attached(Policy::unrestricted(), None);
         assert_eq!(call(&mut s, "key", json!({"key": "V", "shift": true}))["isError"], false);
         assert_eq!(call(&mut s, "click", json!({"x": 10, "y": 20, "button": "right"}))["isError"], false);
+        assert_eq!(call(&mut s, "elements", json!({"prefix": "Family", "path": "x"}))["isError"], false);
+        assert_eq!(call(&mut s, "click", json!({"element": "00ff"}))["isError"], false);
+        assert_eq!(call(&mut s, "set", json!({"element": "00ff", "value": "Sans", "layers": true}))["isError"], false);
+        assert_eq!(call(&mut s, "set", json!({"layers": true}))["isError"], true);
         assert_eq!(call(&mut s, "menu", json!({}))["isError"], false);
         assert_eq!(call(&mut s, "menu", json!({"command": "glyph.newGlyph", "params": {"name": "a"}}))["isError"], false);
         assert_eq!(call(&mut s, "dialog_confirm", json!({}))["isError"], false);
@@ -430,6 +467,9 @@ mod tests {
             [
                 ("ui.key", &json!({"key": "V", "shift": true})),
                 ("ui.click", &json!({"x": 10, "y": 20, "button": "right"})),
+                ("ui.elements", &json!({"prefix": "Family"})),
+                ("ui.click", &json!({"element": "00ff"})),
+                ("ui.set", &json!({"element": "00ff", "value": "Sans"})),
                 ("ui.menu.list", &json!({})),
                 ("ui.menu.invoke", &json!({"command": "glyph.newGlyph", "params": {"name": "a"}})),
                 ("ui.dialog.confirm", &json!({})),

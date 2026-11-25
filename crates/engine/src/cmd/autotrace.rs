@@ -73,6 +73,7 @@ fn autotrace(s: &mut Session, value: &Value) -> Result<Value> {
     let mut done: Vec<Traced> = Vec::new();
     let mut skipped: Vec<Value> = Vec::new();
     for name in &names {
+        crate::work::check()?;
         let Some(glyph) = font.glyph(name) else { continue };
         let reason = if glyph.info.locked {
             Err("the glyph is locked".to_string())

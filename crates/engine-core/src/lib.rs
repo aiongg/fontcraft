@@ -37,7 +37,7 @@ pub enum EngineError {
     #[error(transparent)]
     Format(#[from] fontcraft_format::FormatError),
     #[error(transparent)]
-    Compile(#[from] fontcraft_compile::CompileError),
+    Compile(fontcraft_compile::CompileError),
     #[error(transparent)]
     Glyphs(#[from] fontcraft_io_glyphs::GlyphsError),
     #[error(transparent)]
@@ -56,6 +56,15 @@ pub enum EngineError {
     Unsupported(String),
     #[error("internal error (please report it): {0}")]
     Internal(String),
+}
+
+impl From<fontcraft_compile::CompileError> for EngineError {
+    fn from(e: fontcraft_compile::CompileError) -> Self {
+        match e {
+            fontcraft_compile::CompileError::Cancelled => EngineError::Cancelled,
+            e => EngineError::Compile(e),
+        }
+    }
 }
 
 pub type Result<T> = std::result::Result<T, EngineError>;

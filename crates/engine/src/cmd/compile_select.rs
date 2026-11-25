@@ -416,6 +416,7 @@ pub(super) fn build_variable(
     let options = variable_options(req);
     for pick in picks {
         for &flavour in flavours {
+            crate::work::check()?;
             let built = var::compile_variable(font, pick.setting, &options, &VariableOptions { flavour, optimize_deltas })?;
             if report.feature_code.is_none() {
                 report.feature_code.clone_from(&built.compiled.feature_code);

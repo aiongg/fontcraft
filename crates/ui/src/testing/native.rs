@@ -213,13 +213,19 @@ impl NativeApp {
 
     /// Sends `method` with `params`, runs three frames, and returns the result of a request that must succeed.
     pub fn ok(&mut self, method: &str, params: Value) -> Value {
-        for _ in 0..crate::control::frames_before(&self.app, method, &params) {
-            self.frame();
+        loop {
+            for _ in 0..crate::control::frames_before(&self.app, method, &params) {
+                self.frame();
+            }
+            let reply = crate::control::handle(&mut self.app, &json!({"id": 1, "method": method, "params": params}));
+            assert_eq!(reply["ok"], true, "{method}: {reply}");
+            self.frames(3);
+            if !crate::control::unfinished(&self.app) {
+                return reply["result"].clone();
+            }
+            // The input of a round runs, a step a frame, before the next one looks at what it did.
+            self.frames(9);
         }
-        let reply = crate::control::handle(&mut self.app, &json!({"id": 1, "method": method, "params": params}));
-        assert_eq!(reply["ok"], true, "{method}: {reply}");
-        self.frames(3);
-        reply["result"].clone()
     }
 
     /// The window that has the keyboard focus.

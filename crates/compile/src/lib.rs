@@ -78,6 +78,7 @@ use fontcraft_model::glyphdata::GlyphData;
 use fontcraft_model::{Font, ModelError, Resolved, ResolvedGlyph, Target};
 use write_fonts::types::Tag;
 
+pub use fontcraft_geom::stop;
 pub use outline::Flavour;
 
 /// Largest coordinate, in font units, an outline point may have in a TrueType outline. `glyf`
@@ -128,6 +129,9 @@ pub const DEFAULT_CONVERSION_ERROR: f64 = 0.001;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CompileError {
+    /// The host asked the compile to stop ([`stop`]).
+    #[error("cancelled")]
+    Cancelled,
     #[error(transparent)]
     Model(#[from] ModelError),
     #[error("glyph `{glyph}`: {message}")]
@@ -601,6 +605,7 @@ pub(crate) fn compile_stages_with(
     info::expand_tokens(font, &mut resolved, &mut warnings);
     export_params::without_subset_lists(&mut resolved, options.subset);
     let edits = export_params::apply(font, &mut resolved, &mut warnings)?;
+    check_stop()?;
     let glyphs = preflight::run(std::mem::take(&mut resolved.glyphs), &mut warnings)?;
     let synthesised_notdef = !glyphs.iter().any(|g| g.name == ".notdef");
     let glyphs = order::final_order(glyphs, &resolved, &mut warnings)?;
@@ -621,7 +626,9 @@ pub(crate) fn compile_stages_with(
         color::plan(font, &resolved, options)
     };
     let (glyphs, made) = color::append_layer_glyphs(font, &mut color_plan, &resolved, glyphs, &mut warnings)?;
+    check_stop()?;
     let layout = layout_tables(font, glyph_data.as_deref(), &resolved, &glyphs, &edits, options, var_layout, &mut warnings)?;
+    check_stop()?;
     let upm = f64::from(resolved.units_per_em);
     let error =
         if options.conversion_error.is_finite() && options.conversion_error > 0.0 { options.conversion_error } else { DEFAULT_CONVERSION_ERROR };
@@ -649,10 +656,12 @@ pub(crate) fn compile_stages_with(
             (outlines, Extra::default(), kern_table)
         }
     };
+    check_stop()?;
     extra.math = math::plan(font, &resolved, &edits);
     extra.cid = cid_plan;
     let color_tables = color::build(font, &color_plan, &color::GlyphOrder::new(&glyphs, &made)?, options, &mut warnings)?;
     extra.cpal = color_tables.cpal;
+    check_stop()?;
     let bytes = build::assemble(
         font,
         &resolved,
@@ -676,6 +685,11 @@ pub(crate) fn compile_stages_with(
     }
     extras::finish(font, &mut compiled, options)?;
     Ok(compiled)
+}
+
+/// Stops the compile when the host asked it to: between stages and tables, and in the loops over a font's glyphs.
+pub(crate) fn check_stop() -> Result<(), CompileError> {
+    if stop::requested() { Err(CompileError::Cancelled) } else { Ok(()) }
 }
 
 /// The layout stage ([`layout::build`]), variable when `variable` gives the masters; nothing when

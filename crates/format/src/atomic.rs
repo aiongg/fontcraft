@@ -12,7 +12,9 @@ use crate::FormatError;
 #[cfg(not(target_arch = "wasm32"))]
 pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), FormatError> {
     // craft-atomic's errors already name the file and say whether the original was kept.
-    craft_atomic::atomic_write(path, bytes).map_err(|e| FormatError::Io(e.to_string()))
+    craft_atomic::atomic_write(path, bytes).map_err(|e| FormatError::Io(e.to_string()))?;
+    crate::written::record(path);
+    Ok(())
 }
 
 /// The browser has no file system to save to. Commands refuse before they get here; this keeps a

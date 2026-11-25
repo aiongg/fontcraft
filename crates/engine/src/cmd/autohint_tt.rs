@@ -132,6 +132,7 @@ fn hint_layers(p: &Params, font: &Font, glyphs: &[String], master: &str, setting
     let per_glyph = control.by_glyph();
     let no_control = ControlInstructions::default();
     for name in glyphs {
+        crate::work::check()?;
         let glyph = font.glyph(name).ok_or_else(|| p.bad(format!("there is no glyph `{name}`")))?;
         if let Err(e) = crate::check_unlocked(glyph) {
             if explicit {

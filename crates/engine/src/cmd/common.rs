@@ -120,6 +120,7 @@ pub(crate) fn each_layer(
     let bad = |message: String| EngineError::BadParams { command: command.into(), message };
     let mut out = Outcome::default();
     for name in &scope.glyphs {
+        crate::work::check()?;
         let Some(glyph) = font.glyph(name) else {
             return Err(bad(format!("there is no glyph `{name}`")));
         };

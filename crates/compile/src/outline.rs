@@ -158,6 +158,7 @@ pub fn prepare(glyphs: &[ResolvedGlyph], s: &Settings, warnings: &mut Vec<String
     let mut expansion = Expansion::new(s.max_expanded);
     let mut out = Vec::with_capacity(glyphs.len());
     for (i, g) in glyphs.iter().enumerate() {
+        crate::check_stop()?;
         let contours = if decompose.get(i) == Some(&true) && s.single_precision {
             let mut out = Vec::new();
             let mut budget = MAX_OUTLINE_ELEMENTS;
