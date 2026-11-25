@@ -9,6 +9,7 @@
 use std::sync::Arc;
 
 use fontcraft_model::glyphdata::GlyphData;
+use fontcraft_model::guide_follow::{BothGuides, follow_width};
 use fontcraft_model::plist::Value as PValue;
 use fontcraft_model::{Font, Layer, data_props, glyph_props};
 use fontcraft_spacing::WIDTH_RANGE;
@@ -121,6 +122,7 @@ pub(crate) fn color_layers_follow_master(next: &mut Font, before: &Font) {
         })
         .map(|(i, _)| i)
         .collect();
+    let both = BothGuides::of(next);
     for i in changed {
         let Some(mut g) = next.glyphs.get_mut_at(i) else { continue };
         let widths: Vec<(String, f64)> = g.layers.iter().filter(|l| l.is_master_layer()).map(|l| (l.id.clone(), l.width)).collect();
@@ -128,7 +130,7 @@ pub(crate) fn color_layers_follow_master(next: &mut Font, before: &Font) {
             if let Some((_, width)) = widths.iter().find(|(id, _)| *id == layer.master) {
                 let before = layer.width;
                 layer.width = *width;
-                fontcraft_model::guide_follow::follow_width(layer, before);
+                follow_width(layer, before, both);
             }
         }
     }

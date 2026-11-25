@@ -7,6 +7,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use fontcraft_model::guide_follow::{BothGuides, follow_width};
 use fontcraft_model::{Alignment, Font, Glyph, KernGroups, Layer, MetricsKeys, Shape, SourceFormat};
 use fontcraft_spacing::afm::{self, Afm};
 use fontcraft_spacing::kerning::pairs::{self, NewPair};
@@ -768,10 +769,11 @@ fn import_glyph_metrics(font: &mut Font, master: &str, source: &Source, mode: Mo
             skip(&mut skipped, want.glyph, format!("the width would be {width}, outside 0 to 65535"));
             continue;
         }
+        let both = BothGuides::of(font);
         let mut gm = font.glyph_mut(want.glyph)?;
         let Some(l) = gm.layers.iter_mut().find(|l| l.id == master) else { continue };
         let before = l.width + dx;
-        if let Err(e) = super::shared::shift_layer(l, dx) {
+        if let Err(e) = super::shared::shift_with_right_edge(l, dx, both) {
             drop(gm);
             if aligned {
                 restore(font, &original)?;
@@ -780,7 +782,7 @@ fn import_glyph_metrics(font: &mut Font, master: &str, source: &Source, mode: Mo
             continue;
         }
         l.width = width;
-        fontcraft_model::guide_follow::follow_width(l, before);
+        follow_width(l, before, both);
         if aligned {
             // The imported values hold only with the layer's components placed by hand.
             for shape in &mut l.shapes {

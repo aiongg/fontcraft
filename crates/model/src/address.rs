@@ -40,6 +40,8 @@ pub struct LayerParts<'a> {
     /// The side's own guides (the master's guides are the global ones).
     pub guides: &'a [Guide],
     pub annotations: &'a [Annotation],
+    /// The layer's width, which places guides referenced to the right ([`crate::guide_follow`]).
+    pub width: f64,
 }
 
 /// [`LayerParts`] for editing.
@@ -49,18 +51,21 @@ pub struct LayerPartsMut<'a> {
     pub anchors: &'a mut Vec<Anchor>,
     pub guides: &'a mut Vec<Guide>,
     pub annotations: &'a mut Vec<Annotation>,
+    /// The layer's width, which places guides referenced to the right ([`crate::guide_follow`]).
+    pub width: f64,
 }
 
 impl Layer {
     /// The lists of one side. A layer without a background has an empty one.
     pub fn parts(&self, side: LayerSide) -> LayerParts<'_> {
+        let width = self.width;
         match side {
             LayerSide::Foreground => {
-                LayerParts { shapes: &self.shapes, anchors: &self.anchors, guides: &self.info.guides, annotations: &self.info.annotations }
+                LayerParts { shapes: &self.shapes, anchors: &self.anchors, guides: &self.info.guides, annotations: &self.info.annotations, width }
             }
             LayerSide::Background => match self.info.background.as_ref() {
-                Some(b) => LayerParts { shapes: &b.shapes, anchors: &b.anchors, guides: &b.guides, annotations: &b.annotations },
-                None => LayerParts { shapes: &[], anchors: &[], guides: &[], annotations: &[] },
+                Some(b) => LayerParts { shapes: &b.shapes, anchors: &b.anchors, guides: &b.guides, annotations: &b.annotations, width },
+                None => LayerParts { shapes: &[], anchors: &[], guides: &[], annotations: &[], width },
             },
         }
     }
@@ -68,14 +73,21 @@ impl Layer {
     /// The lists of one side, for editing. Asking for the background of a layer that has none
     /// gives it an empty one.
     pub fn parts_mut(&mut self, side: LayerSide) -> LayerPartsMut<'_> {
+        let width = self.width;
         match side {
             LayerSide::Foreground => {
                 let info = &mut *self.info;
-                LayerPartsMut { shapes: &mut self.shapes, anchors: &mut self.anchors, guides: &mut info.guides, annotations: &mut info.annotations }
+                LayerPartsMut {
+                    shapes: &mut self.shapes,
+                    anchors: &mut self.anchors,
+                    guides: &mut info.guides,
+                    annotations: &mut info.annotations,
+                    width,
+                }
             }
             LayerSide::Background => {
                 let b = self.info.background.get_or_insert_with(Default::default);
-                LayerPartsMut { shapes: &mut b.shapes, anchors: &mut b.anchors, guides: &mut b.guides, annotations: &mut b.annotations }
+                LayerPartsMut { shapes: &mut b.shapes, anchors: &mut b.anchors, guides: &mut b.guides, annotations: &mut b.annotations, width }
             }
         }
     }

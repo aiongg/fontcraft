@@ -10,6 +10,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use fontcraft_geom::{CubicBez, Piece, Point, Segment, Vec2, round_point, round_to_grid};
 use fontcraft_model::fc_keys::CONTOUR_NAME;
+use fontcraft_model::guide_follow::placed_x;
 use fontcraft_model::plist::{Str, Value as Plist};
 use fontcraft_model::{Family, LayerSide, MAX_COORDINATE, MAX_NAME_LEN, Node, NodeKind, Path, Shape};
 use fontcraft_pathops::geometry_helpers as gh;
@@ -883,13 +884,14 @@ fn slice_contours(s: &mut Session, v: &Value) -> Result<Value> {
         };
         let guide = list.get(g.index).ok_or_else(|| p.bad(format!("{} guide {} does not resolve", g.scope.as_str(), g.index)))?;
         let a = guide.angle.to_radians();
-        if !(guide.x.is_finite() && guide.y.is_finite() && a.is_finite()) {
+        let x = placed_x(guide, r.layer.width);
+        if !(x.is_finite() && guide.y.is_finite() && a.is_finite()) {
             return Err(p.bad("the guide's position or angle is not a number"));
         }
         let bounds = fontcraft_geom::bounds(paths(r.parts.shapes).flat_map(|(_, path)| path.nodes.iter().map(Node::point)));
         // cos 90° is 6e-17, not 0: keep a vertical or horizontal guide exactly so.
         let exact = |v: f64| if v.abs() < 1e-12 { 0.0 } else { v };
-        (Point::new(guide.x, guide.y), Vec2::new(exact(a.cos()), exact(a.sin())), bounds)
+        (Point::new(x, guide.y), Vec2::new(exact(a.cos()), exact(a.sin())), bounds)
     };
     let Some(bounds) = bounds else {
         return Ok(json!({ "selection": selection_points(&t, &layer, Vec::new()) }));

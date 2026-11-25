@@ -84,6 +84,31 @@ fn pointer(app: &mut FontCraftApp, kind: PointerKind, x: f64, y: f64) {
     app.drain();
 }
 
+/// A guide referenced to the right sidebearing is drawn at the width plus its offset, and moves with the width.
+#[test]
+fn a_right_referenced_guide_is_drawn_from_the_right_edge() {
+    let mut app = edit_app();
+    run(&mut app, "spacing.setWidth", json!({"glyphs": ["A"], "value": 600}));
+    run(&mut app, "guide.add", json!({"glyph": "A", "x": 500, "y": 0, "angle": 90}));
+    run(&mut app, "guide.addGlobal", json!({"glyph": "A", "x": 550, "y": 0, "angle": 90}));
+    for scope in ["local", "global"] {
+        run(&mut app, "guide.setProperties", json!({"glyph": "A", "guide": {"scope": scope, "index": 0}, "relativeTo": "right"}));
+    }
+    let t = OverlayTokens::standard();
+    let at = |app: &FontCraftApp, color: egui::Color32| -> Vec<f32> {
+        let d = drawn(app, super::guides::guide_shapes);
+        let lines = d.shapes.iter().filter_map(|s| match s {
+            egui::Shape::LineSegment { points, stroke } if stroke.color == color => Some(points[0].x.round()),
+            _ => None,
+        });
+        lines.collect()
+    };
+    // One point per unit, the canvas centred at x 400.
+    assert_eq!((at(&app, t.guide_local), at(&app, t.guide_global)), (vec![600.0], vec![650.0]));
+    run(&mut app, "spacing.setWidth", json!({"glyphs": ["A"], "value": 500}));
+    assert_eq!((at(&app, t.guide_local), at(&app, t.guide_global)), (vec![500.0], vec![550.0]));
+}
+
 /// A local guide with its measurement on draws its line and knob and the distances between its crossings with the
 /// outline; the guide's name shows at its left end.
 #[test]

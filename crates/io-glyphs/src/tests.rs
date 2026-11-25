@@ -573,6 +573,17 @@ fn version_3_stems_numbers_guides_and_instances_are_fields() {
     assert_eq!(write(&font).unwrap(), text);
 }
 
+/// The global guides of the public format sample.
+#[test]
+fn right_referenced_global_guides_round_trip() {
+    let guides = "guides = (\n{\nangle = 24.582;\nlockAngle = 1;\nlocked = 1;\nname = \"guide name\";\norientation = right;\npos = (-25,193);\nshowMeasurement = 1;\n},\n{\nangle = 90;\nfilter = \"category == \\\"Letter\\\"\";\norientation = right;\npos = (-34,271);\n}\n);\n";
+    let text = V3.replace("id = m01;\nmetricValues", &format!("{guides}id = m01;\nmetricValues"));
+    let font = read(&text).unwrap();
+    let m = font.default_master().unwrap();
+    assert_eq!(m.guides.iter().map(|g| (g.x, g.orientation.as_deref())).collect::<Vec<_>>(), [(-25.0, Some("right")), (-34.0, Some("right"))]);
+    assert_eq!(write(&font).unwrap(), text);
+}
+
 #[test]
 fn a_guide_colour_and_identifier_go_into_its_name() {
     let mut font = read(&v3_design()).unwrap();

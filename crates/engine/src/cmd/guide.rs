@@ -56,7 +56,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Make Global Guide",
             [],
             None,
-            "{glyph: name, layer?: id, side?: \"foreground\" | \"background\", guides: [{scope: \"local\", index}…]} move local guides to the layer's master, keeping their position and properties. A locked guide or a locked glyph refuses it → {selection: {glyph, layer, guides: [{scope: \"global\", index}…]}}",
+            "{glyph: name, layer?: id, side?: \"foreground\" | \"background\", guides: [{scope: \"local\", index}…]} move local guides to the layer's master, keeping their position in this layer and their properties. A locked guide or a locked glyph refuses it → {selection: {glyph, layer, guides: [{scope: \"global\", index}…]}}",
             has_doc,
             make_global
         )
@@ -67,7 +67,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Make Local Guide",
             [],
             None,
-            "{glyph: name, layer?: id, side?: \"foreground\" | \"background\", guides: [{scope: \"global\", index}…]} move global guides from the master to this layer, keeping their position and properties. A locked guide or a locked glyph refuses it → {selection: {glyph, layer, guides: [{scope: \"local\", index}…]}}",
+            "{glyph: name, layer?: id, side?: \"foreground\" | \"background\", guides: [{scope: \"global\", index}…]} move global guides from the master to this layer, keeping their position in it and their properties. A locked guide or a locked glyph refuses it → {selection: {glyph, layer, guides: [{scope: \"local\", index}…]}}",
             has_doc,
             make_local
         )
@@ -100,7 +100,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Set Properties",
             [],
             None,
-            "{glyph: name, layer?: id, side?: \"foreground\" | \"background\", guide: {scope: \"local\" | \"global\", index}, x?: number, y?: number, angle?: degrees, angleLocked?: bool, relativeTo?: \"left\" | \"right\" | \"both\", measurement?: bool, name?: string, filter?: string (global guides only: a glyph predicate), color?: \"r,g,b,a\" with numbers from 0 to 1} change a guide's properties; an empty name, filter or colour clears it. x and y are rounded to the font's grid; the angle is kept from 0 to 360. An angle-locked guide refuses a new angle unless the same call sets angleLocked: false. A locked guide refuses every change → {guide: {scope, index}}",
+            "{glyph: name, layer?: id, side?: \"foreground\" | \"background\", guide: {scope: \"local\" | \"global\", index}, x?: number, y?: number, angle?: degrees, angleLocked?: bool, relativeTo?: \"left\" | \"right\" | \"both\", measurement?: bool, name?: string, filter?: string (global guides only: a glyph predicate), color?: \"r,g,b,a\" with numbers from 0 to 1} change a guide's properties. x is the place in this layer, whatever the guide is relative to; changing relativeTo leaves the guide where this layer shows it, and a global guide relative to the right is at the same distance from the right edge of every glyph. An empty name, filter or colour clears it. x and y are rounded to the font's grid; the angle is kept from 0 to 360. An angle-locked guide refuses a new angle unless the same call sets angleLocked: false. A locked guide refuses every change → {guide: {scope, index}}",
             has_doc,
             set_properties
         )
@@ -132,7 +132,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "List Guides",
             [],
             None,
-            "{glyph: name, layer?: id, side?: \"foreground\" | \"background\"} every guide the layer shows, its own (local) then its master's (global), with all their properties → {glyph, layer, master, guides: [{scope, index, x, y, angle, locked, angleLocked, measurement, relativeTo: \"left\" | \"right\" | \"both\", name?, filter?, color?}]}",
+            "{glyph: name, layer?: id, side?: \"foreground\" | \"background\"} every guide the layer shows, its own (local) then its master's (global), with all their properties; x is the place in this layer, whatever the guide is relative to → {glyph, layer, master, guides: [{scope, index, x, y, angle, locked, angleLocked, measurement, relativeTo: \"left\" | \"right\" | \"both\", name?, filter?, color?}]}",
             has_doc,
             list
         )
@@ -296,13 +296,14 @@ fn relative_to(g: &Guide) -> &'static str {
     guide_follow::reference(g).name()
 }
 
-fn set_relative_to(g: &mut Guide, to: &str) {
+/// Sets the reference, the guide staying where it is in a layer `width` wide.
+fn set_relative_to(g: &mut Guide, to: &str, width: f64) {
     let to = match to {
         "right" => Reference::Right,
         "both" => Reference::Both,
         _ => Reference::Left,
     };
-    guide_follow::set_reference(g, to);
+    guide_follow::set_reference(g, to, width);
 }
 
 /// A colour as `r,g,b,a`, each from 0 to 1 (the form a UFO guideline uses).
@@ -312,11 +313,12 @@ fn check_color(p: &Params, text: &str) -> Result<()> {
     if ok { Ok(()) } else { Err(p.bad(format!("`color` must be \"r,g,b,a\" with numbers from 0 to 1, got \"{text}\""))) }
 }
 
-fn guide_json(scope: GuideScope, index: usize, g: &Guide) -> Value {
+/// A guide with its place in a layer `width` wide.
+fn guide_json(scope: GuideScope, index: usize, g: &Guide, width: f64) -> Value {
     let mut v = json!({
         "scope": scope.as_str(),
         "index": index,
-        "x": g.x,
+        "x": guide_follow::placed_x(g, width),
         "y": g.y,
         "angle": g.angle,
         "locked": g.locked,
@@ -515,7 +517,10 @@ fn set_properties(s: &mut Session, p: &Value) -> Result<Value> {
     }
     let step = grid(s.font()?);
     s.edit("Set Guide Properties", |font| {
-        let master = t.resolve(font)?.master.id.clone();
+        let (master, width) = {
+            let resolved = t.resolve(font)?;
+            (resolved.master.id.clone(), resolved.layer.width)
+        };
         apply(font, &t, &master, &p, |g| {
             if g.locked {
                 return Err(locked_error(&p, r.scope, r.index));
@@ -527,8 +532,15 @@ fn set_properties(s: &mut Session, p: &Value) -> Result<Value> {
             {
                 return Err(p.bad("the guide's angle is locked: set `angleLocked: false` in the same call to change it"));
             }
-            if let Some(v) = x {
-                g.x = round_to_grid(v, step);
+            let place = x.map_or_else(|| guide_follow::placed_x(g, width), |v| round_to_grid(v, step));
+            if let Some(to) = relative {
+                set_relative_to(g, to, width);
+            }
+            if x.is_some() || relative.is_some() {
+                if !guide_follow::can_place(g, place, width) {
+                    return Err(p.bad(format!("`x` must be within {MAX_COORDINATE} of the sidebearing the guide is referenced to")));
+                }
+                guide_follow::place_x(g, place, width);
             }
             if let Some(v) = y {
                 g.y = round_to_grid(v, step);
@@ -538,9 +550,6 @@ fn set_properties(s: &mut Session, p: &Value) -> Result<Value> {
             }
             if let Some(v) = angle_locked {
                 g.angle_locked = v;
-            }
-            if let Some(to) = relative {
-                set_relative_to(g, to);
             }
             if let Some(v) = measurement {
                 g.show_measurement = v;
@@ -620,8 +629,8 @@ fn list(s: &mut Session, p: &Value) -> Result<Value> {
         .guides
         .iter()
         .enumerate()
-        .map(|(i, g)| guide_json(GuideScope::Local, i, g))
-        .chain(r.master.guides.iter().enumerate().map(|(i, g)| guide_json(GuideScope::Global, i, g)))
+        .map(|(i, g)| guide_json(GuideScope::Local, i, g, r.layer.width))
+        .chain(r.master.guides.iter().enumerate().map(|(i, g)| guide_json(GuideScope::Global, i, g, r.layer.width)))
         .collect();
     Ok(json!({"glyph": r.glyph.name, "layer": r.layer.id, "master": r.master.id, "guides": guides}))
 }

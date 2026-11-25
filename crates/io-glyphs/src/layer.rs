@@ -563,9 +563,17 @@ fn write_guide(g: &Guide, version: u32) -> Option<Value> {
     if version == 2 { crate::v2::write_guide(g) } else { crate::design::write_guide(g) }
 }
 
+fn take_guides(d: &mut Dict, version: u32) -> Vec<Guide> {
+    let key = guide_key(version);
+    let own = if version == 2 { crate::v2::GUIDE_ALIGNMENT } else { crate::design::ORIENTATION };
+    crate::design::with_own_reference(d, key, own, |d| {
+        take_list(d, key, version, MAX_LAYER_GUIDES, |v| read_guide(v, version), |g| write_guide(g, version))
+    })
+}
+
 fn take_content(d: &mut Dict, version: u32) -> Content {
     Content {
-        guides: take_list(d, guide_key(version), version, MAX_LAYER_GUIDES, |v| read_guide(v, version), |g| write_guide(g, version)),
+        guides: take_guides(d, version),
         hints: take_list(
             d,
             "hints",

@@ -175,7 +175,7 @@ fn hit(scene: &Scene, view: &View, pos: Point, tolerance: f64, corners: bool) ->
     let global = scene.shown_global_guides().map(|(i, g)| (GuideScope::Global, i, g));
     let mut guide: Option<(f64, HitResult)> = None;
     for (scope, index, g) in local.chain(global) {
-        let Some((d, at)) = line_distance(pos, Point::new(g.x, g.y), g.angle) else { continue };
+        let Some((d, at)) = line_distance(pos, scene.knob(g), g.angle) else { continue };
         if d <= tol && guide.as_ref().is_none_or(|(bd, _)| d < *bd) {
             let hit = Hit::Guide { guide: GuideRef { scope, index } };
             guide = Some((d, HitResult { hit, at, locked: g.locked }));

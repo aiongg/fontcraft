@@ -11,6 +11,7 @@ use fontcraft_components::compose;
 use fontcraft_components::recipe::{self, Recipe};
 use fontcraft_geom::{Rect, Shape as _};
 use fontcraft_model::glyphdata::{GlyphData, items, validate};
+use fontcraft_model::guide_follow::{BothGuides, follow_width};
 use fontcraft_model::{
     Component, Font, Glyph, GlyphTable, Layer, MAX_COMPONENT_DEPTH, MAX_GLYPHS, MAX_NAME_LEN, ModelError, Shape, glyph_order, insert_by_sort_key,
 };
@@ -653,7 +654,7 @@ fn overwrite(font: &Font, clip: &GlyphClip, map: &HashMap<String, String>, c: &C
 }
 
 /// Applies the chosen parts of `o` to `target`; returns why a part was left out on a master.
-fn apply(target: &mut Glyph, o: &Overwrite, parts: &Parts, shown: &str) -> Vec<String> {
+fn apply(target: &mut Glyph, o: &Overwrite, parts: &Parts, shown: &str, both: BothGuides) -> Vec<String> {
     let mut notes = Vec::new();
     let src = &o.source;
     if parts.all {
@@ -709,7 +710,7 @@ fn apply(target: &mut Glyph, o: &Overwrite, parts: &Parts, shown: &str) -> Vec<S
             let mut dx = 0.0;
             if parts.lsb {
                 match (lsb, bounds) {
-                    (Some(lsb), Some(b)) => match super::shared::shift_layer(to, lsb - b.min_x()) {
+                    (Some(lsb), Some(b)) => match super::shared::shift_with_right_edge(to, lsb - b.min_x(), both) {
                         Ok(()) => {
                             dx = lsb - b.min_x();
                             to.width += dx;
@@ -732,7 +733,7 @@ fn apply(target: &mut Glyph, o: &Overwrite, parts: &Parts, shown: &str) -> Vec<S
             if parts.width && !rsb_done {
                 to.width = from.width;
             }
-            fontcraft_model::guide_follow::follow_width(to, before + dx);
+            follow_width(to, before + dx, both);
         }
     }
     notes
@@ -862,10 +863,11 @@ fn paste_special(s: &mut Session, v: &Value) -> Result<Value> {
     let changed: Vec<String> = writes.iter().map(|o| o.target.clone()).collect();
     let added: Vec<String> = new_glyphs.iter().map(|g| g.name.clone()).collect();
     let notes = s.edit("Paste Special", |font| {
+        let both = BothGuides::of(font);
         let mut notes = Vec::new();
         for o in &writes {
             let mut g = font.glyph_mut(&o.target)?;
-            for reason in apply(&mut g, o, &parts, &shown) {
+            for reason in apply(&mut g, o, &parts, &shown, both) {
                 notes.push(json!({"glyph": o.target, "reason": reason}));
             }
         }

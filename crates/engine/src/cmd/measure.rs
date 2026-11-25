@@ -15,6 +15,7 @@
 use std::collections::HashSet;
 
 use fontcraft_geom::{Affine, BezPath, Line, ParamCurve, PathEl, PathSeg, Point, Rect, Shape as _, Vec2};
+use fontcraft_model::guide_follow::placed_x;
 use fontcraft_model::{Font, Glyph, Layer, LayerParts, LayerSide, MAX_COORDINATE, MAX_OUTLINE_ELEMENTS, Master, NodeKind, Shape, metric};
 use serde_json::{Map, Value, json};
 
@@ -521,10 +522,11 @@ fn ruler(s: &mut Session, p: &Value) -> Result<Value> {
             };
             let guide = list.get(g.index).ok_or_else(|| p.bad(format!("{} guide {} does not resolve", g.scope.as_str(), g.index)))?;
             let a = guide.angle.to_radians();
-            if !(guide.x.is_finite() && guide.y.is_finite() && a.is_finite()) {
+            let x = placed_x(guide, r.layer.width);
+            if !(x.is_finite() && guide.y.is_finite() && a.is_finite()) {
                 return Err(p.bad("the guide's position or angle is not a number"));
             }
-            (Point::new(guide.x, guide.y), Vec2::new(a.cos(), a.sin()), None)
+            (Point::new(x, guide.y), Vec2::new(a.cos(), a.sin()), None)
         }
         (None, Some(_), Some(_)) => {
             let (from, to) = (point(&p, "from")?, point(&p, "to")?);

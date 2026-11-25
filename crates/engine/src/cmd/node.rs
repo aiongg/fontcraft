@@ -17,6 +17,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use fontcraft_geom::{Point, Rect, Shape as _, Vec2, round_point};
+use fontcraft_model::guide_follow::placed_x;
 use fontcraft_model::{Font, Layer, LayerParts, LayerPartsMut, LayerSide, MAX_COORDINATE, Node, NodeKind, Path, Shape};
 use serde_json::{Map, Value, json};
 
@@ -491,7 +492,7 @@ fn selection_bounds(font: &Font, r: &ResolvedTargets, t: &Targets) -> Option<Rec
             GuideScope::Local => parts.guides.get(g.index),
             GuideScope::Global => r.master.guides.get(g.index),
         };
-        pts.extend(guide.map(|g| Point::new(g.x, g.y)));
+        pts.extend(guide.map(|g| Point::new(placed_x(g, r.layer.width), g.y)));
     }
     pts.extend(t.annotations.iter().filter_map(|&i| parts.annotations.get(i)).map(|a| Point::new(a.x, a.y)));
     if let Some(b) = fontcraft_geom::bounds(pts) {

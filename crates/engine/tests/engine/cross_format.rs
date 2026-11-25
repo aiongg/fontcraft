@@ -371,12 +371,14 @@ fn image_form(i: &Option<Image>) -> String {
     format!("{:?}", i.as_ref().map(|i| (&i.path, i.transform.affine().as_coeffs(), i.crop, i.alpha, i.locked)))
 }
 
-fn guides_form(g: &[Guide]) -> Vec<(f64, f64, f64, String, bool)> {
-    g.iter().map(guide_form).collect()
+/// The guides of a layer `width` wide at their places, which is what a UFO holds of a guide
+/// referenced to the right sidebearing.
+fn guides_form(g: &[Guide], width: f64) -> Vec<(f64, f64, f64, String, bool)> {
+    g.iter().map(|g| guide_form(&fontcraft_engine::model::guide_follow::placed(g, width))).collect()
 }
 
-fn background_form(b: &Option<Background>) -> String {
-    format!("{:?}", b.as_ref().map(|b| (drawing(&b.shapes, &b.anchors), guides_form(&b.guides), image_form(&b.image))))
+fn background_form(b: &Option<Background>, width: f64) -> String {
+    format!("{:?}", b.as_ref().map(|b| (drawing(&b.shapes, &b.anchors), guides_form(&b.guides, width), image_form(&b.image))))
 }
 
 /// Hints in glyphsLib's form, whatever format they were read from.
@@ -516,9 +518,9 @@ fn layers_trip(font: &Font, back: &Font, diffs: &mut Vec<String>) {
                     format!("{:?}", (hints_form(&x.info.hints), bg_hints(x))),
                 ),
                 (LAYER_LOSSES[8], format!("{:?}", (notes(l), bg_notes(l))), format!("{:?}", (notes(x), bg_notes(x)))),
-                (LAYER_LOSSES[11], format!("{:?}", guides_form(&l.info.guides)), format!("{:?}", guides_form(&x.info.guides))),
+                (LAYER_LOSSES[11], format!("{:?}", guides_form(&l.info.guides, l.width)), format!("{:?}", guides_form(&x.info.guides, x.width))),
                 (LAYER_LOSSES[9], image_form(&l.info.image), image_form(&x.info.image)),
-                ("the layer's background", background_form(&l.info.background), background_form(&x.info.background)),
+                ("the layer's background", background_form(&l.info.background, l.width), background_form(&x.info.background, x.width)),
                 ("the layer's user data", user_data_form(&numbered(&l.info.user_data)), user_data_form(&numbered(&x.info.user_data))),
                 ("booleans in user data", user_data_form(&l.info.user_data), user_data_form(&x.info.user_data)),
                 ("the layer's kind", format!("{:?}", l.is_master_layer()), format!("{:?}", x.is_master_layer())),

@@ -315,6 +315,11 @@ impl<'a> Scene<'a> {
         &self.layer.info.guides
     }
 
+    /// Where a guide of the scene, local or global, lies in this layer.
+    pub fn knob(&self, g: &Guide) -> Point {
+        Point::new(fontcraft_model::guide_follow::placed_x(g, self.layer.width), g.y)
+    }
+
     /// Whether the shape at `shape` can be hit and selected (path focus).
     pub fn shape_editable(&self, shape: usize) -> bool {
         self.focus.as_ref().is_none_or(|f| f.contains(&shape))

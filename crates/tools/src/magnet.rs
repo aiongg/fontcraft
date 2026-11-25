@@ -48,7 +48,7 @@ pub fn guide_at(cx: &Context<'_>, pos: Point) -> Option<GuideHit> {
         if g.locked {
             continue;
         }
-        let Some((d, foot)) = line_distance(pos, Point::new(g.x, g.y), g.angle) else { continue };
+        let Some((d, foot)) = line_distance(pos, scene.knob(g), g.angle) else { continue };
         if d <= tolerance && best.is_none_or(|(b, _)| d < b) {
             best = Some((d, GuideHit { guide: r, at: foot }));
         }

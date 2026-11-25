@@ -37,7 +37,7 @@
 use std::collections::{BTreeMap, HashSet};
 
 use fontcraft_model::glyphdata::GlyphData;
-use fontcraft_model::guide_follow::follow_width;
+use fontcraft_model::guide_follow::{BothGuides, follow_width};
 use fontcraft_model::{Font, Glyph, Layer, MAX_COORDINATE, Master, MetricValue, glyph_props, metric};
 use fontcraft_spacing::profile::{self, Band, Side};
 use fontcraft_spacing::space_model::{ClassModel, Control, SideShape};
@@ -45,7 +45,7 @@ use fontcraft_spacing::{self as spacing, Field, SIDEBEARING_RANGE, Scope, WIDTH_
 use serde_json::{Map, Value, json};
 
 use super::common::{self, in_range, master_metrics};
-use super::shared::shift_layer;
+use super::shared::{shift_layer, shift_with_right_edge};
 use super::*;
 use crate::EngineError;
 use crate::params::{Params, TargetKind};
@@ -625,6 +625,7 @@ fn auto_space(s: &mut Session, v: &Value) -> Result<Value> {
     let mut changed = Vec::new();
     let mut seen = HashSet::new();
     s.edit("Auto Space", |font| {
+        let both = BothGuides::of(font);
         for plan in &plans {
             values.entry(plan.glyph.clone()).or_default().insert(plan.layer.clone(), json!({"left": plan.left, "right": plan.right}));
             let [left, right] = &plan.classes;
@@ -643,9 +644,9 @@ fn auto_space(s: &mut Session, v: &Value) -> Result<Value> {
                 continue;
             }
             let before = l.width + plan.shift;
-            shift_layer(l, plan.shift).map_err(|e| p.bad(format!("glyph `{}`: {e}", plan.glyph)))?;
+            shift_with_right_edge(l, plan.shift, both).map_err(|e| p.bad(format!("glyph `{}`: {e}", plan.glyph)))?;
             l.width = plan.width;
-            follow_width(l, before);
+            follow_width(l, before, both);
             if seen.insert(plan.glyph.as_str()) {
                 changed.push(plan.glyph.clone());
             }
@@ -715,6 +716,7 @@ fn center_in_width(s: &mut Session, v: &Value) -> Result<Value> {
     let mut values: BTreeMap<String, Map<String, Value>> = BTreeMap::new();
     let mut changed: Vec<String> = Vec::new();
     s.edit("Center in Width", |font| {
+        let both = BothGuides::of(font);
         for (name, id, shift, left, right) in &plans {
             values.entry(name.clone()).or_default().insert(id.clone(), json!({"left": left, "right": right}));
             if *shift == 0.0 {
@@ -722,7 +724,7 @@ fn center_in_width(s: &mut Session, v: &Value) -> Result<Value> {
             }
             let mut gm = font.glyph_mut(name)?;
             let Some(l) = gm.layers.iter_mut().find(|l| l.id == *id) else { continue };
-            shift_layer(l, *shift).map_err(|e| p.bad(format!("glyph `{name}`: {e}")))?;
+            shift_layer(l, *shift, both).map_err(|e| p.bad(format!("glyph `{name}`: {e}")))?;
             if !changed.contains(name) {
                 changed.push(name.clone());
             }
@@ -863,6 +865,7 @@ fn copy_metrics(s: &mut Session, v: &Value) -> Result<Value> {
     let mut skipped = Vec::new();
     let mut changed = Vec::new();
     s.edit("Copy Width / Sidebearings", |font| {
+        let both = BothGuides::of(font);
         for name in &to {
             let Some(g) = font.glyph(name) else { continue };
             if g.info.locked {
@@ -903,18 +906,18 @@ fn copy_metrics(s: &mut Session, v: &Value) -> Result<Value> {
                         What::Width => check_width(*value).map(|()| {
                             let before = l.width;
                             l.width = *value;
-                            follow_width(l, before);
+                            follow_width(l, before, both);
                         }),
                         What::Lsb => {
                             let d = value - current.unwrap_or(*value);
-                            check_width(l.width + d).and_then(|()| shift_layer(l, d)).map(|()| l.width += d)
+                            check_width(l.width + d).and_then(|()| shift_with_right_edge(l, d, both)).map(|()| l.width += d)
                         }
                         What::Rsb => {
                             let width = l.width + value - current.unwrap_or(*value);
                             check_width(width).map(|()| {
                                 let before = l.width;
                                 l.width = width;
-                                follow_width(l, before);
+                                follow_width(l, before, both);
                             })
                         }
                         What::VerticalAdvance => check_width(*value).map(|()| l.info.vert_width = Some(*value)),

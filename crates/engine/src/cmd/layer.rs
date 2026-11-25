@@ -1,5 +1,6 @@
 //! Queries on one layer: `layer.inspect`, the outline with the address of everything in it.
 
+use fontcraft_model::guide_follow::placed_x;
 use fontcraft_model::{NodeKind, Shape};
 use serde_json::{Value, json};
 
@@ -13,7 +14,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Inspect Layer",
             [],
             None,
-            "{glyph: name, layer?: id (default: the first master's layer), side?: \"foreground\" | \"background\"} one layer with the address of every shape, node, anchor, guide and annotation, in the form the editing commands' targets use → {glyph, layer, master, side, locked, width, shapes: [{index, kind: \"path\" | \"component\" | \"image\" | \"other\", closed?, locked?, nodes?: [{index, x, y, type: \"line\" | \"curve\" | \"qcurve\" | \"offcurve\", smooth}], component?: name, transform?: [xx, xy, yx, yy, dx, dy]}], anchors: [{name, x, y}], guides: [{scope: \"local\" | \"global\", index, x, y, angle, locked}], annotations: [{index, type: \"text\" | \"arrow\" | \"circle\" | \"plus\" | \"minus\" (another type as stored), x, y, text?}]}",
+            "{glyph: name, layer?: id (default: the first master's layer), side?: \"foreground\" | \"background\"} one layer with the address of every shape, node, anchor, guide and annotation, in the form the editing commands' targets use → {glyph, layer, master, side, locked, width, shapes: [{index, kind: \"path\" | \"component\" | \"image\" | \"other\", closed?, locked?, nodes?: [{index, x, y, type: \"line\" | \"curve\" | \"qcurve\" | \"offcurve\", smooth}], component?: name, transform?: [xx, xy, yx, yy, dx, dy]}], anchors: [{name, x, y}], guides: [{scope: \"local\" | \"global\", index, x (the place in this layer, whatever the guide is relative to), y, angle, locked}], annotations: [{index, type: \"text\" | \"arrow\" | \"circle\" | \"plus\" | \"minus\" (another type as stored), x, y, text?}]}",
             has_doc,
             inspect
         )
@@ -60,7 +61,7 @@ fn inspect(s: &mut Session, p: &Value) -> Result<Value> {
         })
         .collect();
     let anchors: Vec<Value> = r.parts.anchors.iter().map(|a| json!({"name": a.name, "x": a.x, "y": a.y})).collect();
-    let guide = |scope: GuideScope, (index, g): (usize, &fontcraft_model::Guide)| json!({"scope": scope.as_str(), "index": index, "x": g.x, "y": g.y, "angle": g.angle, "locked": g.locked});
+    let guide = |scope: GuideScope, (index, g): (usize, &fontcraft_model::Guide)| json!({"scope": scope.as_str(), "index": index, "x": placed_x(g, r.layer.width), "y": g.y, "angle": g.angle, "locked": g.locked});
     let guides: Vec<Value> = r
         .parts
         .guides

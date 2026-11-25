@@ -44,6 +44,7 @@ use std::sync::Arc;
 use fontcraft_geom::expr::Expr;
 use fontcraft_geom::{grid_step, round_to_grid};
 use fontcraft_model::fc_keys::ANCHOR_EXPRESSIONS;
+use fontcraft_model::guide_follow::placed;
 use fontcraft_model::plist::{Dict, Str, Value};
 use fontcraft_model::{Anchor, Font, Glyph, GlyphTable, Layer, MAX_COORDINATE, Master, Metrics, metric};
 
@@ -162,7 +163,8 @@ fn split_axis(text: &str) -> Option<(&str, char)> {
 
 fn guide_value(layer: &Layer, master: Option<&Master>, text: &str) -> Option<f64> {
     let find = |name: &str| {
-        layer.info.guides.iter().chain(master.into_iter().flat_map(|m| m.guides.iter())).find(|g| g.name.as_deref() == Some(name)).cloned()
+        let found = layer.info.guides.iter().chain(master.into_iter().flat_map(|m| m.guides.iter())).find(|g| g.name.as_deref() == Some(name));
+        found.map(|g| placed(g, layer.width))
     };
     if let Some(g) = find(text) {
         let angle = g.angle.rem_euclid(180.0);

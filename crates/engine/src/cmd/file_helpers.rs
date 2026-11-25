@@ -7,6 +7,7 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
+use fontcraft_model::guide_follow::BothGuides;
 use fontcraft_model::{Font, Glyph, Layer, MAX_COORDINATE, MAX_GLYPHS, ModelError, Shape};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -366,7 +367,7 @@ fn paste_after(s: &mut Session, p: &Value) -> Result<Value> {
         let mut part = Layer::new(master_id.as_str(), 0.0);
         part.shapes = src.shapes.iter().filter(|sh| is_outline(sh)).cloned().collect();
         skipped = skipped.saturating_add(src.shapes.len().saturating_sub(part.shapes.len()));
-        super::shared::shift_layer(&mut part, width).map_err(|e| p.bad(format!("`{}` cannot be placed: {e}", c.glyph.name)))?;
+        super::shared::shift_layer(&mut part, width, BothGuides::of(font)).map_err(|e| p.bad(format!("`{}` cannot be placed: {e}", c.glyph.name)))?;
         added.extend(part.shapes);
         width += src.width;
         if !width.is_finite() || width.abs() > MAX_COORDINATE {

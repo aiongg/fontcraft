@@ -14,6 +14,7 @@
 use std::collections::{HashMap, HashSet};
 
 use fontcraft_geom::Point;
+use fontcraft_model::guide_follow::{BothGuides, follow_width};
 use fontcraft_model::{Layer, Metrics, Node, NodeKind, Path, Shape};
 use fontcraft_pathops::stem_filters::{self as sf, AdjustStems, ChangeWeight, ChangeXHeight, CondenseExtend, CounterMode, StemRule, WeightMethod};
 use fontcraft_pathops::{Contour, Node as PNode, NodeKind as PKind};
@@ -112,6 +113,7 @@ fn run_layers(s: &mut Session, p: &Params, label: &str, mut op: impl FnMut(&Cx, 
     let unicodes: HashMap<String, Option<u32>> =
         scope.glyphs.iter().map(|g| (g.clone(), font.glyph(g).and_then(|g| g.unicodes.first().copied()))).collect();
     let step = grid(font);
+    let both = BothGuides::of(font);
     let mut stems = 0usize;
     let mut work = MAX_STEM_FILTER_WORK;
     let (mut done, mut current) = (0usize, String::new());
@@ -145,7 +147,7 @@ fn run_layers(s: &mut Session, p: &Params, label: &str, mut op: impl FnMut(&Cx, 
             if change.contours == contours && change.width_change == 0.0 {
                 return Ok(Some("nothing changed".into()));
             }
-            write(p, layer, &slots, &sources, &change)?;
+            write(p, layer, &slots, &sources, &change, both)?;
             stems += change.stems;
             Ok(None)
         })
@@ -186,7 +188,7 @@ fn layer_contours(layer: &Layer) -> (Vec<Contour>, Vec<usize>, Vec<(usize, usize
 /// Writes `change` into `layer`: node by node, or, for rebuilt contours, as new paths in place of
 /// the old ones (each keeping the attributes of the path its first surviving node came from, and
 /// surviving nodes their names and user data).
-fn write(p: &Params, layer: &mut Layer, slots: &[usize], sources: &[(usize, usize)], change: &Change) -> Result<()> {
+fn write(p: &Params, layer: &mut Layer, slots: &[usize], sources: &[(usize, usize)], change: &Change, both: BothGuides) -> Result<()> {
     let width = layer.width + change.width_change;
     if !(in_range(width) && width >= 0.0) {
         return Err(p.bad(format!("glyph layer `{}` would get the advance width {width}", layer.id)));
@@ -199,7 +201,7 @@ fn write(p: &Params, layer: &mut Layer, slots: &[usize], sources: &[(usize, usiz
     }
     let before = layer.width;
     layer.width = width;
-    fontcraft_model::guide_follow::follow_width(layer, before);
+    follow_width(layer, before, both);
     if !change.rebuilt {
         for (&slot, contour) in slots.iter().zip(&change.contours) {
             let Some(Shape::Path(path)) = layer.shapes.get_mut(slot) else {

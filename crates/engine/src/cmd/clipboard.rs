@@ -13,6 +13,7 @@ use fontcraft_geom::{Point, Rect, Segment, bounds, round_to_grid};
 use fontcraft_io_pdf as io_pdf;
 use fontcraft_io_svg::clipboard::{self, Fragment, FragmentGuide, FragmentShape, GuideScope as FragmentScope};
 use fontcraft_io_svg::{Placement, glyph_name_for_file, looks_like_eps, looks_like_svg, read_eps, read_svg, shapes_to_svg};
+use fontcraft_model::guide_follow::{place_x, placed_x};
 use fontcraft_model::{Component, Font, MAX_COORDINATE, MAX_LAYER_GUIDES, MAX_NAME_LEN, NodeKind, Path, Shape, Transform, metric};
 use serde_json::{Value, json};
 
@@ -337,9 +338,9 @@ fn opt_point(p: &Params, key: &str) -> Result<Option<Point>> {
     Ok(Some(Point::new(x, y)))
 }
 
-/// The box around what a fragment places: nodes, component origins and anchors, or the guides'
-/// positions when it holds nothing else.
-fn content_bounds(f: &Fragment) -> Option<Rect> {
+/// The box around what a fragment places in a layer `width` wide: nodes, component origins and
+/// anchors, or the guides' places when it holds nothing else.
+fn content_bounds(f: &Fragment, width: f64) -> Option<Rect> {
     let mut points = Vec::new();
     for shape in &f.shapes {
         match shape {
@@ -352,13 +353,13 @@ fn content_bounds(f: &Fragment) -> Option<Rect> {
     }
     points.extend(f.anchors.iter().map(|a| Point::new(a.x, a.y)));
     if points.is_empty() {
-        points.extend(f.guides.iter().map(|g| Point::new(g.guide.x, g.guide.y)));
+        points.extend(f.guides.iter().map(|g| Point::new(placed_x(&g.guide, width), g.guide.y)));
     }
     bounds(points)
 }
 
-/// Moves everything in `f` by `(dx, dy)` and rounds it to the grid.
-fn place(f: &mut Fragment, dx: f64, dy: f64, step: f64) {
+/// Moves everything in `f` by `(dx, dy)` and rounds it to the grid, in a layer `width` wide.
+fn place(f: &mut Fragment, dx: f64, dy: f64, step: f64, width: f64) {
     let r = |v: f64, d: f64| round_to_grid(v + d, step);
     for shape in &mut f.shapes {
         match shape {
@@ -382,7 +383,8 @@ fn place(f: &mut Fragment, dx: f64, dy: f64, step: f64) {
         a.y = r(a.y, dy);
     }
     for g in &mut f.guides {
-        g.guide.x = r(g.guide.x, dx);
+        let x = r(placed_x(&g.guide, width), dx);
+        place_x(&mut g.guide, x, width);
         g.guide.y = r(g.guide.y, dy);
     }
 }
@@ -420,12 +422,12 @@ fn paste(s: &mut Session, p: &Value) -> Result<Value> {
     let descender = font.metric_pos(r.master, metric::DESCENDER, -em * 0.2);
     let step = grid(font);
 
-    let (dx, dy) = match (at, content_bounds(&fragment)) {
+    let (dx, dy) = match (at, content_bounds(&fragment, width)) {
         (Some(at), Some(b)) => (at.x - b.min_x(), at.y - b.min_y()),
         _ => (0.0, 0.0),
     };
-    place(&mut fragment, dx, dy, step);
-    let placed = content_bounds(&fragment);
+    place(&mut fragment, dx, dy, step, width);
+    let placed = content_bounds(&fragment, width);
     let margin = em / 2.0;
     let glyph_box = Rect::new(-margin, descender.min(ascender) - margin, width.max(0.0) + margin, ascender.max(descender) + margin);
     let out_of_bounds = placed.is_some_and(|b| {

@@ -62,7 +62,7 @@ use std::collections::BTreeMap;
 
 use fontcraft_model::{
     Anchor, AnchorInfo, ColorLabel, Component, Extra, Family, Guide, Image, Layer, MAX_COORDINATE, MAX_LAYER_GUIDES, Node, NodeInfo, NodeKind, Path,
-    Rare, RawShape, Shape, Transform, UserData,
+    Rare, RawShape, Shape, Transform, UserData, guide_follow,
 };
 use fontcraft_plist::xml::{self, Element, Node as XNode};
 use fontcraft_plist::{Array, Dict, Layout, Number, Value, xmlplist};
@@ -980,7 +980,8 @@ pub fn write(head: Head<'_>, layer: &Layer, format: u32, style: &Style) -> Resul
             children.push(el);
         }
         for g in &layer.info.guides {
-            let mut el = guideline_el(g, style).ok_or_else(|| bad(name, "a guide value is not a number"))?;
+            // A guideline has an absolute place.
+            let mut el = guideline_el(&guide_follow::placed(g, layer.width), style).ok_or_else(|| bad(name, "a guide value is not a number"))?;
             apply_tag(&mut el, &g.extra, "<");
             children.push(el);
         }

@@ -720,7 +720,7 @@ fn type_glyph(font: &Font, g: &Glyph, default_id: &str) -> Option<Glyph> {
                 let format = glif_format(l);
                 let w = entries(&Glif { font, glyph: &t, layer: l, background: false, primary: is_primary(l, default_id), new: false, format });
                 let bw = l.info.background.as_ref().map(|b| {
-                    let stand_in = crate::ufo::background_layer(b, &l.master);
+                    let stand_in = crate::ufo::background_layer(b, &l.master, l.width);
                     entries(&Glif { font, glyph: &t, layer: &stand_in, background: true, primary: false, new: false, format })
                 });
                 (w, bw)
