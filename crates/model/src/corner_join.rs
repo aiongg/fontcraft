@@ -223,7 +223,8 @@ fn outline_of(shapes: &[Shape], group: &BTreeSet<usize>, extras: &[ExtraNode], w
         nodes.extend(p.nodes.iter().enumerate().filter(|(_, n)| n.on_curve()).map(|(i, n)| ((shape, i), place_of(n.point()))));
         let mut own = p.segments();
         // The segment that leaves the start node first, so a contour that keeps it starts there.
-        own.rotate_right(usize::from(own.len() > 1));
+        let turn = usize::from(own.len() > 1);
+        own.rotate_right(turn);
         segments.extend(own.into_iter().map(|s| (shape, s)));
     }
     let pieces: Vec<Vec<Piece>> = segments.iter().map(|(_, s)| s.pieces.clone()).collect();

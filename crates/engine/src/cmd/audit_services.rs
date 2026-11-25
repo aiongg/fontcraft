@@ -71,7 +71,8 @@ impl AuditServices for EngineServices {
     }
 
     fn default_anchors(&self, font: &Font, glyph: &str) -> std::result::Result<Vec<String>, Unavailable> {
-        Ok(default_anchors::default_anchor_names(font, &self.glyph_data()?, glyph))
+        let data = self.glyph_data()?;
+        Ok(default_anchors::default_anchor_names(font, &data, glyph))
     }
 
     fn effective_anchors(&self, font: &Font, glyph: &str, layer: &str) -> std::result::Result<Vec<String>, Unavailable> {

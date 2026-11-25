@@ -352,7 +352,7 @@ fn variable_options(req: &Request) -> Options {
         conversion_error: o.conversion_error,
         keep_direction: o.keep_direction,
         glyph_data: o.glyph_data.clone(),
-        components: o.components,
+        components: o.components.clone(),
         assets: o.assets.clone(),
         skip_features: o.skip_features,
         feature_dir: o.feature_dir.clone(),

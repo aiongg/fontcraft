@@ -216,7 +216,11 @@ impl Staged {
 
 fn start(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("audit.start", v)?;
-    document_target(&p)?;
+    match p.get("target") {
+        None => {}
+        Some(Value::String(t)) if t == "document" => {}
+        Some(_) => return Err(EngineError::Unsupported("auditing a file or a family of files in steps; use audit.run".into())),
+    }
     let doc = s.doc()?;
     let target = document_target_of(doc);
     let font = doc.font.clone();
