@@ -602,6 +602,11 @@ impl FontCraftApp {
             ViewMsg::FeatureCompletion(ask) => self.view.font_info.features.completion = ask,
             ViewMsg::FeatureDraft(draft) => self.view.font_info.features.draft = draft,
             ViewMsg::FeatureCaretPlaced => self.view.font_info.features.caret = None,
+            ViewMsg::FeatureJumped => self.view.font_info.features.jump = None,
+            ViewMsg::FeatureFilter(filter) => self.view.font_info.features.filter = filter,
+            ViewMsg::FeatureNotesHeight(height) => {
+                self.view.font_info.features.notes_height = Some(height).filter(|h| h.is_finite() && *h > 0.0);
+            }
             ViewMsg::FeaturePreview(ask) => self.view.font_info.features.preview = ask,
             ViewMsg::FeatureFind(find) => self.view.font_info.features.find = find,
             ViewMsg::FontViewSearchFocused => self.view.font_view.focus_search = false,

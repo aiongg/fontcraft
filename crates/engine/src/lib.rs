@@ -67,6 +67,16 @@ pub use fontcraft_pathops as pathops;
 pub use fontcraft_plugins as plugins;
 use serde_json::{Value, json};
 
+/// The registered name of the language a name's language tag (`model::LANGUAGES`) stands for: `DEU` is German.
+pub fn language_name(tag: &str) -> Option<&'static str> {
+    let bytes = tag.as_bytes();
+    let mut padded = *b"    ";
+    for (to, from) in padded.iter_mut().zip(bytes) {
+        *to = *from;
+    }
+    if bytes.len() > padded.len() { None } else { fontcraft_audit::data::tags::language_name(padded) }
+}
+
 /// The extension traits through which the command areas reach their state on a [`Session`] or a
 /// [`DocState`] ([`slots`]): `use fontcraft_engine::prelude::*;`.
 pub mod prelude {

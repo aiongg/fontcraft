@@ -7,7 +7,8 @@
 use std::collections::HashSet;
 
 use craft::ui::contract::PlainData;
-use fontcraft_engine::model::{Features, Font};
+use fontcraft_engine::features::registry;
+use fontcraft_engine::model::{Features, Font, Snippet};
 use serde_json::{Value, json};
 
 use super::ProjectCx;
@@ -33,6 +34,10 @@ pub struct FeaturesModel {
     /// The selected entries, resolved against the font; the last shows in the editor.
     pub selected: Vec<EntryKey>,
     pub entry: Option<EntryPane>,
+    /// The text of the sidebar's filter field.
+    pub filter: String,
+    /// The height of the notes field in points, once its divider was dragged.
+    pub notes_height: Option<f32>,
     /// The compile the Compile button asked for is under way.
     pub compiling: bool,
     pub snippets: SnippetsModel,
@@ -55,6 +60,10 @@ pub struct EntryRow {
     pub disabled: bool,
     /// The last compile, still current, found an error in it.
     pub error: bool,
+    /// A registered feature's name; empty for the others.
+    pub title: String,
+    /// The filter leaves it out of the sidebar.
+    pub filtered: bool,
 }
 
 /// The entry the editor shows.
@@ -82,6 +91,8 @@ pub struct EntryPane {
     pub completion: Option<CompletionModel>,
     /// Where the code editor puts the caret, in characters (after a snippet went in).
     pub caret: Option<usize>,
+    /// The place the code editor selects and scrolls to, in characters (an error jumped to).
+    pub jump: Option<(usize, usize)>,
     /// The preview of the name Alt-clicked in this entry's code.
     pub preview: Option<PreviewModel>,
     /// The find bar, while it is open, with its matches.
@@ -179,6 +190,7 @@ pub fn project(cx: &mut ProjectCx<'_>) -> FeaturesModel {
     let diagnostics = diagnostics(errors.as_ref());
     let with_errors: HashSet<(EntryKind, usize)> =
         diagnostics.iter().filter(|(_, d)| d.error).filter_map(|(e, _)| e.as_ref().map(|e| (e.kind, e.index))).collect();
+    let filter = cx.view.font_info.features.filter.trim().to_lowercase();
     let groups = EntryKind::ALL
         .into_iter()
         .map(|kind| {
@@ -194,6 +206,12 @@ pub fn project(cx: &mut ProjectCx<'_>) -> FeaturesModel {
                         automatic: e.automatic,
                         disabled: e.disabled,
                         error: with_errors.contains(&(kind, index)),
+                        title: if kind == EntryKind::Feature {
+                            registry::lookup(&e.name).map(|t| t.name.to_string()).unwrap_or_default()
+                        } else {
+                            String::new()
+                        },
+                        filtered: !passes(&filter, kind, e),
                     })
                     .collect(),
                 hidden: group.len().saturating_sub(MAX_SHOWN_ENTRIES),
@@ -215,13 +233,25 @@ pub fn project(cx: &mut ProjectCx<'_>) -> FeaturesModel {
     let preview = entry.as_ref().and_then(|e| preview(cx, e, master.as_deref()));
     let find = entry.as_ref().and_then(|e| find(cx, e));
     let caret = entry.as_ref().and_then(|e| cx.view.font_info.features.caret.as_ref().filter(|(k, _)| *k == e.key).map(|(_, c)| *c));
+    let jump =
+        entry.as_ref().and_then(|e| cx.view.font_info.features.jump.as_ref().filter(|(k, _, _)| *k == e.key).map(|(_, start, end)| (*start, *end)));
     let view = &cx.view.font_info.features;
     let entry = entry.map(|e| {
         let draft = view.draft.as_ref().filter(|d| d.key == e.key).map(|d| d.code.clone());
         let check = view.checked.as_ref().filter(|c| c.draft.key == e.key).map(|c| (c.draft.code.clone(), c.diagnostics.clone()));
-        EntryPane { spec_url, completion, caret, compiled, draft, check, preview, find, ..e }
+        EntryPane { spec_url, completion, caret, jump, compiled, draft, check, preview, find, ..e }
     });
-    FeaturesModel { groups, selected, entry, compiling: view.compiling, snippets }
+    FeaturesModel { groups, selected, entry, filter: view.filter.clone(), notes_height: view.notes_height, compiling: view.compiling, snippets }
+}
+
+/// Whether the sidebar lists the entry `e` under the filter text `filter`, in lower case: its name as shown or its code
+/// holds that text. The empty filter passes every entry.
+fn passes(filter: &str, kind: EntryKind, e: &Snippet) -> bool {
+    if filter.is_empty() {
+        return true;
+    }
+    let name = if kind == EntryKind::Class { format!("@{}", e.name.trim_start_matches('@')) } else { e.name.clone() };
+    name.to_lowercase().contains(filter) || e.code.to_lowercase().contains(filter)
 }
 
 /// The selection resolved against the font, without repeats; the first entry when nothing is selected.
@@ -256,6 +286,7 @@ fn pane(font: &Font, key: &EntryKey, diagnostics: &[(Option<EntryKey>, Diagnosti
         spec_url: None,
         completion: None,
         caret: None,
+        jump: None,
         preview: None,
         find: None,
         compiled: false,

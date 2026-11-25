@@ -2332,6 +2332,7 @@ id = "fontInfo.features"
 label = "Features"
 location = "window"
 controls = [
+  "filter field over the sidebar",
   "sidebar in three groups: Prefix, Classes, Features, each heading with a plus button",
   "update button beside each automatic entry; error icon beside entries with errors",
   "minus button (bottom-left): delete selected sidebar entries",
@@ -2746,7 +2747,7 @@ milestone = "M8"
 summary = "Selects the entry and scrolls the editor to the faulty code, as clicking the error icon of an entry in the sidebar does."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
-notes = "Documented, not yet observed. An engine query returning the entry, range, line and column of the error; the Features tab selects the entry and scrolls to that place (M8.17)."
+notes = "Documented, not yet observed. An engine query returning the entry, range, line and column of the error; a click on the error icon of a sidebar row runs it, and the Features tab shows the entry, selects the range in its code and scrolls to it (M8.50). In an automatic entry, whose code cannot be edited, the code scrolls to the place without taking the keyboard."
 
 [[command]]
 id = "font.features.listSnippets"
@@ -2794,7 +2795,7 @@ milestone = "M8"
 summary = "Opens the specification page of the selected feature on Microsoft's OpenType site in the browser. The button is shown at the top-right only while a feature is selected."
 ref = "Font Info › Features › Editing Feature Code"
 status = "handbook"
-notes = "Documented, not yet observed. The engine command returns the section's address and the Features tab opens it in the browser."
+notes = "Documented, not yet observed. The engine command returns the section's address and the Spec button of the Features tab opens it in the browser (M8.50)."
 
 [[command]]
 id = "font.features.setLabel"
@@ -2872,7 +2873,10 @@ milestone = "M8"
 summary = "The sidebar always has three groups in fixed order: Prefix (arbitrary code outside features), Classes (whitespace-separated glyph name lists) and Features (rules under a four-character tag)."
 ref = "Font Info › Features › Editing Feature Code"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. The sidebar scrolls on its own between the filter field and the buttons under it (M8.50). A feature's row shows its registered name after its tag while the row is wide enough."
+guesses = [
+  "A feature's registered name shows after its tag; the sidebar in the reference app settles what it shows beside the tag.",
+]
 
 [[behavior]]
 id = "fontInfo.features.automaticIndicator"
@@ -2881,7 +2885,10 @@ milestone = "M8"
 summary = "Automatic entries carry an update button beside their name in the sidebar; manual entries do not."
 ref = "Font Info › Features › Automatic Feature Code"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. A refresh icon at the end of the row; a click runs font.features.updateEntry and leaves the selection (M8.50)."
+observe = [
+  "In F1 (Latin features), in Font Info › Features, note which icons an automatic row and a row with an error show and in which order, and what a click on each does to the selection.",
+]
 
 
 [[behavior]]
@@ -2909,9 +2916,10 @@ milestone = "M8"
 summary = "A search field above the sidebar shows only the entries whose name or code holds the typed text, ignoring case; the groups stay in their order and clearing the field shows every entry."
 ref = "Font Info › Features"
 status = "inferred"
-notes = "Not in the handbook. View state only: it filters what font.features.list and font.features.get return."
+notes = "Not in the handbook. View state only: it filters what font.features.list and font.features.get return. A class matches with its @ too. While the field holds text the groups cannot be reordered and Select All takes the rows shown; the shown entry stays when its row is hidden (M8.50)."
 guesses = [
   "The filter matches code as well as names; typing a glyph name into the reference app's sidebar search, if it has one, would settle it.",
+  "Entries cannot be reordered while the filter hides some of them; dragging a row of a filtered sidebar in the reference app, if it has a filter, would settle it.",
 ]
 observe = [
   "In F1 (Latin features), in Font Info › Features, look for a search field over the sidebar; type a glyph name used in one feature's code and note which entries stay.",
@@ -2993,9 +3001,9 @@ milestone = "M8"
 summary = "The notes field under the editor is resized by dragging the gray divider line above it."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. The line stands between the code, which fills the height the rest of the pane leaves and scrolls in it, and the notes, which scroll in theirs. The height is kept per window (M8.50)."
 guesses = [
-  "The notes field starts four rows tall and the divider keeps it between two rows and half the tab's height; dragging the divider in the reference app settles the limits.",
+  "The notes field starts four rows tall and the divider keeps it between two rows and half the pane's height; dragging the divider in the reference app settles the limits.",
 ]
 
 [[behavior]]
@@ -3005,7 +3013,7 @@ milestone = "M8"
 summary = "Selecting one of ss01 to ss20 shows name rows above the editor, each with a language and a text. The Default language is the fallback, which many systems treat as English, so the usual set-up is Default for English plus rows for other languages. The texts accept text tokens."
 ref = "Font Info › Features › Naming Stylistic Sets"
 status = "handbook"
-notes = "Documented, not yet observed. The names are written as a `featureNames` block at the start of the feature, the default language as `name \"…\";` and the others as Windows names in their language, as glyphsLib writes them."
+notes = "Documented, not yet observed. The names are written as a `featureNames` block at the start of the feature, the default language as `name \"…\";` and the others as Windows names in their language, as glyphsLib writes them. The language menu shows the languages by their registered names, Default first (M8.50)."
 guesses = [
   "A name in a language without a Windows language id is left out, as fontc does (glyphsLib stops with an error), and text tokens in names are not expanded yet; a name in such a language exported from the reference app settles it.",
   "Choosing another language for a name row removes the name and adds it in the new language, as two undo steps; changing a row's language in the reference app settles whether it is one step.",

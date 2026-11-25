@@ -943,3 +943,164 @@ fn next_shows_the_selected_match_while_the_query_has_the_keyboard() {
     fixture.click(&next).settle();
     assert_eq!(filled(&mut fixture), vec!["a".to_string()]);
 }
+
+/// The Features tab with 80 features, the last of them automatic and with an error.
+fn many_entries() -> FontInfoModel {
+    let mut model = features_model();
+    if let Some(group) = model.features.groups.iter_mut().find(|g| g.kind == EntryKind::Feature) {
+        group.entries = (0..80).map(|n| row(&format!("f{n:03}"))).collect();
+        if let Some(last) = group.entries.last_mut() {
+            last.automatic = true;
+            last.error = true;
+        }
+    }
+    model
+}
+
+/// The sidebar scrolls on its own: with 80 entries scrolled to the end the code field stands where it stood, and the
+/// Compile button under the sidebar stays in view.
+#[test]
+fn the_code_stays_in_view_while_the_sidebar_scrolls() {
+    use craft::ui::testing::pointer;
+    let (mut fixture, _) = panel(many_entries());
+    let before = fixture.by_label("Feature Code").expect("the code field").rect;
+    let over = fixture.by_label("f000").expect("the first entry").rect.center();
+    fixture.frame(vec![pointer::moved(over)]).frame(vec![pointer::wheel(-4000.0)]).settle();
+    let last = fixture.by_label("f079").expect("the last entry").rect;
+    let shown = fixture.shown();
+    assert!(last.bottom() <= shown.bottom() && last.top() >= shown.top(), "the sidebar scrolled to its end: {last:?}");
+    assert_eq!(fixture.by_label("Feature Code").expect("the code field").rect, before);
+    let compile = fixture.by_label("Compile").expect("the Compile button").rect;
+    assert!(compile.bottom() <= shown.bottom(), "{compile:?}");
+}
+
+/// The code field fills the height the rest of the entry pane leaves, and a drag of the line over the notes asks for
+/// another height of the notes.
+#[test]
+fn the_code_fills_the_pane_and_the_notes_line_drags() {
+    let (mut fixture, posted) = panel(features_model());
+    let code = fixture.by_label("Feature Code").expect("the code field").rect;
+    assert!(code.height() > ROOM.y / 2.0, "one line of code fills the pane: {code:?}");
+    let line = fixture.by_label("Resize Notes").expect("the line over the notes").rect.center();
+    let button = |pos, pressed| egui::Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
+    let to = line - egui::vec2(0.0, 60.0);
+    fixture.frame(vec![egui::Event::PointerMoved(line)]).frame(vec![button(line, true)]);
+    fixture.frame(vec![egui::Event::PointerMoved(to)]).frame(vec![button(to, false)]).settle();
+    let heights: Vec<f32> =
+        posted.borrow().iter().filter_map(|m| if let Msg::View(ViewMsg::FeatureNotesHeight(h)) = m { Some(*h) } else { None }).collect();
+    assert!(heights.last().is_some_and(|h| *h > 100.0), "{heights:?}");
+}
+
+/// The update button of an automatic row and the error icon post their commands; neither changes the selection.
+#[test]
+fn a_rows_update_button_and_error_icon_post_their_commands() {
+    let mut model = features_model();
+    if let Some(liga) = model.features.groups.iter_mut().find(|g| g.kind == EntryKind::Feature).and_then(|g| g.entries.first_mut()) {
+        liga.automatic = true;
+    }
+    let (mut fixture, posted) = panel(model);
+    for label in ["Regenerate this entry", "Show the error the last compile found here"] {
+        let part = fixture.by_label(label).unwrap_or_else(|| panic!("the part {label}"));
+        fixture.click(&part).settle();
+    }
+    assert_eq!(
+        *posted.borrow(),
+        vec![
+            Msg::run("font.features.updateEntry", json!({ "kind": "feature", "name": "liga", "index": 0 })),
+            Msg::run("font.features.jumpToError", json!({ "kind": "feature", "name": "ss01", "index": 1 })),
+        ]
+    );
+}
+
+/// `font.features.jumpToError` shows the entry with the place of its error for the code editor, which selects it and
+/// reports it done; Spec opens the feature's address.
+#[test]
+fn a_jump_selects_the_entry_and_the_faulty_code_and_spec_opens_its_address() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static OPENED: AtomicBool = AtomicBool::new(false);
+    fn opened(url: &str) -> Result<(), String> {
+        OPENED.store(url.starts_with("https://"), Ordering::SeqCst);
+        Ok(())
+    }
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    app.sent.push(Msg::run("font.features.addFeature", json!({ "tag": "calt", "automatic": false })));
+    app.sent.push(Msg::run("font.features.addFeature", json!({ "tag": "liga", "automatic": false })));
+    app.sent.push(Msg::run("font.features.setCode", json!({ "kind": "feature", "name": "liga", "code": "# é\nsub A by nonesuch;" })));
+    app.sent.push(shell("font.info", json!({ "tab": "features" })));
+    app.sent.push(Msg::run("font.features.compile", json!({})));
+    app.drain();
+    let index = app.session.font().ok().and_then(|f| f.features.features.iter().position(|e| e.name == "liga")).expect("liga");
+    app.sent.push(Msg::run("font.features.jumpToError", json!({ "kind": "feature", "name": "liga", "index": index })));
+    app.drain();
+    let entry = app.models.font_info.features.entry.clone().expect("the shown entry");
+    assert_eq!(entry.key.name, "liga");
+    let (start, end) = entry.jump.expect("the place of the error");
+    let picked: String = entry.code.chars().skip(start).take(end - start).collect();
+    assert!(picked.contains("nonesuch") || picked == "A", "{picked:?}");
+
+    let (_fixture, posted) =
+        panel(FontInfoModel { open: true, tab: FontInfoTab::Features, features: app.models.font_info.features.clone(), ..FontInfoModel::default() });
+    assert!(posted.borrow().contains(&Msg::View(ViewMsg::FeatureJumped)), "the editor takes the jump");
+    app.sent.push(Msg::View(ViewMsg::FeatureJumped));
+    app.opener = craft_ext::platform::open::Opener::new(Some(opened), None);
+    app.sent.push(Msg::run("font.features.openSpec", json!({ "tag": "liga" })));
+    app.drain();
+    assert_eq!(app.view.font_info.features.jump, None);
+    assert!(OPENED.load(Ordering::SeqCst), "Spec opened the address");
+}
+
+/// The filter keeps the entries whose name or code holds its text, ignoring case, and changes nothing in the font; the
+/// field posts what is typed.
+#[test]
+fn the_filter_hides_rows_and_changes_no_data() {
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    for (tag, code) in [("calt", "sub A by B;"), ("liga", "# Nothing here")] {
+        app.sent.push(Msg::run("font.features.addFeature", json!({ "tag": tag, "automatic": false })));
+        app.sent.push(Msg::run("font.features.setCode", json!({ "kind": "feature", "name": tag, "code": code })));
+    }
+    app.sent.push(shell("font.info", json!({ "tab": "features" })));
+    app.drain();
+    let revision = app.session.active().map(|d| d.revision);
+    let listed = |app: &FontCraftApp| -> Vec<String> {
+        let groups = &app.models.font_info.features.groups;
+        groups.iter().flat_map(|g| g.entries.iter()).filter(|e| !e.filtered).map(|e| e.name.clone()).collect()
+    };
+    app.sent.push(Msg::View(ViewMsg::FeatureFilter("SUB a".into())));
+    app.drain();
+    assert_eq!(listed(&app), vec!["calt".to_string()], "matched in its code");
+    app.sent.push(Msg::View(ViewMsg::FeatureFilter("lig".into())));
+    app.drain();
+    assert_eq!(listed(&app), vec!["liga".to_string()], "matched in its name");
+    assert_eq!(app.session.active().map(|d| d.revision), revision);
+
+    let mut model = features_model();
+    model.features.filter = "liga".into();
+    if let Some(ss01) = model.features.groups.iter_mut().find(|g| g.kind == EntryKind::Feature).and_then(|g| g.entries.last_mut()) {
+        ss01.filtered = true;
+    }
+    let (fixture, _) = panel(model);
+    assert!(fixture.by_label("liga").is_some() && fixture.by_label("ss01").is_none(), "the row is hidden, its entry stays shown");
+}
+
+/// Measure: a frame of the Features tab with 2,000 entries takes under 16 ms in a release build.
+#[test]
+#[ignore = "a measure: run with --release --ignored"]
+fn a_frame_with_2000_entries_takes_under_16_ms() {
+    let mut model = features_model();
+    if let Some(group) = model.features.groups.iter_mut().find(|g| g.kind == EntryKind::Feature) {
+        group.entries = (0..2_000).map(|n| EntryRow { title: "A Registered Name".into(), automatic: true, ..row(&format!("f{n:04}")) }).collect();
+    }
+    let (mut fixture, _) = panel(model);
+    let mut times: Vec<std::time::Duration> = (0..5)
+        .map(|_| {
+            let start = std::time::Instant::now();
+            fixture.frame_shapes();
+            start.elapsed()
+        })
+        .collect();
+    times.sort();
+    eprintln!("a frame with 2,000 entries: {:?} median of 5", times[2]);
+    if !cfg!(debug_assertions) {
+        assert!(times[2] < std::time::Duration::from_millis(16), "{:?}", times[2]);
+    }
+}

@@ -115,7 +115,7 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
         return;
     }
     let sent = &mut *props.sent;
-    Stack::new().fill_width().show(ui, |ui, _| {
+    Stack::new().fill().show(ui, |ui, _| {
         if let Some(tab) = tab_strip(ui, model.tab, &words) {
             sent.push(Msg::Shell(CommandRef::with_params("font.info.selectTab", json!({ "tab": tab.name() }))));
         }

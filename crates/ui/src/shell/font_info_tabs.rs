@@ -160,6 +160,13 @@ pub struct FeaturesView {
     /// Where the caret goes in the entry's code field, in characters: after a snippet went in
     /// (`font.features.insertSnippet`'s `caret`). The code editor places it and drops it.
     pub caret: Option<(EntryKey, usize)>,
+    /// The place of an error in an entry's stored code, as characters, start and end: after a click on the entry's
+    /// error icon (`font.features.jumpToError`). The code editor selects it, scrolls to it and drops it.
+    pub jump: Option<(EntryKey, usize, usize)>,
+    /// The text the sidebar's filter field holds: the sidebar lists the entries whose name or code holds it.
+    pub filter: String,
+    /// The height of the notes field in points, once its divider was dragged.
+    pub notes_height: Option<f32>,
     /// The code as typed in the code editor, while it differs from the entry's stored code; checked after a pause
     /// (`crate::shell::feature_work`).
     pub draft: Option<FeatureDraft>,
@@ -225,13 +232,43 @@ pub struct CheckedDraft {
     pub diagnostics: Vec<crate::app::models::font_features::DiagnosticModel>,
 }
 
-/// After a run of `id` the person asked for: an inserted snippet leaves the caret after itself; new code is compiled in
-/// the background.
+/// After a run of `id` the person asked for: an inserted snippet leaves the caret after itself; an error jumped to shows
+/// its entry with the faulty code selected; a feature's specification opens in the browser; new code is compiled in the
+/// background.
 pub fn after_run(app: &mut crate::app::FontCraftApp, id: &str, reply: &Value) {
     crate::shell::feature_work::after_run(app, id);
-    if id != "font.features.insertSnippet" {
-        return;
+    match id {
+        "font.features.insertSnippet" => place_caret(app, reply),
+        "font.features.jumpToError" => show_error(app, reply),
+        "font.features.openSpec" => {
+            if let Some(url) = reply.get("url").and_then(Value::as_str)
+                && let Err(error) = app.opener.open_url(url)
+            {
+                app.status = error;
+            }
+        }
+        _ => {}
     }
+}
+
+/// Shows the entry of `font.features.jumpToError`'s reply; the code editor then selects the range it names.
+fn show_error(app: &mut FontCraftApp, reply: &Value) {
+    let Some(key) = reply.get("entry").and_then(EntryKey::from_json) else { return };
+    let Ok(font) = app.session.font() else { return };
+    let Some(code) = key.snippet(&font.features).map(|e| e.code.as_str()) else { return };
+    let byte = |at: usize| reply.get("range").and_then(|r| r.get(at)).and_then(Value::as_u64).and_then(|b| usize::try_from(b).ok());
+    let jump = byte(0).zip(byte(1)).map(|(start, end)| {
+        let chars = |byte: usize| code.char_indices().take_while(|(at, _)| *at < byte).count();
+        (key.clone(), chars(start), chars(end.max(start)))
+    });
+    let view = &mut app.view.font_info.features;
+    view.selected = vec![key];
+    view.jump = jump;
+    app.view_changed();
+}
+
+/// The caret goes after the inserted snippet.
+fn place_caret(app: &mut FontCraftApp, reply: &Value) {
     let caret = reply.get("caret").and_then(Value::as_u64).and_then(|c| usize::try_from(c).ok());
     if let (Some(key), Some(caret)) = (EntryKey::from_json(reply), caret) {
         app.view.font_info.features.caret = Some((key, caret));

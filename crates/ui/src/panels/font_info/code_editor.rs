@@ -7,6 +7,9 @@
 //! | a gutter icon | opens the details of the line's diagnostics (`fontInfo.featureErrorDetails`) |
 //! | a Fix button in the details | `font.features.applyFix {error, fix}` |
 //!
+//! The field fills the height its pane leaves it and scrolls there with its gutter; a caret that moves out of view is
+//! scrolled to. An error jumped to from the sidebar is selected and scrolled to (`EntryPane::jump`).
+//!
 //! The field's last selection goes back to the Features tab, whose snippets menu puts a snippet in its place; the
 //! caret then goes after the snippet and the field takes the keyboard (`EntryPane::caret`).
 //!
@@ -49,6 +52,7 @@ use craft::ui::runtime::focus::{self, FocusTarget};
 use craft::ui::runtime::keys;
 use craft::ui::style::UiTokens;
 use craft::ui::text::TextField;
+use craft_ext::ui::contract::reveal_rect;
 use craft_ext::ui::text::{
     AsyncCompleter, CompletionAnswer, CompletionQuery, FieldSelection as _, Highlight, HighlightText as _, TextSelection, field_layout, text_focused,
 };
@@ -87,10 +91,21 @@ craft::ui::words! {
     }
 }
 
-/// Lines the code field shows.
-const CODE_LINES: usize = 18;
+/// Fewest and most lines the code field shows.
+const MIN_CODE_LINES: f32 = 6.0;
+const MAX_CODE_LINES: f32 = 500.0;
+
+/// The room of the code in the entry pane: where the pane's content starts, the pane's height, and the height what
+/// stands under the code takes.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Room {
+    pub top: f32,
+    pub height: f32,
+    pub under: f32,
+}
 
 /// What the code editor reports.
+#[derive(Default)]
 pub struct CodeOut {
     /// The messages to post.
     pub sent: Vec<Msg>,
@@ -98,12 +113,36 @@ pub struct CodeOut {
     pub selection: Option<TextSelection>,
 }
 
-/// Draws the code field and the diagnostics of `entry`.
-pub fn view(ui: &mut Ui, entry: &EntryPane) -> CodeOut {
+/// Draws the find bar, and the code field with the diagnostics of `entry` in the height of `room` the rest leaves, where
+/// it scrolls.
+pub fn view(ui: &mut Ui, entry: &EntryPane, room: Room) -> CodeOut {
+    let mut sent = Vec::new();
+    let action = code_find::bar(ui, entry, &mut sent);
+    let used = (ui.cursor().min.y - room.top).max(0.0);
+    let row = ui.ctx().fonts_mut(|fonts| fonts.row_height(&TextStyle::Monospace.resolve(ui.style()))).max(1.0);
+    let height = (room.height - used - room.under).max(MIN_CODE_LINES * row);
+    let mut out = CodeOut::default();
+    let salt = ("fontcraftFeatureCode.box", entry.key.kind.name(), entry.key.index, entry.key.name.as_str());
+    super::features_tab::scroll_box(ui, salt, height, |ui| out = field(ui, entry, action, height));
+    sent.append(&mut out.sent);
+    CodeOut { sent, ..out }
+}
+
+/// The lines a field in a box `height` points tall shows, each `line` points tall.
+fn lines_in(height: f32, line: f32) -> usize {
+    (height / line.max(1.0)).floor().clamp(MIN_CODE_LINES, MAX_CODE_LINES) as usize
+}
+
+/// The code field in its box, `height` points tall, with its gutter.
+fn field(ui: &mut Ui, entry: &EntryPane, action: Option<FindAction>, height: f32) -> CodeOut {
     let words = Env::of(ui).words::<CodeEditorWords>();
     let key = &entry.key;
     let mut sent = Vec::new();
-    let action = code_find::bar(ui, entry, &mut sent);
+    // The field's own line height, learnt from how tall it showed: it belongs to the field's style.
+    let line_id = egui::Id::unique("fontcraftFeatureCode.line");
+    let number_font = TextStyle::Monospace.resolve(ui.style());
+    let line = ui.ctx().data(|d| d.get_temp::<f32>(line_id)).unwrap_or_else(|| 1.5 * ui.ctx().fonts_mut(|f| f.row_height(&number_font)));
+    let lines = lines_in(height, line);
     let edit_id = egui::Id::unique(("fontcraftFeatureCode.edit", key.kind.name(), key.index, key.name.as_str()));
     let pending: Option<PendingEdit> = ui.ctx().data_mut(|d| {
         let pending = d.get_temp::<PendingEdit>(edit_id);
@@ -112,7 +151,7 @@ pub fn view(ui: &mut Ui, entry: &EntryPane) -> CodeOut {
     });
     let field = TextField::new(words.code.clone(), Bind::given(entry.code.clone()))
         .mono()
-        .lines(CODE_LINES)
+        .lines(lines)
         .sizing(Sizing::FillWidth)
         .limit(None)
         .enabled(!entry.automatic)
@@ -129,7 +168,6 @@ pub fn view(ui: &mut Ui, entry: &EntryPane) -> CodeOut {
         Some(p) if !entry.automatic => field.replace_selection(p.insert.clone()),
         _ => field,
     };
-    let number_font = TextStyle::Monospace.resolve(ui.style());
     let gutter_width = gutter_width(ui, entry.draft.as_deref().unwrap_or(&entry.code), &number_font);
     let out = ui
         .horizontal_top(|ui| {
@@ -147,6 +185,15 @@ pub fn view(ui: &mut Ui, entry: &EntryPane) -> CodeOut {
         }
     } else if entry.completion.is_some() && !text_focused(ui.ctx(), out.response.id) {
         sent.push(Msg::View(ViewMsg::FeatureCompletion(None)));
+    }
+    if let Some((_, galley)) = field_layout(ui, &out.response)
+        && galley.rows.len() < lines
+    {
+        let shown = out.response.rect.height() / lines as f32;
+        if shown.is_finite() && shown >= 1.0 && (shown - line).abs() > 0.5 {
+            ui.ctx().data_mut(|d| d.insert_temp(line_id, shown));
+            ui.ctx().request_repaint();
+        }
     }
     if let Some(caret) = entry.caret.filter(|_| !entry.automatic) {
         out.select(ui.ctx(), TextSelection::caret_at(caret.min(entry.code.chars().count())));
@@ -196,6 +243,7 @@ pub fn view(ui: &mut Ui, entry: &EntryPane) -> CodeOut {
     if let Some(found) = &entry.find {
         find_action(ui, &out.response, entry, found, shown, action, &mut sent);
     }
+    follow_selection(ui, &out.response, entry, shown, &mut sent);
     let selection = out.last_selection(ui.ctx()).and_then(|s| s.within(entry.code.chars().count()));
     if let Some(text) = out.events.committed()
         && !entry.automatic
@@ -210,6 +258,39 @@ pub fn view(ui: &mut Ui, entry: &EntryPane) -> CodeOut {
     }
     preview(ui, &out.response, entry, &words, &mut sent);
     CodeOut { sent, selection }
+}
+
+/// Selects the place the sidebar's error icon jumped to, and keeps the caret in view: when the selection moved since the
+/// last pass, by typing, the arrow keys, Next, Previous or a jump, the code scrolls to it.
+fn follow_selection(ui: &mut Ui, field: &Response, entry: &EntryPane, shown: &str, sent: &mut Vec<Msg>) {
+    let Some((pos, galley)) = field_layout(ui, field) else {
+        // A jump waits for a pass in which the field's text has a layout.
+        if entry.jump.is_some() {
+            ui.ctx().request_repaint();
+        }
+        return;
+    };
+    let ctx = ui.ctx().clone();
+    if let Some((start, end)) = entry.jump {
+        let len = shown.chars().count();
+        field.select(&ctx, TextSelection::new(start.min(len), end.min(len)));
+        if !entry.automatic {
+            let _ = focus::request(&ctx, FocusTarget::Id(field.id));
+        }
+        sent.push(Msg::View(ViewMsg::FeatureJumped));
+    }
+    let seen_id = field.id.with("fontcraftFeatureCode.seenSelection");
+    let now = field.last_selection(&ctx);
+    let before = ctx.data(|d| d.get_temp::<Option<TextSelection>>(seen_id));
+    if before != Some(now) {
+        ctx.data_mut(|d| d.insert_temp(seen_id, now));
+    }
+    let moved = before.is_some_and(|b| b != now) || entry.jump.is_some();
+    if let Some(s) = now.filter(|_| moved) {
+        // A jump shows where the error starts, a moving caret itself.
+        let at = if entry.jump.is_some() { s.range().start } else { s.caret };
+        reveal_rect(ui, galley.pos_from_cursor(CCursor::new(at)).translate(pos.to_vec2()));
+    }
 }
 
 /// A change of the code field's text the editor makes in the next pass: the field selects `replace` in this pass,

@@ -59,6 +59,12 @@ pub enum ViewMsg {
     FeatureDraft(Option<crate::shell::font_info_tabs::FeatureDraft>),
     /// The feature code editor placed the caret a snippet left.
     FeatureCaretPlaced,
+    /// The feature code editor selected the place of the error the sidebar's error icon jumped to.
+    FeatureJumped,
+    /// The text of the Features sidebar's filter field.
+    FeatureFilter(String),
+    /// The height, in points, the divider gave the Features tab's notes field.
+    FeatureNotesHeight(f32),
     /// The feature code editor asks a preview of an Alt-clicked name; `None` closes it.
     FeaturePreview(Option<crate::shell::font_info_tabs::PreviewAsk>),
     /// The feature code editor's find bar changed, or closed (`None`).
