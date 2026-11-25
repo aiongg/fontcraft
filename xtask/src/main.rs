@@ -65,8 +65,8 @@ commands:
   roundtrip [--mode plist|model|native] [--kind glyphs|glyphspackage|ufo|ufoz|designspace] [-v]
                   read every corpus source and write it back; count byte-identical results
                   (known differences with a reason: xtask/roundtrip-allow.toml)
-  audit [--match TEXT]
-                  run the outline audit (`outlines` profile) on every source of the corpus comparison set
+  audit [--profile ID] [--match TEXT]
+                  run the audit (`outlines` profile by default) on every source of the corpus comparison set
   overlap [--out DIR] [--reference FILE] [--match TEXT] [--quadratic]
                   remove overlaps on every glyph layer of the corpus comparison set and measure it
                   (--quadratic: convert the input to quadratic curves first)

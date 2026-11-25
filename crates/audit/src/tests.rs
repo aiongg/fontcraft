@@ -113,7 +113,7 @@ fn fixtures() -> Vec<(&'static str, Glyph)> {
         ("check.outlines.almostOrthogonalLine", o(vec![closed(vec![line(0.0, 0.0), line(100.0, 0.0), line(101.0, 200.0), line(0.0, 200.0)])])),
         (
             "check.outlines.shortSegments",
-            o(vec![closed(vec![line(0.0, 0.0), line(100.0, 0.0), off(100.0, 50.0), off(50.0, 100.0), curve(0.0, 100.0), line(0.0, 98.0)])]),
+            o(vec![closed(vec![line(0.0, 0.0), line(100.0, 0.0), line(100.0, 100.0), line(0.0, 100.0), line(0.0, 98.0)])]),
         ),
         ("check.outlines.overlappingSegments", o(vec![rect(0.0, 0.0, 100.0, 100.0), rect(100.0, 0.0, 200.0, 100.0)])),
         (
@@ -266,9 +266,69 @@ fn near_misses_are_not_reported() {
     let same = o(vec![rect(0.0, 0.0, 100.0, 100.0), rect(20.0, 20.0, 80.0, 80.0)]);
     assert_eq!(run(&same, "check.outlines.overlap").findings[0].code, "nested-same-direction");
     assert_eq!(run(&same, "check.outlines.pathDirection").findings[0].code, "counter-same-direction");
+    // A short line after a curve is not a short segment.
+    let flat_end = o(vec![closed(vec![line(0.0, 0.0), line(100.0, 0.0), off(100.0, 50.0), off(50.0, 100.0), curve(0.0, 100.0), line(0.0, 98.0)])]);
+    assert!(run(&flat_end, "check.outlines.shortSegments").findings.is_empty());
     // Points on a metric line, or far from one, are fine.
     assert!(run(&o(vec![rect(0.0, 0.0, 100.0, 500.0)]), "check.outlines.alignmentMiss").findings.is_empty());
     assert!(run(&o(vec![rect(0.0, 10.0, 100.0, 400.0)]), "check.outlines.alignmentMiss").findings.is_empty());
+}
+
+#[test]
+fn path_direction_reads_implied_points_and_overlapping_shapes() {
+    // A counter of off-curve nodes only, as TrueType outlines draw small rings.
+    let ring = |reverse: bool| {
+        let mut p = Path::new(
+            true,
+            [(419., 1090.), (597., 1090.), (696., 1206.), (696., 1394.), (597., 1508.), (419., 1508.), (320., 1394.), (320., 1206.)]
+                .map(|(x, y)| off(x, y))
+                .to_vec(),
+        );
+        if reverse {
+            p.nodes.reverse();
+        }
+        Shape::Path(p)
+    };
+    let disc = || rect(128.0, 921.0, 890.0, 1677.0);
+    assert!(run(&o(vec![disc(), ring(true)]), "check.outlines.pathDirection").findings.is_empty());
+    assert_eq!(run(&o(vec![disc(), ring(false)]), "check.outlines.pathDirection").findings[0].code, "counter-same-direction");
+
+    // A crossbar whose corners lie inside the legs of the shape it overlaps is not its counter.
+    let legs = closed(vec![
+        line(0.0, 0.0),
+        line(100.0, 0.0),
+        line(100.0, 500.0),
+        line(400.0, 500.0),
+        line(400.0, 0.0),
+        line(500.0, 0.0),
+        line(500.0, 600.0),
+        line(0.0, 600.0),
+    ]);
+    let crossbar = || rect(50.0, 200.0, 450.0, 280.0);
+    assert!(run(&o(vec![legs, crossbar()]), "check.outlines.pathDirection").findings.is_empty());
+    // Nor is one that crosses the counter of a bowl.
+    let mut counter = Path::rect(100.0, 100.0, 400.0, 400.0);
+    counter.nodes.reverse();
+    let barred = o(vec![rect(0.0, 0.0, 500.0, 500.0), Shape::Path(counter), crossbar()]);
+    assert!(run(&barred, "check.outlines.pathDirection").findings.is_empty());
+}
+
+#[test]
+fn a_decoded_variable_font_keeps_its_overlaps() {
+    let mut font = Font::new("Test");
+    let g = o(vec![rect(0.0, 0.0, 100.0, 100.0), rect(50.0, 50.0, 150.0, 150.0)]);
+    let spec = find("check.outlines.overlap").unwrap();
+    let decoded = |font: &Font| {
+        let ctx = AuditContext::new(font).with_glyf_outlines(true);
+        audit_layer(&ctx, &g, &g.layers[0], &[spec], &Config::default())
+    };
+    assert_eq!(decoded(&font).findings.len(), 1, "a static font is checked");
+    let second = Master { id: "m02".into(), name: "Bold".into(), ..Default::default() };
+    Arc::make_mut(&mut font.masters).push(second);
+    let r = decoded(&font);
+    assert_eq!((r.findings.len(), r.skipped.len()), (0, 1));
+    assert_eq!(run_with(&font, &g, &[spec], &Config::default()).findings.len(), 1, "a source with two masters is checked");
+    assert!(find("check.outlines.unflaggedSmoothNode").unwrap().preconditions.contains(&Precondition::SourceData));
 }
 
 #[test]

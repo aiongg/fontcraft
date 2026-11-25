@@ -215,8 +215,8 @@ pub(crate) fn collinear_lines(input: &LayerInput<'_>, p: &Params<'_>, sink: &mut
     }
 }
 
-/// A segment shorter than `minLength` or than `minFraction` of its contour; a line after a line
-/// does not count.
+/// A segment shorter than `minLength` or than `minFraction` of its contour; a line counts only
+/// after another line, so the flat end of a rounded stroke is not reported.
 pub(crate) fn short_segments(input: &LayerInput<'_>, p: &Params<'_>, sink: &mut Sink) {
     let min_len = p.get(&SHORT_MIN_LENGTH);
     let min_frac = p.get(&SHORT_MIN_FRACTION);
@@ -227,7 +227,7 @@ pub(crate) fn short_segments(input: &LayerInput<'_>, p: &Params<'_>, sink: &mut 
             if !seg.is_valid() || len <= 0.0 {
                 continue;
             }
-            if seg.kind == SegKind::Line && c.incoming(seg.start).is_some_and(|prev| prev.kind == SegKind::Line) {
+            if seg.kind == SegKind::Line && c.incoming(seg.start).is_none_or(|prev| prev.kind != SegKind::Line) {
                 continue;
             }
             if len < min_len || len < min_frac * total {

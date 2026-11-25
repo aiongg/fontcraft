@@ -172,7 +172,7 @@ pub(super) const CHECKS: &[CheckSpec] = &[
     CheckSpec {
         id: "check.outlines.shortSegments",
         label: "Short segments",
-        description: "A segment is shorter than `minLength` units or than `minFraction` of its contour; a short line after a line does not count.",
+        description: "A segment is shorter than `minLength` units or than `minFraction` of its contour; a short line counts only after another line.",
         family: Some(PointsAndSegments),
         severity: Warn,
         profile: Outlines,
@@ -473,6 +473,8 @@ pub(super) const CHECKS: &[CheckSpec] = &[
         fix: fix("setSmooth", Some("path.toggleNodeType"), true, "Set the smooth flag."),
         skip_variable: false,
         capped: true,
+        // A compiled font stores no smooth flags.
+        preconditions: &[crate::Precondition::SourceData],
         codes: &["collinear-handles"],
         run: Runner::Layer(handles::unflagged_smooth_node),
         ..LAYER_OUTLINES
