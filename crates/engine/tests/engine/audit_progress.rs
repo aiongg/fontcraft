@@ -131,3 +131,51 @@ fn audit_cancel_drops_the_run_and_returns_its_partial_results_without_changing_a
     assert!(s.execute("audit.step", &json!({"runId": b, "budget": 0})).is_err(), "a budget below 1 is refused");
     assert!(s.execute("audit.start", &json!({"target": "/no/such/file.ttf"})).is_err(), "files are audited with audit.run");
 }
+
+/// A cancelled run reports progress up to where it stopped, keeps no results and changes nothing; a cancelled change
+/// is undone, and one cancelled after its end stands.
+#[test]
+fn a_cancelled_request_stops_and_changes_nothing() {
+    use fontcraft_engine::{EngineError, work};
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    let mut s = font_with_problems();
+    let before = s.inspect();
+    let token = work::Token::new();
+    let steps: Rc<RefCell<Vec<(u64, u64)>>> = Rc::default();
+    let (seen, stop) = (Rc::clone(&steps), token.clone());
+    let report: work::Report = Rc::new(move |done, total, _: &str| {
+        seen.borrow_mut().push((done, total));
+        if seen.borrow().len() == 2 {
+            stop.cancel();
+        }
+    });
+    let result = work::with(token.clone(), Some(report), || s.execute("audit.run", &json!({})));
+    assert!(matches!(result, Err(EngineError::Cancelled)), "{result:?}");
+    assert_eq!(steps.borrow().len(), 2, "it stopped at the cancel: {:?}", steps.borrow());
+    assert!(steps.borrow().windows(2).all(|w| w[0].0 < w[1].0));
+    assert_eq!(s.inspect(), before);
+    refused(&mut s, "audit.results", json!({}));
+    assert!(run(&mut s, "audit.run", json!({}))["runId"].is_string(), "the next run is not cancelled");
+
+    // The second step of a batch is cancelled: the first is undone with it.
+    let token = work::Token::new();
+    let stop = token.clone();
+    let report: work::Report = Rc::new(move |_, _, _: &str| {
+        stop.cancel();
+    });
+    let steps = json!({"steps": [
+        {"command": "glyph.newGlyph", "params": {"name": "one.test"}},
+        {"command": "glyph.newGlyph", "params": {"name": "two.test"}},
+    ]});
+    let before = s.inspect();
+    assert!(work::with(token, Some(report), || s.execute("command.batch", &steps)).is_err());
+    assert_eq!(s.inspect(), before);
+
+    // A command that ended cannot be cancelled any more.
+    let token = work::Token::new();
+    work::with(token.clone(), None, || s.execute("command.batch", &steps)).unwrap();
+    assert!(!token.cancel());
+    assert_ne!(s.inspect(), before);
+}

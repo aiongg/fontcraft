@@ -2,13 +2,14 @@
 //! our own, built on `std::net`. See `docs/mcp.md` › HTTP transport.
 //!
 //! One endpoint, [`ENDPOINT`], takes `POST` (one JSON-RPC message per request) and `DELETE` (ends
-//! a session). Replies are `application/json`, or `text/event-stream` when the request produced
-//! log notifications and the client accepts a stream. `GET` is refused with 405: the server never
+//! a session). Replies are `application/json`, or `text/event-stream` when there are notifications
+//! for the client (log messages, changed resources) and it accepts a stream. `GET` is refused with 405: the server never
 //! starts a stream of its own.
 //!
 //! Threads: one accepts connections, one per connection reads and checks requests, and the thread
 //! that called [`serve`] owns the [`Server`] and answers the requests one at a time, as the stdio
-//! loop does. The backend therefore never needs to be `Send`.
+//! loop does. The backend therefore never needs to be `Send`. A cancellation is carried out by the
+//! thread that reads it, so it reaches a request that runs or waits.
 //!
 //! Everything a peer sends is untrusted: request heads, bodies, connections, sessions and the
 //! message rate are capped by [`Limits`], a slow peer runs into a deadline, a connection is closed
@@ -19,14 +20,16 @@
 use std::collections::HashMap;
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::net::{IpAddr, Shutdown, TcpListener, TcpStream};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::mpsc;
+use std::sync::{Arc, Mutex, PoisonError, mpsc};
 use std::time::{Duration, Instant};
 
+use fontcraft_engine::work::Token;
 use serde_json::Value;
 
-use crate::{INVALID_REQUEST, LogLevel, PARSE_ERROR, PROTOCOL_VERSIONS, Server, error};
+use crate::stdio::cancelled_request;
+use crate::subscriptions::Client;
+use crate::{INVALID_REQUEST, PARSE_ERROR, PROTOCOL_VERSIONS, Server, error, request_key};
 
 /// Where `--transport http` listens without `--listen`: loopback only, next to the app's control
 /// port.
@@ -63,6 +66,8 @@ const ACCEPT_BACKOFF: Duration = Duration::from_millis(50);
 const MAX_BLANK_BYTES: usize = 64;
 /// Longest `Content-Length` value read, in digits.
 const MAX_LENGTH_DIGITS: usize = 19;
+/// The error of a request its client cancelled.
+const CANCELLED: i64 = -32800;
 
 /// The transport's caps. [`Limits::default`] holds the named constants above; tests shrink them.
 #[derive(Clone, Copy, Debug)]
@@ -96,12 +101,12 @@ impl Default for Limits {
 /// thread. Returns early only when the accepting thread cannot be started.
 pub fn serve(server: Server, listener: TcpListener, limits: Limits) -> io::Result<()> {
     let local = listener.local_addr()?;
-    let shared = Arc::new(Shared { limits, loopback: local.ip().is_loopback(), active: AtomicUsize::new(0) });
+    let shared = Arc::new(Shared { limits, loopback: local.ip().is_loopback(), active: AtomicUsize::new(0), running: Mutex::default() });
     let (jobs, inbox) = mpsc::channel::<Job>();
     std::thread::Builder::new().name("mcp-http-accept".into()).spawn(move || accept_loop(&listener, &shared, &jobs))?;
     let mut dispatcher = Dispatcher::new(server, limits);
     for job in inbox {
-        let response = dispatcher.answer(&job.request);
+        let response = if job.token.is_cancelled() { cancelled(&job.request) } else { dispatcher.answer(&job) };
         // The connection may have gone while the request ran; nothing waits for the reply then.
         let _ = job.reply.send(response);
     }
@@ -115,12 +120,55 @@ struct Shared {
     loopback: bool,
     /// Connections being served.
     active: AtomicUsize,
+    /// What cancels the requests that run or wait, by session and request id: at most one for each connection.
+    running: Mutex<HashMap<RequestKey, Arc<Token>>>,
+}
+
+/// A session id and a request's id in it.
+type RequestKey = (String, String);
+
+impl Shared {
+    /// Runs `f` while `token` cancels the request `key`. A second request under the same key is not cancelled by it.
+    fn cancellable<T>(&self, key: Option<RequestKey>, token: &Arc<Token>, f: impl FnOnce() -> T) -> T {
+        let held = key.filter(|key| {
+            let mut running = self.running.lock().unwrap_or_else(PoisonError::into_inner);
+            let free = !running.contains_key(key);
+            if free {
+                running.insert(key.clone(), Arc::clone(token));
+            }
+            free
+        });
+        let result = f();
+        if let Some(key) = held {
+            self.running.lock().unwrap_or_else(PoisonError::into_inner).remove(&key);
+        }
+        result
+    }
+
+    fn cancel(&self, key: &RequestKey) {
+        if let Some(token) = self.running.lock().unwrap_or_else(PoisonError::into_inner).get(key) {
+            token.cancel();
+        }
+    }
 }
 
 /// One checked request, handed to the thread that owns the [`Server`].
 struct Job {
     request: Request,
+    /// Cancels the request.
+    token: Arc<Token>,
     reply: mpsc::Sender<Response>,
+}
+
+/// The message of a `POST`, when its body is one.
+fn message_of(request: &Request) -> Option<Value> {
+    if request.method == "POST" { serde_json::from_slice(&request.body).ok() } else { None }
+}
+
+/// The answer to a request its client cancelled: HTTP needs one.
+fn cancelled(request: &Request) -> Response {
+    let id = message_of(request).and_then(|m| m.get("id").cloned()).unwrap_or(Value::Null);
+    Response::rpc(200, &error(&id, CANCELLED, "the request was cancelled"))
 }
 
 fn accept_loop(listener: &TcpListener, shared: &Arc<Shared>, jobs: &mpsc::Sender<Job>) {
@@ -178,11 +226,23 @@ fn serve_connection(stream: TcpStream, shared: &Shared, jobs: &mpsc::Sender<Job>
         let response = match check(&request, shared) {
             Err(refusal) => refusal,
             Ok(()) => {
-                let (reply, answer) = mpsc::channel();
-                if jobs.send(Job { request, reply }).is_err() {
-                    Response::refuse(503, "the server is shutting down")
+                let session = request.header("mcp-session-id").unwrap_or_default().to_string();
+                let message = message_of(&request);
+                if let Some(id) = message.as_ref().and_then(cancelled_request) {
+                    shared.cancel(&(session, id));
+                    Response::empty(202)
                 } else {
-                    answer.recv().unwrap_or_else(|_| Response::refuse(500, "the request was lost inside the server"))
+                    let key = message.as_ref().and_then(request_key).map(|id| (session, id));
+                    drop(message);
+                    let token = Token::new();
+                    shared.cancellable(key, &token, || {
+                        let (reply, answer) = mpsc::channel();
+                        if jobs.send(Job { request, token: Arc::clone(&token), reply }).is_err() {
+                            Response::refuse(503, "the server is shutting down")
+                        } else {
+                            answer.recv().unwrap_or_else(|_| Response::refuse(500, "the request was lost inside the server"))
+                        }
+                    })
                 }
             }
         };
@@ -518,8 +578,8 @@ fn accepts_stream(request: &Request) -> bool {
 // Answering, on the thread that owns the server
 
 struct Session {
-    /// The level this session asked for with `logging/setLevel`.
-    log_level: Option<LogLevel>,
+    /// The session's log level and subscriptions.
+    client: Client,
     /// The dispatcher's tick at its last request; the smallest is ended first when sessions run out.
     last_used: u64,
 }
@@ -538,7 +598,8 @@ impl Dispatcher {
         Self { server, limits, sessions: HashMap::new(), tick: 0, window_start: Instant::now(), window_count: 0 }
     }
 
-    fn answer(&mut self, request: &Request) -> Response {
+    fn answer(&mut self, job: &Job) -> Response {
+        let request = &job.request;
         let now = Instant::now();
         if now.duration_since(self.window_start) >= Duration::from_secs(1) {
             self.window_start = now;
@@ -554,7 +615,7 @@ impl Dispatcher {
         if request.method == "DELETE" {
             return self.end_session(request);
         }
-        self.post(request)
+        self.post(request, &job.token)
     }
 
     fn end_session(&mut self, request: &Request) -> Response {
@@ -567,7 +628,7 @@ impl Dispatcher {
         }
     }
 
-    fn post(&mut self, request: &Request) -> Response {
+    fn post(&mut self, request: &Request, token: &Arc<Token>) -> Response {
         let Ok(text) = std::str::from_utf8(&request.body) else {
             return Response::rpc(400, &error(&Value::Null, PARSE_ERROR, "the request is not valid UTF-8"));
         };
@@ -596,24 +657,27 @@ impl Dispatcher {
             Some(id.to_string())
         };
 
-        // The log level is per session; the server holds the current request's.
-        self.server.log_level = session.as_ref().and_then(|id| self.sessions.get(id)).and_then(|s| s.log_level);
+        // The log level and the subscriptions are per session; the server holds the current request's. Handling
+        // the request also finds what other sessions changed since.
+        self.server.client = session.as_ref().and_then(|id| self.sessions.get_mut(id)).map(|s| std::mem::take(&mut s.client)).unwrap_or_default();
+        self.server.token = Some(Arc::clone(token));
+        let streams = accepts_stream(request);
         let reply = self.server.handle(&message);
         let notifications = self.server.take_notifications();
-        let level = self.server.log_level.take();
+        let client = std::mem::take(&mut self.server.client);
         if let Some(s) = session.as_ref().and_then(|id| self.sessions.get_mut(id)) {
-            s.log_level = level;
+            s.client = client;
             s.last_used = self.tick;
         }
 
         let Some(reply) = reply else {
-            return Response::empty(202);
+            return if message.get("id").is_some() && token.is_cancelled() { cancelled(request) } else { Response::empty(202) };
         };
         // An error that names no request (a malformed message) is the client's fault.
         if reply.get("error").is_some() && reply.get("id").is_none_or(Value::is_null) {
             return Response::rpc(400, &reply);
         }
-        let mut response = if !notifications.is_empty() && accepts_stream(request) {
+        let mut response = if !notifications.is_empty() && streams {
             let reply_line = reply.to_string();
             let mut body = String::new();
             for line in notifications.iter().map(String::as_str).chain(std::iter::once(reply_line.as_str())) {
@@ -644,7 +708,7 @@ impl Dispatcher {
             self.tick = self.tick.saturating_add(1);
             id = session_id(self.tick);
         }
-        self.sessions.insert(id.clone(), Session { log_level: None, last_used: self.tick });
+        self.sessions.insert(id.clone(), Session { client: Client::default(), last_used: self.tick });
         id
     }
 }

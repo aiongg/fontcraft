@@ -272,7 +272,8 @@ fn step(s: &mut Session, v: &Value) -> Result<Value> {
     let budget = usize::try_from(budget).unwrap_or(1);
     let staged = in_progress(&p, s)?;
     let mut st = staged.lock().map_err(|_| EngineError::Internal("the audit run in progress failed earlier; start it again".into()))?;
-    st.advance(budget);
+    // A step stopped half way would leave the run without the layers it skipped.
+    crate::work::shielded(|| st.advance(budget));
     if st.stage != Stage::Done {
         let mut out = st.progress();
         if let Some(o) = out.as_object_mut() {

@@ -385,6 +385,59 @@ fn ui_wait_returns_once_the_window_is_idle() {
     assert!(t.app.dialogs.open.is_some(), "the dialog is still open");
 }
 
+/// Over TCP: progress lines with the request's id go out before its reply, and a request that waits for the UI thread is
+/// cancelled from another connection, without a frame, and does nothing.
+#[test]
+fn a_request_reports_progress_and_is_cancelled_by_its_key() {
+    let mut t = TestApp::new();
+    let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let ctx = t.frames.ctx.clone();
+    let addr = t.app.control.listen(listener, &ctx).unwrap();
+    let connect = move || {
+        let stream = std::net::TcpStream::connect(addr).unwrap();
+        stream.set_read_timeout(Some(std::time::Duration::from_secs(20))).unwrap();
+        (stream.try_clone().unwrap(), BufReader::new(stream))
+    };
+    let read = |reader: &mut BufReader<std::net::TcpStream>| {
+        let mut line = String::new();
+        reader.read_line(&mut line).unwrap();
+        serde_json::from_str::<Value>(&line).unwrap()
+    };
+    let (mut writer, mut reader) = connect();
+    let glyph = |name: &str| json!({"command": "glyph.newGlyph", "params": {"name": name}});
+    writeln!(writer, "{}", json!({"id": 1, "method": "engine.execute", "params": glyph("wire"), "cancelKey": "k"})).unwrap();
+    let (mut other, mut answers) = connect();
+    let cancelled = (0..500).any(|_| {
+        writeln!(other, "{}", json!({"id": 2, "method": "control.cancel", "params": {"key": "k"}})).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        read(&mut answers)["result"]["cancelled"] == true
+    });
+    assert!(cancelled, "the key is known while the request waits");
+    let client = std::thread::spawn(move || {
+        let first = read(&mut reader);
+        let batch = json!({"command": "command.batch", "params": {"steps": [glyph("one.test"), glyph("two.test")]}});
+        writeln!(writer, "{}", json!({"id": 3, "method": "engine.execute", "params": batch, "progress": true})).unwrap();
+        let mut rest = vec![read(&mut reader)];
+        while rest.last().is_some_and(|line| line.get("ok").is_none()) {
+            rest.push(read(&mut reader));
+        }
+        (first, rest)
+    });
+    for _ in 0..2_000 {
+        if client.is_finished() {
+            break;
+        }
+        t.frame();
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
+    let (first, rest) = client.join().unwrap();
+    assert_eq!((&first["id"], &first["ok"], &first["error"]), (&json!(1), &json!(false), &json!("cancelled")));
+    assert!(t.app.session.font().unwrap().glyphs.get("wire").is_none(), "the cancelled request did nothing");
+    assert_eq!(rest[0]["id"], 3);
+    assert_eq!(rest[0]["progress"]["total"], 2, "{rest:?}");
+    assert_eq!(rest.last().unwrap()["ok"], true, "{rest:?}");
+}
+
 /// A dialog's number field takes arithmetic: the text `(10+20)/2` sets 15, and a division by zero is refused.
 #[test]
 fn a_dialog_number_field_takes_arithmetic() {

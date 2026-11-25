@@ -46,6 +46,7 @@ fn batch(s: &mut Session, p: &Value) -> Result<Value> {
 }
 
 fn run_steps(s: &mut Session, p: &Params, steps: &[Value], results: &mut Vec<Value>) -> Result<()> {
+    crate::work::plan(steps.len());
     for (i, step) in steps.iter().enumerate() {
         let id = step.get("command").and_then(Value::as_str).ok_or_else(|| p.bad(format!("step {i} has no `command`")))?;
         if matches!(id, "edit.undo" | "edit.redo") {
@@ -58,6 +59,7 @@ fn run_steps(s: &mut Session, p: &Params, steps: &[Value], results: &mut Vec<Val
         }
         let value = s.execute(id, &params).map_err(|e| p.bad(format!("step {i} (`{id}`) failed: {e}")))?;
         results.push(value);
+        crate::work::advance(1, id);
     }
     Ok(())
 }

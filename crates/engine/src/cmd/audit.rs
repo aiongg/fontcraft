@@ -27,7 +27,7 @@ use serde_json::{Map, Value, json};
 use super::audit_services::EngineServices;
 use super::*;
 use crate::params::Params;
-use crate::{DocState, EngineError};
+use crate::{DocState, EngineError, work};
 
 const SCHEMA: &str = "fontcraft.audit/1";
 /// Most entries in a `checks`, `exclude`, `groups` or `scope` list.
@@ -548,6 +548,9 @@ fn examine_font(font: &Font, fi: usize, run: &Run, facts: &audit::run::Facts, ex
     let layer_checks = start_font(font, fi, run, facts, ex, places);
     let chosen = layers_of(font, run);
     examine_layers(&AuditContext::new(font).with_glyf_outlines(facts.glyf_outlines), fi, run, &layer_checks, &chosen, ex, raw, places);
+    if work::cancelled() {
+        return;
+    }
     examine_rest(font, fi, run, facts, ex, raw);
 }
 
@@ -574,7 +577,7 @@ fn start_font(
 }
 
 /// Runs the layer checks and the check modules on `chosen`, a stretch of [`layers_of`] of the
-/// font of `ctx`.
+/// font of `ctx`. It stops early when the work is cancelled; what it examined is then of no use.
 #[allow(clippy::too_many_arguments)]
 fn examine_layers(
     ctx: &AuditContext<'_>,
@@ -595,7 +598,11 @@ fn examine_layers(
         if keeps {
             ex.cache.start(ctx, run, layer_checks);
         }
+        work::plan(chosen.len());
         for (_, g, li, layer) in chosen {
+            if work::cancelled() {
+                return;
+            }
             let kept = cached.and_then(|c| c.reports(ctx, g)).and_then(|r| r.iter().find(|(id, _)| *id == layer.id)).map(|(_, r)| r.clone());
             let report = kept.unwrap_or_else(|| audit::audit_layer(ctx, g, layer, layer_checks, &run.config));
             if keeps {
@@ -603,12 +610,18 @@ fn examine_layers(
             }
             place.layers.insert((g.name.clone(), layer.id.clone()), (*li, layer.master.clone()));
             ex.tally.absorb(layer_checks, report);
+            work::advance(1, "layers");
         }
     }
     if !run.modules.is_empty() {
+        work::plan(chosen.len());
         for (_, g, li, layer) in chosen {
+            if work::cancelled() {
+                return;
+            }
             place.layers.insert((g.name.clone(), layer.id.clone()), (*li, layer.master.clone()));
             run.modules.run_layer(font, g, layer, &mut ex.modules, &mut ex.tally.findings);
+            work::advance(1, "check modules");
         }
         ex.tally.truncated = ex.tally.truncated.saturating_add(std::mem::take(&mut ex.modules.truncated));
     }
@@ -1074,10 +1087,14 @@ fn compile_sources(t: &mut Target, run: &Run, ex: &mut Examined) {
     }
 }
 
-/// Runs every check of `run` on `t`.
+/// Runs every check of `run` on `t`. It stops early when the work is cancelled: the caller asks and drops the result.
 fn examine_target(t: &mut Target, run: &Run) -> Examined {
     let mut ex = Examined::default();
+    // Compiling, the glyph and source checks, and the binary and family checks.
+    const STAGES: usize = 3;
+    work::plan(STAGES);
     compile_sources(t, run, &mut ex);
+    work::advance(1, "compiling");
     let (mut raw, mut places) = (Raw::new(), HashMap::new());
     let values = t.settings.values.keys().cloned().collect();
     let facts = |src: &Src| audit::run::Facts {
@@ -1088,10 +1105,18 @@ fn examine_target(t: &mut Target, run: &Run) -> Examined {
         values: BTreeSet::clone(&values),
     };
     for src in &t.srcs {
+        if work::cancelled() {
+            return ex;
+        }
         examine_font(&src.model, src.font, run, &facts(src), &mut ex, &mut raw, &mut places);
+    }
+    work::advance(1, "source checks");
+    if work::cancelled() {
+        return ex;
     }
     let base = audit::run::Facts { network: run.network, values: values.clone(), ..Default::default() };
     examine_binaries(&t.bins, &t.ids(), &t.settings.values, run, &base, &mut ex, &mut raw);
+    work::advance(1, "binary checks");
     let ignore = t.settings.ignore_index();
     finish(raw, run, &places, &ignore, true, &mut ex);
     t.notes.append(&mut ex.tally.notes);
@@ -1329,6 +1354,7 @@ fn run(s: &mut Session, v: &Value) -> Result<Value> {
         run.cache = kept_run(doc).and_then(|k| k.cache.clone());
     }
     let mut ex = examine_target(&mut t, &run);
+    work::seal()?;
     keep_run(s, &t, &run, &mut ex, font, next_run_id())
 }
 
@@ -1351,6 +1377,7 @@ fn run_paths(s: &mut Session, p: &Params, paths: &[String], keep: bool) -> Resul
     // The stamp is taken before the checks, so a change while they run makes the results stale.
     let kept = t.path.as_deref().filter(|_| keep).map(|path| file_runs::FileRun::new(path, &first));
     let ex = examine_target(&mut t, &run);
+    if kept.is_some() { work::seal() } else { work::check() }?;
     let how = match (t.kind, t.path.as_deref()) {
         ("binary", Some(path)) => FixParams::File(path),
         ("source", Some(path)) => FixParams::Source(path),

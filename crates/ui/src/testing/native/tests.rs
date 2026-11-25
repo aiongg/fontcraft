@@ -117,3 +117,28 @@ fn control_text_types_into_a_field_of_a_floated_panel() {
     t.frames(3);
     assert_eq!(t.app.session.font().unwrap().note, "Draft", "the text was typed into the floating window's field");
 }
+
+/// The element list covers a floated panel's OS window, and an element there is clicked and set by its id.
+#[test]
+fn the_elements_of_a_floated_panel_are_listed_clicked_and_set() {
+    let mut t = NativeApp::new();
+    let font_info = float_font_info(&mut t);
+    let element = |t: &mut NativeApp, prefix: &str, role: Option<&str>| {
+        let list = t.ok("ui.elements", json!({"prefix": prefix, "role": role}));
+        let all = list["elements"].as_array().cloned().unwrap_or_default();
+        let floated = all.iter().find(|e| e["window"] != "main" && e["visible"] == true).cloned();
+        floated.unwrap_or_else(|| panic!("no {prefix} in the floating window: {list}"))
+    };
+    let notes = element(&mut t, "Notes", None);
+    let left = t.place(font_info).min.x;
+    assert!(notes["rect"][0].as_f64().is_some_and(|x| x >= f64::from(left)), "rectangles are in main-window points: {notes}");
+    let reply = t.ok("ui.click", json!({"element": notes["id"]}));
+    assert_eq!(reply["window"], notes["window"], "the click goes to the element's window");
+    t.frames(3);
+    assert_eq!(t.app.view.font_info.tab, FontInfoTab::Notes);
+
+    let note = element(&mut t, "Font Note", Some("multilineTextInput"));
+    t.ok("ui.set", json!({"element": note["id"], "value": "First line\nSecond line"}));
+    t.frames(12);
+    assert_eq!(t.app.session.font().unwrap().note, "First line\nSecond line");
+}
