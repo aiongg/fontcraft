@@ -131,6 +131,7 @@ mod layout_convert;
 mod layout_features;
 mod layout_normalize;
 mod linked_sources;
+mod m6_end_to_end;
 mod macros;
 mod masters;
 mod match_masters;
