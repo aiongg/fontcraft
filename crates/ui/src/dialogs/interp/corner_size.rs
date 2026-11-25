@@ -13,8 +13,16 @@ use super::super::fields::Field;
 use super::super::spec::{DialogSpec, Fields, Shaped};
 use super::no_link;
 
-pub const CORNER_LAYER_SIZE: DialogSpec =
-    DialogSpec::new("popover.cornerLayerSize", "Corner Layer Size", "layers.rename", Fields::Shaped(Shaped { fields, given, params, link: no_link }));
+/// Opened for a corner glyph's layer, never as "the dialog of `layers.rename`".
+pub const CORNER_LAYER_SIZE: DialogSpec = DialogSpec {
+    follow_up: true,
+    ..DialogSpec::new(
+        "popover.cornerLayerSize",
+        "Corner Layer Size",
+        "layers.rename",
+        Fields::Shaped(Shaped { fields, given, params, link: no_link }),
+    )
+};
 
 /// The prefix of corner glyphs' names.
 pub const CORNER_PREFIX: &str = "_corner.";
