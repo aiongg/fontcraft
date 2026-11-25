@@ -32,6 +32,9 @@ status = "handbook"
 guesses = [
   "Show Font View is a View menu row with its Cmd+Alt+1 shortcut; the handbook names the shortcut but no menu item, and the reference app's View and Window menus settle it.",
 ]
+observe = [
+  "Open the View menu and the Window menu: note which has a row for Font View, its label and its shortcut.",
+]
 
 [[command]]
 id = "fontView.setViewMode"
@@ -48,6 +51,9 @@ status = "handbook"
 guesses = [
   "The selection, the sidebar entries, the search and the sort carry over when the mode changes. Settled by observation.",
 ]
+observe = [
+  "In Grid View select three glyphs, a category and a search term, then switch to List View: note whether the selection, the sidebar entry, the search and (going back) the sort are kept.",
+]
 
 [[command]]
 id = "fontView.setCellSize"
@@ -63,6 +69,9 @@ ref = "Font View › Grid View"
 status = "handbook"
 guesses = [
   "Cells run from 16 to 512 points on a logarithmic slider, 64 by default. Settled by observation.",
+]
+observe = [
+  "Drag the cell size slider to both ends: measure a cell in points at each end, and read the size in a new document.",
 ]
 
 [[command]]
@@ -81,6 +90,10 @@ guesses = [
   "Glyphs without a value in the sort column go last in both directions, and ties keep glyph order. Settled by observation.",
   "The sort belongs to the Font View tab and is not saved with the document. Settled by observation.",
 ]
+observe = [
+  "In List View sort by Unicode in a font with unencoded glyphs, then reverse the sort: note where the unencoded glyphs stand each time and whether glyphs with equal values keep glyph order.",
+  "Sort by a column, save, close and reopen the file: note whether the sort is still there.",
+]
 
 [[command]]
 id = "fontView.setColumns"
@@ -96,6 +109,9 @@ ref = "Font View › List View"
 status = "handbook"
 guesses = [
   "At least one column stays shown; the header's context menu lists every column with a check mark. Settled by observation.",
+]
+observe = [
+  "Right-click a List View header: note whether every column is listed with a check mark, and whether the last shown column can be hidden.",
 ]
 
 [[command]]
@@ -113,6 +129,9 @@ status = "handbook"
 guesses = [
   "The inspector is shown when a document opens. Settled by observation.",
 ]
+observe = [
+  "Create a new document with default settings: note whether the glyph inspector is open.",
+]
 
 [[command]]
 id = "fontView.toggleInspectorDetails"
@@ -126,8 +145,12 @@ milestone = "M4"
 summary = "Expands or collapses the extra inspector rows for production name, script, category and subcategory (the chevron beside the Unicode field)."
 ref = "Font View › Glyph Properties"
 status = "handbook"
+notes = "Version 4 makes the bottom-left panel customisable with a three-dot button, for example to show tags instead of colours (news page \"Glyphs 4: Create. Love the process.\", glyphsapp.com/news/glyphs-4-create-love-the-process)."
 guesses = [
   "The extra rows start collapsed. Settled by observation.",
+]
+observe = [
+  "In a new document look at the chevron beside the Unicode field: note whether production name, script, category and subcategory show already.",
 ]
 
 [[command]]
@@ -146,6 +169,10 @@ notes = "Documented, not yet observed."
 guesses = [
   "The orientation is a panel setting kept across documents and sessions, not stored per font; watching the reference app reopen a file would settle it.",
   "The switch shows the icon of the set on show (left to right, or top to bottom); a screenshot of the reference inspector would settle it.",
+]
+observe = [
+  "Switch the inspector to vertical metrics, close and reopen the file, then open another font: note which orientation each shows.",
+  "Look at the icon between the metric fields in both orientations: note whether it pictures the set shown or the set a click shows next.",
 ]
 
 [[command]]
@@ -220,7 +247,7 @@ milestone = "M4"
 summary = "Opens a dialog with one text field and adds a glyph for every item, items separated by spaces, line breaks or tabs: a glyph name, a literal character, a uniXXXX / uXXXXX value, a colon range, or a glyph recipe. Items given as a character, a Unicode name or a legacy name are converted to the database nice name; names already in the font trigger the Replace / Keep Existing / Cancel dialog."
 ref = "Font View › Adding New Glyphs › Adding Multiple Glyphs; tutorial \"Adding glyphs to your font\" (glyphsapp.com/learn)"
 status = "handbook"
-notes = "Separators and the conversion of legacy names (uni0421, dotlessi) come from the tutorial, checked in the M4 planning pass. Recipe items (component=glyph, base+mark=glyph) are built with M6, which owns components and anchors; until then they are listed in the result's `skipped` (the owner's decision, docs/plans/M4.md § 7 question 7). Documented, not yet observed. The text parser is `crates/glyphdata/src/items.rs`; its limits make hostile text an error with a message: at most 512 KB of text, 65,535 items, 65,536 code points spanned by one range and 65,535 glyphs asked for."
+notes = "Separators and the conversion of legacy names (uni0421, dotlessi) come from the tutorial, checked in the M4 planning pass. Recipe items (component=glyph, base+mark=glyph) are built with M6, which owns components and anchors; until then they are listed in the result's `skipped` (the owner's decision, docs/plans/M4.md § 7 question 7). Documented, not yet observed. The text parser is `crates/glyphdata/src/items.rs`; its limits make hostile text an error with a message: at most 512 KB of text, 65,535 items, 65,536 code points spanned by one range and 65,535 glyphs asked for. Release notes: newly added glyphs are shown even when the filter in use would hide them (4.0, build 3826, updates.glyphsapp.com/Glyphs4.0-4000.html), and replacing a glyph keeps its kerning (build 3855), which agrees with our Replace."
 guesses = [
   "A comma is not a separator: an item containing one is an invalid name and is reported. Settled by observation (05 question 7).",
   "A range covers every code point from the first endpoint's to the second's; code points Unicode does not assign, and surrogates, are skipped, and one range holds at most 65,536 code points. Settled by observation (05 question 7).",
@@ -230,6 +257,15 @@ guesses = [
   "With Use Custom Naming on, a typed character and the code points of a range are named uniXXXX or uXXXXX, as typed code-point names are kept. Settled by observing a font with the option on.",
   "New glyphs that land between the same two existing glyphs are in sort-key order; the glyphs already in the font are never moved. Settled by observation (05 question 2).",
   "Headless calls default to Keep Existing (05-font-view.md § 3.1); the dialog first calls with ask, which changes nothing when a name exists and returns the existing names. Our design; nothing to settle.",
+]
+observe = [
+  "In Add Glyphs type `A,B C` in an empty font: note which glyphs are added and what is said about `A,B`.",
+  "Type `uni0370:uni037F` (a range with unassigned code points) and note which glyphs are added.",
+  "Type `A 1bad B` and note whether A and B are added and what is said about `1bad`.",
+  "In a font where A has outlines, is kerned and stands first, add A with Replace: note its place, its outline and its kerning afterwards.",
+  "Type `uni0045:uni0041` (the end before the start) and note what is added.",
+  "Turn Use Custom Naming on, type `Ä uni00C4`, and note the names of the glyphs added.",
+  "In a font opened with an unsorted stored order, add two glyphs that sort next to each other: note where each is placed and whether any old glyph moved.",
 ]
 
 [[command]]
@@ -248,6 +284,9 @@ notes = "The tutorial \"Adding glyphs to your font\" (glyphsapp.com/learn) adds 
 guesses = [
   "When newGlyph is taken the new glyph is named newGlyph.001, newGlyph.002 and so on, the rule documented for duplicated and pasted glyphs. Settled by observation (05 question 6).",
 ]
+observe = [
+  "Press Cmd+Alt+Shift+N three times in a new font and note the three names.",
+]
 
 [[command]]
 id = "glyph.duplicateGlyph"
@@ -261,12 +300,17 @@ milestone = "M4"
 summary = "Makes a copy of every selected glyph in the same font, named with the first free three-digit suffix (A.001, then A.002 when A.001 is taken). The copies become the selection."
 ref = "Font View › Batch-Processing › Batch Commands; tutorial \"Adding glyphs to your font\" (glyphsapp.com/learn)"
 status = "handbook"
-notes = "The naming rule and the new selection come from the tutorial, checked in the M4 planning pass (05 question 6). Documented, not yet observed."
+notes = "The naming rule and the new selection come from the tutorial, checked in the M4 planning pass (05 question 6). Documented, not yet observed. The scripting API's duplicate call without a name appends `.00n` (docu.glyphsapp.com, GSGlyph.duplicate)."
 guesses = [
   "Each copy is placed directly after its original in the glyph order. Settled by observation.",
   "A copy of a suffixed glyph gets one more suffix (A.ss01 gives A.ss01.001). Settled by observation.",
   "The copy keeps everything but the code points, so the original stays the glyph for its characters. Settled by observation.",
   "The `suffix` parameter names the copy A.<suffix> (A.<suffix>.001 when taken), for scripts that want a feature suffix in one step. Our addition; nothing to settle.",
+]
+observe = [
+  "Duplicate A, which stands between @ and B: note where the copy stands.",
+  "Duplicate A.ss01 and note the copy's name.",
+  "Duplicate a glyph with a code point, a kerning group, tags and a colour: note which the copy keeps.",
 ]
 
 [[command]]
@@ -281,11 +325,16 @@ milestone = "M4"
 summary = "Deletes the selected glyphs after a confirmation dialog (Remove / Cancel). Applies to glyphs selected in Font View, to the glyph being edited in Edit View and to a Text-tool selection; the minus button at the bottom left of Font View does the same. Follow-up choices cover glyphs used as components and metrics keys that point at a deleted glyph."
 ref = "Font View › Deleting Glyphs"
 status = "handbook"
-notes = "The answers are parameters: without a needed `components` or `metricsKeys` answer the command refuses and names it; `confirm: false` changes nothing and returns what the dialog asks about (removeGlyph.confirm). Kerning pairs that name a removed glyph stay, as obsolete pairs until Clean Up removes them (kerning.obsoletePairs). Group membership leaves with the glyph. Documented, not yet observed."
+notes = "The answers are parameters: without a needed `components` or `metricsKeys` answer the command refuses and names it; `confirm: false` changes nothing and returns what the dialog asks about (removeGlyph.confirm). Kerning pairs that name a removed glyph stay, as obsolete pairs until Clean Up removes them (kerning.obsoletePairs). Group membership leaves with the glyph. Documented, not yet observed. Release notes: deleting glyphs also clears width keys that name them (version 3, build 3091, updates.glyphsapp.com/Glyphs3.4-3434.html); FontCraft covers every metric field."
 guesses = [
   "Decompose replaces each component of a removed glyph with that glyph's shapes from the matching layer; components inside it that point at glyphs that stay remain components. Settled by observation.",
   "A metrics key points at a glyph when its formula starts with that glyph's name (=H, =|H, =O-4); the longest leading name that is a glyph wins, since names may contain hyphens. Settled by observation.",
   "A removed glyph's bitmaps leave every bitmap strike with it, so a new glyph with the same name starts without one. Settled by observing whether the reference app keeps a deleted glyph's bitmap for a new glyph of that name.",
+]
+observe = [
+  "Delete acutecomb from a font where Aacute uses A and acutecomb and choose Decompose: note which components of Aacute become paths and which layers change.",
+  "Give V the keys =A, =A-10 and (width) A, delete A and note which of the keys the unlink question covers.",
+  "Place a bitmap in A (iColor), delete A, add A again: note whether the bitmap is back.",
 ]
 
 [[command]]
@@ -300,12 +349,18 @@ milestone = "M4"
 summary = "Batch command on the selected glyphs: re-derives each glyph's properties from the glyph database (built-in and custom), its name included. A legacy, production or alternative name (uni0416, ostroke) becomes the database nice name, and the Unicode values follow the name."
 ref = "Font Info › Other Settings › Use Custom Naming; Font View › Batch-Processing › Batch Commands; tutorial \"Getting your glyph names right\" (glyphsapp.com/learn)"
 status = "handbook"
-notes = "Checked against written sources in the M4 planning pass (it was a `memory` row). The handbook (Use Custom Naming) says the command updates the properties of the selected glyphs, the glyph name included. The tutorial says it synchronises names and Unicode values with the built-in database and respects custom glyph data; the tutorial \"Roll your own glyph data\" says legacy alternative names are updated to the nice name. Documented, not yet observed."
+notes = "Checked against written sources in the M4 planning pass (it was a `memory` row). The handbook (Use Custom Naming) says the command updates the properties of the selected glyphs, the glyph name included. The tutorial says it synchronises names and Unicode values with the built-in database and respects custom glyph data; the tutorial \"Roll your own glyph data\" says legacy alternative names are updated to the nice name. Documented, not yet observed. The tutorial \"Roll your own glyph data\" (glyphsapp.com/learn, updated 2022-08-08) names this command as the one that renames legacy names through `altNames`."
 guesses = [
   "Stored overrides of category, subcategory, script, production name, case and direction are dropped, so those properties follow the database again; the sort name, tags, colour labels, note and export flag stay. Settled by observing a glyph with a custom category before and after the command (05 question 5).",
   "With Use Custom Naming on, names are kept and only the other properties are updated. Settled by observation.",
   "A rename the command makes goes through glyph.rename, so references follow it; a new name that is already taken (by any glyph of the font before the command, or by an earlier glyph of the batch) leaves the glyph's name and Unicode values unchanged and is reported. Settled by observation.",
   "The Unicode values follow the name whether or not it changed: the glyph data's code point for it, none for a name it knows without one (A.alt), and the stored values for a name it does not know. Settled by observation.",
+]
+observe = [
+  "Give A a custom category, tags, a colour, a sort name and Export off, run Update Glyph Info and note what is left.",
+  "With Use Custom Naming on, run it on a glyph named uni0410: note its name and Unicode value.",
+  "With glyphs `ostroke` and `oslash` both in the font, run it on `ostroke` and note the result.",
+  "Give A the Unicode value 0391 by hand, then A.alt the value E000, run it on both and note the values.",
 ]
 
 [[command]]
@@ -320,12 +375,18 @@ milestone = "M4"
 summary = "Opens the Glyph Info window: a searchable, sortable table of every entry in the glyph database."
 ref = "Font View › Names & Unicode › Glyph Info Database"
 status = "handbook"
-notes = "The tutorial \"Adding glyphs to your font\" (glyphsapp.com/learn) lists the columns: glyph name, Unicode value, category, subcategory, script and composition. Multiple rows are selected with Shift or Cmd. The composition column is left out until M6 provides decomposition data. Documented, not yet observed. FontCraft: crates/ui/src/shell/glyph_info.rs; the table shows what glyphData.search returns for the search field and the sorted column, so the window and the headless query agree. Add to Font runs glyphInfo.addToFont with the selected names."
+notes = "The tutorial \"Adding glyphs to your font\" (glyphsapp.com/learn) lists the columns: glyph name, Unicode value, category, subcategory, script and composition. Multiple rows are selected with Shift or Cmd. The composition column is left out until M6 provides decomposition data. Documented, not yet observed. FontCraft: crates/ui/src/shell/glyph_info.rs; the table shows what glyphData.search returns for the search field and the sorted column, so the window and the headless query agree. Add to Font runs glyphInfo.addToFont with the selected names. Release notes (\"What's new in Glyphs\", updates.glyphsapp.com/Glyphs3.4-3434.html): Next and Previous buttons (version 3, build 3169). Version 4 redesigned the window: better search, more information and the character shown in any installed font (news page \"Glyphs 4: Create. Love the process.\")."
 guesses = [
   "The table adds a Description column (ours). Settled by observing the window.",
   "With an empty search field the table lists the whole database in the sorted order, up to the search's limit of 10,000 rows (the CJK ideographs past it are reached by searching). Settled by observing the window when it opens.",
   "Sorting is ascending only; a second click on the sorted header keeps the order. Settled by observing a second header click.",
   "Shift+click selects the rows from the last clicked one; Cmd+click adds or removes one row. Settled by observing the window.",
+]
+observe = [
+  "Open Window › Glyph Info and write down every column.",
+  "With the search empty, scroll to the end of the list: note the last glyph and whether CJK ideographs are listed.",
+  "Click a column header twice: note whether the order reverses.",
+  "Click a row, then Shift+click and Cmd+click others: note what is selected.",
 ]
 
 [[command]]
@@ -342,6 +403,9 @@ ref = "Font View › Adding New Glyphs › Adding From the Glyph Info Database"
 status = "handbook"
 guesses = [
   "Names the font already has are left as they are and listed in `existing`; no Replace question is asked. Settled by observation.",
+]
+observe = [
+  "Select two glyphs in Glyph Info, one of them already in the font, and press Add to Font: note whether a question appears and what is added.",
 ]
 
 [[command]]
@@ -360,6 +424,9 @@ notes = "List filters, Groups*.plist `list` entries, scripts and languages know 
 guesses = [
   "A Categories entry expects the glyphs that the languages of the listed scripts need and that the glyph data puts in that category, subcategory or case group; without language data it has no expected set. Settled by observing the badge of a category in a font with one language list shown.",
 ]
+observe = [
+  "In a font with only A, with only the English or Latin entry shown, read the badge beside Letter › Uppercase and right-click it: note the total and the first missing names.",
+]
 
 [[command]]
 id = "fontView.generateMissingGlyphs"
@@ -375,6 +442,9 @@ ref = "Font View › Adding New Glyphs › Adding From the Sidebar"
 status = "handbook"
 guesses = [
   "Generated glyphs are empty, as wide as the Default Layer Width parameter or the built-in width makes a new glyph (as New Glyph), take the code point the entry gives or the glyph data gives their name, and are placed by the default sort key; all of them are one undo step. Settled by observing Generate on a list filter.",
+]
+observe = [
+  "Generate one missing glyph from a list filter and from a language: note its width, Unicode value and place, then undo once and note how many go.",
 ]
 
 [[command]]
@@ -398,7 +468,16 @@ guesses = [
   "LSB moves the outline and keeps the right side bearing; RSB sets the width from the outline's right edge. Settled by observation.",
   "As Components adds each component at the origin, after the shapes already there, and leaves out a component that would make a glyph refer to itself. Settled by observation.",
 ]
-notes = "The shell's Paste Special (Cmd+Alt+V, Edit › Paste Special) opens dialog.pasteSpecial on the copied glyphs on the system clipboard."
+observe = [
+  "Copy A and B (selecting B first), select X and Y, Paste Special › Selected Glyphs: note which glyph gets which.",
+  "With the second master shown, paste Content of Active Layer: note which layer of the target changed.",
+  "Copy from a font with masters Light and Bold, paste All Data into a font with masters Bold and Light in the other order, and into one with a single master Regular: note which layers are filled.",
+  "Paste All Data onto a selected glyph and note its name and Unicode values.",
+  "In Edit View's text mode hold Option in the Edit menu: note whether Paste Special is enabled and what it does.",
+  "Paste only LSB, then only RSB, onto a glyph of another width: note whether the outline moves and what the width becomes.",
+  "Paste As Components onto a glyph with a path, then copy a glyph that uses the target and paste it onto the target: note the component's place in the shape order and what the second paste does.",
+]
+notes = "The shell's Paste Special (Cmd+Alt+V, Edit › Paste Special) opens dialog.pasteSpecial on the copied glyphs on the system clipboard. Release notes (\"What's new in Glyphs\", updates.glyphsapp.com/Glyphs4.0-4000.html): an option leaves the background out of Paste Special (4.0, build 3849), and the dialog was reworked (builds 3841, 3872)."
 
 # ───────────────────────────── Glyph properties ─────────────────────────────
 
@@ -418,6 +497,10 @@ notes = "Documented, not yet observed. The window describes the Font View select
 guesses = [
   "The menu item opens the window and does not toggle it; `open: false` closes it. Settled by observation.",
   "In Edit View the window describes the edited glyph. Settled by observation.",
+]
+observe = [
+  "With the Selection Info window open choose Edit › Info for Selection again: note whether it closes.",
+  "In Edit View, with a glyph open and other glyphs selected in Font View, choose it: note which glyph it describes.",
 ]
 
 [[command]]
@@ -448,13 +531,20 @@ milestone = "M4"
 summary = "Changes a glyph's name (click the name under a cell, in the Name column, or in the inspector). When the base name before the first dot changes, the database-derived properties (Unicode values, category and so on) are re-resolved; when only the dot suffix changes they are left alone. Fails if the new name is already taken."
 ref = "Font View › Names & Unicode › Renaming Glyphs; tutorial \"Getting your glyph names right\" (glyphsapp.com/learn)"
 status = "handbook"
-notes = "The tutorial adds that a Private Use Area value set on a glyph stays when the glyph is renamed to a name the database does not know. Documented, not yet observed."
+notes = "The tutorial adds that a Private Use Area value set on a glyph stays when the glyph is renamed to a name the database does not know. Documented, not yet observed. Release notes (\"What's new in Glyphs\", updates.glyphsapp.com/Glyphs4.0-4000.html): a dialog about the uses of renamed glyphs also appears after a rename in Edit View and through Find and Replace (4.0, build 3854). Forum answers of earlier versions say components follow and manual feature code does not (thread \"Changing glyph names and updating feature code\", forum.glyphsapp.com/t/15765)."
 guesses = [
   "When the base name changes, the Unicode values become the glyph data's for the new name whenever the data knows the name, directly or through the suffix, ligature or code-point rules, so renaming B to A.alt clears them; a name the data does not know keeps the stored values. Settled by observation (05 question 4).",
-  "Rename updates the font's references by name: components (also in backgrounds), kerning pairs, UFO groups, the glyphOrder parameter of the font and its instances, and metrics keys of the glyph and its layers. Feature code, kerning contexts, other custom parameters, hints and display strings are not rewritten; the result lists where the old name is still used. Settled by observation (05 question 9).",
+  "Rename updates the font's references by name: components (also in backgrounds), kerning pairs, UFO groups, the glyphOrder parameter of the font and its instances, and metrics keys of the glyph and its layers. Feature code, kerning contexts, other custom parameters, hints and display strings are not rewritten; the result lists where the old name is still used. From version 4 the reference asks in a dialog which uses of a renamed glyph to update (4.0 release notes, build 3854); what that dialog offers is not documented. Settled by observation (05 question 9).",
   "A typed production, alternative or code-point name becomes the nice name (as for a new glyph), unless the font uses custom naming. Settled by observation.",
   "A name that breaks the naming rules is refused, as Find and Replace refuses one. Settled by observing whether the reference accepts an illegal name typed in Font View.",
   "When a locked glyph uses the renamed glyph as a component, the rename is refused, because a locked glyph refuses changes to its layers. Settled by observation.",
+]
+observe = [
+  "Rename B (U+0042, hand-set E000 on a second copy) to A.alt, to a name the database knows and to one it does not: read the Unicode field after each.",
+  "Rename a glyph used in components, kerning pairs, metrics keys, a kerning group's name, a feature and a class; note what the dialog that follows offers to update and what changed.",
+  "Type the names `afii10017`, `uni0410` and `Cyrillic_A` as names in Font View and note what each becomes.",
+  "Type `1a` and `a b` as a glyph name: note whether the name is accepted, changed or refused.",
+  "Lock a composite's glyph, rename its base and note whether the component still resolves.",
 ]
 
 [[command]]
@@ -521,8 +611,12 @@ milestone = "M4"
 summary = "Overrides the case of a glyph; null returns to the derived value. The chapter describes the property and its five values but does not say where it is edited, so the control placement is our design."
 ref = "Font View › Glyph Properties › Case"
 status = "inferred"
+notes = "The scripting API has a stored case behind a flag (GSGlyph.case and storeCase, version 3, docu.glyphsapp.com), so a glyph's case can be overridden; no page names a control."
 guesses = [
   "Case is edited in the Selection Info window and in List View's Case column; the handbook names no control for it. Settled by observation (05 question 15).",
+]
+observe = [
+  "Look for a control that edits the case in the inspector, in Selection Info and in List View; note which have one.",
 ]
 
 [[command]]
@@ -537,9 +631,14 @@ milestone = "M4"
 summary = "Overrides a glyph's writing direction; null returns to the database value. The chapter describes the three values but not where the property is edited."
 ref = "Font View › Glyph Properties › Writing Direction"
 status = "inferred"
+notes = "The scripting API has a stored direction behind a flag (GSGlyph.direction and storeDirection, version 3, docu.glyphsapp.com); no page names a control."
 guesses = [
   "Writing direction is edited in the Selection Info window and in List View's Direction column; the handbook names no control for it. Settled by observation (05 question 15).",
   "The vertical directions VTR and VTL, which source files may store, are accepted too. Settled by observation.",
+]
+observe = [
+  "Look for a control that edits the writing direction in the inspector, in Selection Info and in List View; note which have one.",
+  "Write down the values that control offers, and whether the vertical directions are among them.",
 ]
 
 [[command]]
@@ -570,6 +669,9 @@ status = "handbook"
 guesses = [
   "Label names are matched without case and spaces, and grey is accepted for gray (lightGreen, Light Green and lightgreen are the same).",
 ]
+observe = [
+  "Run a script that sets the colour by the names \"light green\", \"Light Green\" and \"grey\" in a smart filter: note which are understood.",
+]
 
 [[command]]
 id = "glyph.setLayerColorLabel"
@@ -585,6 +687,9 @@ ref = "Font View › Glyph Properties › Color Label"
 status = "handbook"
 guesses = [
   "Locked glyphs, and glyphs without the layer, are skipped and listed, because a locked glyph refuses changes to its layers. Settled by observation.",
+]
+observe = [
+  "Lock a glyph, select it with an unlocked one and set a layer colour: note which cells change.",
 ]
 
 [[command]]
@@ -602,6 +707,9 @@ status = "handbook"
 notes = "The tags are kept sorted, as the reference's files store them (05-font-view.md § 2)."
 guesses = [
   "A tag is trimmed, and an empty tag or a repeated one is dropped. Settled by observation.",
+]
+observe = [
+  "Type `  foo  ,foo,` in the Tags field and note which tags are stored.",
 ]
 
 [[command]]
@@ -632,6 +740,9 @@ status = "inferred"
 guesses = [
   "Deleting a capsule in the Tags field removes that tag from every selected glyph. Settled by observation.",
 ]
+observe = [
+  "Select two glyphs that share a tag, click its capsule and press Delete: note whether both lose it.",
+]
 
 [[command]]
 id = "glyph.setSortName"
@@ -645,10 +756,7 @@ milestone = "M4"
 summary = "Sets the key a glyph is ordered by in Font View and in exported fonts; null (unchecked box, empty field) means the glyph name is the key. Edited in Selection Info after ticking the checkbox next to the field."
 ref = "Font View › Glyph Properties › Sort Name"
 status = "handbook"
-notes = "The glyph moves to its place in the default order at once (glyphOrder.default); a glyphOrder parameter still decides the order it names."
-guesses = [
-  "Null clears both stored sort names: the one used with Keep Alternates Next to Base Glyph on and the one used with it off. Settled by observation.",
-]
+notes = "The glyph moves to its place in the default order at once (glyphOrder.default); a glyphOrder parameter still decides the order it names. One setting (storeSortName) turns both stored sort names on and off, the same as the checkbox of the Cmd+Alt+I dialog (scripting API, GSGlyph.sortName, sortNameKeep and storeSortName, docu.glyphsapp.com), so null clears both."
 
 [[command]]
 id = "glyph.setNote"
@@ -680,6 +788,10 @@ guesses = [
   "The cell lists component names separated by a comma and a space; a name added to the list appends a component at offset zero (aligned automatically when the layer allows it), a name removed deletes the last component with that name, and only the layer of the master shown in Font View changes; editing the cell in the reference app settles it.",
   "Removing a locked component through the list is refused with a message naming it, and nothing changes; the layer's hints follow their shapes to their new places (PostScript hints and TrueType instructions count paths, so removing a component leaves them as they are) and a hint on a removed component goes with it; removing a locked component's name from the cell in the reference app settles it.",
 ]
+observe = [
+  "In List View show Components and edit a cell from `A, acutecomb` to `A, acutecomb, gravecomb`, then remove one of two equal names: note the separator, the new component's position and alignment, which of the equal ones went and which masters changed.",
+  "Lock a component with a hint on it and delete its name from the cell: note what happens.",
+]
 
 [[command]]
 id = "glyph.copyGlyphNames"
@@ -693,9 +805,14 @@ milestone = "M4"
 summary = "Writes the names (or code points) of the selected glyphs to the clipboard in one of six text formats. Reached from the Copy Glyph Names submenu of the glyph context menu; headless it returns the text."
 ref = "Font View › Names & Unicode › Copy Glyph Names"
 status = "handbook"
+notes = "The submenu has a seventh entry for production names (release notes (\"What's new in Glyphs\", updates.glyphsapp.com/Glyphs4.0-4000.html and updates.glyphsapp.com/Glyphs3.4-3434.html): version 3, build 3330; 4.0, build 3826)."
 guesses = [
   "Names come in glyph order (the order Font View shows), not in the order they were selected. Settled by observation.",
   "One per Line and Python List put no line break after the last line; code points are written in uppercase hex. Settled by pasting the reference's output into a text editor.",
+]
+observe = [
+  "Select B, then A with Cmd held, copy the names with Space Separated and paste: note the order.",
+  "Paste One per Line and Python List into a text editor: note a final line break; paste Unicodes and note the letter case.",
 ]
 
 # ───────────────────────────── Glyph data queries ─────────────────────────────
@@ -717,6 +834,9 @@ guesses = [
   "Our own query for agents; its answers must equal what the reference shows in Glyph Info and the inspector for the same name, which the oracles' copies of the data (fontc, glyphsLib) check.",
   "A ligature without a record takes the script that all its known parts share, and no case. Settled by observation.",
 ]
+observe = [
+  "Add a ligature without a record, such as `beth_gimel-hb` and `A_be-cy`, and read their script and case in the inspector.",
+]
 
 [[command]]
 id = "glyphData.search"
@@ -734,6 +854,10 @@ notes = "The tutorial \"Adding glyphs to your font\" (glyphsapp.com/learn) says 
 guesses = [
   "A query matches as a case-insensitive substring of the name, the description, the hex code point, or equals the character. Settled by observation.",
   "Results are sorted by name unless another field is asked for, and at most 10,000 are returned. An empty query matches every record.",
+]
+observe = [
+  "In Glyph Info search `ACUTE`, `00C1`, `Á` and `with acute`: note what each finds.",
+  "Note the order of the results and whether the list is cut off when the term is empty.",
 ]
 
 [[command]]
@@ -783,13 +907,20 @@ milestone = "M4"
 summary = "Renames the selected glyphs by replacing every occurrence of the Find text in their names with the Replace text. An empty Find appends the Replace text to each name; with Regex on, Find is a regular expression and Replace may use numbered group references such as \\1."
 ref = "Font View › Batch-Processing › Batch-Renaming Glyphs"
 status = "handbook"
-notes = "Regex mode and the `\\1` group references are documented in the handbook but not yet observed. The pattern is read within the same size and nesting limits as the search field's regular expressions; a pattern that cannot be compiled, or a reference to a group the pattern lacks, refuses the command and names the problem."
+notes = "Regex mode and the `\\1` group references are documented in the handbook but not yet observed. The pattern is read within the same size and nesting limits as the search field's regular expressions; a pattern that cannot be compiled, or a reference to a group the pattern lacks, refuses the command and names the problem. Release notes (\"What's new in Glyphs\", updates.glyphsapp.com/Glyphs4.0-4000.html): renames through Find and Replace also bring up the dialog about uses of renamed glyphs (4.0, build 3854)."
 guesses = [
-  "A batch that would give two glyphs the same name, or any glyph an invalid name, is refused as a whole and the clashes are listed. Each rename follows glyph.rename. Settled by observation (05 question 9).",
+  "A batch that would give two glyphs the same name, or any glyph an invalid name, is refused as a whole and the clashes are listed. Each rename follows glyph.rename. The reference prevents duplicate names here (version 3 release notes, build 3177); whether it refuses the batch, skips the clashing glyphs or adds a suffix is not documented. Settled by observation (05 question 9).",
   "The results are not converted to nice names: Find and Replace gives the names it computes. Settled by observation.",
   "In Regex mode a group reference is a backslash and one digit (`\\0` is the whole match, `\\10` is group 1 followed by 0), `\\\\` is a backslash, and `$` is plain text. Settled by renaming with a two-digit group reference and a `$` in the reference app.",
-  "Matching is case-sensitive unless `matchCase` is false, in plain and Regex mode alike; with it false, plain Find is still plain text. Settled by observation.",
+  "Matching is case-sensitive unless `matchCase` is false, in plain and Regex mode alike; with it false, plain Find is still plain text. The reference has a case option in its search-and-replace dialog (4.0 release notes, build 3823); its default and its effect in Regex mode are not documented.",
   "An empty Find appends Replace in Regex mode as in plain mode. Settled by observation.",
+]
+observe = [
+  "Select A.ss01 and A.ss02, replace `.ss0[12]` with `.alt` in Regex mode: note whether nothing, one or both are renamed and what is said.",
+  "Replace `Cyrillic_A` with a legacy name that has a nice name and note which name is kept.",
+  "In Regex mode replace `(.)(.)` with `\\10`, then with `$1`: note both results.",
+  "Type `a` in Find for a selection of A and a, with and without the case option: note which names change, in plain and Regex mode.",
+  "Leave Find empty with Regex on and Replace `.alt`: note the result.",
 ]
 
 # ───────────────────────────── Search and sidebar filters ─────────────────────────────
@@ -824,6 +955,10 @@ guesses = [
   "Glyphs that a new search hides are deselected, so batch commands never act on glyphs the view does not show. Settled by observing whether the reference keeps hidden glyphs selected after a search.",
   "A term the matcher refuses (a regular expression that does not compile yet) is refused and the view stays as it was; the field keeps the typed text while it has the keyboard. Settled by typing an unfinished regular expression in the reference's field.",
 ]
+observe = [
+  "Select A and B, search for `B`, clear the search and note whether A is still selected.",
+  "With Regex on type `[A` and note the glyphs shown and any message.",
+]
 
 [[command]]
 id = "fontView.selectSidebarEntries"
@@ -837,11 +972,18 @@ milestone = "M4"
 summary = "Selects the sidebar entries that filter Font View: All, categories and subcategories, scripts and languages, smart filters, list filters and folders. Cmd-click toggles one entry, Shift-click selects a range of filters; selecting All shows every glyph."
 ref = "Font View › Filtering Font View"
 status = "handbook"
+notes = "The reference restores the sidebar selection of a document (version 3 release notes (\"What's new in Glyphs\", updates.glyphsapp.com/Glyphs3.4-3434.html), build 3310)."
 guesses = [
   "Shift-click selects every entry listed between the last entry selected in the clicked entry's section and the clicked one, in any section (the handbook names filters only), and keeps the other sections' entries. Settled by Shift-clicking categories and languages in the reference.",
   "Without a selected entry in its section, a Shift-clicked entry is added as Cmd-click adds it. Settled by Shift-clicking an entry of an unused section in the reference.",
   "Glyphs that a new sidebar selection hides are deselected. Settled by observing whether the reference keeps hidden glyphs selected after choosing a sidebar entry.",
   "A selected entry that disappears (a removed or renamed filter, a category with no glyph left) is deselected. Settled by removing a selected filter in the reference.",
+]
+observe = [
+  "Click a category, Shift+click a later one, then Shift+click a language: note which entries end up selected in both sections.",
+  "With a category selected and no filter, Shift+click a filter: note what is selected.",
+  "Select glyphs, choose a sidebar entry without them, return to All and note the selection.",
+  "Remove the selected filter: note which entry is selected afterwards.",
 ]
 
 [[command]]
@@ -858,6 +1000,9 @@ ref = "Font View › Filtering Font View"
 status = "inferred"
 guesses = [
   "The sections start open and every other entry with children starts closed. Settled by opening a new document in the reference.",
+]
+observe = [
+  "Open a new document with default settings and note which sections and which entries of the sidebar are open.",
 ]
 
 [[command]]
@@ -906,6 +1051,9 @@ status = "handbook"
 notes = "Kind `engine`: filters and the scripts the Languages section lists live in the user settings (the owner's decision, docs/plans/M4.md § 7 question 4), which the engine holds so that agents, the CLI and fontView.queryGlyphs reach them; they change no document and make no undo step."
 guesses = [
   "Headless, a filter added without rules gets one rule every glyph matches (Glyph Name contains an empty text), standing for the editor's single empty rule. Settled by observing what an untouched new smart filter shows.",
+]
+observe = [
+  "Add a smart filter and press OK without changing anything: note the rule it shows and which glyphs the filter lists.",
 ]
 
 [[command]]
@@ -1044,7 +1192,12 @@ guesses = [
   "Dragging across the grid draws a rectangle that selects the cells it touches, added to the selection while Shift or Cmd is held. Settled by observation.",
   "Section headers of the glyphOrder parameter show only while the view lists every glyph in glyph order (no filter, search or sort). Settled by observation.",
 ]
-notes = "Cells draw the filled closed contours of Font View's master; open paths are not drawn in cells. Only the lines in view are laid out."
+observe = [
+  "Click a cell, Shift+click another row's cell, Cmd+click a third, then click empty space: note the selection after each.",
+  "Drag a rectangle across the grid, then again with Shift and with Cmd held: note how each changes the selection.",
+  "In a font with a glyphOrder parameter look for section headers, then choose a filter, search and sort in turn: note when the headers show.",
+]
+notes = "Cells draw the filled closed contours of Font View's master; open paths are not drawn in cells. Only the lines in view are laid out. Version 4 has a third view, a detail mode between grid and list that shows glyph information beside each glyph image, more of it the larger the cell (4.0 release notes (\"What's new in Glyphs\", updates.glyphsapp.com/Glyphs4.0-4000.html), build 3831; news page \"Glyphs 4: Create. Love the process.\"). A glyph's note shows as a tooltip (build 3835)."
 
 [[panel]]
 id = "fontView.list"
@@ -1063,9 +1216,14 @@ milestone = "M4"
 summary = "Shows the visible glyphs as a table of glyph properties that can be sorted, rearranged and partly edited in place."
 ref = "Font View › List View; Glyph Properties"
 status = "handbook"
+notes = "Tab and Shift+Tab move between the fields of List View (tutorial \"Kerning\", updated for version 3; fixed in 4.0, build 3812)."
 guesses = [
-  "A click on an editable cell of the only selected row, or a double-click on it, starts editing; a click on an Exports cell flips the flag; a double-click on a cell that cannot be edited opens the glyph. Settled by observation.",
+  "A click on an editable cell of the only selected row, or a double-click on it, starts editing; a click on an Exports cell flips the flag; a double-click on a cell that cannot be edited opens the glyph. The reference's list edits like a spreadsheet, with Tab and Shift+Tab moving between fields (tutorial \"Kerning\", glyphsapp.com/learn/kerning); what starts the editing is not documented.",
   "Values that come from the glyph data rather than from the glyph are drawn dimmed. Settled by observation.",
+]
+observe = [
+  "In List View click a Name cell once, again, and double-click it; click the Exports cell; double-click the ID cell: note what each does.",
+  "Compare a category that comes from the database with one set by hand: note whether they look different.",
 ]
 
 [[panel]]
@@ -1087,13 +1245,16 @@ milestone = "M4"
 summary = "Shows and edits the properties of the selected glyphs at the bottom left of Font View. With several glyphs selected, differing values display as a mixed state and an edit applies to all of them."
 ref = "Font View › Glyph Properties"
 status = "handbook"
-notes = "Documented, not yet observed. Built in M4.8: a column at Font View's left holds the inspector at its bottom; with a sidebar, the inspector sits at the bottom of the sidebar. While an Edit tab shows, the inspector describes the glyph that tab edits instead of the Font View selection behind it (X.fix95)."
+notes = "Documented, not yet observed. Built in M4.8: a column at Font View's left holds the inspector at its bottom; with a sidebar, the inspector sits at the bottom of the sidebar. While an Edit tab shows, the inspector describes the glyph that tab edits instead of the Font View selection behind it (X.fix95). The metric and kerning group fields edit and the orientation switch is drawn (`crates/ui/src/panels/font_view/metrics.rs`, `inspector.rs`). From version 4 the reference also edits top and bottom groups in Font View (4.0 release notes (\"What's new in Glyphs\", updates.glyphsapp.com/Glyphs4.0-4000.html), build 3855)."
 guesses = [
   "In Edit View the inspector describes the edited glyph alone, not every glyph of the tab's text or the glyphs selected in text mode.",
   "With several glyphs selected the Name field is read-only and shows Multiple Values, since glyph names are unique. Settled by observation.",
-  "The metric and kerning group fields are shown read-only until their commands exist (M5). Settled by M5.",
-  "A Unicode value typed with several glyphs selected goes to all of them, as for any other field. Settled by observation.",
   "The orientation icon between the metric fields is left out until M5 (fontView.toggleMetricsOrientation). Settled by M5.",
+]
+observe = [
+  "Open a glyph in Edit View with other glyphs in its text and others selected in Font View: note which glyphs the inspector describes.",
+  "Select two glyphs and try to type in the inspector's Name field.",
+  "Select two glyphs, type a Unicode value and read the field of each.",
 ]
 
 [[panel]]
@@ -1130,6 +1291,9 @@ guesses = [
 observe = [
   "Select three glyphs in Font View, open Edit › Info for Selection and write down every field in order.",
   "With two glyphs in different kerning groups selected, note what the Left Group field shows, then type a group and undo once.",
+  "Tick the sort name check box, close the window without typing and reopen it: note whether it is ticked. Untick it on a glyph with a sort name and note what is kept.",
+  "With the window open select another glyph and click into the font window: note whether it follows and whether other windows work.",
+  "With the second master shown set the layer colour here: note which layer gets it.",
 ]
 
 [[panel]]
@@ -1177,6 +1341,10 @@ guesses = [
 observe = [
   "Right-click a selection of three glyphs in Font View and write down every item in order, submenus included.",
   "Turn off export on one of three glyphs, right-click all three and note the mark beside Exports.",
+  "Select A and B, right-click C, then right-click A: note the selection each time.",
+  "Open the menu and press and release Option while it is open: note whether its items change.",
+  "Set a layer colour with Option while the second master is shown and note which layer got it.",
+  "Choose the entry for more tags, if there is one, and note what opens.",
 ]
 
 [[panel]]
@@ -1195,12 +1363,18 @@ milestone = "M4"
 summary = "Left column of Font View that restricts which glyphs are shown. Entries can be combined by Cmd-clicking, and entries with a known full glyph set offer the missing glyphs for creation."
 ref = "Font View › Filtering Font View"
 status = "handbook"
-notes = "Entries, counts and badges come from fontView.queryGlyphs with sidebar: true. The actions menu at the sidebar's foot holds Add Smart Filter, Add List Filter, Add Folder, Edit Filter, Remove Filter and Edit Languages List; an entry's context menu offers Show Missing Glyphs, and for filters Edit Filter and Remove Filter."
+notes = "Entries, counts and badges come from fontView.queryGlyphs with sidebar: true. The actions menu at the sidebar's foot holds Add Smart Filter, Add List Filter, Add Folder, Edit Filter, Remove Filter and Edit Languages List; an entry's context menu offers Show Missing Glyphs, and for filters Edit Filter and Remove Filter. Release notes (\"What's new in Glyphs\", updates.glyphsapp.com/Glyphs4.0-4000.html): an option hides the counts beside the sidebar's items (4.0, build 3852), and CJK Unicode blocks are listed (build 3845)."
 guesses = [
   "The sections start open; categories, scripts, folders and groups start closed. Settled by opening a new document in the reference.",
   "The actions menu sits at the foot of the sidebar, below the entries. Settled by a screenshot of the reference's Font View.",
   "A script entry shows the Unicode Script property value its glyph-data id stands for (`Latin`, `Tibetan`, `Canadian Aboriginal`), not the id; paths and parameters keep the id. Settled by a screenshot of the reference's Languages section.",
   "Remove Filter shows a danger tone in both menus, a trash icon in the error colour; no source shows the reference marking it. Settled by a screenshot of the reference's actions menu.",
+]
+observe = [
+  "In a new document note which sections and entries of the sidebar are open.",
+  "Note where the actions menu button sits against the list of entries.",
+  "Read the names of the script entries under Languages.",
+  "Open the actions menu and note how Remove Filter is drawn (colour, icon).",
 ]
 
 [[panel]]
@@ -1239,6 +1413,12 @@ guesses = [
   "A language is listed under the glyph database's script that most of its exemplar characters belong to, ignoring Common and Inherited characters (Japanese falls under han, Korean under hangul). Settled by observing where the reference lists Japanese and other mixed-script languages.",
   "Every CLDR locale with its own main exemplar set is a language entry, regional and script variants included (de-CH, sr-Latn); those that inherit their parent's set are left out. Settled by observing which entries the reference lists under one script.",
 ]
+observe = [
+  "Right-click German and Czech in an empty font: write down the missing glyphs and note whether punctuation, figures and auxiliary letters are among them.",
+  "Note whether capitals and lowercase are both in that list, and whether ẞ and the Georgian capitals are.",
+  "Note under which script Japanese and Korean stand.",
+  "Expand Latin and write down the entries; note whether regional variants such as Swiss German are listed.",
+]
 
 [[panel]]
 id = "fontView.sidebar.filters"
@@ -1256,7 +1436,7 @@ milestone = "M4"
 summary = "User-defined filters: rule-based smart filters, fixed-name list filters and folders that group them. Managed from the actions menu in the window's bottom-left corner."
 ref = "Font View › Filtering Font View › Smart Filters; List Filters; Managing Filters"
 status = "handbook"
-notes = "A double-click on a filter's or folder's name, or Return while the sidebar has the keyboard and one filter is selected, opens a field over the name with the whole name selected; Return runs fontView.renameFilter. A double-click on a smart or list filter's icon opens its editor. Dragging a filter or folder draws a line where it would go, or frames the folder it would go into, and the drop runs one fontView.moveFilter; a drop the engine would refuse (into the dragged folder or a folder inside it, deeper than folders nest, or beside an entry of the same name) draws nothing and runs nothing. A renamed or moved entry stays selected. Documented, not yet observed."
+notes = "A double-click on a filter's or folder's name, or Return while the sidebar has the keyboard and one filter is selected, opens a field over the name with the whole name selected; Return runs fontView.renameFilter. A double-click on a smart or list filter's icon opens its editor. Dragging a filter or folder draws a line where it would go, or frames the folder it would go into, and the drop runs one fontView.moveFilter; a drop the engine would refuse (into the dragged folder or a folder inside it, deeper than folders nest, or beside an entry of the same name) draws nothing and runs nothing. A renamed or moved entry stays selected. Documented, not yet observed. Names could not be edited in place in some version 3 builds (inline editing turned off in version 3, build 3181); the version 4 handbook has double-click and Return rename."
 guesses = [
   "A double-click anywhere on a filter's row except its icon and disclosure triangle renames it, the empty space after the name included. Settled by double-clicking right of a short filter name in the reference.",
   "Return renames only while the sidebar has the keyboard, which it takes when a row is pressed and gives up when anything else is pressed. Settled by selecting a filter, clicking a glyph cell and pressing Return in the reference.",
@@ -1269,6 +1449,8 @@ observe = [
   "In Font View, add three smart filters and a folder; drag a filter slowly over the folder's row from top to bottom and note where the drop line or folder highlight appears.",
   "Drag a folder holding a filter onto that filter's row and note whether the reference shows a drop mark and what the drop does.",
   "Select a filter, click a glyph cell, press Return; note whether the filter's name opens for editing.",
+  "Add a filter with a short name and double-click the empty space right of it: note whether the name or the editor opens.",
+  "Rename a filter to its own name, then to an empty name, and note the result (and whether Undo has a step).",
 ]
 
 [[panel]]
@@ -1286,8 +1468,12 @@ milestone = "M4"
 summary = "Text filter at the top left of Font View (Cmd+F) that further narrows the glyphs shown by the sidebar selection."
 ref = "Font View › Filtering Font View › Search Field"
 status = "handbook"
+notes = "The menu's marks at opening were fixed in 4.0, build 3827; its items are not listed in any page."
 guesses = [
   "The magnifier menu offers All Fields, Name Only, Unicode Value Only and Note Only as one choice, then Match Case and Regex. Settled by opening the reference's magnifier menu.",
+]
+observe = [
+  "Click the search glass and write down every item of its menu in order, with its marks.",
 ]
 
 [[panel]]
@@ -1307,6 +1493,9 @@ ref = "Font View › Filtering Font View; Grid View"
 status = "handbook"
 guesses = [
   "The counts read \"N selected · N shown · N in font\". Settled by observation.",
+]
+observe = [
+  "Select two glyphs with a filter on and write down the text at the bottom centre exactly.",
 ]
 
 [[panel]]
@@ -1343,6 +1532,9 @@ notes = "Opens after the person's run of glyph.addGlyphs with `onExisting: \"ask
 guesses = [
   "The buttons sit Cancel, Replace, Keep Existing from left to right, Keep Existing the default (Return). Settled by observation.",
 ]
+observe = [
+  "Add a glyph that exists: write down the buttons from left to right and the one Return presses.",
+]
 
 [[panel]]
 id = "dialog.missingGlyphs"
@@ -1360,6 +1552,9 @@ status = "handbook"
 notes = "A scrolling list: a click selects one name, Shift+click the names from the last clicked one, Cmd+click adds or takes out one, Cmd+A selects them all. fontView.generateMissingGlyphs without `glyphs` adds every missing glyph. Each change previews the new glyphs; Generate is one undo step."
 guesses = [
   "Every missing glyph starts chosen, so Generate right away adds them all. Settled by opening the reference's list and pressing Generate.",
+]
+observe = [
+  "Right-click a sidebar entry with a badge and press Generate at once: note what is added.",
 ]
 
 [[panel]]
@@ -1385,6 +1580,9 @@ notes = "Runs edit.pasteSpecial with a live preview: the mode as a pop-up menu, 
 guesses = [
   "The dialog opens on Glyphs With Same Name with All Data ticked. Settled by observation.",
 ]
+observe = [
+  "Open Paste Special for the first time and write down which mode and which boxes are on.",
+]
 
 [[panel]]
 id = "dialog.removeGlyph"
@@ -1405,6 +1603,11 @@ guesses = [
   "Decompose is the default button because it keeps other glyphs' outlines; observing the reference dialog would settle it.",
   "With components to answer, the buttons sit Cancel, Remove, Decompose from left to right. Settled by observation.",
   "The metrics-key question is a second pop-up menu in the same dialog (Dissolve first) instead of a second dialog. Settled by observation.",
+]
+observe = [
+  "Delete a glyph used as a component and note which button Return presses.",
+  "Write down the buttons of that dialog from left to right.",
+  "Delete a glyph used both as a component and in a metrics key: count the dialogs and write down their controls.",
 ]
 
 [[panel]]
@@ -1438,10 +1641,14 @@ milestone = "M4"
 summary = "Dialog for renaming the selected glyphs by substring or regular-expression replacement."
 ref = "Font View › Batch-Processing › Batch-Renaming Glyphs"
 status = "handbook"
-notes = "Cmd+Shift+F opens it on the selected glyphs. Replace runs edit.findAndReplace once with `find`, `replace`, `matchCase` and `regex`; when a result is taken or not a valid name nothing is renamed and the dialog stays open with the problems. Documented, not yet observed."
+notes = "Cmd+Shift+F opens it on the selected glyphs. Replace runs edit.findAndReplace once with `find`, `replace`, `matchCase` and `regex`; when a result is taken or not a valid name nothing is renamed and the dialog stays open with the problems. Documented, not yet observed. Release notes (\"What's new in Glyphs\", updates.glyphsapp.com/Glyphs4.0-4000.html): the Find field opens filled with the glyph names (4.0, build 3854)."
 guesses = [
-  "A Match Case checkbox, on by default, as names are case-sensitive; the handbook names only Find, Replace and Regex. Settled by observation.",
+  "A Match Case checkbox, on by default, as names are case-sensitive. The 4.0 release notes (build 3823) add a case option to the search-and-replace dialog; its label and default are not documented.",
   "Nothing is renamed until Replace; there is no live preview. Settled by observation.",
+]
+observe = [
+  "Open Find and Replace on two glyphs: write down every control, the state of the case option and what the Find field holds at first.",
+  "Type in Find and Replace without pressing the button: note whether a preview of the new names shows.",
 ]
 
 [[panel]]
@@ -1466,6 +1673,8 @@ guesses = [
 ]
 observe = [
   "In a smart filter's editor, hold Option over a rule's plus button; note what the button shows, and what clicking it adds and where.",
+  "Open a smart filter's editor with Option up and note whether a dots button shows.",
+  "Add two smart filters without naming them and write down both names.",
 ]
 
 [[panel]]
@@ -1483,9 +1692,12 @@ milestone = "M4"
 summary = "Window editing the name and the ordered glyph-name list of a list filter."
 ref = "Font View › Filtering Font View › List Filters"
 status = "handbook"
-notes = "The names are a box of ten lines, separated by spaces or line breaks; Return starts a new line and Cmd+Return is OK. The editor of a stored filter reads its name and names by its `filter` path."
+notes = "The names are a box of ten lines, separated by spaces or line breaks; Return starts a new line and Cmd+Return is OK. The editor of a stored filter reads its name and names by its `filter` path. Release notes (\"What's new in Glyphs\", updates.glyphsapp.com/Glyphs3.4-3434.html): a list filter takes single characters as well as names (version 3, build 3177)."
 guesses = [
   "A new list filter is named New List, or New List 2 and so on when the name is taken. Settled by adding a list filter in the reference.",
+]
+observe = [
+  "Add two list filters without naming them and write down both names.",
 ]
 
 [[panel]]
@@ -1500,6 +1712,9 @@ ref = "Font View › Filtering Font View › Languages"
 status = "handbook"
 guesses = [
   "The checklist offers every script the language data lists and the default ones, alphabetically. Settled by opening the reference's list.",
+]
+observe = [
+  "Press + beside Languages: write down which scripts are offered and in which order.",
 ]
 
 # ═════════════════════════════ Behaviours ═════════════════════════════
@@ -1527,6 +1742,8 @@ observe = [
   "Click the plus and minus buttons at the bottom left of Font View, with and without a selection.",
   "In Grid View select the last glyph of a row and press Right; note whether the next row's first glyph is selected.",
   "Select a glyph in Font View and press Delete; note whether a confirmation appears before it is removed.",
+  "Type `ae` quickly in Grid View and note what is selected.",
+  "Type `V` and `P` (tool letters) there and note whether a tool changes in the Edit tab.",
 ]
 
 # ── Grid cells ──
@@ -1543,6 +1760,10 @@ guesses = [
   "Font View's master is its own: choosing a master in a tab does not change it, and a tab opened from Font View starts in it. Settled by observation.",
   "Each document window keeps its own selected master, as each font has its own window in the reference app; switching between two open fonts there would settle it.",
 ]
+observe = [
+  "Choose the second master in an Edit tab, return to Font View and note its master; open a glyph and note the master of the new tab.",
+  "Open two fonts with two masters, choose different masters in each, switch between their windows and note the master shown.",
+]
 
 [[behavior]]
 id = "fontView.cell.contentBySize"
@@ -1553,6 +1774,9 @@ ref = "Font View › Grid View"
 status = "handbook"
 guesses = [
   "Names and Unicode markers show from a cell size of 64 points up. Settled by observation.",
+]
+observe = [
+  "Shrink the cells until the name and the Unicode marker vanish: note the cell size in points at which each goes.",
 ]
 
 [[behavior]]
@@ -1565,6 +1789,10 @@ status = "handbook"
 guesses = [
   "CJK glyphs are those whose first code point is in the Han, Hiragana, Katakana, Hangul or Bopomofo script; the character is drawn with the interface font, and the marker is drawn when that font lacks it. Settled by observation.",
   "The marker is a small grey square. Settled by observation.",
+]
+observe = [
+  "Look at the marker of 字, か, ㄅ, 한 and Ω: note which show a character; add a CJK glyph the system fonts lack.",
+  "Zoom into the marker of A and note its shape and colour.",
 ]
 
 [[behavior]]
@@ -1582,10 +1810,12 @@ milestone = "M5"
 summary = "A cell shows a warning triangle at its top right when at least one metrics key of the glyph no longer matches its computed value."
 ref = "Font View › Grid View"
 status = "handbook"
-notes = "Documented, not yet observed. Read from the session's out-of-sync cache, which rescans only the glyphs an edit touched and the glyphs whose keys read them."
+notes = "Documented, not yet observed. Read from the session's out-of-sync cache, which rescans only the glyphs an edit touched and the glyphs whose keys read them. The triangle covers every master: a developer's answer sends a user whose shown master was in sync to the other masters (thread \"Some metrics are out of sync\", forum.glyphsapp.com/t/17291, 2021-01-06). Empty glyphs give no warning (version 3 release notes (\"What's new in Glyphs\", updates.glyphsapp.com/Glyphs3.4-3434.html), build 3201)."
 guesses = [
-  "Any layer the out-of-sync scan covers counts, not only the layer of the master Font View shows; a font whose second master alone is out of sync, viewed on the first master in the reference app, would settle it.",
   "Unlinked keys and keys that cannot be evaluated give no triangle; a key naming a missing glyph in the reference app would settle it.",
+]
+observe = [
+  "Give a glyph a key that names a missing glyph and look for the triangle in its cell.",
 ]
 
 [[behavior]]
@@ -1598,6 +1828,9 @@ status = "handbook"
 guesses = [
   "Drawn in the top-left corner; the handbook gives no position. Settled by observation (05 question 15).",
 ]
+observe = [
+  "Add an annotation to a glyph and note the corner its badge is drawn in.",
+]
 
 [[behavior]]
 id = "fontView.cell.badgeCustomInfo"
@@ -1609,6 +1842,10 @@ status = "handbook"
 guesses = [
   "Drawn in the bottom-left corner; the handbook gives no position. Settled by observation (05 question 15).",
   "A glyph counts as custom when it stores a category, subcategory, script, production name, case, direction or sort name that differs from the database's, or Unicode values that differ from the database's for its name. Settled by observation.",
+]
+observe = [
+  "Change a glyph's category and note the corner the info badge is drawn in.",
+  "Set a custom sort name, then a second Unicode value, on two other glyphs: note which get the badge.",
 ]
 
 [[behavior]]
@@ -1630,6 +1867,9 @@ status = "handbook"
 guesses = [
   "Drawn at the top centre of the cell; the handbook gives no position. Settled by observation (05 question 15).",
 ]
+observe = [
+  "Turn off export on a glyph and note where the red ring is drawn.",
+]
 
 [[behavior]]
 id = "fontView.cell.colorGlyphOnly"
@@ -1648,6 +1888,9 @@ ref = "Font View › Glyph Properties › Color Label"
 status = "handbook"
 guesses = [
   "The cut-out is a triangle over 30% of the side at the top-left corner. Settled by observation.",
+]
+observe = [
+  "Give a glyph a layer colour only and measure the cut-out against the cell.",
 ]
 
 [[behavior]]
@@ -1670,6 +1913,10 @@ guesses = [
   "The image is drawn at its own opacity (50 % when the file states none), as Edit View draws it. Settled by a Font View cell of a glyph with an image in the reference.",
   "A missing or unreadable file draws the missing-image marker in the cell. Settled by moving an image file away and looking at Font View in the reference.",
 ]
+observe = [
+  "Place an image at 30% opacity on an empty glyph and compare the cell with Edit View.",
+  "Move the image file away, reopen the font and look at the cell.",
+]
 
 # ── List View columns ──
 
@@ -1689,6 +1936,9 @@ summary = "The Char column renders the glyph's character in the system font. A g
 ref = "Font View › Glyph Properties › Char"
 status = "handbook"
 guesses = ["A character the interface font lacks is drawn with the glyph's own outline from the document, at row height in the text colour, instead of a system font's. Settled by observing the reference with a code point that the system fonts lack."]
+observe = [
+  "Give a glyph the value U+E000 and an unassigned CJK code point: note what the Char column draws.",
+]
 
 [[behavior]]
 id = "fontView.column.name"
@@ -1725,6 +1975,9 @@ notes = "Documented, not yet observed. The cell lists the component names of the
 guesses = [
   "The cell shows and edits the layer of the master Font View shows, not the first master's; editing the cell with a second master selected in the reference app settles it.",
 ]
+observe = [
+  "With the second master shown, edit a Components cell and look at both masters.",
+]
 
 [[behavior]]
 id = "fontView.column.lastChanged"
@@ -1746,6 +1999,10 @@ notes = "The handbook says each column is a glyph property and points at Glyph P
 guesses = [
   "Every column is shown by default, in this order: ID, Char, Name, Unicode, Production Name, Script, Category, Subcategory, Case, Direction, Exports, Color, Tags, Sort Name, Note, Components, Last Changed, LSB, RSB, Width, Left Group, Right Group. Settled by observation (05 question 14).",
   "Besides the four cells the handbook calls editable (Name, Unicode, Note, Components), cells of properties that have a set command (Exports, colour, tags, production name, script, category, subcategory, case, direction, sort name) are editable too. Settled by observation.",
+]
+observe = [
+  "Show List View in a new document: write down the columns shown and, from the header's menu, all columns in order.",
+  "Click into each column's cell of one selected glyph and note which can be edited.",
 ]
 
 # ── Inspector ──
@@ -1770,6 +2027,9 @@ notes = "Documented, not yet observed."
 guesses = [
   "A click on the mixed box makes every selected glyph export. Settled by observation.",
 ]
+observe = [
+  "Select an exporting and a non-exporting glyph and click the mixed box: note the state of both.",
+]
 
 [[behavior]]
 id = "fontView.inspector.metricsFields"
@@ -1778,12 +2038,18 @@ milestone = "M5"
 summary = "The inspector shows LSB, RSB and width of the selected glyph on the current master, or TSB, BSB, vertical origin and vertical width after switching orientation. The fields accept numbers or metrics keys as defined in the spacing chapter."
 ref = "Font View › Glyph Properties › Metrics"
 status = "handbook"
-notes = "Documented, not yet observed. LSB, RSB, width, TSB and BSB edit through spacing.setLeftSidebearing, setRightSidebearing, setWidth, setTopSidebearing and setBottomSidebearing, one command for all selected glyphs, on the layer of Font View's master. Vertical origin and vertical width have the engine commands spacing.setVerticalOrigin and spacing.setVerticalWidth (M5.20); the inspector still shows them read-only."
+notes = "Documented, not yet observed. LSB, RSB, width, TSB and BSB edit through spacing.setLeftSidebearing, setRightSidebearing, setWidth, setTopSidebearing and setBottomSidebearing, one command for all selected glyphs, on the layer of Font View's master. A developer's answer says the vertical origin defaults to the ascender (thread \"Ideas about a better vertical mode of the Edit view\", forum.glyphsapp.com/t/14230, 2020-03-29); the scripting API resets vertWidth and vertOrigin to their defaults with None (docu.glyphsapp.com). Vertical origin and vertical width edit through spacing.setVerticalOrigin and spacing.setVerticalWidth (`crates/ui/src/panels/font_view/metrics.rs`)."
 guesses = [
   "A field shows the metrics key that governs it (the layer's own key first, written with ==), else the measured value with up to two decimals; a screenshot of the reference inspector on a glyph with a key would settle it.",
   "The orientation icon sits after the first field; the vertical set puts TSB and BSB on the first row and vertical origin and vertical width on a second row; a screenshot of the reference inspector would settle it.",
   "A field left empty commits nothing; trying it in the reference app would settle it.",
-  "The vertical origin shows 0 and the vertical width shows ascender minus descender when the layer stores none; the reference inspector on a new glyph would settle it.",
+  "The vertical origin shows 0 and the vertical width shows ascender minus descender when the layer stores none; the reference inspector on a new glyph would settle it. The default place of the origin is the ascender (note), which the stored 0 stands for; the number the field shows for it is not documented.",
+]
+observe = [
+  "Give a glyph an LSB key and a second one a fractional width: read their fields in the inspector.",
+  "Switch to the vertical set and write down the fields and the place of the icon.",
+  "Empty the LSB field of a glyph with a number and press Tab: note the value.",
+  "Read O and H of a new glyph, with the ascender at 800 and the descender at −200.",
 ]
 
 [[behavior]]
@@ -1807,6 +2073,11 @@ guesses = [
   "Leaving the Tags field also commits the typed text as a tag; Escape drops it. Settled by observation.",
   "Each capsule has a cross that removes the tag from every selected glyph (glyph.removeTag). Settled by observation.",
   "Several tags pasted at once with commas are added one command each. Settled by observation.",
+]
+observe = [
+  "Type `foo` in Tags without Return and click a glyph cell; type `bar` and press Escape: note which is added.",
+  "Look at a tag capsule for a cross, and at two glyphs that share it when it is removed.",
+  "Paste `a, b, c` into the field and undo once.",
 ]
 
 [[behavior]]
@@ -2016,11 +2287,16 @@ milestone = "M6"
 summary = "The Add Glyphs text field also accepts glyph recipes. The three forms are those of the Components page: component=glyph, base+mark=glyph and base+base=glyph (components.recipeSingleComponent, components.recipeBasePlusMarks, components.recipeMultipleBases). A recipe item builds the glyph named after the equals sign from the listed components."
 ref = "Font View › Adding New Glyphs › Adding Multiple Glyphs; Reusing Shapes › Components › Recipes"
 status = "handbook"
-notes = "Verified by the M6 planning pass against the handbook pages Glyph Set (the field accepts recipes) and Components › Recipes (the three forms); the recalled forms were right, the examples differ. Documented, not yet observed. glyph.addGlyphs parses each recipe item with `components::recipe` (at most 4,096 bytes and 64 parts) and builds the glyph with `components::compose::composite_glyph`: the parts in the written order, marks aligned to their base by anchors, bases side by side. The plain items of the same text are added first, so a recipe may use them, and a recipe may use an earlier recipe's glyph."
+notes = "Verified by the M6 planning pass against the handbook pages Glyph Set (the field accepts recipes) and Components › Recipes (the three forms); the recalled forms were right, the examples differ. Documented, not yet observed. glyph.addGlyphs parses each recipe item with `components::recipe` (at most 4,096 bytes and 64 parts) and builds the glyph with `components::compose::composite_glyph`: the parts in the written order, marks aligned to their base by anchors, bases side by side. The plain items of the same text are added first, so a recipe may use them, and a recipe may use an earlier recipe's glyph. The recipe forms base+mark=name and base=name are in the release notes since 1.3.11 (updates.glyphsapp.com/changelog.php)."
 guesses = [
   "A recipe that names a glyph the font does not have adds nothing and is listed in `skipped` with the missing names; trying a recipe with a missing part in the reference app settles it.",
   "A recipe for a glyph the font already has follows the same Keep, Replace and Cancel answers as a plain name, and Replace rebuilds the glyph from the recipe, keeping its code points; a recipe for an existing glyph in the reference app settles it.",
   "The name after `=` is kept as typed, without turning a legacy name into a nice name, and gets the code point the glyph data gives it unless another glyph has it; a recipe ending in `=uni00E9` in the reference app settles it.",
+]
+observe = [
+  "Add `A+nosuchcomb=Atest`: note what is added and what is said.",
+  "Add `A+acutecomb=Aacute` when Aacute exists, with Replace: note the glyph and its Unicode values.",
+  "Add `E+acutecomb=uni00C9`: note the name and the Unicode value.",
 ]
 
 [[behavior]]
@@ -2046,8 +2322,9 @@ milestone = "M4"
 summary = "A sidebar entry with a known full set shows a grey badge with glyphs present and glyphs expected when some are missing, a checkmark when all are present, and a plain count when no expected total is known."
 ref = "Font View › Filtering Font View › Categories; Adding From the Sidebar"
 status = "handbook"
-guesses = [
-  "The badge counts expected glyphs present by name or by code point (a glyph with the character counts even under another name). Settled by observing a badge for a font that names a glyph differently.",
+notes = "The expected glyphs are glyph names: a glyph with the character but another name counts as missing (developer's answer in the thread \"Sidebar 'Missing Glyphs' - conceptual flaw\", forum.glyphsapp.com/t/5422, 2016-11-21, version 2; Unicode lists were then only considered). FontCraft counts a glyph that has the character too (05 question 21)."
+observe = [
+  "In a font whose euro glyph is named Euro (with U+20AC), read the badge of Symbol › Currency or a language that needs it: is the glyph counted as missing?",
 ]
 
 # ── Copy and paste of glyphs ──
@@ -2072,6 +2349,9 @@ notes = "edit.paste recognises the copied-glyphs text in `json` or `text`. Docum
 guesses = [
   "Pasted glyphs take their place in the default sort order, like added glyphs. Settled by observation.",
 ]
+observe = [
+  "Paste B from another font into a font that lacks it: note where it stands.",
+]
 
 [[behavior]]
 id = "fontView.paste.nameClashSuffix"
@@ -2080,8 +2360,12 @@ milestone = "M4"
 summary = "A pasted glyph whose name is taken is renamed with the first free three-digit counter suffix: A.001, then A.002, and so on. The existing glyph is left untouched."
 ref = "Font View › Copying Glyphs Between Files"
 status = "handbook"
+notes = "Release notes (\"What's new in Glyphs\", updates.glyphsapp.com/Glyphs3.4-3434.html): pasting in Font View brings up the dialog about glyphs already in the font (version 3, build 3228), while the version 4 handbook describes the suffix only."
 guesses = [
   "A renamed pasted glyph has no code points, so the existing glyph stays the one for its characters. Settled by observation.",
+]
+observe = [
+  "Paste A into a font that has A: note whether a dialog appears, the new glyph's name and its Unicode value.",
 ]
 
 [[behavior]]
@@ -2181,6 +2465,9 @@ ref = "Font View › Deleting Glyphs"
 status = "handbook"
 notes = "Moved from M6 to M4: glyph.removeGlyph takes the answer as `components`, and decomposing needs only the layers, not M6's component editing. In dialog.removeGlyph, Decompose is the default button. Documented, not yet observed."
 guesses = ["Decompose reverses each path that a mirroring component transform (negative determinant) places, as export decomposition does, so the outline keeps its direction. Settled by decomposing a mirrored component in the reference app and checking the path direction."]
+observe = [
+  "Decompose a component mirrored with a negative scale and note the path's direction.",
+]
 
 [[behavior]]
 id = "removeGlyph.linkedMetricsKeys"
@@ -2258,6 +2545,9 @@ notes = "Built in crates/glyphdata (M4.1). A record without a direction gets one
 guesses = [
   "A script is right to left when most of its letters with a code point are strong right-to-left characters in Unicode 17.0: adlam, arabic, avestan, chorasmian, elymaic, hebrew, mandaic, nko, rovas, samaritan, syriac, thaana and yezidi. A glyph with neither a stated direction nor a script is right to left when the character its name stands for is. Settled by observing the reference's directions.",
 ]
+observe = [
+  "Read the writing direction of alef-hb, meem-ar, a Syriac, an NKo and an Adlam glyph, and of a name such as `uni061F`.",
+]
 
 [[behavior]]
 id = "glyphData.ideographsFile"
@@ -2297,6 +2587,9 @@ notes = "Answers 05 question 3 from the tutorial, checked in the M4 planning pas
 guesses = [
   "Adding by a legacy character (typing U+FB04) finds the record through unicodeLegacy and creates f_f_l without a code point. Settled by observation.",
 ]
+observe = [
+  "Type ﬄ (U+FB04) in Add Glyphs: note the name and the Unicode value.",
+]
 
 [[behavior]]
 id = "glyphData.altNames"
@@ -2317,6 +2610,9 @@ status = "docs"
 notes = "Built in crates/glyphdata (M4.1). The built-in order is nice name, alternative name, production name, then code point, as in both oracles. `cargo xtask glyphdata --check` agrees with fontc's glyphs-reader 1.0.0 on every name of its set and with glyphsLib 6.15.0 apart from the causes in crates/glyphdata/crosscheck/allow.toml."
 guesses = [
   "When two built-in records share a code point or a production name, the first by name wins; the pinned data has no such pair. Settled by observation.",
+]
+observe = [
+  "Put two records with the same code point in a custom GlyphData.xml, add a glyph by that character and note which record names it.",
 ]
 
 [[behavior]]
@@ -2380,11 +2676,16 @@ milestone = "M4"
 summary = "A user-supplied GlyphData.xml changes glyph properties for all files on the machine and can teach the app custom names, so that Unicode values and categories are still assigned automatically for them. Per-file overrides on individual glyphs remain possible on top."
 ref = "Font View › Names & Unicode › Glyph Info Database; Naming Glyphs"
 status = "handbook"
-notes = "crates/glyphdata reads custom files (GlyphData::with_custom): files later in the list win per record. The session merges the user's files (Session::set_user_glyph_data, given by the app) and the files beside the document's source (read by file.open); a malformed file is skipped and reported, the others still apply (crates/engine/src/glyph_data.rs)."
+notes = "crates/glyphdata reads custom files (GlyphData::with_custom): files later in the list win per record. The session merges the user's files (Session::set_user_glyph_data, given by the app) and the files beside the document's source (read by file.open); a malformed file is skipped and reported, the others still apply (crates/engine/src/glyph_data.rs). A custom file whose XML is broken is ignored (tutorial \"Roll your own glyph data\", glyphsapp.com/learn, updated 2022-08-08). Glyph data, groups and filters also load from the Info folder of the system-wide Application Support folder (4.0 release notes (\"What's new in Glyphs\", updates.glyphsapp.com/Glyphs4.0-4000.html), build 3837)."
 guesses = [
   "A custom record replaces the built-in record of the same name as a whole: fields it leaves out are empty, not taken from the built-in record. Settled by observation.",
-  "A file over a limit (16 MB, 200,000 records, 1,024 bytes per attribute value, two levels of elements) or with an entity declaration or a malformed record is rejected as a whole; attributes the format does not define are skipped with a warning.",
-  "Beside a source file and in the Info folder beside it, every file named GlyphData*.xml is read, in name order, those beside the file first; at most 32 files of the user's and 32 of a document's. Settled by observation.",
+  "A file over a limit (16 MB, 200,000 records, 1,024 bytes per attribute value, two levels of elements) or with an entity declaration is rejected as a whole, as a file with broken XML is (note); attributes the format does not define are skipped with a warning.",
+  "Beside a source file and in the Info folder beside it, every file named GlyphData*.xml is read, in name order, those beside the file first; at most 32 files of the user's and 32 of a document's. The reference also reads the user's Info folder and, from 4.0 build 3837, a system-wide one; the order between several files is not documented.",
+]
+observe = [
+  "Give a custom record for A with only name and category, restart, and read A's Unicode value, script and production name.",
+  "Break one attribute of one record in a custom file, restart, and note whether the file's other records are used.",
+  "Put GlyphData-x.xml and GlyphData-a.xml with different records for one name into the Info folder and note which applies.",
 ]
 
 [[behavior]]
@@ -2427,6 +2728,9 @@ notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.m
 guesses = [
   "A ligature part whose production name has a dot is joined as fontc joins it (bh_a-telugu → uni0C2D.half0C05), not replaced by the cleaned glyph name as glyphsLib does. Settled by exporting such a ligature from the reference app.",
 ]
+observe = [
+  "Export `bh_a-telugu` with production names and read the name in the post table.",
+]
 
 [[behavior]]
 id = "export.productionNameForm"
@@ -2457,6 +2761,10 @@ notes = "Moved from M7 to M12 by the M7 planning pass, with the ROS parameter: C
 guesses = [
   "A glyph named cid followed by a decimal number takes that CID, as CID-keyed fonts and AFDKO's tools name CID glyphs; exporting such a glyph from the reference app with the ROS parameter would settle it.",
   "Without bundled collection data a nice-named glyph gets its CID from the Unicode CMap file the user gives, through its first code point the file maps; the reference app maps nice names from its own data, which exporting a nice-named glyph would show.",
+]
+observe = [
+  "Export a font with the ROS parameter and a glyph named cid00123 and read its CID.",
+  "Add a nice-named kanji to that font, export and read its CID.",
 ]
 
 [[behavior]]
@@ -2496,6 +2804,9 @@ notes = "crates/glyphdata's validate applies it (M4.1); whether a glyph exports 
 guesses = [
   ".null is exempt like .notdef.",
 ]
+observe = [
+  "Name a glyph `.null`, then `.foo`, and note whether either is refused.",
+]
 
 [[behavior]]
 id = "glyphName.invalidBlocksExport"
@@ -2508,6 +2819,10 @@ notes = "Moved from M2 by the M4 plan, which the owner accepted (docs/plans/M4.m
 guesses = [
   "Only glyphs that export are checked: a glyph that is not written to the font cannot block its export. Settled by exporting a font whose non-exporting glyph has an invalid name.",
   "The glyph's name is checked, not a production name it stores; a stored production name with bad characters is cleaned at export like any other. Settled by exporting a font with such a production name.",
+]
+observe = [
+  "Give a non-exporting glyph an invalid name (through a script) and export.",
+  "Set a production name with a space and export: note the name in the font.",
 ]
 
 [[behavior]]
@@ -2561,6 +2876,9 @@ ref = "Font View › Names & Unicode › Naming Glyphs; Renaming Glyphs"
 status = "handbook"
 guesses = [
   "A click on the name of the glyph that is already the only one selected starts editing; a click on another glyph's name selects it. Return or a click elsewhere commits through glyph.rename, Escape cancels. Settled by observation.",
+]
+observe = [
+  "Click the name of the only selected glyph, then the name of another glyph: note what each starts; press Escape while editing.",
 ]
 
 [[behavior]]
@@ -2659,6 +2977,9 @@ status = "handbook"
 guesses = [
   "Invert Selection works among the visible glyphs, as Select All does. Settled by observation (05 question 12).",
 ]
+observe = [
+  "Choose a category, select one glyph, Invert Selection, return to All and count the selected glyphs.",
+]
 
 [[behavior]]
 id = "fontView.batch.appliesToSelection"
@@ -2670,6 +2991,9 @@ status = "handbook"
 notes = "The shell fills `glyphs` from the Font View selection, and `layer` with Font View's master for commands that take one, for every command whose targets include glyphs. Option for all masters is not wired to the key yet; the ForAllMasters commands do it. In `crates/ui`, a glyph command fired from the window (menu, shortcut, context menu, ui.menu.invoke) with no glyph in the edit view and nothing selected in Font View changes nothing and puts \"<label>: select a glyph first\" in the status line, as its dialog does (`FontCraftApp::fired`); Paste of a drawing refuses the same way, and a command whose `glyphs` default to every glyph refuses too. Commands with explicit parameters (`engine.execute`, the CLI) are unaffected."
 guesses = [
   "With no glyph shown and nothing selected, a glyph command refuses with a status message instead of acting on the font's first glyph or on every glyph; whether the reference greys such menu items out would settle it.",
+]
+observe = [
+  "Deselect everything in Font View and look at the Glyph and Path menus: note which items are greyed and what Update Metrics does.",
 ]
 
 [[behavior]]
@@ -2699,6 +3023,9 @@ status = "handbook"
 notes = "Documented, not yet observed. In Font View, glyph.addComponent and glyph.addComponentAllMasters given a `component` and no `glyph` run once per selected glyph as one command.batch, on the layer of Font View's master (`shell::font_view::per_glyph_batch`). The component picker that asks for the component belongs to the Info box and picker package."
 guesses = [
   "When the component cannot go into one selected glyph (it would contain itself), the whole batch is refused and no glyph changes; adding a glyph to a selection that includes it in the reference app settles it.",
+]
+observe = [
+  "Select A and B, add A as a component: note what happens to each.",
 ]
 
 [[behavior]]
@@ -2860,6 +3187,9 @@ status = "handbook"
 guesses = [
   "Fit Curve applies each glyph's remembered node indices to its layer of Font View's master; glyphs never edited, or whose nodes are gone, are skipped; the run is one undo step. Settled by observation.",
 ]
+observe = [
+  "Select nodes in A in Edit View, close the tab, select A and B in Font View and press Fit Curve: note what changes, then undo once.",
+]
 
 [[behavior]]
 id = "fontView.batch.pluginsAndScripts"
@@ -2871,6 +3201,9 @@ status = "handbook"
 notes = "Documented, not yet observed. Built in M13.6: in Font View the selection is the `glyphs` of plugin.runFilter (in Font View's master as `layer`) and the `glyphs` argument of script.run; in Edit View the edited glyph and layer (with the selected nodes for filters) take their place, and in text mode the selected glyphs in the tab's master. A filter module's item is greyed out while nothing is selected (in `crates/ui` it refuses with \"select a glyph first\"); a macro runs without `glyphs` then."
 guesses = [
   "A filter module run from Font View acts on the selected glyphs' layers of Font View's master only, not on every master; observing a filter plug-in run on a Font View selection in a font with two masters would settle it.",
+]
+observe = [
+  "Run a filter plug-in on a Font View selection in a font with two masters and look at both masters.",
 ]
 
 [[behavior]]
@@ -2907,8 +3240,12 @@ milestone = "M4"
 summary = "A search term matches a glyph by name (thorn), by hexadecimal code point (00FE), by the character itself, or by text in its note. The magnifier menu can restrict matching to name, Unicode value or note alone."
 ref = "Font View › Filtering Font View › Search Field"
 status = "handbook"
+notes = "Release notes (\"What's new in Glyphs\", updates.glyphsapp.com/Glyphs3.4-3434.html): the search takes more than one name part (version 3, build 3201), and a search by character also finds its unencoded alternates (build 3193). How the parts are separated and combined is not stated."
 guesses = [
-  "A plain term matches names and notes by substring; it matches a code point when it is four to six hexadecimal digits (optionally after U+ or 0x) equal to it, and a character when it is that one character. Shorter hexadecimal terms such as FE only match names, so a term like a does not also find every code point containing A. Settled by observing a search for 00FE and for FE.",
+  "A plain term matches names and notes by substring; it matches a code point when it is four to six hexadecimal digits (optionally after U+ or 0x) equal to it, and a character when it is that one character. Shorter hexadecimal terms such as FE only match names, so a term like a does not also find every code point containing A. The reference also takes several name parts and finds the unencoded alternates of a character (note), which FontCraft does not yet (05 question 22). Settled by observing a search for 00FE and for FE.",
+]
+observe = [
+  "Search `FE`, `00FE`, `U+00FE`, `þ`, `thorn alt` and `þ` in a font with thorn and thorn.alt: note the glyphs found each time.",
 ]
 
 [[behavior]]
@@ -2929,6 +3266,9 @@ status = "handbook"
 guesses = [
   "With Regex on, the pattern must match a whole field (name, hex code point or note) among the fields the magnifier menu selects; the handbook's examples only show names. Settled by observation (05 question 13).",
 ]
+observe = [
+  "With Regex on search `00FE`, `00F.` and a word that stands inside a note: note which match a whole field and which part of it.",
+]
 
 [[behavior]]
 id = "fontView.search.combinesWithSidebar"
@@ -2947,8 +3287,12 @@ milestone = "M4"
 summary = "Selecting a category shows only glyphs of that category; expanding it reveals subcategories, each selectable on its own and labelled with its glyph count."
 ref = "Font View › Filtering Font View › Categories"
 status = "handbook"
+notes = "The Number entry's figures group is labelled Figures (version 3 release notes (\"What's new in Glyphs\", updates.glyphsapp.com/Glyphs3.4-3434.html), build 3323)."
 guesses = [
   "A category lists case groups (Uppercase, Lowercase, Smallcaps, Minor: the glyphs with that case, or with the subcategory older files store under the same name) and then its subcategories, each only when the font has such glyphs or the shown languages expect some. Settled by observing the expanded Letter entry.",
+]
+observe = [
+  "Expand Letter in a font with capitals, lowercase, small caps and superiors: write down the entries in order.",
 ]
 
 [[behavior]]
@@ -3002,6 +3346,9 @@ status = "handbook"
 guesses = [
   "The default short list is latin, greek and cyrillic. Settled by observing the Languages section of a new user.",
 ]
+observe = [
+  "Create a new document on a new user account and write down the entries under Languages.",
+]
 
 [[behavior]]
 id = "fontView.sidebar.customGroups"
@@ -3031,6 +3378,9 @@ ref = "Font View › Filtering Font View › Smart Filters"
 status = "handbook"
 guesses = [
   "Text rules (Glyph Name, Tags, Script) offer is, is not, contains, does not contain, begins with, ends with and matches (a regular expression); number rules offer =, ≠, <, ≤, >, ≥; yes-or-no and choice rules (Case, Category & Subcategory, the colour labels, Custom) offer is and is not. The reference's stored predicates use ==, !=, <, >, CONTAINS, IN, BEGINSWITH and ENDSWITH (tutorial \"Custom sidebar entries in Font View\"), which this set covers. Settled by observing the rule editor (05 question 10).",
+]
+observe = [
+  "In the rule editor open the operator menu of Glyph Name, Count of Paths, Has Anchors and Color Label and write down each list.",
 ]
 
 [[behavior]]
@@ -3075,6 +3425,9 @@ status = "handbook"
 guesses = [
   "The rule is a choice (is, is not) of a category or a category and subcategory, written Letter/Uppercase; the case groups Uppercase, Lowercase, Smallcaps and Minor also match glyphs by case, as data that stores case instead of those subcategories does. Settled by observing the rule's value menu.",
 ]
+observe = [
+  "Choose Category & Subcategory and write down the first entries of its value menu and how a subcategory is written.",
+]
 
 [[behavior]]
 id = "smartFilter.rule.case"
@@ -3085,6 +3438,9 @@ ref = "Font View › Filtering Font View › Smart Filters"
 status = "handbook"
 guesses = [
   "The rule offers all five case values, minor included, as the Case property has five; the rule's own description lists four. Settled by observation (05 question 10).",
+]
+observe = [
+  "Open the value menu of the Case rule and write it down.",
 ]
 
 [[behavior]]
@@ -3171,6 +3527,9 @@ notes = "Documented, not yet observed. The rule reads the layer of the master Fo
 guesses = [
   "Only the layer's own anchors count, not those it gets from its components; filtering a composite without anchors of its own in the reference app settles it.",
 ]
+observe = [
+  "Filter Has Anchors in a font where Aacute has no anchors of its own: note whether it is listed.",
+]
 
 [[behavior]]
 id = "smartFilter.rule.containsComponent"
@@ -3182,6 +3541,9 @@ status = "handbook"
 notes = "Documented, not yet observed. Property `containsComponent` in the rule JSON, operators is and is not, value a glyph name; the predicate spelling is `layer.hasComponent.<name>`. It reads the layer of the master Font View shows."
 guesses = [
   "The glyph name is compared whole, not as a substring; trying a partial name in the reference app settles it.",
+]
+observe = [
+  "Use Contains Component with `acute` in a font with acutecomb: note the result.",
 ]
 
 [[behavior]]
@@ -3227,6 +3589,9 @@ ref = "Font View › Filtering Font View › Smart Filters"
 status = "handbook"
 notes = "Evaluated by crates/glyphquery (property `hasMetricsKeys`, also the predicate attribute of the same name). A key stored on the glyph or on any of its layers counts. Documented, not yet observed."
 guesses = ["A metrics key stored on one layer only (a local key) makes the rule true for the glyph; a glyph with a layer-local key in the reference app would settle it."]
+observe = [
+  "Give a glyph only a `==n` key and filter Has Metrics Keys.",
+]
 
 [[behavior]]
 id = "smartFilter.rule.metricsKeysOutOfSync"
@@ -3235,8 +3600,13 @@ milestone = "M5"
 summary = "Rule Metrics Keys Out of Sync is true when a metrics key of the glyph no longer matches the stored metric and needs updating; these are the glyphs carrying the warning triangle."
 ref = "Font View › Filtering Font View › Smart Filters"
 status = "handbook"
-notes = "Evaluated by crates/glyphquery (property `metricsKeysOutOfSync`) from the set of out-of-sync glyphs its caller computes with crates/spacing, which glyphquery does not depend on: the glyphs with an `outOfSync` finding of spacing.listOutOfSyncMetrics on any master. fontView.queryGlyphs computes the set from the same scan as Font View's out-of-sync badge. Documented, not yet observed."
-guesses = ["Keys that name a missing glyph or cannot be evaluated do not count as out of sync, and a key out of sync on any master counts; the reference app on a glyph with an unlinked key and on one out of sync in one master only would settle it."]
+notes = "Evaluated by crates/glyphquery (property `metricsKeysOutOfSync`) from the set of out-of-sync glyphs its caller computes with crates/spacing, which glyphquery does not depend on: the glyphs with an `outOfSync` finding of spacing.listOutOfSyncMetrics on any master. fontView.queryGlyphs computes the set from the same scan as Font View's out-of-sync badge. Documented, not yet observed. Release notes (\"What's new in Glyphs\", updates.glyphsapp.com/Glyphs3.4-3434.html): a separate sidebar filter lists glyphs with invalid metrics keys (version 3, build 3315)."
+guesses = [
+  "Keys that name a missing glyph or cannot be evaluated do not count as out of sync, and a key out of sync on any master counts; the reference app on a glyph out of sync in one master only would settle the second. The reference lists invalid keys in a filter of their own (note), which agrees with the first.",
+]
+observe = [
+  "Give one glyph a key to a missing glyph and another a stale key in the second master only, then filter Metrics Keys Out of Sync: note which are listed.",
+]
 
 [[behavior]]
 id = "smartFilter.rule.hasKerningGroups"
@@ -3247,6 +3617,9 @@ ref = "Font View › Filtering Font View › Smart Filters"
 status = "handbook"
 notes = "Evaluated by crates/glyphquery (property `hasKerningGroups`). Documented, not yet observed."
 guesses = ["A vertical kerning group (top or bottom) alone makes the rule true, as a left or right group does; the reference app on a glyph with only a vertical group would settle it."]
+observe = [
+  "Give a glyph only a top group and filter Has Kerning Groups.",
+]
 
 [[behavior]]
 id = "smartFilter.rule.colorLabel"
@@ -3257,6 +3630,9 @@ ref = "Font View › Filtering Font View › Smart Filters"
 status = "handbook"
 guesses = [
   "A glyph whose label is an RGBA colour, not one of the twelve, counts as set but equals none of the twelve. Settled by observing a file with an RGBA label.",
+]
+observe = [
+  "Open a file with a glyph whose colour is an RGBA value and filter Color Label is Not Set, then each of the twelve.",
 ]
 
 [[behavior]]
@@ -3286,6 +3662,9 @@ notes = "Evaluated by crates/glyphquery, the same evaluator smart-filter rules c
 guesses = [
   "The language adds matches (a regular expression over the whole value), which fea-rs refuses, because the Glyph Name rule offers matches and compiles to this language; && and || stand for AND and OR, and a yes-or-no attribute alone means == true. A comparison on tags holds when it holds for one tag. Settled by trying these forms in the reference's Custom rule.",
 ]
+observe = [
+  "In the Custom rule type `name matches \"A.*\"`, `isAligned`, `case == upper && script == \"latin\"` and `tags == \"foo\"`: note which are accepted and what they list.",
+]
 
 [[behavior]]
 id = "smartFilter.groups"
@@ -3311,8 +3690,12 @@ milestone = "M4"
 summary = "A smart filter stores rules, not glyphs: its contents are recomputed from the current font whenever it is shown. The refresh timing is not described in the source."
 ref = "Font View › Filtering Font View › Smart Filters"
 status = "inferred"
+notes = "Developer's answer in the thread \"Does Glyphs store hidden SB formulas?\" (forum.glyphsapp.com/t/35652, 2026-01-13)."
 guesses = [
-  "Results are recomputed from the current font whenever the filter is shown and after every edit, for the master Font View shows. Settled by observation (05 question 11).",
+  "Results are recomputed from the current font whenever the filter is shown and after every edit, for the master Font View shows. A developer confirms the reference does not always update the filter for invalid metrics keys when a key's state changes (note), so it is not recomputed after every edit there. Settled by observation (05 question 11).",
+]
+observe = [
+  "Choose a smart filter Count of Paths is 1, edit a listed glyph to two paths in a tab, return to Font View without touching the sidebar: note whether it is still listed.",
 ]
 
 # ── List filters ──
@@ -3334,6 +3717,9 @@ ref = "Font View › Filtering Font View › List Filters; Sort Name"
 status = "handbook"
 guesses = [
   "When several filters are selected and one is a list filter, the result follows the first selected list filter; a folder shows glyph order even when it holds list filters. Settled by observing a list filter combined with a smart filter and with a folder.",
+]
+observe = [
+  "Select a list filter together with a smart filter, then a folder holding the list filter: note the order of the glyphs.",
 ]
 
 [[behavior]]
@@ -3361,12 +3747,17 @@ milestone = "M4"
 summary = "Without a custom order, glyphs are ordered by sort name, where a glyph's sort name is its own override, else the database value, else its glyph name. The same order is used in Font View and in exported fonts."
 ref = "Font View › Glyph Order; Sort Name; GlyphsSDK GlyphsFileFormatv3.md; tutorials \"Alter the glyph order in Font view\" and \"Roll your own glyph data\" (glyphsapp.com/learn)"
 status = "handbook"
-notes = "The tutorials say the default orders glyphs alphabetically within their category, and that glyph data can change it with sortName. Documented, not yet observed. The owner chose to keep a file's stored order and place new glyphs by the sort key (docs/plans/M4.md § 7 question 5); the key itself is our guess (below). The key is GlyphData::sort_key in crates/glyphdata; fontcraft_model::glyph_order gives the order and fontcraft_model::insertion_index a new glyph's place (glyph.newGlyph uses it). Export reads the same order (Font::resolve, M4.2)."
+notes = "The tutorials say the default orders glyphs alphabetically within their category, and that glyph data can change it with sortName. Documented, not yet observed. The owner chose to keep a file's stored order and place new glyphs by the sort key (docs/plans/M4.md § 7 question 5); the key itself is our guess (below). The key is GlyphData::sort_key in crates/glyphdata; fontcraft_model::glyph_order gives the order and fontcraft_model::insertion_index a new glyph's place (glyph.newGlyph uses it). Export reads the same order (Font::resolve, M4.2). Release notes (\"What's new in Glyphs\", updates.glyphsapp.com/Glyphs4.0-4000.html and updates.glyphsapp.com/Glyphs3.4-3434.html): glyphs sort by script first (4.0, build 3844); Font View puts punctuation and numbers in a group per script (version 3, builds 3327 and 3328; 4.0, build 3826). The tutorial \"Roll your own glyph data\" says a sort name takes the place of the name in the alphabetical order within the category (`Az` moves AE behind the accented A), so a glyph with a sort name is not set after the others (05 question 23). With a glyphOrder parameter, glyphs it does not name follow the listed ones, sorted (developer's answer, thread \"Alternate glyph position/order in font window\", forum.glyphsapp.com/t/27889, 2023-11-16)."
 guesses = [
   "An opened file keeps its stored glyph order, which is the order the oracles compile; only glyphs added later, renamed, or given a sort name move to the place the sort key gives. Settled by observing where the reference puts a new glyph (05 question 2).",
-  "The published data has no sort names, so the key is ours: category in the order Letter, Number, Punctuation, Symbol, Separator, Mark, then glyphs without one; within a category the base glyph's first code point, then the name; suffixed glyphs after the run of base glyphs, or right after their base with Keep Alternates Next to Base Glyph on. Settled by observation (05 question 2).",
-  "A sort name (from custom glyph data or the glyph itself) places the glyph after the others of its category, ordered by the sort name.",
+  "The published data has no sort names, so the key is ours: category in the order Letter, Number, Punctuation, Symbol, Separator, Mark, then glyphs without one; within a category the base glyph's first code point, then the name; suffixed glyphs after the run of base glyphs, or right after their base with Keep Alternates Next to Base Glyph on. From version 4 the reference puts the script before the category and gives each script its own group of numbers and of punctuation, and within a category it orders alphabetically (notes), which the key does not do yet (05 question 23). The order of the scripts and of the categories is not documented.",
   "In a stored order that is not sorted by the key, a new glyph goes right after the last glyph whose key is not greater than its own (first when there is none), so it follows the glyphs it would follow in a sorted font. Settled by observing where the reference puts a new glyph in a hand-ordered font.",
+]
+observe = [
+  "Open a file whose stored order is B, A, C and add D, then a suffixed A.alt: note where each goes, before and after Update Glyph Info.",
+  "In a new font add A, a, be-cy, one, one-ar, period, plus and acutecomb, and write down the order and the section headers.",
+  "Reorder nothing, set A's sort name to `Cz`, and note A's place.",
+  "In a font with a hand-made glyphOrder that lists only some glyphs, add two glyphs and note their places.",
 ]
 
 [[behavior]]
@@ -3408,6 +3799,10 @@ notes = "Documented, not yet observed. The drop runs `glyph.addImage` with the f
 guesses = [
   "The active layer of a glyph in Font View is its layer of Font View's master. Settled by dropping an image on a cell while Font View shows the second master in the reference.",
   "Several files dropped on Font View are matched to glyph names, whatever cell they land on, as Add Image does with several files. Settled by dropping two files on one cell in the reference.",
+]
+observe = [
+  "With the second master shown drop an image on a cell: note which layer holds it.",
+  "Drop two images on one cell and note where each goes.",
 ]
 
 [[behavior]]
@@ -3467,7 +3862,10 @@ guesses = [
   "With a selection, the handles next to a selected on-curve node are rounded with it.",
   "With a selection, anchors and components stay where they are, even when selected.",
 ]
-observe = ["Select two nodes of a path with fractional coordinates and an anchor, run Round Coordinates, and note which nodes, handles and anchors move."]
+observe = [
+  "Select two nodes of a path with fractional coordinates and an anchor, run Round Coordinates, and note which nodes, handles and anchors move.",
+  "Set the grid spacing to 0, give a node the coordinate 10.4 and run Round Coordinates: note the coordinate.",
+]
 
 [[command]]
 id = "path.roundCoordinatesForAllMasters"
@@ -3484,6 +3882,9 @@ status = "handbook"
 guesses = [
   "The label \"… for All Masters\" is ours; the handbook describes the Option key but not the item's label (03a question 18).",
 ]
+observe = [
+  "Hold Option in the Path menu and write down the labels of the items that change.",
+]
 
 [[command]]
 id = "path.removeOverlapForAllMasters"
@@ -3499,6 +3900,9 @@ ref = "Font View › Batch-Processing"
 status = "handbook"
 guesses = [
   "The label \"… for All Masters\" is ours; the handbook describes the Option key but not the item's label (03a question 18).",
+]
+observe = [
+  "Hold Option in the Path menu and write down Remove Overlap's label.",
 ]
 
 [[command]]
@@ -3518,6 +3922,10 @@ guesses = [
   "The shortcut is Cmd+Alt+Shift+D, Decompose with Option added as for the other Option variants; the Glyph menu of the reference app with Option held settles it.",
   "Only master layers are decomposed; intermediate and alternate layers keep their components. A composite with a brace layer in the reference app settles it.",
 ]
+observe = [
+  "Hold Option in the Glyph menu and note the shortcut shown for the Decompose item.",
+  "Run it on a composite with a brace layer and look at the brace layer's shapes.",
+]
 
 [[command]]
 id = "path.convertToQuadratic"
@@ -3531,9 +3939,14 @@ milestone = "M3"
 summary = "Rewrites cubic segments as quadratic ones, approximating within a tolerance (the compiler's by default), as TrueType outlines need. The opposite is path.convertToCubic."
 ref = "Font View › Batch-Processing"
 status = "handbook"
+notes = "It can run for all masters from Font View (4.0 release notes (\"What's new in Glyphs\", updates.glyphsapp.com/Glyphs4.0-4000.html), build 3842)."
 guesses = [
   "New off-curve points are rounded to the grid.",
   "With allMasters, master layers with the same node structure are converted together (one spline length for all), so they stay compatible.",
+]
+observe = [
+  "Convert a curve with the grid spacing at 1 and read the off-curve coordinates.",
+  "In a font with two compatible masters convert a glyph for all masters and compare the node counts.",
 ]
 
 # ───────────────────── Glyph Data Editor (M12 planning pass, our own rows) ─────────────────────
