@@ -202,14 +202,20 @@ fn build(session: &mut Session, view: &ViewState, target: Target) -> Option<Prev
     };
     let edited_glyph = text_glyph(&text, edited);
     match &drawn {
-        Drawn::Master => fill_line(&mut model, font, &master, &master_layout, edited, is_text),
+        Drawn::Master => {
+            let outline = |name: &str, own: Option<&str>| crate::app::models::text::item_outline(font, view, &master, name, own);
+            fill_line(&mut model, &text, &master_layout, edited, is_text, outline);
+        }
         Drawn::Instance(i) => {
             let glyphs = layout_glyphs(&master_layout);
             let instance_view = session.instance_view(*i, &glyphs).ok()?;
             let at = view_master_id(*i);
             let options = Options { direction: dir, kerning: view.text.kerning, single_line: true, ..Default::default() };
+            let mut text = text;
+            // An instance has no masters' layers: every item shows the glyph in the instance.
+            text.clear_layers();
             let layout = fontcraft_textlayout::layout(&instance_view, &at, &text, &options).ok()?;
-            fill_line(&mut model, &instance_view, &at, &layout, edited, is_text);
+            fill_line(&mut model, &text, &layout, edited, is_text, |name, _| instance_view.outline(name, &at).ok());
         }
         Drawn::All(list) => {
             let glyph = edited_glyph.clone()?;
@@ -238,20 +244,29 @@ fn layout_glyphs(layout: &Layout) -> Vec<String> {
     layout.placed.iter().filter_map(|p| p.glyph.as_deref()).filter(|g| seen.insert(*g)).take(MAX_LINE_GLYPHS).map(str::to_string).collect()
 }
 
-/// The line of `layout` in `font` at master `master`: the outlines, the extent, the edited glyph's middle and, for
-/// the edit view's text, the glyphs a double-click edits.
-fn fill_line(model: &mut PreviewModel, font: &Font, master: &str, layout: &Layout, edited: usize, is_text: bool) {
+/// The line of `layout`, which laid `text` out: the outlines (`outline` finds a glyph's in the own layer of the item
+/// that shows it), the extent, the edited glyph's middle and, for the edit view's text, the glyphs a double-click
+/// edits.
+fn fill_line(
+    model: &mut PreviewModel,
+    text: &Text,
+    layout: &Layout,
+    edited: usize,
+    is_text: bool,
+    outline: impl Fn(&str, Option<&str>) -> Option<BezPath>,
+) {
     let length = layout.lines.first().map_or(0.0, |l| l.length);
     let length = if length.is_finite() { length.max(0.0) } else { 0.0 };
     model.extent = if layout.direction == Direction::Rtl { [-length, 0.0] } else { [0.0, length] };
     model.focus = layout.placed.get(edited).map(|p| p.x + p.advance / 2.0).filter(|f| f.is_finite());
-    let mut outlines: std::collections::HashMap<&str, Option<BezPath>> = std::collections::HashMap::new();
+    let mut outlines: std::collections::HashMap<(&str, Option<&str>), Option<BezPath>> = std::collections::HashMap::new();
     for (item, placed) in layout.placed.iter().enumerate().take(MAX_LINE_GLYPHS) {
         let Some(name) = placed.glyph.as_deref() else { continue };
         if is_text {
             model.hits.push(HitItem { item, x: placed.x, advance: placed.advance });
         }
-        if let Some(outline) = outlines.entry(name).or_insert_with(|| font.outline(name, master).ok()) {
+        let own = text.layer_of(item, name);
+        if let Some(outline) = outlines.entry((name, own)).or_insert_with(|| outline(name, own)) {
             let mut moved = outline.clone();
             moved.apply_affine(Affine::translate((placed.x, placed.y)));
             model.outline.extend(moved.elements().iter().copied());

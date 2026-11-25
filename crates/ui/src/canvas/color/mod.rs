@@ -294,9 +294,12 @@ pub fn project(cx: &ProjectCx<'_>, files: &mut ColorFiles) -> Option<ColorPictur
     Some(ColorPicture { art: ColorArt::new(content), text: TEXT })
 }
 
-/// The glyphs of the edit view's text drawn in colour, from `(name, origin)` of each glyph besides the edited one, in
-/// the edited glyph's font units. Each name's drawing is found once.
-pub fn text_colors(session: &fontcraft_engine::Session, view: &ViewState, files: &mut ColorFiles, glyphs: &[(&str, [f64; 2])]) -> Vec<PlacedColor> {
+/// A glyph of the edit view's text besides the edited one: its name, the own layer of the item that shows it, and its
+/// origin in the edited glyph's font units.
+pub type TextPlace<'a> = (&'a str, Option<&'a str>, [f64; 2]);
+
+/// The glyphs of the edit view's text drawn in colour. The drawing of each name and layer is found once.
+pub fn text_colors(session: &fontcraft_engine::Session, view: &ViewState, files: &mut ColorFiles, glyphs: &[TextPlace<'_>]) -> Vec<PlacedColor> {
     files.follow(session.active().map(|d| d.id));
     let Ok(font) = session.font() else { return Vec::new() };
     let Some(edited) = crate::shell::masters::shown_glyph(font, view) else { return Vec::new() };
@@ -304,15 +307,16 @@ pub fn text_colors(session: &fontcraft_engine::Session, view: &ViewState, files:
     let Some(mode) = mode(font, edited, layer, false) else { return Vec::new() };
     let assets = session.assets();
     let mut src = Sources { assets: assets.as_ref(), files, text: TEXT };
-    let mut found: HashMap<&str, Option<Arc<ColorArt>>> = HashMap::new();
+    let mut found: HashMap<(&str, Option<&str>), Option<Arc<ColorArt>>> = HashMap::new();
     let mut out = Vec::new();
-    for &(name, at) in glyphs {
+    for &(name, own, at) in glyphs {
         if out.len() >= MAX_TEXT_COLOR_GLYPHS {
             break;
         }
-        let art = found.entry(name).or_insert_with(|| {
+        let art = found.entry((name, own)).or_insert_with(|| {
             let glyph = font.glyph(name).filter(|g| has_color(g, &mode))?;
-            content(font, glyph, &mode, None, &mut src).filter(|c| !c.is_empty()).map(|c| Arc::new(ColorArt::new(c)))
+            let layer = own.and_then(|id| glyph.layers.iter().find(|l| l.id == id));
+            content(font, glyph, &mode, layer, &mut src).filter(|c| !c.is_empty()).map(|c| Arc::new(ColorArt::new(c)))
         });
         if let Some(art) = art {
             out.push(PlacedColor { at, art: Arc::clone(art) });

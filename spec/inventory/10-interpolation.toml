@@ -1014,6 +1014,18 @@ milestone = "M9"
 summary = "In Edit View, inserts every master layer of the current glyph into the tab's text, followed by its intermediate and alternate layers, so all can be seen and edited side by side."
 ref = "Interpolation › Editing Multiple Masters › Show All Masters"
 status = "handbook"
+notes = "Built in M9.28 (crates/ui/src/shell/show_all_masters.rs). A text item can have its own layer (`fontcraft_textlayout::Text::set_layer`): the Edit View and the previews space and draw the item with it, and while the item is the edited one (the cursor is before it) its layer is the active layer, which the canvas draws and the tools edit (`canvas::text::sync_layer`). Tabs keep the item layers while another tab shows; edits elsewhere in the text move them with their items. Display strings do not hold them, so a saved document's tabs open without them. Color, backup and other layers are not inserted."
+guesses = [
+  "The layers go after the edited glyph, which stays, masters first and then the intermediate and alternate layers in the order of the Layers panel; settle by choosing the menu item with one glyph in a tab of the reference app and counting the glyphs.",
+  "The cursor stays before the edited glyph, so it stays the edited one; settle in the reference app.",
+  "Choosing a layer in the Layers panel or a master icon while an item with its own layer is edited changes that item alone, and another master leaves the other items' layers; settle by pressing a master icon in a tab with all masters shown in the reference app.",
+  "The text kerns in the current master, whatever layers its items show; settle by kerning a pair in one master and reading the gap between two layers in the reference app.",
+  "An item keeps its own layer when Next or Previous Glyph puts another glyph in its place, while that glyph has a layer of the same id (a master's); settle in the reference app.",
+]
+observe = [
+  "In F2 (special layers), open one glyph with an intermediate layer in a tab, choose Edit › Show All Masters and note where the layers are inserted, their order, and whether the glyph that was there is replaced.",
+  "With all masters shown, click another layer's glyph, then press Cmd+1 and Cmd+2: note which glyphs of the tab change master.",
+]
 
 [[command]]
 id = "edit.keepLayerSelectionInSync"

@@ -331,7 +331,8 @@ Glyphs on the heavy static instances to get the same result in static fonts.
   (`mastersAsLayers.paletteListing`); the eye button keeps a non-active layer visible
   (`layers.toggleVisibility`).
 - Edit › Show All Masters (`edit.showAllMasters`) puts all master layers of the current glyph,
-  and its intermediate and alternate layers, into the Edit View tab.
+  and its intermediate and alternate layers, into the Edit View tab. They go after the edited glyph,
+  masters first, each a text item with its own layer (guess); clicking one makes its layer the active one.
 - Edit › Keep Layer Selection in Sync (`edit.keepLayerSelectionInSync`) carries the selection
   over when switching masters; works on compatible glyphs only.
 - `layers.reInterpolate` (recalled, not in the chapter) refills a layer from the interpolation of

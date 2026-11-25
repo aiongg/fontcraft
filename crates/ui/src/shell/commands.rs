@@ -74,6 +74,7 @@ pub const MODULES: &[Module] = &[
     super::components::MODULE,
     crate::dialogs::glyph_picker::SHELL,
     super::font_info_masters::MODULE,
+    super::show_all_masters::MODULE,
     super::compatibility::MODULE,
     crate::canvas::text::features::MODULE,
     crate::dialogs::sample_strings::MODULE,

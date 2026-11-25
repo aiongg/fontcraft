@@ -387,11 +387,13 @@ impl FontCraftApp {
         // A shell command may have switched or closed the active document: its tab set shows before anything reads
         // the tabs, and again after a close the drain answered.
         crate::shell::tabs::follow_document(self);
+        crate::canvas::text::sync_layer(self);
         crate::canvas::tools::apply::sync(self);
         crate::canvas::text::sync(self);
         self.tools.refresh();
         close::after_drain(self);
         crate::shell::tabs::follow_document(self);
+        crate::canvas::text::sync_layer(self);
         self.project();
         crate::canvas::text::after_project(self);
         crate::control::events::observe(self);

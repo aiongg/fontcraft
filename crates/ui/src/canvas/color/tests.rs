@@ -137,11 +137,12 @@ fn the_texts_other_colour_glyphs_are_drawn_in_colour() {
     red_square_layer(&mut app, "B");
     app.view.layers.layers.insert("A".into(), a);
     let mut files = ColorFiles::default();
-    let placed = text_colors(&app.session, &app.view, &mut files, &[("B", [600.0, 0.0]), ("C", [1200.0, 0.0]), ("B", [1800.0, 0.0])]);
+    let placed =
+        text_colors(&app.session, &app.view, &mut files, &[("B", None, [600.0, 0.0]), ("C", None, [1200.0, 0.0]), ("B", None, [1800.0, 0.0])]);
     assert_eq!(placed.iter().map(|p| p.at).collect::<Vec<_>>(), vec![[600.0, 0.0], [1800.0, 0.0]]);
     assert!(Arc::ptr_eq(&placed[0].art, &placed[1].art), "one drawing per glyph name");
     app.view.layers.layers.clear();
-    assert!(text_colors(&app.session, &app.view, &mut files, &[("B", [600.0, 0.0])]).is_empty(), "the master layer is shown");
+    assert!(text_colors(&app.session, &app.view, &mut files, &[("B", None, [600.0, 0.0])]).is_empty(), "the master layer is shown");
 }
 
 /// An iColor layer draws its image placed by its transform; an svg layer draws the file's outlines in their colours.

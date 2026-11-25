@@ -45,6 +45,7 @@ pub mod reference_font;
 pub mod selection;
 pub mod settings;
 pub mod shape_order;
+pub mod show_all_masters;
 pub mod sidebar;
 pub mod space_center;
 pub mod start;

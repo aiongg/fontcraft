@@ -67,6 +67,8 @@
 //! Text::replace(&mut self, range: Range<usize>, items: Vec<Item>) -> Result<(), TextError>
 //! Text::insert(&mut self, index: usize, items: Vec<Item>) -> Result<(), TextError>
 //! Text::delete(&mut self, range: Range<usize>) -> Result<(), TextError>
+//! Text::layer(&self, index: usize) -> Option<&str>;  Text::layer_of(&self, index: usize, name: &str) -> Option<&str>
+//! Text::set_layer(&mut self, index: usize, layer: Option<&str>) -> bool;  Text::clear_layers(&mut self)
 //! Text::current_glyph(&self) -> Option<&str>;  Text::set_current_glyph(&mut self, name: Option<&str>)
 //! Text::to_display_string(&self, font: &Font) -> String;  Text::to_plain_text(&self, font: &Font) -> String
 //! KerningMode::{None, Kerning, Locked}: name, from_name, shows_kerning
