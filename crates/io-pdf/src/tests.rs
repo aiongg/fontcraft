@@ -278,6 +278,21 @@ fn pdf_page_renders_as_an_image() {
     assert_eq!((small.image.width, small.image.height, small.pixels_per_point), (200, 100, 1.0));
 }
 
+/// A page of a file is drawn by its number; pages past the last are refused.
+#[test]
+fn any_page_of_a_pdf_is_drawn() {
+    let contents: [&[u8]; 3] = [b"1 0 0 rg 0 0 200 200 re f", b"0 1 0 rg 0 0 200 200 re f", b"0 0 1 rg 0 0 200 200 re f"];
+    let bytes = save(document(&contents, Dictionary::new(), Dictionary::new(), true));
+    let inks = [[255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255]];
+    for (page, ink) in inks.into_iter().enumerate() {
+        let drawn = render_pdf_page(&bytes, page, 0.1, 1 << 20).unwrap();
+        let middle = drawn.image.pixels.len() / 8 * 4 + 40;
+        assert_eq!(drawn.image.pixels[middle..middle + 4], ink, "page {page}");
+    }
+    assert_eq!(render_pdf_page(&bytes, 3, 0.1, 1 << 20).unwrap_err(), PdfError::NoPage);
+    assert_eq!(render_pdf_page(&bytes, usize::MAX, 0.1, 1 << 20).unwrap_err(), PdfError::NoPage);
+}
+
 #[test]
 fn pdf_page_drawn_smaller_keeps_its_bottom_edge_on_the_image_bottom() {
     // 100.1 points tall at about half a pixel per point: 49.5 pixel rows in a 50-row image. The

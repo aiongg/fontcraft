@@ -7,7 +7,7 @@
 use std::collections::HashSet;
 
 use craft::ui::contract::{PlainData, Tracked};
-use fontcraft_engine::cmd::stroke::{format_version, layer_outline, mask_mode, shapes_outline, stroke_style};
+use fontcraft_engine::cmd::stroke::{OpenCorners, format_version, layer_outline, mask_mode, shapes_outline, stroke_style};
 use fontcraft_engine::components::align::{AlignMode, component_alignment};
 use fontcraft_engine::model::glyphdata::GlyphData;
 use fontcraft_engine::model::shown_metrics::{ShownMetric, shown_metrics};
@@ -30,6 +30,9 @@ pub struct CanvasModel {
     pub glyph: Option<EditedGlyph>,
     /// The edited glyph in colour (`canvas::color`).
     pub color: Option<crate::canvas::color::ColorPicture>,
+    /// The interpolation paths, while the Higher-Order Interpolation tool is the current one (`canvas::hoi`).
+    #[plain_data(assume = "owned points, strings and numbers, no interior mutability")]
+    pub hoi: Option<fontcraft_tools::hoi::HoiMarks>,
 }
 
 /// The edited glyph in its active layer, in font units.
@@ -51,6 +54,9 @@ pub struct EditedGlyph {
     /// The composite outline (strokes expanded, masks applied); the plain outline while the background is edited.
     #[plain_data(assume = "a kurbo path: owned points")]
     pub outline: BezPath,
+    /// The outline as Fill Preview fills it, when it has open corners that an export erases.
+    #[plain_data(assume = "a kurbo path: owned points")]
+    pub fill: Option<BezPath>,
     /// The paths as drawn, when strokes or masks make the composite differ from them.
     #[plain_data(assume = "a kurbo path: owned points")]
     pub source: Option<BezPath>,
@@ -111,7 +117,8 @@ pub fn project(model: &mut Tracked<CanvasModel>, files: &mut crate::canvas::colo
         let master = masters::layer_master(font, &cx.view.layers, layer)?;
         edited_glyph(font, data.as_deref(), glyph, layer, master, side)
     });
-    super::set(model, CanvasModel { glyph: edited, color: crate::canvas::color::project(cx, files) });
+    let hoi = cx.session.font().ok().and_then(|font| super::hoi::marks(font, cx.view));
+    super::set(model, CanvasModel { glyph: edited, color: crate::canvas::color::project(cx, files), hoi });
 }
 
 /// The canvas's picture of `glyph`'s layer `full`, editing its `side`, with the metric lines and zones of `master`.
@@ -130,6 +137,7 @@ pub fn edited_glyph(font: &Font, data: Option<&GlyphData>, glyph: &Glyph, full: 
             Err(_) => (plain, None),
         }
     };
+    let fill = OpenCorners::of(font).filled(&layer.master, &glyph.name, &outline);
     let components = layer
         .shapes
         .iter()
@@ -156,6 +164,7 @@ pub fn edited_glyph(font: &Font, data: Option<&GlyphData>, glyph: &Glyph, full: 
         status: fontcraft_engine::cmd::status::effective_status(font, &glyph.name).map(|def| def.color),
         layer,
         outline,
+        fill,
         source,
         components,
         background,

@@ -13,9 +13,16 @@ workspace = true
 [dependencies]
 fontcraft-ui.workspace = true
 fontcraft-engine.workspace = true
+craft = { workspace = true, features = ["settings"] }
+serde.workspace = true
 serde_json.workspace = true
+toml.workspace = true
 ureq.workspace = true
 eframe = { workspace = true, features = ["wayland"] }
+
+# The print service: native only, as `fontcraft-ui` uses it.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+craft = { workspace = true, features = ["print"] }
 
 # The pasteboard's PDF for a paste on the canvas, in the versions the clipboard crate of eframe already pulls in.
 [target.'cfg(target_os = "macos")'.dependencies]

@@ -902,9 +902,9 @@ fn quadratic_curves_stay_within_the_tolerance() {
     // The option is in em: a 2048-unit font gets about 2 units.
     let mut f = sample();
     f.units_per_em = 2048;
-    let fine = compile_ttf(&f, &Options { conversion_error: 0.0001, ..Default::default() }).unwrap();
+    let fine = compile_ttf(&f, &Options { conversion_error: Some(0.0001), ..Default::default() }).unwrap();
     let coarse = compile_ttf(&f, &Options::default()).unwrap();
-    let bad = compile_ttf(&f, &Options { conversion_error: f64::NAN, ..Default::default() }).unwrap();
+    let bad = compile_ttf(&f, &Options { conversion_error: Some(f64::NAN), ..Default::default() }).unwrap();
     let points = |out: &Compiled| {
         let font = FontRef::new(&out.bytes).unwrap();
         drawn(&font, font.charmap().map('O').unwrap()).iter().map(Vec::len).sum::<usize>()
@@ -1799,6 +1799,53 @@ fn corner_and_smart_components_are_drawn_into_the_compiled_glyphs() {
     let h = drawn(&font, gid_of(&out, "H"));
     let right = h.iter().flatten().map(|p| p.0).fold(f32::MIN, f32::max);
     assert_eq!(right, 200.0, "the smart component is interpolated at its value");
+}
+
+/// A component pinned to another master is written from that master, and a corner on the crossing
+/// of two paths is in the compiled outline, with and without overlap removal.
+#[test]
+fn pinned_components_and_extra_node_corners_are_drawn_into_the_compiled_glyphs() {
+    use fontcraft_model::corner::{CornerHint, CornerTarget};
+    let mut f = Font::new("Pinned Sans");
+    let mut bold = f.masters[0].clone();
+    bold.id = "m02".into();
+    Arc::make_mut(&mut f.masters).push(bold);
+    let n = |x, y| Node::new(x, y, NodeKind::Line);
+    let mut corner = Glyph::new("_corner.cut");
+    let mut l = Layer::new("m01", 0.0);
+    l.shapes.push(path(false, vec![n(0.0, -40.0), n(-20.0, 20.0), n(40.0, 0.0)]));
+    corner.layers.push(l);
+    f.glyphs.push(corner);
+    {
+        let mut t = f.glyph_mut("T").unwrap();
+        t.layers[0].shapes = vec![Shape::Path(Path::rect(0.0, 400.0, 500.0, 500.0)), Shape::Path(Path::rect(200.0, 0.0, 300.0, 600.0))];
+        // The bar's bottom edge and the stem's right edge, ending at file nodes 0 and 1.
+        let mut hint = CornerHint::new("_corner.cut", 0, 0);
+        hint.target = CornerTarget::Intersection { shape: 0, node: 0, other_shape: 1, other_node: 1 };
+        t.layers[0].info.hints.push(hint.to_hint());
+    }
+    {
+        let mut i = f.glyph_mut("I").unwrap();
+        i.layers[0].shapes = vec![Shape::Path(Path::rect(0.0, 0.0, 100.0, 700.0))];
+        let mut l = Layer::new("m02", 600.0);
+        l.shapes = vec![Shape::Path(Path::rect(0.0, 0.0, 300.0, 700.0))];
+        i.layers.push(l);
+    }
+    let mut c = Component::new("I", 0.0, 0.0);
+    c.info.master_id = Some("m02".into());
+    f.glyph_mut("H").unwrap().layers[0].shapes = vec![Shape::Component(c)];
+    let target = Target::Master("m01".into());
+    for keep in [false, true] {
+        let options = Options { remove_overlap: !keep, ..Options::default() };
+        let out = compile(&f, &target, Flavour::TrueType, &options).unwrap();
+        let font = FontRef::new(&out.bytes).unwrap();
+        assert!(matches!(raw(&font, gid_of(&out, "H")), Some(RawGlyph::Simple(_))), "the pinned component is written as contours");
+        let right = drawn(&font, gid_of(&out, "H")).iter().flatten().map(|p| p.0).fold(f32::MIN, f32::max);
+        assert_eq!(right, 300.0, "it is drawn from its own master");
+        let t = drawn(&font, gid_of(&out, "T"));
+        assert_eq!(t.len(), 1, "the two paths are one contour: {t:?}");
+        assert!(t.concat().contains(&(280.0, 420.0)), "the corner's tip lies in the joined T: {t:?}");
+    }
 }
 
 /// The measure of M13.40: no reference compiler supports caps, so the check is that both

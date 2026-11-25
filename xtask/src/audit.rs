@@ -1,7 +1,7 @@
-//! `cargo xtask audit`: `audit.run` with the `outlines` profile on every source of the corpus
-//! comparison set, as the audit measure of `docs/plans/M3.md` § 5 asks. It reports, per source and
-//! in total, whether the run completed, how long it took and how many results it gave, and lists
-//! every source whose run failed or panicked.
+//! `cargo xtask audit`: `audit.run` with the `outlines` profile (or the one `--profile` names) on
+//! every source of the corpus comparison set, as the audit measure of `docs/plans/M3.md` § 5 asks.
+//! It reports, per source and in total, whether the run completed, how long it took and how many
+//! results it gave, and lists every source whose run failed or panicked.
 
 use std::fmt::Write as _;
 use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -12,11 +12,13 @@ use serde_json::{Value, json};
 
 pub fn run(root: &Path, args: &[&str]) -> Result<(), String> {
     let mut filter: Option<String> = None;
+    let mut profile = "outlines".to_string();
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match *a {
             "--match" => filter = Some(it.next().ok_or("--match needs text")?.to_string()),
-            other => return Err(format!("unknown argument `{other}`; usage: cargo xtask audit [--match TEXT]")),
+            "--profile" => profile = it.next().ok_or("--profile needs a profile id")?.to_string(),
+            other => return Err(format!("unknown argument `{other}`; usage: cargo xtask audit [--profile ID] [--match TEXT]")),
         }
     }
     let corpus = root.join("corpus");
@@ -52,7 +54,7 @@ pub fn run(root: &Path, args: &[&str]) -> Result<(), String> {
             continue;
         }
         let t = Instant::now();
-        let outcome = catch_unwind(AssertUnwindSafe(|| session.execute("audit.run", &json!({"profile": "outlines"}))));
+        let outcome = catch_unwind(AssertUnwindSafe(|| session.execute("audit.run", &json!({"profile": profile}))));
         times.push(t.elapsed().as_secs_f64());
         match outcome {
             Ok(Ok(report)) => {

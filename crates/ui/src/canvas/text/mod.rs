@@ -2,7 +2,8 @@
 //!
 //! The edit view's text is view state ([`EditText`] in `ViewState::text`); the shell commands in [`commands`] change
 //! it and never make an undo step. The edited glyph is the text's current glyph (the glyph after the cursor): a text
-//! command that moves the cursor also makes that glyph the shown one (`ViewState::glyph`). While another glyph is
+//! command that moves the cursor also makes that glyph the shown one (`ViewState::glyph`), and the edited item's own
+//! layer, when it has one, the active layer ([`sync_layer`]). While another glyph is
 //! shown (picked in Font View, say), the text stays as it was and the canvas shows that glyph alone.
 //!
 //! | Module | Holds |
@@ -411,12 +412,46 @@ pub fn text_rect(model: &crate::app::models::text::TextModel, ascender: f64, des
     (rect.iter().all(|v| v.is_finite()) && rect[2] > 0.0 && rect[3] > 0.0).then_some(rect)
 }
 
+/// The glyph and the own layer of the edited text item, while the canvas shows the text and the glyph has that layer.
+fn edited_item_layer(font: &Font, view: &ViewState) -> Option<(String, String)> {
+    if !shows_text(font, view) {
+        return None;
+    }
+    let at = view.text.edited_index()?;
+    let glyph = font.glyph(view.text.item_glyph(at)?)?;
+    let id = view.text.text.layer(at)?;
+    glyph.layers.iter().any(|l| l.id == id).then(|| (glyph.name.clone(), id.to_string()))
+}
+
+/// Makes the edited text item's own layer the active layer, or the glyph's shown layer again once no edited item has
+/// its own: after the cursor, the text or the shown glyph changed, before the tools read their target.
+pub fn sync_layer(app: &mut FontCraftApp) {
+    let item = app.session.font().ok().and_then(|font| edited_item_layer(font, &app.view));
+    if app.view.layers.item != item {
+        app.view.layers.item = item;
+        app.view.layers.selection.clear();
+        app.view_changed();
+    }
+}
+
+/// Gives the edited text item its own layer (`layers.select`, `view.selectMaster` on an item that has one), or takes
+/// it away.
+pub fn set_item_layer(app: &mut FontCraftApp, layer: Option<&str>) {
+    if let Some(at) = app.view.text.edited_index()
+        && app.view.text.text.set_layer(at, layer)
+    {
+        app.view.text.touch();
+    }
+    sync_layer(app);
+}
+
 /// Makes the shown glyph follow the text's current glyph, after a text command.
 pub fn follow(app: &mut FontCraftApp) {
     if let Some(current) = app.view.text.current() {
         app.view.glyph = Some(current.to_string());
     }
     app.view.text.touch();
+    sync_layer(app);
     app.view_changed();
 }
 
@@ -436,8 +471,10 @@ pub fn reply(app: &FontCraftApp) -> Value {
         })
         .collect();
     let selection = text.text.selection();
+    let layers: Vec<Option<&str>> = (0..text.text.len()).map(|i| text.text.layer(i)).collect();
     json!({
         "items": items,
+        "layers": layers.iter().any(Option::is_some).then_some(layers),
         "text": font.map(|f| text.text.to_display_string(f)),
         "cursor": text.text.cursor(),
         "selection": [selection.start, selection.end],

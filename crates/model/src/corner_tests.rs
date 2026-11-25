@@ -317,19 +317,99 @@ fn outlines_have_their_corners_fitted() {
     assert_eq!(font.glyph(case.0).unwrap().layer("m01").unwrap().info.hints.len(), 1);
 }
 
-/// A corner on an extra node (an intersection of two paths) is left out; the rest is drawn.
-#[test]
-fn a_corner_on_an_extra_node_is_left_out() {
+/// A font with `_corner.one` and the glyph T: a bar and a stem that crosses it, their tops level
+/// when `flush`.
+fn crossing_font(flush: bool) -> Font {
     let mut font = Font::new("Extra");
     add_glyph(&mut font, "_corner.one", &[], &["o:(0,50,l),(-50,50,l),(-50,0,l),(25,0,l)"]);
-    add_glyph(&mut font, "T", &[], &["c:(0,400,l),(500,400,l),(500,500,l),(0,500,l)", "c:(200,0,l),(300,0,l),(300,600,l),(200,600,l)"]);
+    let stem = if flush { "c:(200,0,l),(300,0,l),(300,500,l),(200,500,l)" } else { "c:(200,0,l),(300,0,l),(300,600,l),(200,600,l)" };
+    add_glyph(&mut font, "T", &[], &["c:(0,400,l),(500,400,l),(500,500,l),(0,500,l)", stem]);
+    font
+}
+
+/// A corner on the crossing of the bar's bottom edge with the stem's left edge (`left`) or its
+/// right edge.
+fn crossing_corner(left: bool) -> CornerHint {
     let mut hint = CornerHint::new("_corner.one", 0, 1);
-    hint.target = CornerTarget::Intersection { shape: 0, node: 1, other_shape: 1, other_node: 2 };
-    set_hints(&mut font, "T", vec![hint.to_hint()]);
+    hint.target = CornerTarget::Intersection { shape: 0, node: 1, other_shape: 1, other_node: if left { 0 } else { 2 } };
+    hint
+}
+
+/// The paths' points, each path turned to its lowest point.
+fn turned(shapes: &[Shape]) -> Vec<Vec<(f64, f64)>> {
+    let mut paths = points(shapes);
+    for p in &mut paths {
+        let at = (0..p.len()).min_by(|&a, &b| p[a].partial_cmp(&p[b]).unwrap()).unwrap_or(0);
+        p.rotate_left(at);
+    }
+    paths
+}
+
+/// Corners on two extra nodes of a T, one of them with a corner on a node of the stem, are drawn
+/// as the same corners on the nodes of the T with its overlap removed. A corner on a node inside
+/// the outline goes; the outline fills what it filled.
+#[test]
+fn corners_on_extra_nodes_are_fitted_on_the_joined_paths() {
+    let t = |flush: bool| {
+        if flush {
+            // The bar's top is cut at the stem's top nodes.
+            "c:(200,400,l),(200,0,l),(300,0,l),(300,400,l),(500,400,l),(500,500,l),(300,500,l),(200,500,l),(0,500,l),(0,400,l)"
+        } else {
+            "c:(200,400,l),(200,0,l),(300,0,l),(300,400,l),(500,400,l),(500,500,l),(300,500,l),(300,600,l),(200,600,l),(200,500,l),(0,500,l),(0,400,l)"
+        }
+    };
+    for flush in [false, true] {
+        let mut font = crossing_font(flush);
+        add_glyph(&mut font, "Tjoined", &[], &[t(flush)]);
+        set_hints(
+            &mut font,
+            "T",
+            vec![crossing_corner(true).to_hint(), crossing_corner(false).to_hint(), CornerHint::new("_corner.one", 1, 1).to_hint()],
+        );
+        set_hints(&mut font, "Tjoined", [0, 2, 3].map(|n| CornerHint::new("_corner.one", 0, n).to_hint()).to_vec());
+        let got = fitted(&font, "T");
+        assert_eq!(turned(&got), turned(&fitted(&font, "Tjoined")), "flush: {flush}");
+        let area = |g: &str| fontcraft_geom::Shape::area(&font.outline(g, "m01").unwrap());
+        assert!((area("T") - area("Tjoined")).abs() < 1e-6, "flush: {flush}");
+    }
+}
+
+/// Segments that do not cross, an open path, and paths that cannot be joined leave the corner out
+/// and the paths as they were; so does a crossing whose corner glyph does not exist.
+#[test]
+fn a_corner_on_no_crossing_is_left_out() {
+    let mut apart = crossing_corner(true);
+    apart.target = CornerTarget::Intersection { shape: 0, node: 2, other_shape: 1, other_node: 2 };
+    let mut gone = crossing_corner(true);
+    gone.target = CornerTarget::Intersection { shape: 0, node: 1, other_shape: 9, other_node: 2 };
+    let missing = CornerHint { name: "_corner.none".into(), ..crossing_corner(true) };
+    for hint in [apart, gone, missing] {
+        let mut font = crossing_font(false);
+        set_hints(&mut font, "T", vec![hint.to_hint()]);
+        let layer = font.glyph("T").unwrap().layer("m01").unwrap();
+        assert_eq!(corner_hint(&layer.info.hints[0]).unwrap(), Some(hint));
+        assert_eq!(insert_corners(&font, layer).unwrap().unwrap(), layer.shapes);
+    }
+    let mut font = crossing_font(false);
+    set_hints(&mut font, "T", vec![crossing_corner(true).to_hint()]);
+    if let Shape::Path(p) = &mut font.glyph_mut("T").unwrap().layer_mut("m01").unwrap().shapes[1] {
+        p.closed = false;
+    }
     let layer = font.glyph("T").unwrap().layer("m01").unwrap();
-    assert_eq!(corner_hint(&layer.info.hints[0]).unwrap(), Some(hint));
     assert_eq!(insert_corners(&font, layer).unwrap().unwrap(), layer.shapes);
-    assert!(font.outline("T", "m01").is_ok());
+}
+
+/// Decomposing a corner on a node moves the extra node of another corner with its segment, so the
+/// two together draw what they drew before.
+#[test]
+fn decomposing_a_corner_keeps_an_extra_node_on_its_segments() {
+    let mut font = crossing_font(false);
+    set_hints(&mut font, "T", vec![CornerHint::new("_corner.one", 0, 0).to_hint(), crossing_corner(true).to_hint()]);
+    let both = fitted(&font, "T");
+    let layer = font.glyph("T").unwrap().layer("m01").unwrap();
+    let once = decompose_corners(&font, layer, &[0]).unwrap();
+    assert_eq!(turned(&insert_corners(&font, &once).unwrap().unwrap()), turned(&both));
+    assert!(decompose_corners(&font, layer, &[1]).is_err());
 }
 
 /// Hostile corners fail with a message and never panic: a scale of 10^9, a corner next to a
@@ -392,6 +472,35 @@ fn decomposing_one_corner_keeps_the_other_on_its_node() {
     let all = decompose_corners(&font, &once, &[0]).unwrap();
     assert!(all.info.hints.is_empty());
     assert_eq!(points(&all.shapes), points(&both));
+}
+
+/// Decomposing a corner keeps the cap, segment and brush hints of its path on the nodes they sat on.
+#[test]
+fn decomposing_a_corner_keeps_attachments_on_their_nodes() {
+    use crate::attach::{Attachment, CapHint, SegmentHint, attachment};
+    let mut font = Font::new("Attached");
+    add_glyph(&mut font, "_corner.one", &[], &["o:(0,50,l),(-50,50,l),(-50,0,l),(25,0,l)"]);
+    add_glyph(&mut font, "I", &[], &["c:(0,0,l),(400,0,l),(400,500,l),(0,500,l)"]);
+    let attached = [
+        Attachment::Cap(CapHint::new("_cap.one", 0, 1)),
+        Attachment::Segment(SegmentHint::new("_segment.one", 0, 2)),
+        Attachment::Brush(SegmentHint::new("_brush.one", 0, 3)),
+    ];
+    let mut hints = vec![CornerHint::new("_corner.one", 0, 0).to_hint()];
+    hints.extend(attached.iter().map(Attachment::to_hint));
+    set_hints(&mut font, "I", hints);
+    let layer = font.glyph("I").unwrap().layer("m01").unwrap();
+    // Where each attachment's node lies: the hints count a closed path's start node last.
+    let places = |layer: &Layer| -> Vec<(f64, f64)> {
+        let Shape::Path(p) = &layer.shapes[0] else { panic!() };
+        let origins = layer.info.hints.iter().filter_map(|h| attachment(h).unwrap()).map(|a| a.origin().1);
+        origins.map(|n| &p.nodes[(n + 1) % p.nodes.len()]).map(|n| (n.x, n.y)).collect()
+    };
+    let decomposed = decompose_corners(&font, layer, &[0]).unwrap();
+    assert_ne!(decomposed.shapes, layer.shapes);
+    assert_eq!(decomposed.info.hints.len(), 3);
+    assert_eq!(places(layer), [(400.0, 500.0), (0.0, 500.0), (0.0, 0.0)]);
+    assert_eq!(places(&decomposed), places(layer));
 }
 
 /// An intermediate layer at 150 % width: a 125 % scale draws the outline halfway between the

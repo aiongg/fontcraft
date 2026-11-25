@@ -11,7 +11,7 @@
 //!
 //! 1. The entries: the automatic ones the font has regenerated for the target's glyph set
 //!    (`fontcraft_features::auto::update`), unless the target's Update Features parameter is
-//!    off; Update adds no entry here. Then the instance parameters (Add, Replace and Remove
+//!    off or DisableAllAutomaticBehaviour on; Update adds no entry here. Then the instance parameters (Add, Replace and Remove
 //!    Classes, Prefixes and Features).
 //! 2. Tokens, lowering and assembly into one feature file (`fontcraft_features::assemble`).
 //! 3. The first pass (`fontcraft_fea::first_pass`): `GSUB` alone, the code's language systems
@@ -44,7 +44,7 @@ use fontcraft_model::{Features, Font, Resolved, ResolvedGlyph, is_ufo_family, pa
 use fontcraft_spacing::kerning::{Direction, KernIndex};
 
 use crate::CompileError;
-use crate::export_params::ExportEdits;
+use crate::export_params::{ExportEdits, automatic_disabled};
 
 /// The parameter that turns the regeneration of automatic feature code off.
 const UPDATE_FEATURES: &str = "Update Features";
@@ -153,7 +153,7 @@ pub struct LayoutInput<'a> {
 fn entries(input: &LayoutInput, font: &Font, opts: &LayoutOptions, warnings: &mut Vec<String>) -> Result<Features, CompileError> {
     let resolved = input.resolved;
     let mut entries: Features = (*font.features).clone();
-    let update_off = resolved.params.get(UPDATE_FEATURES).and_then(param_flag) == Some(false);
+    let update_off = resolved.params.get(UPDATE_FEATURES).and_then(param_flag) == Some(false) || automatic_disabled(&resolved.params);
     let has_automatic = entries.prefixes.iter().chain(&entries.classes).chain(&entries.features).any(|e| e.automatic);
     if opts.regenerate_automatic
         && !update_off

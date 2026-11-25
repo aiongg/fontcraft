@@ -184,7 +184,7 @@ fn deriv2(c: &CubicBez, t: f64) -> Vec2 {
 /// The unit direction of `c` at `t`. At an end it is read from the nearest control point that is
 /// not on the node, which is exact for a retracted handle; inside, where the derivative vanishes,
 /// from two nearby points.
-fn tangent(c: &CubicBez, t: f64) -> Option<Vec2> {
+pub(crate) fn tangent(c: &CubicBez, t: f64) -> Option<Vec2> {
     let first = |ds: [Vec2; 3]| ds.into_iter().find(|d| d.hypot2() > JOIN_EPSILON * JOIN_EPSILON).and_then(unit);
     if t <= 0.0 {
         return first([c.p1 - c.p0, c.p2 - c.p0, c.p3 - c.p0]);
@@ -265,7 +265,7 @@ fn offset_at(c: &CubicBez, t: f64, pen: Vec2, k: f64) -> Option<Point> {
 }
 
 /// The unit direction of side `k`'s offset of `c` at `t`.
-fn offset_dir(c: &CubicBez, t: f64, pen: Vec2, k: f64) -> Option<Vec2> {
+pub(crate) fn offset_dir(c: &CubicBez, t: f64, pen: Vec2, k: f64) -> Option<Vec2> {
     let d1 = deriv(c, t);
     let speed = d1.hypot();
     if speed > DIRECTION_EPSILON {

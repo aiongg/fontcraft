@@ -22,6 +22,8 @@ mod msg;
 mod notices;
 pub mod open;
 pub mod preview_host;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod print_host;
 pub mod sidebar;
 pub mod startup;
 pub mod user_store;
@@ -127,6 +129,8 @@ pub struct ViewState {
     pub text_preview: crate::shell::text_preview::TextPreviewState,
     /// Show Hints aside: the TrueType Instructor's state, the badge under a drag, the Review Hints dialog.
     pub hinting: crate::canvas::hinting::HintingView,
+    /// The Higher-Order Interpolation tool's axis.
+    pub hoi: crate::canvas::hoi::HoiView,
     /// The Actions window's state.
     pub actions: crate::dialogs::actions::ActionsState,
     pub font_audit: crate::shell::font_audit::FontAuditView,
@@ -195,6 +199,7 @@ impl Default for ViewState {
             preview: Default::default(),
             overlay_fonts: Default::default(),
             shape_order: Default::default(),
+            hoi: Default::default(),
             bitmap_editor: Default::default(),
             axis_mappings: Default::default(),
             cross_axis: Default::default(),
@@ -250,8 +255,15 @@ pub struct FontCraftApp {
     pub frame_hook: Option<Box<dyn preview_host::FrameHook>>,
     /// The web server for the TrueType preview page; `None` where no port can be opened.
     pub preview_host: Option<Box<dyn preview_host::PreviewHost>>,
+    /// The Print dialog (`dialogs::print`).
+    pub printing: crate::dialogs::print::PrintState,
+    /// The system's print service; `None` in tests, which print nothing.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub print_host: Option<Arc<dyn print_host::PrintHost>>,
     /// Where the user's settings are kept between runs; `None` keeps nothing (tests, the browser).
     pub user_store: Option<Box<dyn user_store::UserStore>>,
+    /// The window's layout as the store has it; `None` until the store is read.
+    pub kept_layout: Option<user_store::KeptLayout>,
     /// Opens web links in the browser and shows files in the file manager; the desktop app supplies the system's,
     /// tests and the browser build have none.
     pub opener: craft_ext::platform::open::Opener,
@@ -327,7 +339,11 @@ impl FontCraftApp {
             picks: Picks::default(),
             frame_hook: None,
             preview_host: None,
+            printing: Default::default(),
+            #[cfg(not(target_arch = "wasm32"))]
+            print_host: None,
             user_store: None,
+            kept_layout: None,
             opener: craft_ext::platform::open::Opener::NONE,
             clipboard_reader: None,
             clipboard_flavours: None,
@@ -387,11 +403,13 @@ impl FontCraftApp {
         // A shell command may have switched or closed the active document: its tab set shows before anything reads
         // the tabs, and again after a close the drain answered.
         crate::shell::tabs::follow_document(self);
+        crate::canvas::text::sync_layer(self);
         crate::canvas::tools::apply::sync(self);
         crate::canvas::text::sync(self);
         self.tools.refresh();
         close::after_drain(self);
         crate::shell::tabs::follow_document(self);
+        crate::canvas::text::sync_layer(self);
         self.project();
         crate::canvas::text::after_project(self);
         crate::control::events::observe(self);
@@ -470,12 +488,20 @@ impl FontCraftApp {
                 if ask_files && self.picks.ask(&self.host, &self.session, &command) {
                     return Ok(json!({ "picker": true }));
                 }
-                let params = if command.params.is_null() { json!({}) } else { command.params.clone() };
+                let mut params = if command.params.is_null() { json!({}) } else { command.params.clone() };
+                if origin == Origin::Person {
+                    params = crate::shell::compatibility::with_matching(self, &command.id, params);
+                }
                 if matches!(command.id.as_str(), "file.save" | "file.saveAs") {
                     crate::shell::tabs::upkeep::store_display_strings(self);
                 }
                 let before = self.session.active().map(|d| (d.id, Arc::clone(&d.font)));
-                let reply = match self.session.execute(&command.id, &params) {
+                let work = if origin == Origin::Control { self.control.work.take() } else { None };
+                let result = match work {
+                    Some(work) => fontcraft_engine::work::with(work.token, work.report, || self.session.execute(&command.id, &params)),
+                    None => self.session.execute(&command.id, &params),
+                };
+                let reply = match result {
                     Ok(reply) => reply,
                     Err(e) => {
                         let error = e.to_string();
@@ -540,6 +566,7 @@ impl FontCraftApp {
         let stamp = Stamp::of(&self.session, self.view_revision);
         let mut cx = ProjectCx { session: &mut self.session, view: &self.view };
         self.models.project(stamp, &mut cx);
+        self.models.project_sweep(&mut cx);
         models::console::project(&mut self.models.console, &mut cx);
         self.models.project.project(&mut cx);
         models::palette::project(&mut self.models.palette, &mut cx, &self.tools, stamp);
@@ -777,6 +804,7 @@ impl ShellApp for FontCraftApp {
         open::take_dropped(self, ctx);
         crate::canvas::images::drop::take(self, ctx);
         crate::shell::font_audit::logic(self, ctx);
+        crate::shell::axis_sweep::logic(self, ctx);
         startup::poll_folders(self, ctx);
         if clipboard::finish_pdf(self) {
             ctx.request_repaint_after(clipboard::READ_POLL);
@@ -788,7 +816,9 @@ impl ShellApp for FontCraftApp {
             }
             self.frame_hook = Some(hook);
         }
-        user_store::save(self);
+        if let Some(again) = user_store::save(self) {
+            ctx.request_repaint_after(again);
+        }
         if self.closing.take_close_window() {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
@@ -808,7 +838,11 @@ impl ShellApp for FontCraftApp {
     }
 
     fn close_requested(&mut self) -> CloseDecision {
-        close::close_requested(self)
+        let decision = close::close_requested(self);
+        if decision == CloseDecision::Close {
+            user_store::flush(self);
+        }
+        decision
     }
 }
 

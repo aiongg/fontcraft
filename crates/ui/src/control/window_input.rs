@@ -8,9 +8,9 @@
 //!   request is checked whole before anything of it is queued. In the desktop app the reply comes once the frames
 //!   have carried the input.
 //! - `ui.click {id}` presses a control of the open dialog: it runs `ui.dialog.click`, which the dialogs package
-//!   adds.
+//!   adds. `ui.click {element}` presses an element of a window (`elements`).
 //! - `ui.set` turns switches on or off with their commands, so the result is the menu's: the panels by their id,
-//!   and the switches packages add to [`SWITCHES`].
+//!   and the switches packages add to [`SWITCHES`]. `ui.set {element, value}` sets an element of a window.
 
 use craft::behavior::PointerButton;
 use craft::keymap::Mods;
@@ -47,12 +47,12 @@ const DEFAULT_DRAG_STEPS: u64 = 8;
 const LINE_POINTS: f32 = 40.0;
 
 /// The window host for window input, or the error for a host without frames.
-fn window(app: &FontCraftApp, method: &str) -> Result<WindowHost, String> {
+pub(super) fn window(app: &FontCraftApp, method: &str) -> Result<WindowHost, String> {
     app.control.window.clone().ok_or_else(|| format!("{method}: no window: window input needs the desktop app or a test frame"))
 }
 
 /// The reply of a request that queued `steps` window input steps in `viewport`.
-fn queued(app: &mut FontCraftApp, steps: usize, viewport: ViewportId) -> Value {
+pub(super) fn queued(app: &mut FontCraftApp, steps: usize, viewport: ViewportId) -> Value {
     app.control.queued += steps;
     json!({ "queued": steps, "window": window_name(viewport) })
 }
@@ -82,7 +82,7 @@ fn land(host: &WindowHost, at: Pos2) -> (ViewportId, Pos2) {
 /// A press in `viewport` gives its window the keyboard, as a click on the desktop does, so `ui.text` and `ui.key`
 /// reach the field the click focused. Nothing is asked of the platform when the window has the keyboard already, or
 /// for the main window while no window of the app has it ([`WindowHost::key_window`] is then the main window).
-fn focus_on_press(host: &WindowHost, viewport: ViewportId) {
+pub(super) fn focus_on_press(host: &WindowHost, viewport: ViewportId) {
     if viewport != host.key_window() {
         host.act(viewport, WindowAction::Focus);
     }
@@ -185,16 +185,31 @@ fn host_mods(m: Modifiers) -> Mods {
     mods
 }
 
-/// `ui.click {x, y, button?, count?, mods?}` clicks at a window point ([`land`]); `ui.click {id}` presses a control of the
-/// open dialog (`ui.dialog.click`).
+/// `ui.click {x, y, button?, count?, mods?}` clicks at a window point ([`land`]); `ui.click {element, button?, count?,
+/// mods?}` clicks the middle of what shows of an element (`ui.elements`); `ui.click {id}` presses a control of the open
+/// dialog (`ui.dialog.click`).
 fn click(app: &mut FontCraftApp, params: &Value) -> Result<Value, String> {
     const M: &str = "ui.click";
     let has_point = params.get("x").is_some() || params.get("y").is_some();
+    if let Some(element) = params.get("element").filter(|v| !v.is_null()) {
+        if has_point || params.get("id").is_some_and(|v| !v.is_null()) {
+            return Err(format!("{M}: give one of `element`, `id`, or `x` and `y`"));
+        }
+        let clicks = count(M, params, "count", 1, MAX_CLICK_COUNT)?;
+        let button = button(M, params)?;
+        let mods = host_mods(modifiers(M, params)?);
+        let (viewport, element) = super::elements::find(app, M, element)?;
+        let at = element.press_point(M)?;
+        let host = window(app, M)?;
+        focus_on_press(&host, viewport);
+        host.inject_click(viewport, at, button, clicks, mods, false);
+        return Ok(queued(app, 1 + 2 * clicks as usize, viewport));
+    }
     match params.get("id").filter(|v| !v.is_null()) {
         Some(Value::String(_)) if has_point => Err(format!("{M}: give `id` or `x` and `y`, not both")),
         Some(Value::String(_)) => super::dialogs::click(app, params).map_err(|e| format!("{M}: {e}")),
         Some(_) => Err(format!("{M}: `id` must be a control id")),
-        None if !has_point => Err(format!("{M}: `id` (a dialog control) or `x` and `y` (a window point) is required")),
+        None if !has_point => Err(format!("{M}: `id` (a dialog control), `element` (see ui.elements) or `x` and `y` (a window point) is required")),
         None => {
             let clicks = count(M, params, "count", 1, MAX_CLICK_COUNT)?;
             let button = button(M, params)?;
@@ -368,11 +383,14 @@ impl PartialEq for Switch {
     }
 }
 
-/// `ui.set {key: bool, …}`: turns panels (by their id) and switches on or off with their commands. Every key is
+/// `ui.set {element, value}` sets an element (`elements::set`). `ui.set {key: bool, …}`: turns panels (by their id) and switches on or off with their commands. Every key is
 /// checked before the first one moves; when a command fails, the ones already moved are put back. Returns each
 /// key's value afterwards.
 fn set(app: &mut FontCraftApp, params: &Value) -> Result<Value, String> {
     const M: &str = "ui.set";
+    if params.get("element").is_some_and(|v| !v.is_null()) {
+        return super::elements::set(app, params);
+    }
     let keys = params
         .as_object()
         .filter(|o| !o.is_empty())

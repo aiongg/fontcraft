@@ -32,10 +32,13 @@ scope = "source"
 fixable = true
 area = "qa"
 milestone = "M3"
-summary = "After components are decomposed, the glyph's contours cross each other or themselves, or a contour lies inside another contour that runs the same way. Curves are flattened into 24 line pieces each and only proper crossings count; the contours of one component are not compared with each other. Message codes: `crossing` and `nested-same-direction`. The fix replaces the paths involved with their union (Remove Overlap); open paths and components stay."
+summary = "After components are decomposed, the glyph's contours cross each other or themselves, or a contour lies inside another contour that runs the same way. Curves are flattened into 24 line pieces each and only proper crossings count; the contours of one component are not compared with each other. A decoded variable TrueType font is skipped, since it keeps its overlaps. Message codes: `crossing` and `nested-same-direction`. The fix replaces the paths involved with their union (Remove Overlap); open paths and components stay."
 ref = "checkoutlinesufo overlap removal (do_overlap_removal); fontTools ttLib.removeOverlaps"
 status = "docs"
 notes = "Restoring the earlier contour order and start points after the union (audit.outlineFixKeepsContourOrder) is not built yet."
+guesses = [
+  "A decoded variable TrueType font is not checked for overlaps, whether or not its glyphs carry the overlap flag; a reference checker that reads variable fonts would settle it.",
+]
 
 [[check]]
 id = "check.outlines.coincidentPoints"
@@ -100,9 +103,12 @@ scope = "source"
 fixable = true
 area = "qa"
 milestone = "M3"
-summary = "A contour winds the wrong way for its nesting depth: outer contours run counter-clockwise (the PostScript convention of sources), counters clockwise, and so on alternately. Outlines decoded from a compiled `glyf` table follow the TrueType convention instead, outer contours clockwise; the codes keep their names. A contour encloses another when the inner contour's bounding box lies inside the outer one's (and is not equal to it) and every sampled on-curve point of the inner contour (up to 16) is inside the outer contour. Message codes: `outer-clockwise`, `counter-same-direction`, `nested-clockwise`. The fix runs Correct Path Direction on the layer: directions from nesting, each closed path starting at its lowest, then leftmost, node, and the paths sorted."
+summary = "A contour winds the wrong way for its nesting depth: outer contours run counter-clockwise (the PostScript convention of sources), counters clockwise, and so on alternately. Outlines decoded from a compiled `glyf` table follow the TrueType convention instead, outer contours clockwise; the codes keep their names. A contour encloses another when the inner contour's bounding box lies inside the outer one's (and is not equal to it) and the ends and middles of the inner contour's segments (up to 16 segments, implied on-curve points included) are all inside the outer contour. An enclosed contour that crosses another contour is part of an overlapping shape and is not judged. Message codes: `outer-clockwise`, `counter-same-direction`, `nested-clockwise`. The fix runs Correct Path Direction on the layer: directions from nesting, each closed path starting at its lowest, then leftmost, node, and the paths sorted."
 ref = "fontbakery outline_direction"
 status = "docs"
+guesses = [
+  "A contour inside another one that also crosses a contour is never a counter; a glyph whose real counter crosses another path, checked in the reference app, would show whether it expects a direction there.",
+]
 
 [[check]]
 id = "check.outlines.alignmentMiss"
@@ -145,7 +151,7 @@ scope = "source"
 fixable = false
 area = "qa"
 milestone = "M3"
-summary = "A segment is shorter than 3 units or shorter than 0.6% of its contour's length; a short line that follows another line is not counted. The report is dropped above 100 hits and is not produced for sources with more than one master."
+summary = "A segment is shorter than 3 units or shorter than 0.6% of its contour's length; a short line counts only when it follows another line. The report is dropped above 100 hits and is not produced for sources with more than one master."
 ref = "fontbakery outline_short_segments"
 status = "docs"
 
@@ -411,7 +417,7 @@ scope = "source"
 fixable = true
 area = "qa"
 milestone = "M3"
-summary = "A node flagged as corner has exactly collinear handles; it probably should be smooth. The fix sets the smooth flag."
+summary = "A node flagged as corner has exactly collinear handles; it probably should be smooth. Sources only: a compiled font stores no smooth flags. The fix sets the smooth flag."
 ref = "Editor audit convention (node type clean-up)"
 status = "inferred"
 notes = "audit.fix sets the reported nodes smooth with path.toggleNodeType (to: smooth, keepOutline: true)."
@@ -588,7 +594,11 @@ milestone = "M12"
 summary = "A mark component is not where its anchor pair would put it, or a composite's width differs from its base letter although automatic alignment would apply. The fix re-applies automatic alignment."
 ref = "Editor audit convention (components out of alignment)"
 status = "inferred"
-notes = "Not registered yet: the check needs the alignment routine of the components crate, which the audit crate does not depend on."
+notes = "Runs on the master and special layers of a source, in the profile strict; threshold `tolerance` (1 unit). Positions and width are those of components.autoAlign*. A component next to a path, or in a font with Disable Automatic Alignment on, is not reported. The fix (component.enableAutomaticAlignment) needs safeOnly: false, because the component moves and the width then follows the bases; a component aligned horizontally only is reported without a fix. Built in M12.84; tested on FontCraft fonts only."
+guesses = [
+  "A mark whose automatic alignment was turned off by hand is reported when it is more than one unit from where its anchors put it, measured from where the glyphs before it stand; the row's source names no such exception, and the reference's own audit on a hand-placed accent would settle it.",
+  "A width is compared only where at least one component of the layer is aligned automatically; a composite with every component placed by hand keeps its own width.",
+]
 
 [[check]]
 id = "check.components.caronAlternate"
@@ -627,7 +637,11 @@ milestone = "M12"
 summary = "A base letter lacks an anchor that its glyph-data entry expects (such as top or bottom) while the font contains marks that attach there. The fix adds the default anchors for the glyph at their computed positions."
 ref = "Editor audit convention (missing anchors)"
 status = "inferred"
-notes = "Not registered yet: the check needs the default-anchor table of the components crate, which the audit crate does not depend on."
+notes = "Runs on the drawn master layers of exporting glyphs of a source, in the profile outlines. The expected anchors are those Set Anchors adds (custom glyph data first, then the default table of fontcraft-components); an anchor counts as expected only when some glyph has the attaching anchor of that name (`_top` for `top`), and anchors taken over from components count as present. Built in M12.84; tested on FontCraft fonts only."
+guesses = [
+  "A base is any glyph to which the glyph data gives anchors but no attaching one, so a figure with anchors in custom glyph data is checked like a letter.",
+  "Master layers only: a special layer without the anchors of its master is not reported.",
+]
 
 [[check]]
 id = "check.anchors.markWithoutAttachment"
@@ -639,7 +653,10 @@ milestone = "M12"
 summary = "A combining mark has no attaching anchor (one whose name starts with an underscore), so it cannot be positioned or used to build composites. The fix adds the default mark anchor."
 ref = "Editor audit convention (mark anchors)"
 status = "inferred"
-notes = "Not registered yet: telling combining marks apart needs the glyph data and the default-anchor table of the components crate, which the audit crate does not depend on."
+notes = "Runs on the drawn master layers of a source, in the profile outlines. A combining mark is a glyph to which the glyph data or the default table gives an attaching anchor; one attaching anchor of any name, its own or taken over from a component, is enough. Built in M12.84; tested on FontCraft fonts only."
+guesses = [
+  "Marks outside the default-anchor table (spacing marks, enclosing marks) and marks that draw nothing are not reported, because Set Anchors has nothing to add to them.",
+]
 
 [[check]]
 id = "check.anchors.duplicateName"
@@ -2463,10 +2480,13 @@ scope = "binary"
 fixable = false
 area = "qa"
 milestone = "M12"
-summary = "The STAT table is missing or cannot describe every named instance: an instance uses an axis value that no STAT axis value covers, or its name record is missing."
+summary = "The STAT table is missing or cannot describe every named instance: an instance uses an axis value that no STAT axis value covers or (warning) that more than one format 1 or 3 value names, or its name record is missing."
 ref = "fontbakery inconsistencies_between_fvar_STAT; fontbakery microsoft/fvar_STAT_axis_ranges"
 status = "docs"
 notes = "A format 4 axis value whose coordinates equal an instance's covers that whole instance; FontBakery's check ignores format 4 values."
+guesses = [
+  "Two format 1 or 3 values for one instance value are a warning, since applications take one of them; FontBakery fails them. A system that shows a wrong style name because of it would settle the severity.",
+]
 
 [[check]]
 id = "check.variations.statValueQuality"
@@ -3693,7 +3713,10 @@ summary = "Returns the cached results of the last run for a target without runni
 ref = "Our design"
 status = "inferred"
 own = true
-notes = "M3 keeps the last run of each open document until the next run or until the document closes; saving keeps it. A glyph counts as edited when its layers differ from the run's. The document carries the run's runId; a call with another runId is refused (M12.64b)."
+notes = "M3 keeps the last run of each open document until the next run or until the document closes; saving keeps it. A glyph counts as edited when its layers differ from the run's. The document carries the run's runId; a call with another runId is refused (M12.64b). The last run of each of the eight paths audited last is kept for the session (M12.84); a run of a list of files is not. On a path every result is stale once the files on disk changed, and results on the ignore list are those the run found ignored."
+guesses = [
+  "The runs of eight paths are kept; no source says how many a session holds.",
+]
 
 [[command]]
 id = "audit.fix"
@@ -3707,7 +3730,7 @@ milestone = "M3"
 summary = "Applies the registered fix of every selected result that has one, as a single undo step, then re-runs the affected checks and returns what changed and what remains. `dryRun` reports the planned edits only; `safeOnly` (default true) skips fixes that alter the design; `output` writes a fixed copy of a file target instead of overwriting it."
 ref = "AFDKO checkoutlinesufo -e, -o, -w, -d, --ignore-contour-order"
 status = "docs"
-notes = "M3 fixes the open document. `results` takes ids of the kept run and cannot be combined with the filters; a result whose glyph changed since the run is skipped. The first stage runs each selected Font Info fix (syncVerticalMetrics, syncVersion, syncStyleLinking, syncFamilyValues, sortZones, clearInfoFields, and the source side of cleanNameRecords and cleanInstances) once, through its font.info or font.instance command with that command's defaults, for findings of any scope; with filters, the checks of those fixes run in full, compiling the source when they read compiled fonts. Then the glyph-data steps 1 to 6 (addMandatoryGlyphs, removeGlyphs, removeCodepoints, updateGlyphInfo, useProductionNames, setGdefClasses) run once each on the whole font, then each layer runs the steps of audit.outlineFixOrder, and last the font-wide steps 34 to 38 that read the final outlines (cleanKerning, with the stored pairs behind tabular-kerning results; renameLanguageTag, addDefaultLanguagesystem and reorderFeatures through font.features.setCode and font.features.reorder; autohint). Each font-wide step runs its checks again, compiling the source when they read compiled fonts, builds its calls from what they report now, and is undone as a whole when one of its calls fails. A call by result ids limits those steps to the glyphs of the results, or takes the whole font when a result names no glyph. A fix whose call audit.fix cannot build yet (the table fixes on the open document) is skipped with the reason, and its result reports `available: false`. The result cap does not hide findings from a fix. On the open document `output` is refused. A compiled font file as target (M12.61) runs the checks on the file, then the table repairs of docs/spec/21-qa.md § 5 › Fix calls in that table's order on a temporary copy next to the output, each call reading the previous one's output; the copy replaces `output` (default FONT.fixed.EXT, or the input with `inPlace`) only when every call succeeded, and a failing call leaves nothing written. When checking the written file again fails, the result has `remaining: null` and a warning. patchTable results pass their `table.field` to tables.recalculate (OS/2.fsType passes the project's value from the result); glyph-data and Font Info fixes are skipped with the reason. `results`, `masters`, `layers` and `keepOriginal` are refused on a file. A list of files as target (a family) runs the checks on all of them, plans each file's table repairs as for one file, and turns syncFamilyValues results into tables.recalculate `values`: for vertical-metric mismatches the widest value of the fonts the result compares (lowest descenders, highest of the rest), for underline results the value of the font the others are compared with; outputs follow outputDir or inPlace (`output` is refused), are written to temporary files, and replace their files only when every call on every file succeeded; `remaining` checks the family as written. `decimal` and `keepContourOrder` wait for later packages. `runId` (M12.64b) refuses the call when the document no longer keeps that run, so result ids cannot reach a later run. The Font Audit panel previews a fix with dryRun before applying it."
+notes = "M3 fixes the open document. `results` takes ids of the kept run and cannot be combined with the filters; a result whose glyph changed since the run is skipped. The first stage runs each selected Font Info fix (syncVerticalMetrics, syncVersion, syncStyleLinking, syncFamilyValues, sortZones, clearInfoFields, and the source side of cleanNameRecords and cleanInstances) once, through its font.info or font.instance command with that command's defaults, for findings of any scope; with filters, the checks of those fixes run in full, compiling the source when they read compiled fonts. Then the glyph-data steps 1 to 6 (addMandatoryGlyphs, removeGlyphs, removeCodepoints, updateGlyphInfo, useProductionNames, setGdefClasses) run once each on the whole font, then each layer runs the steps of audit.outlineFixOrder, and last the font-wide steps 34 to 38 that read the final outlines (cleanKerning, with the stored pairs behind tabular-kerning results; renameLanguageTag, addDefaultLanguagesystem and reorderFeatures through font.features.setCode and font.features.reorder; autohint). Each font-wide step runs its checks again, compiling the source when they read compiled fonts, builds its calls from what they report now, and is undone as a whole when one of its calls fails. A call by result ids limits those steps to the glyphs of the results, or takes the whole font when a result names no glyph. A fix whose call audit.fix cannot build yet (the table fixes on the open document) is skipped with the reason, and its result reports `available: false`. The result cap does not hide findings from a fix. On the open document `output` is refused. A compiled font file as target (M12.61) runs the checks on the file, then the table repairs of docs/spec/21-qa.md § 5 › Fix calls in that table's order on a temporary copy next to the output, each call reading the previous one's output; the copy replaces `output` (default FONT.fixed.EXT, or the input with `inPlace`) only when every call succeeded, and a failing call leaves nothing written. When checking the written file again fails, the result has `remaining: null` and a warning. patchTable results pass their `table.field` to tables.recalculate (OS/2.fsType passes the project's value from the result); glyph-data and Font Info fixes are skipped with the reason. `results`, `masters`, `layers` and `keepOriginal` are refused on a file. A list of files as target (a family) runs the checks on all of them, plans each file's table repairs as for one file, and turns syncFamilyValues results into tables.recalculate `values`: for vertical-metric mismatches the widest value of the fonts the result compares (lowest descenders, highest of the rest), for underline results the value of the font the others are compared with; outputs follow outputDir or inPlace (`output` is refused), are written to temporary files, and replace their files only when every call on every file succeeded; `remaining` checks the family as written. A source file as target (M12.84: .glyphs, .glyphspackage, .fontcraft, UFO, UFOZ; a designspace with `inPlace`) is opened in a session of its own with the user's settings and glyph data, gets the fixes of the open document as one call, and is written through the save path, each file atomically, to `output` (default FONT.fixed.EXT; another extension is another format) or over the input with `inPlace`; nothing is written when a step of the call fails, nothing changed, the file changed on disk meanwhile, or on `dryRun`; `results` is refused, and the open documents and the kept runs stay as they are. A package or a designspace holds many files: each one is replaced atomically, not all of them at once. `decimal` and `keepContourOrder` wait for later packages. `runId` (M12.64b) refuses the call when the document no longer keeps that run, so result ids cannot reach a later run. The Font Audit panel previews a fix with dryRun before applying it."
 guesses = [
   "An outline fix on a composite glyph only reports unless `safeOnly` is false (21-qa question 4).",
   "The fixes of M12 run in the three stages and the order of docs/spec/21-qa.md § 5 › Fix calls (glyph data, then layers, then kerning, feature code and hints); no reference tool fixes all of these, so a case where the order changes the result would settle it.",
@@ -3715,6 +3738,7 @@ guesses = [
   "alignHandles turns both handles onto the line that bisects their two directions, keeping their lengths; a type designer's review of fixed kinks would settle whether one handle should stay put instead.",
   "setGdefClasses makes a glyph that must not be a mark a Symbol when the glyph database classes it as a mark; a review of the fixed glyphs' categories would settle it.",
   "cleanKerning leaves a tabular glyph that is kerned through a group shared with other glyphs in the report, because removing the group pair would change their kerning; an exception pair of zero is the other choice, which a review of fixed fonts would settle.",
+  "A copy of a designspace is refused, because it would name the UFOs of the original; checkoutlinesufo -o writes one UFO and has no such case.",
   "A compiled font fixed with inPlace through a symbolic link replaces the file the link points to and keeps the link, with that file's permissions; fixing a linked font with the reference tools would settle whether the link should be replaced instead.",
 ]
 
@@ -3730,7 +3754,7 @@ milestone = "M12"
 summary = "Discards cached results and the per-glyph change hashes of a target, so the next run examines every glyph again."
 ref = "AFDKO checkoutlinesufo --clear-hash-map"
 status = "docs"
-notes = "Built in M12.59. Clearing drops the run kept for audit.results and audit.fix together with its per-glyph layer-check results (audit.glyphHashCache); a file target keeps no cache and reports `cleared: false`."
+notes = "Built in M12.59. Clearing drops the run kept for audit.results and audit.fix together with its per-glyph layer-check results (audit.glyphHashCache); a path drops the run kept for that file target (M12.84)."
 
 [[command]]
 id = "audit.profile.list"
@@ -3956,7 +3980,7 @@ milestone = "M12"
 summary = "Shortcut for the classic outline check: runs overlap, coincident points, flat curves, collinear lines, tiny contours and empty glyphs, and repairs them when `fix` is set. Defaults: minArea 25, tolerance 0, integer rounding, both check families on, fixed outlines written with the original kept in a backup layer."
 ref = "AFDKO checkoutlinesufo (all options)"
 status = "docs"
-notes = "Built in M12.44 as one audit.run of overlap, coincidentPoints, flatCurve, collinearLines, tinyContour and noContours with the reference defaults (minArea 25, tolerance 0); `fix` then runs audit.fix on the open document with every repair, not only the safe ones, as the reference's error correction mode does. Repair order read from AFDKO 5.0.1's checkoutlinesufo (Apache-2.0): coincident points, flat curves, collinear lines, overlap removal repeated until the rounded point list stops changing, tiny contours, collinear lines again; coordinates rounded (three decimals with decimal), points closer than one unit merged, then the original contour order restored for contours that did not change. `all` (X.audit3) passes to audit.run, which otherwise reuses the layer-check results of glyphs unchanged since the kept run (audit.glyphHashCache). `quiet` (X.audit3) leaves the `results` list out of the reply and keeps the summary and the per-check counts, as the reference prints no line per glyph in quiet mode. After audit.fix, each layer it changed is cleaned up as the reference cleans up each glyph it changed (X.audit4, ported from AFDKO 5.0.1's checkoutlinesufo and ufotools): every point rounded half to even, to integers or to three decimals with `decimal`; each segment whose end lies less than one unit from the point before it dropped, as fontPens' threshold pen does; then, unless keepContourOrder is false, the reference's contour matching: contours sorted by their top point and node count, each matched to the first original contour with as many nodes, else to the first original contour with an on-curve node on its top point (taking that contour's start point), the rest last. The reference's quirks are kept so the order matches its output: the node-count match ignores coordinates, and the top point compares x with y on a tie. The reply lists the cleaned layers under `cleanup` with the number of points merged. On an outline of four rectangles (two overlapping) the order and rounding equal AFDKO 5.0.1's `checkoutlinesufo -e -w` with and without `-d`."
+notes = "Built in M12.44 as one audit.run of overlap, coincidentPoints, flatCurve, collinearLines, tinyContour and noContours with the reference defaults (minArea 25, tolerance 0; collinearLines without its nearly-collinear variant) and no result cap; `fix` then runs audit.fix on the open document with every repair, not only the safe ones, as the reference's error correction mode does. Repair order read from AFDKO 5.0.1's checkoutlinesufo (Apache-2.0): coincident points, flat curves, collinear lines, overlap removal repeated until the rounded point list stops changing, tiny contours, collinear lines again; coordinates rounded (three decimals with decimal), points closer than one unit merged, then the original contour order restored for contours that did not change. `all` (X.audit3) passes to audit.run, which otherwise reuses the layer-check results of glyphs unchanged since the kept run (audit.glyphHashCache). `quiet` (X.audit3) leaves the `results` list out of the reply and keeps the summary and the per-check counts, as the reference prints no line per glyph in quiet mode. After audit.fix, each layer it changed is cleaned up as the reference cleans up each glyph it changed (X.audit4, ported from AFDKO 5.0.1's checkoutlinesufo and ufotools): every point rounded half to even, to integers or to three decimals with `decimal`; each segment whose end lies less than one unit from the point before it dropped, as fontPens' threshold pen does; then, unless keepContourOrder is false, the reference's contour matching: contours sorted by their top point and node count, each matched to the first original contour with as many nodes, else to the first original contour with an on-curve node on its top point (taking that contour's start point), the rest last. The reference's quirks are kept so the order matches its output: the node-count match ignores coordinates, and the top point compares x with y on a tie. The reply lists the cleaned layers under `cleanup` with the number of points merged. On an outline of four rectangles (two overlapping) the order and rounding equal AFDKO 5.0.1's `checkoutlinesufo -e -w` with and without `-d`."
 guesses = ["A fix of a file given by path is refused; the command line opens the source, fixes it and saves it, so the engine command only fixes the open document.", "The clean-up keeps node types, smooth flags and node names; the reference redraws the glyph through a segment pen, which loses smooth flags and point names. Running it on a UFO with smooth points would show whether that matters to users.", "Only paths are cleaned up and reordered; components keep their places in the shape list and their offsets, fractional ones included. The reference decomposes components before testing, so a fixed glyph never has any.", "`quiet` drops the results list and keeps the counts; the reference's quiet mode still prints how many glyphs it skipped, which the summary covers."]
 
 [[command]]
@@ -3987,7 +4011,7 @@ summary = "Shortcut for the family comparison: groups the given fonts into style
 ref = "AFDKO comparefamily (-d, -st, -ft, -tolerance, -nohints, -rm, -rn, -rp, -rf)"
 status = "docs"
 guesses = ["The label is Check Family and the results go to the Font Audit panel, never to the Compare Family window, so the two features with similar names stay apart; the id stays for the command line (21-qa.md question 13).", "`reports` only adds the tables; the reference's -rm also turns on its menu-name checks, which run here whenever their test numbers are selected. Running the reference with and without -rm on our fonts would settle whether the checks should follow the option."]
-notes = "Test numbers checked against AFDKO 5.0.1, run locally: comparefamily has single-face tests 1 to 34 and family tests 1 to 21, as 21-qa.md § 6 maps them; single-face test 29 is empty. Built in M12.44 as one audit.run of the mapped checks on the fonts and folder given; a number whose checks are not built yet is named in `warnings`, and a selection with no built check at all is refused. `tolerance` sets the `tolerance` threshold of each selected check that has one. `reports` (X.audit3) adds, under `reports`, the tables of audit.report.menuNames, .metrics, .panose and .featureLanguages for the same fonts: the reference's -rm, -rn (its code prints the menu-name table for -rn; see audit.report.menuNames), -rp and -rf. The reference's -l (a log file) is the command line's `check family -l`, which writes what it would print to the file instead of standard output."
+notes = "Test numbers checked against AFDKO 5.0.1, run locally: comparefamily has single-face tests 1 to 34 and family tests 1 to 21, as 21-qa.md § 6 maps them; single-face test 29 is empty. Built in M12.44 as one audit.run of the mapped checks on the fonts and folder given; a number whose checks are not built yet is named in `warnings`, and a selection with no built check at all is refused; the results are not capped. `tolerance` sets the `tolerance` threshold of each selected check that has one. `reports` (X.audit3) adds, under `reports`, the tables of audit.report.menuNames, .metrics, .panose and .featureLanguages for the same fonts: the reference's -rm, -rn (its code prints the menu-name table for -rn; see audit.report.menuNames), -rp and -rf. The reference's -l (a log file) is the command line's `check family -l`, which writes what it would print to the file instead of standard output."
 
 [[command]]
 id = "audit.report.menuNames"

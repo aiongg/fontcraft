@@ -57,7 +57,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Remove Overlap",
             ["Path"],
             Some("Cmd+Shift+O"),
-            "{glyph: name, layer?: id (default the first master's), side?: \"foreground\" | \"background\", shapes?: [index] (default every path)} or {glyphs: [names], layer?: id | layers?: [ids]}, keepOpenPaths?: bool = false. Merges the overlapping closed paths into outlines without overlaps (nonzero rule; new points on the grid) and deletes the open paths and one-node paths among them unless keepOpenPaths. Components stay. With `glyphs`, a locked glyph or a layer that cannot be done (one taking longer than 5 s included) is skipped and left as it was → {glyphs: [names], skipped: [{glyph, layer?, reason}], selection?: {glyph, layer, shapes} (one glyph: the result paths)}",
+            "{glyph: name, layer?: id (default the first master's), side?: \"foreground\" | \"background\", shapes?: [index] (default every path)} or {glyphs: [names], layer?: id | layers?: [ids]}, keepOpenPaths?: bool = false. Merges the overlapping closed paths into outlines without overlaps (nonzero rule; new points on the grid) and deletes the open paths and one-node paths among them unless keepOpenPaths. Small open corners are erased first when an export of the font erases them in every glyph. Components stay. With `glyphs`, a locked glyph or a layer that cannot be done (one taking longer than 5 s included) is skipped and left as it was → {glyphs: [names], skipped: [{glyph, layer?, reason}], selection?: {glyph, layer, shapes} (one glyph: the result paths)}",
             has_doc,
             remove_overlap
         )
@@ -107,7 +107,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Correct Path Direction",
             ["Path"],
             Some("Cmd+Shift+R"),
-            "{glyph: name, layer?: id, side?} or {glyphs: [names], layer?: id | layers?: [ids]}. Outer closed paths run counter-clockwise and counters clockwise, by nesting; each closed path starts at its lowest, then leftmost, on-curve node; paths and components are sorted by the bottom-left corner of their bounds (left edge first). Open paths keep their direction → {glyphs, skipped, selection?: {glyph, layer}}",
+            "{glyph: name, layer?: id, side?} or {glyphs: [names], layer?: id | layers?: [ids]}. Outer closed paths run counter-clockwise and counters clockwise, by nesting; each closed path starts at its lowest, then leftmost, on-curve node; paths and components are sorted from the bottom left to the top right, by the sum of the coordinates of the bottom-left corner of their bounds. Open paths keep their direction → {glyphs, skipped, selection?: {glyph, layer}}",
             has_doc,
             correct_path_direction
         )
@@ -127,7 +127,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Add Extremes",
             ["Path"],
             None,
-            "{glyph: name, layer?: id, side?, points?: [[shape, node]], shapes?: [index]} or {glyphs: [names], layer?: id | layers?: [ids]}. Adds a node at each horizontal and vertical extreme of the segments whose two end nodes are in `points`, of the paths in `shapes`, or of every path; skips an extreme closer than 3 units to a segment end or to the extreme before it; a node within 2 units and 2° of an extreme gets its handles made exactly horizontal or vertical. New nodes are smooth and on the grid → {glyphs, skipped, selection?: {glyph, layer, shapes}}",
+            "{glyph: name, layer?: id, side?, points?: [[shape, node]], shapes?: [index]} or {glyphs: [names], layer?: id | layers?: [ids]}. Adds a node at each horizontal and vertical extreme of the segments whose two end nodes are in `points`, of the paths in `shapes`, or of every path; skips an extreme closer than 3 units, or than both 10 units and a tenth of the segment's chord, to a segment end or to the extreme before it. First, a smooth node between two cubics within 2 units or 1% of the curve's chord of an extreme moves onto it when the refitted curves stay within half a unit, and any other node within 2 units and 2° of an extreme gets its handles made exactly horizontal or vertical. New nodes are smooth and on the grid → {glyphs, skipped, selection?: {glyph, layer, shapes}}",
             has_doc,
             add_extremes
         )
@@ -602,6 +602,7 @@ fn each_glyph(
 ) -> Result<Outcome> {
     let mut out = Outcome::default();
     for name in glyphs {
+        crate::work::check()?;
         if font.glyph(name).is_some_and(|g| g.info.locked) {
             if single {
                 return Err(EngineError::Locked(name.clone()));
@@ -649,23 +650,40 @@ fn overlap_options(p: &Params, font: &Font) -> Result<OverlapOptions> {
     Ok(OverlapOptions { grid: grid(font), open_paths: if keep { OpenPaths::Keep } else { OpenPaths::Remove } })
 }
 
-fn remove_overlap_in(layer: &mut Layer, side: LayerSide, t: Option<&Targets>, options: OverlapOptions) -> Op<Option<Picked>> {
+/// Remove Overlap on one layer. Invisible open corners are erased first in a font whose export
+/// erases them (`openCorner.invisibleWhenSmall`).
+fn remove_overlap_in(layer: &mut Layer, side: LayerSide, t: Option<&Targets>, options: OverlapOptions, corners: bool) -> Op<Option<Picked>> {
     let shapes = layer.parts_mut(side).shapes;
     let chosen = chosen_paths(t, shapes)?;
     let input = Input::new(shapes, |i| chosen.as_ref().is_none_or(|c| c.contains(&i)));
-    apply(shapes, input, TIME_LIMIT, move |c| Ok(Done::merged(po::remove_overlap(&c, options)?)))
+    apply(shapes, input, TIME_LIMIT, move |c| {
+        let mut contours = c;
+        for c in contours.iter_mut().filter(|c| corners && c.closed) {
+            if let Some(erased) = po::erase_invisible_corners_in(c, options.grid)? {
+                *c = erased;
+            }
+        }
+        Ok(Done::merged(po::remove_overlap(&contours, options)?))
+    })
 }
 
 fn remove_overlap(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("path.removeOverlap", v)?;
     let options = overlap_options(&p, s.font()?)?;
-    run_layers(s, &p, "Remove Overlap", &["shapes"], |layer, side, t| remove_overlap_in(layer, side, t, options))
+    let corners = erases_corners(s.font()?);
+    run_layers(s, &p, "Remove Overlap", &["shapes"], |layer, side, t| remove_overlap_in(layer, side, t, options, corners))
 }
 
 fn remove_overlap_for_all_masters(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("path.removeOverlapForAllMasters", v)?;
     let options = overlap_options(&p, s.font()?)?;
-    run_all_masters(s, &p, "Remove Overlap for All Masters", master_layer, |layer, side, t| remove_overlap_in(layer, side, t, options))
+    let corners = erases_corners(s.font()?);
+    run_all_masters(s, &p, "Remove Overlap for All Masters", master_layer, |layer, side, t| remove_overlap_in(layer, side, t, options, corners))
+}
+
+/// Whether an export of `font` erases the invisible open corners of every glyph of every master.
+fn erases_corners(font: &Font) -> bool {
+    super::stroke::OpenCorners::of(font).all()
 }
 
 /// Takes part in a boolean operation: a closed path of more than one node.
@@ -776,15 +794,13 @@ fn correct_direction_in(layer: &mut Layer, side: LayerSide, outlines: &Outlines)
         run_with_time_limit(TIME_LIMIT, move || po::correct_direction(&contours)).map_err(|e| e.to_string())?.map_err(|e| e.to_string())?;
     let done = Done { contours: directed.order.into_iter().map(Some).zip(directed.contours).collect(), selection: Vec::new() };
     let paths = to_paths(&input, &done)?;
-    // Paths and components sorted together, as the paths among themselves are sorted: by the
-    // left edge of their bounds, then the bottom edge; shapes without bounds go last.
-    let corner = |r: Option<Rect>| r.map_or((f64::INFINITY, f64::INFINITY), |r| (r.x0, r.y0));
+    // Paths and components sorted together, as the paths among themselves are sorted.
     let mut items: Vec<((f64, f64), Shape)> =
-        paths.into_iter().map(|(_, path)| (corner(path.to_bez().ok().as_ref().and_then(bounds_of)), Shape::Path(path))).collect();
+        paths.into_iter().map(|(_, path)| (po::shape_order(path.to_bez().ok().as_ref().and_then(bounds_of)), Shape::Path(path))).collect();
     for shape in shapes.iter() {
         if let Shape::Component(c) = shape {
             let b = serde_json::to_string(c).ok().and_then(|json| outlines.get(&(json, master.clone()))).and_then(bounds_of);
-            items.push((corner(b), shape.clone()));
+            items.push((po::shape_order(b), shape.clone()));
         }
     }
     items.sort_by(|a, b| a.0.0.total_cmp(&b.0.0).then(a.0.1.total_cmp(&b.0.1)));

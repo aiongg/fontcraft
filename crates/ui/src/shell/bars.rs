@@ -67,6 +67,8 @@ pub struct StatusProps<'a> {
     pub features: &'a craft::ui::contract::Tracked<crate::app::models::text::FeaturesModel>,
     /// The Edit View's controls; `None` while Font View shows.
     pub edit: Option<EditBar>,
+    /// The Higher-Order Interpolation tool's axis, while it is the current tool.
+    pub hoi: Option<crate::canvas::hoi::AxisChoice>,
     pub sent: &'a mut Vec<crate::app::Msg>,
 }
 
@@ -91,12 +93,18 @@ pub fn status(ui: &mut Ui, mut props: StatusProps<'_>) {
 fn status_view(props: &mut StatusProps<'_>, ui: &mut Ui) {
     let words = Env::of(ui).words::<ChromeWords>();
     let edit = props.edit;
+    let hoi = props.hoi.take();
     // The end group runs in its own closure beside the body's, so it posts into its own list.
     let mut end_sent = Vec::new();
     let mut bar = Bar::new(words.status.clone(), BarKind::Status);
     if let Some(edit) = edit {
         let end_sent = &mut end_sent;
-        bar = bar.trailing(move |ui, _| edit_bar::end_controls(ui, edit_bar::Props { bar: edit, sent: &mut *end_sent }));
+        bar = bar.trailing(move |ui, _| {
+            edit_bar::end_controls(ui, edit_bar::Props { bar: edit, sent: &mut *end_sent });
+            if let Some(choice) = &hoi {
+                edit_bar::hoi_axis(ui, choice, &mut *end_sent);
+            }
+        });
     }
     let _ = bar.show(ui, |ui, _| {
         crate::panels::features_menu::show(ui, crate::panels::features_menu::Props { model: props.features, sent: props.sent });

@@ -25,14 +25,21 @@
 //!   source there, as both oracles do; the handbook asks for one alternate layer under every
 //!   master (`alternateLayer.onePerMaster`) and does not say what happens without one.
 //! - Colour, SVG, bitmap and smart-glyph pole layers are no sources; backup layers are ignored.
+//! - A layer marked inactive ([`is_inactive`]) is no source: it is listed in
+//!   [`GlyphSources::inactive`], and interpolation uses a sub-model without it. The mark has no
+//!   effect on the origin master's main layer, which every interpolation starts from.
 //! - Two sources at one location, a location that is not finite, and more than
 //!   [`crate::MAX_SOURCES`] sources are refused.
 
 use std::collections::HashSet;
+use std::sync::Arc;
 
-use fontcraft_model::{Font, Glyph, Layer};
+use fontcraft_model::fc_keys::SOURCE_INACTIVE;
+use fontcraft_model::plist::{Number, Value};
+use fontcraft_model::{Font, Glyph, GlyphTable, Layer};
 
 use crate::designspace::{Designspace, Location, MasterInfo};
+use crate::instance::{InterpOptions, interpolate_layer};
 use crate::rules::RangeSet;
 use crate::{InterpError, MAX_AXES, MAX_COORDINATE, MAX_RANGE_SETS, MAX_SOURCES};
 
@@ -70,6 +77,70 @@ pub struct GlyphSources {
     pub alternates: Vec<AlternateSet>,
     /// Ids of the designspace's masters the glyph has no layer for.
     pub missing_masters: Vec<String>,
+    /// The sources an inactive mark leaves out, main and alternate ones, in glyph order.
+    pub inactive: Vec<Source>,
+}
+
+/// Whether `layer` is marked as left out of interpolation.
+pub fn is_inactive(layer: &Layer) -> bool {
+    match layer.info.user_data.get(SOURCE_INACTIVE) {
+        Some(Value::Number(n)) => n.value().as_f64() != 0.0,
+        Some(Value::Bool(on)) => *on,
+        Some(Value::String(s)) => s.as_str() == "1",
+        _ => false,
+    }
+}
+
+/// Marks `layer` as left out of interpolation, or takes the mark off.
+pub fn set_inactive(layer: &mut Layer, inactive: bool) {
+    let data = &mut layer.info.user_data;
+    if inactive {
+        data.0.insert(SOURCE_INACTIVE, Value::Number(Number::int(1)));
+    } else {
+        data.0.entries.retain(|(k, _)| k.as_str() != SOURCE_INACTIVE);
+    }
+}
+
+/// Whether any layer of `font` is marked as left out of interpolation.
+pub fn has_inactive(font: &Font) -> bool {
+    font.glyphs.iter().any(|g| g.layers.iter().any(is_inactive))
+}
+
+/// `font` with the drawing of every inactive master layer replaced by the interpolation of the
+/// glyph's other sources there; `None` when nothing is inactive. The layers stay marked, so they
+/// are still no sources of their own glyphs; what uses a glyph at a master (a decomposed
+/// component, the mark positions) then uses the interpolated drawing. A layer whose glyph cannot
+/// be interpolated keeps its drawing.
+pub fn with_inactive_interpolated(font: &Font, designspace: &Designspace, options: &InterpOptions) -> Option<Font> {
+    if !has_inactive(font) {
+        return None;
+    }
+    let mut changed = false;
+    let glyphs = font
+        .glyphs
+        .iter()
+        .map(|g| {
+            if !g.layers.iter().any(is_inactive) {
+                return Arc::clone(g);
+            }
+            let Ok(sources) = GlyphSources::of(font, designspace, &g.name) else { return Arc::clone(g) };
+            let mut out = Glyph::clone(g);
+            for s in sources.inactive.iter().filter(|s| s.is_master) {
+                let Some(layer) = out.layers.iter_mut().find(|l| l.id == s.layer_id && l.is_master_layer()) else { continue };
+                let Ok(new) = interpolate_layer(font, &sources, &s.location, options) else { continue };
+                layer.width = new.width;
+                layer.shapes = new.shapes;
+                layer.anchors = new.anchors;
+                layer.info.vert_width = new.info.vert_width;
+                layer.info.vert_origin = new.info.vert_origin;
+                changed = true;
+            }
+            Arc::new(out)
+        })
+        .collect();
+    let mut out = font.clone();
+    out.glyphs = GlyphTable::from_glyphs(glyphs);
+    changed.then_some(out)
 }
 
 impl GlyphSources {
@@ -77,6 +148,7 @@ impl GlyphSources {
     pub fn of(font: &Font, designspace: &Designspace, glyph: &str) -> Result<GlyphSources, InterpError> {
         let g = font.glyph(glyph).ok_or_else(|| InterpError::UnknownGlyph(glyph.to_string()))?;
         let mut out = GlyphSources { glyph: glyph.to_string(), ..GlyphSources::default() };
+        let origin = designspace.origin().map(|m| m.id.as_str());
 
         for m in designspace.masters() {
             let Some(layer) = g.layer(&m.id) else {
@@ -84,7 +156,9 @@ impl GlyphSources {
                 continue;
             };
             let main = if has_range(layer) { partner(g, &m.id).unwrap_or(layer) } else { layer };
-            out.main.push(Source { layer_id: main.id.clone(), master: m.id.clone(), location: m.location.clone(), is_master: true });
+            let source = Source { layer_id: main.id.clone(), master: m.id.clone(), location: m.location.clone(), is_master: true };
+            let list = if is_inactive(main) && origin != Some(m.id.as_str()) { &mut out.inactive } else { &mut out.main };
+            push_limited(list, source)?;
         }
         for layer in &g.layers {
             let a = &layer.info.attrs;
@@ -92,8 +166,9 @@ impl GlyphSources {
                 continue;
             }
             let Some(m) = designspace.master(&layer.master) else { continue };
+            let list = if is_inactive(layer) { &mut out.inactive } else { &mut out.main };
             push_limited(
-                &mut out.main,
+                list,
                 Source { layer_id: layer.id.clone(), master: m.id.clone(), location: own_location(designspace, m, layer)?, is_master: false },
             )?;
         }
@@ -110,6 +185,13 @@ impl GlyphSources {
             let (location, is_master) =
                 if layer.info.attrs.coordinates.is_empty() { (m.location.clone(), true) } else { (own_location(designspace, m, layer)?, false) };
             let source = Source { layer_id: layer.id.clone(), master: m.id.clone(), location, is_master };
+            // The origin's main layer stays a source in spite of its mark.
+            if is_inactive(layer) && !out.main.iter().any(|s| s.layer_id == source.layer_id) {
+                if !out.inactive.iter().any(|s| s.layer_id == source.layer_id) {
+                    push_limited(&mut out.inactive, source)?;
+                }
+                continue;
+            }
             let set = match boxes.iter().position(|b| *b == key) {
                 Some(i) => out.alternates.get_mut(i),
                 None => {
@@ -400,6 +482,63 @@ pub(crate) mod tests {
         assert_eq!(sources(&font, "b").unwrap().missing_masters, ["black"]);
         assert!(matches!(sources(&font, "c"), Err(InterpError::BadNumber { .. })));
         assert!(matches!(sources(&font, "zz"), Err(InterpError::UnknownGlyph(_))));
+    }
+
+    #[test]
+    fn inactive_sources_leave_interpolation_but_the_origin_stays() {
+        let off = |mut l: Layer| {
+            set_inactive(&mut l, true);
+            l
+        };
+        let g = glyph(
+            "g",
+            vec![
+                off(layer("thin", "thin", vec![rect(100.0)])),
+                layer("black", "black", vec![rect(900.0)]),
+                off(at(layer("thin", "brace", vec![rect(700.0)]), &[Some(500.0)])),
+                off(ranged(layer("black", "alt", vec![rect(1.0)]), &[(Some(600.0), None)])),
+            ],
+        );
+        let mut font = two_masters(vec![g]);
+        let s = sources(&font, "g").unwrap();
+        assert_eq!(ids(&s.main), ["thin", "black"], "the origin's mark has no effect");
+        assert_eq!(ids(&s.inactive), ["brace", "alt"]);
+        assert!(s.alternates.is_empty(), "a set without an active layer is no set");
+        let width = |font: &Font| {
+            let l = interpolate_layer(font, &sources(font, "g").unwrap(), &Location(vec![500.0]), &InterpOptions::default()).unwrap();
+            match l.shapes.first() {
+                Some(Shape::Path(p)) => p.nodes.iter().map(|n| n.x).fold(0.0, f64::max),
+                _ => 0.0,
+            }
+        };
+        assert_eq!(width(&font), 500.0, "halfway between the masters, not the intermediate layer's 700");
+        let glyphs: Vec<Glyph> = font
+            .glyphs
+            .iter()
+            .map(|g| {
+                let mut g = Glyph::clone(g);
+                g.layers.iter_mut().for_each(|l| set_inactive(l, false));
+                g
+            })
+            .collect();
+        font.glyphs = GlyphTable::from_glyphs(glyphs.into_iter().map(Arc::new).collect());
+        assert!(!has_inactive(&font));
+        assert_eq!(width(&font), 700.0);
+    }
+
+    #[test]
+    fn inactive_master_layers_draw_the_interpolation() {
+        let mut black = layer("black", "black", vec![rect(900.0)]);
+        set_inactive(&mut black, true);
+        let g = glyph("g", vec![layer("thin", "thin", vec![rect(100.0)]), at(layer("thin", "brace", vec![rect(200.0)]), &[Some(500.0)]), black]);
+        let font = two_masters(vec![g]);
+        let ds = Designspace::new(&font).unwrap();
+        let filled = with_inactive_interpolated(&font, &ds, &InterpOptions::default()).unwrap();
+        let g = filled.glyph("g").unwrap();
+        let black = g.layers.iter().find(|l| l.id == "black").unwrap();
+        assert!(is_inactive(black), "still no source");
+        assert_ne!(black.shapes, vec![rect(900.0)], "the inactive drawing is gone");
+        assert!(with_inactive_interpolated(&two_masters(Vec::new()), &ds, &InterpOptions::default()).is_none());
     }
 
     #[test]

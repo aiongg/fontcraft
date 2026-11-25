@@ -48,6 +48,23 @@ fn try_read_reply(stream: &mut TcpStream) -> io::Result<Reply> {
     let mut lines = head.split("\r\n");
     let status = lines.next().and_then(|l| l.split(' ').nth(1)).and_then(|s| s.parse().ok()).ok_or_else(|| bad("status line"))?;
     let headers: Vec<(String, String)> = lines.filter_map(|l| l.split_once(':')).map(|(n, v)| (n.trim().to_string(), v.trim().to_string())).collect();
+    if headers.iter().any(|(n, v)| n.eq_ignore_ascii_case("transfer-encoding") && v == "chunked") {
+        let mut body = Vec::new();
+        loop {
+            let mut size = Vec::new();
+            while !size.ends_with(b"\r\n") {
+                stream.read_exact(&mut byte)?;
+                size.push(byte[0]);
+            }
+            let size = usize::from_str_radix(String::from_utf8_lossy(&size).trim(), 16).map_err(|_| bad("chunk size"))?;
+            let mut chunk = vec![0u8; size + 2];
+            stream.read_exact(&mut chunk)?;
+            if size == 0 {
+                return Ok(Reply { status, headers, body: String::from_utf8(body).map_err(|_| bad("body is not UTF-8"))? });
+            }
+            body.extend_from_slice(&chunk[..size]);
+        }
+    }
     let length: usize = headers
         .iter()
         .find(|(n, _)| n.eq_ignore_ascii_case("content-length"))
@@ -304,4 +321,85 @@ fn a_connection_is_closed_after_its_time() {
     assert_eq!(read_reply(&mut stream).status, 200);
     let mut rest = [0u8; 16];
     assert_eq!(stream.read(&mut rest).unwrap(), 0, "the connection is closed after the reply");
+}
+
+/// A cancellation on another connection stops a running request, in its own session only.
+#[test]
+fn a_running_request_is_cancelled_from_another_connection() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    std::thread::spawn(move || serve(Server::new(Box::new(crate::stdio::tests::Slow)), listener, Limits::default()));
+    let start = json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}).to_string();
+    let session = || post_raw(addr, "", start.as_bytes()).header("mcp-session-id").unwrap().to_string();
+    let (session, other) = (session(), session());
+    let header = format!("Mcp-Session-Id: {session}\r\n");
+    let call = json!({"jsonrpc": "2.0", "id": "long", "method": "tools/call", "params": {"name": "run_command", "arguments": {"command": "slow"}}})
+        .to_string();
+    let running = {
+        let header = header.clone();
+        std::thread::spawn(move || post_raw(addr, &header, call.as_bytes()))
+    };
+    let cancel = json!({"jsonrpc": "2.0", "method": "notifications/cancelled", "params": {"requestId": "long"}}).to_string();
+    std::thread::sleep(Duration::from_millis(300));
+    assert_eq!(post_raw(addr, &format!("Mcp-Session-Id: {other}\r\n"), cancel.as_bytes()).status, 202);
+    assert!(!running.is_finished(), "another session cannot cancel it");
+    assert_eq!(post_raw(addr, &header, cancel.as_bytes()).status, 202);
+    let reply = running.join().unwrap();
+    assert_eq!((reply.status, reply.json()["error"]["code"].as_i64()), (200, Some(CANCELLED)));
+}
+
+/// Progress is streamed while the request runs, and a request without a progress token gets a plain reply.
+#[test]
+fn progress_is_streamed_before_the_reply() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    std::thread::spawn(move || serve(Server::new(Box::new(crate::stdio::tests::Slow)), listener, Limits::default()));
+    let start = json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}).to_string();
+    let session = post_raw(addr, "", start.as_bytes()).header("mcp-session-id").unwrap().to_string();
+    let header = format!("Mcp-Session-Id: {session}\r\n");
+    let call = json!({"jsonrpc": "2.0", "id": "long", "method": "tools/call", "params": {
+        "name": "run_command", "arguments": {"command": "slow"}, "_meta": {"progressToken": "p"},
+    }})
+    .to_string();
+    let raw = format!(
+        "POST /mcp HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\nAccept: application/json, text/event-stream\r\n{header}Content-Length: {}\r\n\r\n{call}",
+        call.len()
+    );
+    let mut stream = connect(addr);
+    stream.write_all(raw.as_bytes()).unwrap();
+    // The first bytes of the reply arrive while the command runs.
+    assert_eq!(stream.peek(&mut [0u8; 1]).unwrap(), 1);
+    let cancel = json!({"jsonrpc": "2.0", "method": "notifications/cancelled", "params": {"requestId": "long"}}).to_string();
+    assert_eq!(post_raw(addr, &header, cancel.as_bytes()).status, 202);
+    let reply = read_reply(&mut stream);
+    assert_eq!((reply.status, reply.header("Content-Type")), (200, Some("text/event-stream")));
+    let messages: Vec<Value> = reply.body.lines().filter_map(|l| l.strip_prefix("data: ")).map(|l| serde_json::from_str(l).unwrap()).collect();
+    let (last, progress) = messages.split_last().unwrap();
+    assert!(!progress.is_empty() && progress.iter().all(|m| m["method"] == "notifications/progress" && m["params"]["progressToken"] == "p"));
+    assert_eq!((&last["id"], last["error"]["code"].as_i64()), (&json!("long"), Some(CANCELLED)));
+
+    // The connection goes on after the stream.
+    let ping = ping(9).to_string();
+    let raw =
+        format!("POST /mcp HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\n{header}Content-Length: {}\r\n\r\n{ping}", ping.len());
+    stream.write_all(raw.as_bytes()).unwrap();
+    assert_eq!(read_reply(&mut stream).json()["id"], 9);
+}
+
+/// A session hears of a subscribed resource another session changed with its next reply.
+#[test]
+fn a_session_hears_of_a_change_by_another_with_its_next_reply() {
+    let addr = start(Limits::default());
+    let initialize = json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}).to_string();
+    let open = || post_raw(addr, "", initialize.as_bytes()).header("mcp-session-id").unwrap().to_string();
+    let (one, two) = (open(), open());
+    let post = |session: &str, message: Value| post_raw(addr, &format!("Mcp-Session-Id: {session}\r\n"), message.to_string().as_bytes());
+    post(&one, json!({"jsonrpc": "2.0", "id": 2, "method": "resources/subscribe", "params": {"uri": "fontcraft://glyph/A"}}));
+    let draw = json!({"command": "path.addRectangle", "params": {"glyph": "A", "x": 0, "y": 0, "width": 10, "height": 10}});
+    let changed = post(&two, json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "run_command", "arguments": draw}}));
+    assert_eq!(changed.json()["result"]["isError"], false, "the other session has no subscription: {}", changed.body);
+    let ping = json!({"jsonrpc": "2.0", "id": 3, "method": "ping"});
+    let told = post(&one, ping.clone());
+    assert!(told.body.contains("notifications/resources/updated") && told.body.contains("fontcraft://glyph/A"), "{}", told.body);
+    assert_eq!(post(&one, ping).json()["result"], json!({}), "once");
 }

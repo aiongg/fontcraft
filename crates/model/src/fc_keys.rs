@@ -16,6 +16,7 @@ pub enum Owner {
     Path,
     Node,
     Anchor,
+    Component,
     Guide,
     /// The user settings store, not a document.
     Settings,
@@ -70,6 +71,13 @@ pub const AUDIT: &str = "com.fontcraft.audit";
 /// The font's cross-axis mappings: `{"description"?, "mappings": [{"description"?, "input": {tag:
 /// number}, "output": {tag: number}}]}` in design coordinates (M13.48, `font.setCrossAxisMappings`).
 pub const CROSS_AXIS_MAPPINGS: &str = "com.fontcraft.crossAxisMappings";
+/// A component's own place in the design space: `{tag: number}` in design coordinates (M6.24,
+/// `component.setInstanceLocation`; `crate::pinned`).
+pub const COMPONENT_LOCATION: &str = "com.fontcraft.componentLocation";
+
+/// A source layer left out of interpolation: the integer 1 (M9.37, `glyph.setSourceActive`,
+/// `fontcraft_interp::sources`). A layer without the key takes part.
+pub const SOURCE_INACTIVE: &str = "com.fontcraft.sourceInactive";
 
 /// Every key with the object it is stored on.
 pub const ALL: &[(&str, Owner)] = &[
@@ -90,6 +98,8 @@ pub const ALL: &[(&str, Owner)] = &[
     (LINKED_SOURCE, Owner::Glyph),
     (AUDIT, Owner::Font),
     (CROSS_AXIS_MAPPINGS, Owner::Font),
+    (COMPONENT_LOCATION, Owner::Component),
+    (SOURCE_INACTIVE, Owner::Layer),
 ];
 
 /// Whether `key` is one of FontCraft's own keys.

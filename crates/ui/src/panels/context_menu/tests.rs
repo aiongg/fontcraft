@@ -25,6 +25,7 @@ fn item(command: &'static str, label: &'static str, enabled: bool) -> ContextIte
 fn a_click_on_an_item_reports_it_and_a_disabled_item_reports_nothing() {
     let menu = CanvasMenu {
         glyph: "A".into(),
+        target: None,
         screen: [40.0, 40.0],
         at: [300.0, 300.0],
         hit: None,
@@ -95,6 +96,7 @@ fn a_destructive_item_runs_like_any_other() {
     assert!(crate::app::context_menu::DESTRUCTIVE.contains(&"guide.remove"));
     let menu = CanvasMenu {
         glyph: "A".into(),
+        target: None,
         screen: [40.0, 40.0],
         at: [300.0, 300.0],
         hit: None,

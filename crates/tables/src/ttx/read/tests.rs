@@ -44,6 +44,35 @@ fn numbers_tags_hex_and_timestamps_read_as_fonttools_reads_them() {
     assert!(timestamp_from_string("Fri Aug 10 11:12:00 2017").is_err(), "the weekday must match the date");
 }
 
+/// The `post` table a dump lacks is compiled again for the dump's glyph order: a glyph it renames gets its new name, a
+/// name list entry that is a standard name goes, and names that stand for others stay.
+#[test]
+fn a_truetype_font_s_post_table_is_compiled_again_for_the_dump_s_glyph_order() {
+    let mut font = SfntFont::new(Flavour::TrueType);
+    font.insert(*b"maxp", vec![0, 0, 0x50, 0, 0, 4]);
+    let mut post = vec![0u8; 32];
+    post[..4].copy_from_slice(&0x0002_0000u32.to_be_bytes());
+    // .notdef; "A" as a name of its own; "foo" twice, the second made unique as foo.1 or foo#1.
+    for v in [4u16, 0, 258, 259, 259] {
+        post.extend(v.to_be_bytes());
+    }
+    post.extend(b"\x01A\x03foo");
+    font.insert(*b"post", post.clone());
+    let names = crate::ttx::glyph_order(&font).unwrap();
+    let dump = |second: &str| {
+        let ids: String = [".notdef", second, &names[2], &names[3]].iter().map(|n| format!("<GlyphID name=\"{n}\"/>")).collect();
+        format!("<ttFont><GlyphOrder>{ids}</GlyphOrder><zzzz raw=\"True\"><hexdata>00</hexdata></zzzz></ttFont>")
+    };
+    let opts = ImportOptions::default();
+    let compiled = |text: &str| import(font.clone(), text, &opts).unwrap().get(*b"post").unwrap()[32..].to_vec();
+    let expect = |indices: [u16; 5], list: &[u8]| [indices.map(u16::to_be_bytes).concat(), list.to_vec()].concat();
+    assert_eq!(compiled(&dump("A")), expect([4, 0, 36, 258, 258], b"\x03foo"));
+    assert_eq!(compiled(&dump("A.alt")), expect([4, 0, 259, 258, 258], b"\x03foo\x05A.alt"));
+    // A dump that names other tables only, for a call that picks them, leaves it alone.
+    let picked = ImportOptions { tables: vec![*b"zzzz"], ..ImportOptions::default() };
+    assert_eq!(import(font.clone(), &dump("A.alt"), &picked).unwrap().get(*b"post"), Some(post.as_slice()));
+}
+
 #[test]
 fn import_refuses_other_documents_and_unknown_tables_without_hex() {
     let font = SfntFont::new(Flavour::TrueType);

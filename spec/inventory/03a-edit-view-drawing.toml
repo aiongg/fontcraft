@@ -350,7 +350,7 @@ milestone = "M3"
 summary = "One document window holds Font View as its fixed first tab followed by any number of Edit View tabs; clicking a tab title switches to it."
 ref = "Edit View"
 status = "handbook"
-notes = "Built in M3.2. In `crates/ui` (`shell/tabs.rs`, `panels/tab_strip.rs`) the strip is craft's document tab strip at the top of the document area: Font View first and not closable, then the Edit View tabs titled by their first four glyphs. Each tab keeps its glyph, camera, text and preview features, master and picked layers, selection and path focus, Edit Background and Preview Area; at most 1,000 tabs are open and the last 32 closed are kept. Each open document has its own tab set within those limits: switching the active document shows that document's tabs with the tab that showed last, and closing a document drops its tabs. A window and each new document open on Font View; `docs/ui.md` has the design. A renamed glyph keeps its place in every tab, closed ones included; a removed glyph leaves the tabs, a tab left without glyphs closes and is not kept for Reopen Last Closed Tab (Font View shows when it was showing), and a closed tab left without glyphs is forgotten."
+notes = "Built in M3.2. In `crates/ui` (`shell/tabs.rs`, `panels/tab_strip.rs`) the strip is craft's document tab strip at the top of the document area: Font View first and not closable, then the Edit View tabs titled by their first four glyphs. Tabs that do not fit are listed in the menu of the button at the strip's end (More Tabs; Alt+Down opens it), and a pick there shows the tab; every tab and close button has an accessible name (M14.9). Each tab keeps its glyph, camera, text and preview features, master and picked layers, selection and path focus, Edit Background and Preview Area; at most 1,000 tabs are open and the last 32 closed are kept. Each open document has its own tab set within those limits: switching the active document shows that document's tabs with the tab that showed last, and closing a document drops its tabs. A window and each new document open on Font View; `docs/ui.md` has the design. A renamed glyph keeps its place in every tab, closed ones included; a removed glyph leaves the tabs, a tab left without glyphs closes and is not kept for Reopen Last Closed Tab (Font View shows when it was showing), and a closed tab left without glyphs is forgotten."
 guesses = [
   "A window, and each document opened into it, opens on Font View with no Edit View tab, and a file's stored tabs open behind Font View; the handbook does not say which tab a file opens on. Opening a new file in the reference app settles it.",
   "Font View draws in the master of the Edit View tab shown last; the handbook gives Font View no master of its own. Switching masters in two tabs and then showing Font View in the reference app settles it.",
@@ -674,7 +674,7 @@ milestone = "M3"
 summary = "Row of tool buttons above the Edit View canvas. A click makes the tool active (`tool.select`); a shared button's menu lists the tools of its group."
 ref = "Edit View › Draw Tool; Edit View › Cutting Paths"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (https://www.youtube.com/watch?v=VGe96Qjlvvc; Glyphs 3), 11:54–11:57: the tooltip reads \"Knife (E)\" and the button carries a small menu triangle; 12:21: the Primitives button opens a menu listing Rectangle and Circle. FontCraft: the buttons come from `tool.list` in its order; the icons come from the framework's icon catalog (`crates/ui/src/icons.rs`)."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (https://www.youtube.com/watch?v=VGe96Qjlvvc; Glyphs 3), 11:54–11:57: the tooltip reads \"Knife (E)\" and the button carries a small menu triangle; 12:21: the Primitives button opens a menu listing Rectangle and Circle. FontCraft: the buttons come from `tool.list` in its order; the icons come from the framework's icon catalog (`crates/ui/src/icons.rs`). The toolbar is a rail at the window's left edge, whose buttons scroll when the window is too short for them."
 guesses = [
   "A secondary click on a shared button also opens its menu; no source shows the reference doing so.",
 ]
@@ -1477,7 +1477,7 @@ menu = []
 shortcut = "Delete"
 when = "editView"
 kind = "engine"
-params = "{glyph: name, layer?: id, side?, points?: [[shape, node]], shapes?: [index], anchors?: [name], guides?: [{scope: local|global, index}], annotations?: [index], hints?: [hint index], image?: bool} → {selection}"
+params = "{glyph: name, layer?: id, side?, points?: [[shape, node]], shapes?: [index], anchors?: [name], guides?: [{scope: local|global, index}], annotations?: [index], hints?: [hint index], image?: bool, matchLayers?: bool} → {selection}"
 area = "drawing"
 milestone = "M3"
 summary = "Removes the selection. A deleted node is taken out without opening the path, and the neighbouring handles are refitted so the remaining segment follows the old shape as closely as possible. The same key removes selected anchors and pen points."
@@ -1700,7 +1700,15 @@ milestone = "M3"
 summary = "An opened corner whose triangular overlap is small compared with the visible segments next to it is treated as invisible and does not show in the final outline, which allows opened corners on the outside of a shape. Once the overlap exceeds the threshold it becomes visible. The threshold is not specified."
 ref = "Edit View › Re-segmenting Outlines"
 status = "handbook"
-notes = "Video \"Glyphs 3 quick tutorial. Open corners for better control\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=gcx9H6knvjM; it shows Glyphs 3, not Glyphs 4), 0:24.5: in the filled preview the join is clean and the overlap loop of an opened corner does not show. The threshold is not visible."
+notes = "Video \"Glyphs 3 quick tutorial. Open corners for better control\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=gcx9H6knvjM; it shows Glyphs 3, not Glyphs 4), 0:24.5: in the filled preview the join is clean and the overlap loop of an opened corner does not show. The threshold is not visible. M3.31: the rule of glyphsLib's eraseOpenCorners filter (Apache-2.0), whose thresholds its authors had from the reference app's maker; export, Fill Preview, the Preview panel, preview.render and Remove Overlap use it. The previews close corners on the resolved outline, so a mirrored component's corners show there; an export erases them in the base glyph."
+guesses = [
+  "The size test is that of glyphsLib's filter: the parts of the two segments beyond their crossing are both under half of the segment, or one is under 0.3 and the other under 0.99.",
+  "Only a loop closed by a straight segment, on the outside of a path drawn in the PostScript direction, is invisible.",
+  "Remove Overlap erases invisible open corners only in a font whose export erases them in every glyph, which a UFO's does when its filter list says so.",
+]
+observe = [
+  "Open the top right corner of a 100-unit square by 20, 40, 60, 90 and 150 units, export each and note at which size the ear shows; do the same in Fill Preview and with Remove Overlap.",
+]
 
 # ───────────────────────────── Path direction ─────────────────────────────
 
@@ -1728,7 +1736,7 @@ menu = []
 context = ["canvas.node"]
 shortcut = ""
 kind = "engine"
-params = "{glyph: name, layer?: id, side?, point: [shape, node]} → {selection}"
+params = "{glyph: name, layer?: id, side?, point: [shape, node], matchLayers?: bool} → {selection}"
 area = "path-ops"
 milestone = "M3"
 summary = "Node context-menu command that makes the clicked on-curve node the start node of its closed path, rotating the stored point order without changing the shape."
@@ -1746,7 +1754,7 @@ menu = ["Path"]
 context = ["canvas", "canvas.path"]
 shortcut = "Cmd+Ctrl+Alt+R"
 kind = "engine"
-params = "{glyphs: [names] | glyph: name, layer?: id, side?, shapes?: [index] (with one glyph)} → {reversed: count, selection?}"
+params = "{glyphs: [names] | glyph: name, layer?: id, side?, shapes?: [index] (with one glyph), matchLayers?: bool} → {reversed: count, selection?}"
 area = "path-ops"
 milestone = "M3"
 summary = "Reverses the point order of the selected paths, or of every path on the layer when no path is selected. The shortcut is stated in the Font View chapter. The context menu offers the same action as Reverse Selected Contours or Reverse All Contours depending on whether a path is selected."
@@ -1785,7 +1793,11 @@ status = "handbook"
 notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:24–11:30 and 30:21–30:23: the Path menu lists Correct Path Direction with Cmd+Shift+R, and it is run. The reordering and the start-node change are not visible. FontCraft: sample points are nodes and segment midpoints. Open paths keep their direction and start node. Components are sorted among the paths by the same key (the bottom-left corner of their outline's bounds); images keep their places."
 guesses = [
   "A path is inside another when that one is larger, holds its bounding box and holds most of its sample points; paths that only overlap are both outer.",
-  "Shapes are sorted by the bottom-left corner of their bounds, and the start node is the lowest, then leftmost, on-curve node (03a question 16).",
+  "Shapes are sorted by the sum of the coordinates of the bottom-left corner of their bounds, then by its x (03a question 16).",
+  "The start node is the lowest, then leftmost, on-curve node; 96% to 99.5% of the contours of the corpus sources that keep their starts tidy agree (03a question 16).",
+]
+observe = [
+  "Draw three separate closed paths, one at the bottom right, one at the top left and one in the middle, plus a small path inside the middle one; run Correct Path Direction and read the shape order in Filter › Shape Order.",
 ]
 
 [[command]]
@@ -1825,8 +1837,12 @@ ref = "Edit View › Extremes & Inflections"
 status = "handbook"
 notes = "New nodes are smooth and rounded to the grid, with their handles lined up with them."
 guesses = [
-  "A node within 2 units and 2° of an extreme keeps its place, and its handles within 2° of the axis are made exactly horizontal or vertical (03a question 17).",
-  "An extreme is skipped when the chord from it to the end of its segment, or to the extreme before it, is shorter than 3 units.",
+  "A smooth node between two cubics moves onto an extreme within 2 units or 1% of the curve's chord, and the two curves are refitted, when they stay within half a unit of the old ones (03a question 17).",
+  "Any other node within 2 units and 2° of an extreme keeps its place, and its handles within 2° of the axis are made exactly horizontal or vertical (03a question 17).",
+  "An extreme is skipped when the chord from it to the end of its segment, or to the extreme before it, is shorter than 3 units, or shorter than both 10 units and a tenth of the segment's chord.",
+]
+observe = [
+  "Draw a smooth node 2 units off the top of an arch, between two curves, and run Add Extremes: does the node move, by how much, and do the neighbouring handles change length?",
 ]
 
 [[command]]
@@ -1870,7 +1886,7 @@ menu = []
 context = ["canvas.segment"]
 shortcut = ""
 kind = "engine"
-params = "{glyph: name, layer?: id, side?, segment: [shape, node], t?: number, near?: [x, y], snap?: extremum|inflection} → {node: [shape, node], selection}"
+params = "{glyph: name, layer?: id, side?, segment: [shape, node], t?: number, near?: [x, y], snap?: extremum|inflection, matchLayers?: bool} → {node: [shape, node], selection}"
 area = "path-ops"
 milestone = "M3"
 summary = "Headless equivalent of the Draw tool's Shift-click on a segment: splits a segment at a parameter, or at the extremum or inflection closest to a given position, without changing the shape. Our own command."
@@ -2861,16 +2877,20 @@ ref = "Edit View › Local & Global Guides"
 status = "handbook"
 guesses = [
   "Left keeps the guide's x, right moves it with the width, and both keeps its fraction of the width (03a question 27).",
-  "The guide's x is stored as an absolute position, and the command that changes the width moves it in the same undo step.",
+  "A local guide's x is kept as an absolute position, and the command that changes the width moves it in the same undo step; the reference's file format counts it from the right sidebearing instead (see the notes).",
+  "What the x of a both-referenced guide counts from: half the width by the format's name for it (`center`), but the 296 local `center` guides of Inter's source have x values that lie inside their glyphs only when read as absolute, beside others thousands of units away, so the file data settles nothing.",
+  "A global guide is drawn and snapped at its stored x in every glyph until X.fix106's findings are built: right-referenced at the glyph's width plus x, both-referenced at a rule still to be observed.",
   "A left sidebearing change moves every local guide with the outline, whatever its reference; the reference applies to the rest of a width change.",
   "A both-referenced guide in a glyph of width zero moves by half the change.",
   "Locked guides follow the width too: the lock guards against editing the guide, not against its layer's metrics.",
   "Scaling the units per em keeps every reference without moving guides further, since positions and widths scale together.",
 ]
-notes = "Documented, not yet observed. FontCraft (M3.42): `fontcraft_model::guide_follow::follow_width` moves a layer's local guides, foreground and background, and runs in the same edit as every command that writes a width with the contents left in place: the right sidebearing, width and nudge commands, metrics keys, Auto Space and its value setters, Transform Metrics, automatic alignment, the import of metrics, copying metrics from a glyph set, the stem filters and derived glyphs, and colour layers following the master width. Global guides do not follow yet: they are drawn and snapped at their stored x in every glyph."
+notes = "Documented, not yet observed. FontCraft (M3.42): `fontcraft_model::guide_follow::follow_width` moves a layer's local guides, foreground and background, and runs in the same edit as every command that writes a width with the contents left in place: the right sidebearing, width and nudge commands, metrics keys, Auto Space and its value setters, Transform Metrics, automatic alignment, the import of metrics, copying metrics from a glyph set, the stem filters and derived glyphs, and colour layers following the master width. Global guides do not follow yet: they are drawn and snapped at their stored x in every glyph. Found in X.fix106, in the file format documentation and sample of the reference's public SDK (Apache-2.0): the key is `orientation` (`left`, `center` or `right`) from version 3 on, renamed from version 2's `alignment`; a right-referenced guide's `pos` counts from the right sidebearing, for local and global guides alike (the sample's A, 459 wide, has one at x -74, its master two at -25 and -34). FontCraft departs from both: `fontcraft_model::guide_follow` reads and writes `alignment` in every version and leaves a file's `orientation` unused, so such a guide is drawn and kept at its stored x as if left-referenced."
 observe = [
   "Change the width of a glyph with a right-referenced local guide and with a both-referenced one: note where each guide goes, and whether one undo puts the width and the guides back.",
   "Do the same with a right-referenced global guide: note whether it is drawn at a distance from the right edge of each glyph.",
+  "In a glyph 600 wide, place a vertical local guide at x 500, choose the arrow pointing left and right from a bar in the Info box, and note the x the Info box then shows; save as a version 3 file and read the guide's `pos` and `orientation`; then set the width to 800 and note where the guide is drawn.",
+  "In a glyph 600 wide, place a vertical global guide at x 500, choose the right arrow, and note the x the Info box shows and where the guide is drawn in a glyph 300 wide.",
 ]
 
 [[behavior]]

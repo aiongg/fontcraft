@@ -44,6 +44,7 @@ pub mod overlay_fonts;
 pub mod panose;
 pub mod path;
 pub mod primitive_measurements;
+pub mod print;
 pub mod rename_by_namelist;
 pub mod review_hints;
 pub mod rule_tree;
@@ -97,6 +98,7 @@ pub const MODULES: &[Module] = &[
     extension_manager::run,
     axis_mappings::run_dialog,
     cross_axis::run_dialog,
+    print::run_dialog,
 ];
 
 /// Every package's dialog specs, one line each.

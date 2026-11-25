@@ -23,6 +23,7 @@ use super::*;
 use crate::EngineError;
 use crate::params::{MAX_TARGETS, Params, TargetKind, Targets};
 
+pub use fontcraft_compile::components_opt::OpenCorners;
 pub use fontcraft_compile::drawing::{CAP_AXIS_KEY, cap_axis, format_version, layer_outline, mask_mode, shapes_outline, stroke_style};
 
 /// The keys `path.setStroke` reads besides the target.

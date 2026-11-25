@@ -68,7 +68,7 @@ pub const MAX_PDF_FILTERS: usize = 8;
 /// Deepest nesting: page tree levels, saved graphics states (`q`), and form XObjects inside one
 /// another (each counts as one saved state).
 pub const MAX_PDF_DEPTH: usize = 64;
-/// Most page tree nodes visited while looking for the first page.
+/// Most page tree nodes visited while looking for a page.
 pub const MAX_PDF_PAGE_NODES: usize = 100_000;
 /// Most operators run, over the page and every form it draws.
 pub const MAX_PDF_OPERATORS: usize = 10_000_000;
@@ -258,7 +258,17 @@ pub fn read_pdf(data: &[u8], placement: Placement) -> Result<PdfOutlines, PdfErr
 /// would be larger is drawn at a lower resolution.
 pub fn render_pdf(data: &[u8], pixels_per_point: f64, max_pixels: u64) -> Result<PdfRaster, PdfError> {
     let page = cache::first_page(data)?;
-    let (image, pixels_per_point) = raster::render(&page, pixels_per_point, max_pixels)?;
+    raster_of(&page, pixels_per_point, max_pixels)
+}
+
+/// As [`render_pdf`], for page `index` (from 0); a page the file lacks is [`PdfError::NoPage`]. The
+/// file is read for the call, not kept.
+pub fn render_pdf_page(data: &[u8], index: usize, pixels_per_point: f64, max_pixels: u64) -> Result<PdfRaster, PdfError> {
+    raster_of(&load::page_drawing(data, index)?, pixels_per_point, max_pixels)
+}
+
+fn raster_of(page: &content::PageDrawing, pixels_per_point: f64, max_pixels: u64) -> Result<PdfRaster, PdfError> {
+    let (image, pixels_per_point) = raster::render(page, pixels_per_point, max_pixels)?;
     let mut dropped = Dropped::default();
     for (what, n) in &page.dropped.elements {
         if matches!(what.as_str(), "text" | "image" | "shading") {

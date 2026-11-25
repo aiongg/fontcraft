@@ -298,15 +298,19 @@ fn remove_from_text(text: &mut Text, gone: &dyn Fn(&str) -> bool) -> bool {
 }
 
 /// Passes every item of `text` through `f`, dropping those it returns `None` for, and makes `current` the current
-/// glyph. The cursor and the selection keep their places among the items kept.
+/// glyph. The items kept keep their own layers, and the cursor and the selection their places among them.
 fn rebuild(text: &mut Text, mut f: impl FnMut(&Item) -> Option<Item>, current: Option<&str>) {
     let selection = text.selection();
     let cursor = text.cursor();
     let anchor = if cursor == selection.start { selection.end } else { selection.start };
     let (mut new_cursor, mut new_anchor) = (0, 0);
     let mut items = Vec::with_capacity(text.len());
+    let mut layers = Vec::new();
     for (i, item) in text.items().iter().enumerate() {
         if let Some(kept) = f(item) {
+            if let Some(layer) = text.layer(i) {
+                layers.push((items.len(), layer.to_string()));
+            }
             items.push(kept);
             new_cursor += usize::from(i < cursor);
             new_anchor += usize::from(i < anchor);
@@ -315,6 +319,9 @@ fn rebuild(text: &mut Text, mut f: impl FnMut(&Item) -> Option<Item>, current: O
     let len = text.len();
     // `f` returns at most one item per item, so the text cannot outgrow its limit.
     if text.replace(0..len, items).is_ok() {
+        for (at, layer) in &layers {
+            text.set_layer(*at, Some(layer));
+        }
         text.set_current_glyph(current);
         text.select(new_anchor, new_cursor);
     }

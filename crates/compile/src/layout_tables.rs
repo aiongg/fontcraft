@@ -235,9 +235,9 @@ pub(crate) fn apply_hhea(values: &fontcraft_fea::MetricsValues, hhea: &mut Hhea)
     set_fword(&mut hhea.ascender, values.ascender);
     set_fword(&mut hhea.descender, values.descender);
     set_fword(&mut hhea.line_gap, values.line_gap);
-    if let Some(v) = values.caret_offset {
-        hhea.caret_offset = v;
-    }
+    set(&mut hhea.caret_slope_rise, values.caret_slope_rise);
+    set(&mut hhea.caret_slope_run, values.caret_slope_run);
+    set(&mut hhea.caret_offset, values.caret_offset);
 }
 
 /// The `table vhea` block: each metric it writes.
@@ -245,9 +245,9 @@ pub(crate) fn apply_vhea(values: &fontcraft_fea::MetricsValues, vhea: &mut Vhea)
     set_fword(&mut vhea.ascender, values.ascender);
     set_fword(&mut vhea.descender, values.descender);
     set_fword(&mut vhea.line_gap, values.line_gap);
-    if let Some(v) = values.caret_offset {
-        vhea.caret_offset = v;
-    }
+    set(&mut vhea.caret_slope_rise, values.caret_slope_rise);
+    set(&mut vhea.caret_slope_run, values.caret_slope_run);
+    set(&mut vhea.caret_offset, values.caret_offset);
 }
 
 /// Whether a `table vhea` block sets anything: a font without vertical metrics then gets a
@@ -259,6 +259,12 @@ pub(crate) fn sets_vhea(values: &fontcraft_fea::MetricsValues) -> bool {
 fn set_fword(slot: &mut FWord, value: Option<i16>) {
     if let Some(v) = value {
         *slot = FWord::new(v);
+    }
+}
+
+fn set(slot: &mut i16, value: Option<i16>) {
+    if let Some(v) = value {
+        *slot = v;
     }
 }
 
@@ -316,6 +322,16 @@ pub(crate) fn apply_os2(values: &fontcraft_fea::Os2Values, os2: &mut Os2) {
     if let Some(v) = o.typo_line_gap {
         os2.s_typo_line_gap = v;
     }
+    set(&mut os2.y_subscript_x_size, o.subscript_x_size);
+    set(&mut os2.y_subscript_x_offset, o.subscript_x_offset);
+    set(&mut os2.y_subscript_y_size, o.subscript_y_size);
+    set(&mut os2.y_subscript_y_offset, o.subscript_y_offset);
+    set(&mut os2.y_superscript_x_size, o.superscript_x_size);
+    set(&mut os2.y_superscript_x_offset, o.superscript_x_offset);
+    set(&mut os2.y_superscript_y_size, o.superscript_y_size);
+    set(&mut os2.y_superscript_y_offset, o.superscript_y_offset);
+    set(&mut os2.y_strikeout_size, o.strikeout_size);
+    set(&mut os2.y_strikeout_position, o.strikeout_position);
     if o.lower_optical_point_size.is_some() || o.upper_optical_point_size.is_some() {
         os2.us_lower_optical_point_size = Some(o.lower_optical_point_size.or(os2.us_lower_optical_point_size).unwrap_or(0));
         os2.us_upper_optical_point_size = Some(o.upper_optical_point_size.or(os2.us_upper_optical_point_size).unwrap_or(0));
@@ -424,8 +440,10 @@ mod tests {
     #[test]
     fn metrics_blocks_change_only_the_fields_they_write() {
         let mut hhea = Hhea { ascender: FWord::new(800), descender: FWord::new(-200), line_gap: FWord::new(90), ..Default::default() };
-        let values = fontcraft_fea::MetricsValues { ascender: Some(950), caret_offset: Some(20), ..Default::default() };
+        let values = fontcraft_fea::MetricsValues { ascender: Some(950), caret_offset: Some(20), caret_slope_run: Some(7), ..Default::default() };
+        let rise = hhea.caret_slope_rise;
         apply_hhea(&values, &mut hhea);
+        assert_eq!((hhea.caret_slope_rise, hhea.caret_slope_run), (rise, 7));
         assert_eq!((hhea.ascender.to_i16(), hhea.descender.to_i16(), hhea.line_gap.to_i16(), hhea.caret_offset), (950, -200, 90, 20));
     }
 
@@ -442,9 +460,12 @@ mod tests {
             us_max_context: Some(0),
             ..Default::default()
         };
-        let values = fontcraft_fea::Os2Values { upper_optical_point_size: Some(240), fs_type: Some(0), ..Default::default() };
+        let values =
+            fontcraft_fea::Os2Values { upper_optical_point_size: Some(240), fs_type: Some(0), strikeout_size: Some(0), ..Default::default() };
         os2.fs_type = 8;
+        (os2.y_strikeout_size, os2.y_subscript_x_size) = (50, 650);
         apply_os2(&values, &mut os2);
+        assert_eq!((os2.y_strikeout_size, os2.y_subscript_x_size), (0, 650), "only the fields the block writes");
         assert_eq!((os2.us_lower_optical_point_size, os2.us_upper_optical_point_size, os2.fs_type), (Some(0), Some(240), 0));
         assert!(write_fonts::dump_table(&os2).is_ok(), "a version 5 table with both sizes");
     }

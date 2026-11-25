@@ -79,6 +79,34 @@ fn advances(model: &PreviewModel) -> Vec<f64> {
 }
 
 #[test]
+fn an_animated_axis_moves_the_line_and_ends_with_its_preview() {
+    let mut app = instance_app();
+    run(&mut app, shell("view.animateAxis", json!({"axis": "wght"}))).unwrap();
+    assert_eq!(advances(&app.models.preview_area), [200.0, 300.0], "it starts at the location the preview shows");
+    let document = app.session.active().unwrap().id;
+    let revision = app.session.active().unwrap().revision;
+    app.view.preview.sweep = Some(crate::shell::axis_sweep::AxisSweep::new(document, "wght", 0.5));
+    app.project();
+    assert_eq!(advances(&app.models.preview_area), [300.0, 500.0], "halfway along the axis");
+    assert!(app.models.preview_area.master_chosen, "the preview's own choice stays");
+    assert_eq!(app.session.active().unwrap().revision, revision, "no edit");
+
+    let ctx = egui::Context::default();
+    crate::shell::axis_sweep::logic(&mut app, &ctx);
+    assert!(app.view.preview.sweep.is_some(), "it runs while the area shows");
+    run(&mut app, shell("view.togglePreviewArea", json!({"on": false}))).unwrap();
+    crate::shell::axis_sweep::logic(&mut app, &ctx);
+    assert!(app.view.preview.sweep.is_none(), "closing the preview ends it");
+
+    // With nothing to show it, starting opens the Preview Area; the same command ends it.
+    run(&mut app, shell("view.animateAxis", json!({}))).unwrap();
+    assert!(app.view.preview.area_open && app.view.preview.sweep.is_some());
+    run(&mut app, shell("view.animateAxis", json!({}))).unwrap();
+    assert_eq!(advances(&app.models.preview_area), [200.0, 300.0], "the preview shows its own choice again");
+    assert!(run(&mut app, shell("view.animateAxis", json!({"axis": "opsz"}))).is_err());
+}
+
+#[test]
 fn set_instance_lays_the_line_out_at_the_instance_and_the_panel_keeps_its_own_choice() {
     let mut app = instance_app();
     let area = &app.models.preview_area;

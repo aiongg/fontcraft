@@ -1,6 +1,7 @@
 //! FontCraft engine core (L5): the parts of the engine that need no session. The engine error
 //! type, command parameters ([`params`]), the user's settings ([`settings`]), the clock edits
-//! are stamped with ([`clock`]) and the panic guard every command runs under ([`guard`]).
+//! are stamped with ([`clock`]), the panic guard every command runs under ([`guard`]) and the progress
+//! and cancellation of a request ([`work`]).
 //! `fontcraft-engine` re-exports each of them at the same path.
 #![forbid(unsafe_code)]
 
@@ -8,6 +9,7 @@ pub mod clock;
 pub mod guard;
 pub mod params;
 pub mod settings;
+pub mod work;
 
 pub use clock::Clock;
 use fontcraft_model::Glyph;
@@ -28,12 +30,14 @@ pub enum EngineError {
     Interaction(String),
     #[error("no document open")]
     NoDocument,
+    #[error("cancelled")]
+    Cancelled,
     #[error(transparent)]
     Model(#[from] fontcraft_model::ModelError),
     #[error(transparent)]
     Format(#[from] fontcraft_format::FormatError),
     #[error(transparent)]
-    Compile(#[from] fontcraft_compile::CompileError),
+    Compile(fontcraft_compile::CompileError),
     #[error(transparent)]
     Glyphs(#[from] fontcraft_io_glyphs::GlyphsError),
     #[error(transparent)]
@@ -52,6 +56,15 @@ pub enum EngineError {
     Unsupported(String),
     #[error("internal error (please report it): {0}")]
     Internal(String),
+}
+
+impl From<fontcraft_compile::CompileError> for EngineError {
+    fn from(e: fontcraft_compile::CompileError) -> Self {
+        match e {
+            fontcraft_compile::CompileError::Cancelled => EngineError::Cancelled,
+            e => EngineError::Compile(e),
+        }
+    }
 }
 
 pub type Result<T> = std::result::Result<T, EngineError>;

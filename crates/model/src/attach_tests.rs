@@ -237,13 +237,17 @@ fn hostile_scales_and_zero_length_stems_fail_with_a_message() {
         );
     }
     assert!(cap_hint(&hint).unwrap_err().contains("beyond"));
-    // A Fit that would scale past the limit: a cap glyph 0.5 units wide on an 80-unit stem.
+    // A Fit that would scale past the limit: a cap with its ends 0.5 units apart on an 80-unit stem.
     let mut tiny = f.glyph("_cap.flag").unwrap().as_ref().clone();
     tiny.name = "_cap.tiny".into();
-    tiny.layers[0].width = 0.5;
+    tiny.layers[0].shapes = vec![lines(false, &[(0.0, 20.0), (-40.0, -30.0), (0.5, -30.0), (0.5, 20.0)])];
     put(&mut f, tiny);
     assert!(fit_error(&f, "l", &cap("_cap.tiny", TOP, true)).contains("beyond"));
-    f.glyph_mut("_cap.tiny").unwrap().layers[0].width = 0.0;
+    {
+        let mut flat = f.glyph_mut("_cap.tiny").unwrap();
+        flat.layers[0].shapes = vec![lines(false, &[(0.0, 20.0), (0.0, -30.0), (0.0, 20.0)])];
+        flat.layers[0].width = 0.0;
+    }
     assert!(fit_error(&f, "l", &cap("_cap.tiny", TOP, true)).contains("no width"));
     // Two coinciding stem nodes.
     f.glyph_mut("i").unwrap().layers[0].shapes = vec![lines(true, &[(100.0, 0.0), (100.0, 0.0), (100.0, 500.0), (0.0, 500.0)])];
@@ -394,4 +398,55 @@ fn hostile_segments_and_brushes_fail_with_a_message() {
     put(&mut f, glyph("_brush.huge", &[("m01", 100.0, vec![lines(true, &huge)], vec![])]));
     let e = bent(&f, "stroke", "m01", &SegmentHint::new("_brush.huge", 0, 1), true).unwrap_err();
     assert!(e.contains("more than 500000"), "{e}");
+}
+
+/// On a clockwise path (a counter, or a TrueType outline) the stem end runs the other way: the cap
+/// still spans it from the first node to the second, in every alignment that turns it.
+#[test]
+fn a_cap_on_a_clockwise_path_spans_its_segment() {
+    let mut f = cap_font();
+    put(&mut f, glyph("r", &[("m01", 280.0, vec![lines(true, &[(100.0, 0.0), (100.0, 700.0), (180.0, 700.0), (180.0, 0.0)])], vec![])]));
+    for alignment in [CornerAlignment::Both, CornerAlignment::Left, CornerAlignment::Right] {
+        let nodes = fitted(&f, "r", "m01", &CapHint { alignment, ..cap("_cap.flag", 0, true) });
+        assert_eq!(nodes, [(100.0, 0.0), (100.0, 720.0), (68.0, 670.0), (180.0, 670.0), (180.0, 720.0), (180.0, 0.0)], "{alignment:?}");
+    }
+}
+
+/// Fit measures an origin-only cap along the stem end, from one end of its path to the other, so
+/// both ends meet the stem's sides whatever the advance width (`capComponent.setFit`).
+#[test]
+fn fit_sizes_an_origin_cap_by_the_distance_between_its_ends() {
+    let mut f = cap_font();
+    put(&mut f, glyph("box", &[("m01", 700.0, vec![lines(true, &[(150.0, 150.0), (550.0, 150.0), (550.0, 550.0), (150.0, 550.0)])], vec![])]));
+    let caps = [
+        // Ends 200 apart, on a new glyph's advance.
+        ("_cap.wide", 600.0, lines(false, &[(0.0, 40.0), (-80.0, -60.0), (200.0, -60.0), (200.0, 40.0)])),
+        ("_cap.large", 600.0, lines(false, &[(0.0, 200.0), (-400.0, -300.0), (1000.0, -300.0), (1000.0, 200.0)])),
+        ("_cap.uneven", 600.0, lines(false, &[(0.0, 20.0), (-40.0, -30.0), (100.0, -30.0), (100.0, 60.0)])),
+        // Ends on one point: the drawn path is 100 units wide.
+        ("_cap.loop", 600.0, lines(false, &[(0.0, 20.0), (-40.0, -30.0), (60.0, -30.0), (0.0, 20.0)])),
+    ];
+    for (name, width, path) in caps {
+        put(&mut f, glyph(name, &[("m01", width, vec![path], vec![Anchor::new("origin", 0.0, 0.0)])]));
+    }
+    let top = |host: &str, name: &str, fit: bool| fitted(&f, host, "m01", &cap(name, TOP, fit))[2..].to_vec();
+    // 400 / 200 takes the second end onto the other side; with Fit off it stops halfway.
+    assert_eq!(top("box", "_cap.wide", true), [(550.0, 510.0), (710.0, 610.0), (150.0, 610.0), (150.0, 510.0)]);
+    assert_eq!(top("box", "_cap.wide", false), [(550.0, 510.0), (630.0, 610.0), (350.0, 610.0), (350.0, 510.0)]);
+    // A cap wider than its stem is made narrower, and its height stays.
+    assert_eq!(top("l", "_cap.large", true), [(180.0, 500.0), (212.0, 1000.0), (100.0, 1000.0), (100.0, 500.0)]);
+    // Ends at different heights: the distance along the stem end counts.
+    assert_eq!(top("l", "_cap.uneven", true), [(180.0, 680.0), (212.0, 730.0), (100.0, 730.0), (100.0, 640.0)]);
+    assert_eq!(top("l", "_cap.loop", true), [(180.0, 680.0), (212.0, 730.0), (132.0, 730.0), (180.0, 680.0)]);
+}
+
+/// A cap drawn without any width is sized by its advance width: its path is placed as it is, and
+/// both sides of the stem end at it.
+#[test]
+fn a_cap_outline_without_width_is_placed_as_drawn() {
+    let mut f = cap_font();
+    let upright = lines(false, &[(0.0, 20.0), (0.0, -30.0), (0.0, 20.0)]);
+    put(&mut f, glyph("_cap.line", &[("m01", 100.0, vec![upright], vec![Anchor::new("origin", 0.0, 0.0)])]));
+    let nodes = fitted(&f, "l", "m01", &cap("_cap.line", TOP, true));
+    assert_eq!(nodes, [(100.0, 0.0), (180.0, 0.0), (180.0, 680.0), (180.0, 730.0), (180.0, 680.0)]);
 }

@@ -19,7 +19,7 @@ mod autohint_report;
 mod autohint_tt;
 mod axes;
 mod background;
-mod bitmap_edit;
+pub mod bitmap_edit;
 mod bitmap_strikes;
 mod clipboard;
 mod clipboard_scale;
@@ -32,6 +32,7 @@ mod compile_cid;
 mod compile_export;
 mod compile_features;
 mod compile_layout;
+mod compile_masters;
 mod compile_outlines;
 mod compile_project;
 mod compile_select;
@@ -57,6 +58,7 @@ mod glyph;
 mod glyph_info;
 mod glyph_search;
 mod glyph_set;
+pub mod glyph_sources;
 mod guide;
 mod hint_import;
 mod hint_points;
@@ -118,6 +120,7 @@ mod audit_fix_binary;
 mod audit_fix_glyph;
 mod audit_fix_info;
 mod audit_fix_recalc;
+mod audit_fix_source;
 mod audit_profiles;
 mod audit_reports;
 pub mod audit_services;
@@ -153,6 +156,7 @@ mod autokern;
 mod autospace;
 mod autotrace;
 mod cid;
+mod component_instance;
 mod construction;
 mod corner;
 mod corner_helpers;
@@ -420,6 +424,7 @@ pub const COMMAND_TABLES: &[CommandTable] = &[
     interpolation::specs,
     match_masters::specs,
     hoi::specs,
+    glyph_sources::specs,
     instance_masters::specs,
     variation_tools::specs,
     compare::specs,
@@ -495,6 +500,7 @@ pub const COMMAND_TABLES: &[CommandTable] = &[
     power_guides::specs,
     status::specs,
     attach_cap::specs,
+    component_instance::specs,
     attach_segment::specs,
     export_profiles::specs,
     view_export::specs,

@@ -16,7 +16,8 @@
 //! and `vhea`, `OS/2.usFirstCharIndex` and `usLastCharIndex`, and with bounds recalculation the
 //! glyph and font bounding boxes, the `maxp` maxima, `head.flags` bit 1 and the `hhea` and
 //! `vhea` extremes). A font with `maxp`, `post` and `CFF ` gets its `CFF ` table compiled again
-//! when the text holds none, as fontTools compiles the table it loaded for the glyph order.
+//! when the text holds none, as fontTools compiles the table it loaded for the glyph order; any other font with `maxp`
+//! and `post` its `post` table.
 //! Ported from fontTools' `ttLib.ttFont`, `misc.xmlReader`, `misc.textTools`, `misc.timeTools`
 //! and `misc.fixedTools` (MIT).
 
@@ -717,6 +718,22 @@ pub(crate) fn import_tree(mut font: SfntFont, root: &Element, options: &ImportOp
             }
             Ok(None) => {}
             Err(reason) => warnings.push(format!("the font's CFF table keeps its bytes instead of being compiled again: {reason}")),
+        }
+    }
+    // The glyph order of any other font with `maxp` and `post` comes from `post`, so that table is compiled again, its
+    // names those of the text's glyph order.
+    if options.tables.is_empty()
+        && font.get(*b"CFF ").is_none()
+        && !elements.iter().any(|(tag, _)| tag == b"post")
+        && let Some(data) = font.get(*b"post")
+        && font.get(*b"maxp").is_some()
+    {
+        match super::num_glyphs(&font).and_then(|count| read_core::reload_post(data, count, &ctx)) {
+            Ok(data) => {
+                font.insert(*b"post", data);
+                loaded.insert(*b"post");
+            }
+            Err(reason) => warnings.push(format!("the font's post table keeps its bytes instead of being compiled again: {reason}")),
         }
     }
     for (tag, element) in &elements {

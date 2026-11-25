@@ -216,7 +216,11 @@ impl Staged {
 
 fn start(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("audit.start", v)?;
-    document_target(&p)?;
+    match p.get("target") {
+        None => {}
+        Some(Value::String(t)) if t == "document" => {}
+        Some(_) => return Err(EngineError::Unsupported("auditing a file or a family of files in steps; use audit.run".into())),
+    }
     let doc = s.doc()?;
     let target = document_target_of(doc);
     let font = doc.font.clone();
@@ -272,7 +276,8 @@ fn step(s: &mut Session, v: &Value) -> Result<Value> {
     let budget = usize::try_from(budget).unwrap_or(1);
     let staged = in_progress(&p, s)?;
     let mut st = staged.lock().map_err(|_| EngineError::Internal("the audit run in progress failed earlier; start it again".into()))?;
-    st.advance(budget);
+    // A step stopped half way would leave the run without the layers it skipped.
+    crate::work::shielded(|| st.advance(budget));
     if st.stage != Stage::Done {
         let mut out = st.progress();
         if let Some(o) = out.as_object_mut() {

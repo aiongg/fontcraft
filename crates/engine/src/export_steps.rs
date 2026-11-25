@@ -38,6 +38,10 @@
 //! every other filter string leaves ([`AUTOHINTING`]). A master has no Autohint parameter, so a
 //! master's export reports the string as not used.
 //!
+//! Save as TrueType and Webfont Formats, both instance parameters, choose the outline format and
+//! the containers of their instance's files whatever the export asked for ([`instance_outputs`]);
+//! the fonts of a collection keep its format.
+//!
 //! A parameter that cannot be used is reported as a warning and skipped; a Scale to UPM that
 //! cannot be applied refuses the export, since the font would come out at the wrong size. Export
 //! Folder ([`export_folder`]) names the sub-folder of the destination the job's files go to.
@@ -50,23 +54,25 @@
 //! Rows: `Filter`, `PreFilter`, the `filter.customParameter.*` rows (`.autohinting`: M10.31),
 //! `export.instanceExportFolder` (M7.10); `Import Font`, `Import Master` (M7.12); `Scale to UPM`
 //! (M7.4 scales, M7.10 runs it); `filter.customParameter.thirdParty`,
-//! `filter.menu.pluginFiltersListed` (M13.4, module filters).
+//! `filter.menu.pluginFiltersListed` (M13.4, module filters); `Save as TrueType`, `Webfont
+//! Formats`, `DisableAllAutomaticBehaviour` (M2.10).
 
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use fontcraft_compile::Options;
+use fontcraft_compile::export_params::DISABLE_AUTOMATIC;
+use fontcraft_compile::{Flavour, Options};
 use fontcraft_geom::{Affine, Point};
 use fontcraft_model::glyphdata::GlyphData;
 use fontcraft_model::plist::{Num, Number, Value as PValue};
-use fontcraft_model::{Anchor, Font, Layer, MAX_COMPONENT_DEPTH, MAX_OUTLINE_ELEMENTS, Params, Resolved, Shape, Target, Transform};
+use fontcraft_model::{Anchor, Font, Layer, MAX_COMPONENT_DEPTH, MAX_OUTLINE_ELEMENTS, Params, Resolved, Shape, Target, Transform, param_flag};
 use fontcraft_plugins::Plugin;
 use fontcraft_plugins::export_filter::{self as module_filter, FilterCall};
 use serde_json::{Map, Value};
 
-use crate::cmd::compile::Job;
+use crate::cmd::compile::{Container, Job};
 use crate::extensions::{ModuleEntry, ModuleScope, ModuleSet};
 use crate::{EngineError, Result};
 
@@ -74,6 +80,8 @@ const FILTER: &str = "Filter";
 const PRE_FILTER: &str = "PreFilter";
 const SCALE_TO_UPM: &str = "Scale to UPM";
 const EXPORT_FOLDER: &str = "Export Folder";
+const SAVE_AS_TRUETYPE: &str = "Save as TrueType";
+const WEBFONT_FORMATS: &str = "Webfont Formats";
 /// The filter string of the app function that runs the autohinter (`filter.customParameter.autohinting`).
 const AUTOHINTING: &str = "Autohinting";
 /// The instance parameter Autohinting turns on (`fontcraft_hinting::settings::AUTOHINT`).
@@ -140,10 +148,84 @@ pub(crate) fn prepare<'f>(font: &'f Font, job: &Job, ctx: &StepContext, warnings
         font = Cow::Owned(scaled);
     }
     if !post.is_empty() {
-        let decomposed = decompose_master(&font, &master, ctx.data, warnings);
+        // The levels override each other as resolving merges them: the instance's value, else the
+        // master's, else the font's.
+        let disabled = levels(&font, &master, &job.target)
+            .into_iter()
+            .rev()
+            .flatten()
+            .find_map(|p| p.get(DISABLE_AUTOMATIC).and_then(param_flag))
+            .unwrap_or(false);
+        let decomposed = decompose_master(&font, &master, ctx.data, !disabled, warnings);
         font = Cow::Owned(run_filters(decomposed, &master, &post, warnings)?);
     }
     Ok(font)
+}
+
+/// The parameters of the static instance `job` builds.
+fn instance_params<'a>(font: &'a Font, job: &Job) -> Option<&'a Params> {
+    let Target::Instance(i) = job.target else { return None };
+    font.instances.get(i).map(|inst| &inst.params)
+}
+
+/// Whether `job` is an instance whose Save as TrueType parameter is on.
+pub(crate) fn saves_as_truetype(font: &Font, job: &Job) -> bool {
+    instance_params(font, job).and_then(|p| p.get(SAVE_AS_TRUETYPE)).and_then(param_flag) == Some(true)
+}
+
+/// The outline formats and containers of `job`'s files: `flavours` and `containers`, except that
+/// Save as TrueType makes an instance TrueType and Webfont Formats lists its containers.
+pub(crate) fn instance_outputs(
+    font: &Font,
+    job: &Job,
+    flavours: &[Flavour],
+    containers: &[Container],
+    warnings: &mut Vec<String>,
+) -> (Vec<Flavour>, Vec<Container>) {
+    let flavours = if saves_as_truetype(font, job) { vec![Flavour::TrueType] } else { flavours.to_vec() };
+    let listed = instance_params(font, job).and_then(|p| webfont_containers(p, &job.label, warnings));
+    (flavours, listed.unwrap_or_else(|| containers.to_vec()))
+}
+
+/// The containers of the variable font of `setting`: `containers`, or what its Webfont Formats
+/// parameter lists.
+pub(crate) fn setting_containers(font: &Font, setting: Option<usize>, containers: &[Container], warnings: &mut Vec<String>) -> Vec<Container> {
+    setting
+        .and_then(|i| font.instances.get(i))
+        .and_then(|inst| webfont_containers(&inst.params, &inst.name, warnings))
+        .unwrap_or_else(|| containers.to_vec())
+}
+
+/// The containers Webfont Formats lists; `TTF` is a plain font file. What cannot be written is
+/// reported, and `None` when nothing is left.
+fn webfont_containers(params: &Params, label: &str, warnings: &mut Vec<String>) -> Option<Vec<Container>> {
+    let value = params.get(WEBFONT_FORMATS)?;
+    let Some(names) = fontcraft_fontinfo::value::lines(value) else {
+        warnings.push(format!("{label}: `{WEBFONT_FORMATS}` was not applied: its value is not a list of text"));
+        return None;
+    };
+    let mut out = Vec::new();
+    for name in names {
+        let container = match name.trim().to_ascii_uppercase().as_str() {
+            "" => continue,
+            "TTF" => Container::Plain,
+            "WOFF" => Container::Woff,
+            "WOFF2" => Container::Woff2,
+            "EOT" => {
+                warnings.push(format!("{label}: `{WEBFONT_FORMATS}`: EOT files are not written"));
+                continue;
+            }
+            other => {
+                let other: String = other.chars().take(20).collect();
+                warnings.push(format!("{label}: `{WEBFONT_FORMATS}`: \"{other}\" is no web font format"));
+                continue;
+            }
+        };
+        if !out.contains(&container) {
+            out.push(container);
+        }
+    }
+    (!out.is_empty()).then_some(out)
 }
 
 /// The id of the master whose layers `target` draws: the master itself, or the one a static
@@ -447,10 +529,10 @@ fn unlock(font: &mut Font, master: &str) {
 
 /// `font` as Filter strings see it: corner and smart components drawn, then every component of
 /// the master layers of `master` replaced by the outlines it stands for, each composite keeping
-/// the anchors it inherited. A glyph whose components cannot be resolved keeps them, with a
-/// warning.
-fn decompose_master(font: &Font, master: &str, data: &GlyphData, warnings: &mut Vec<String>) -> Font {
-    let inherited = inherited_anchors(font, master, data, warnings);
+/// the anchors it inherited when the export `propagates` them. A glyph whose components cannot be
+/// resolved keeps them, with a warning.
+fn decompose_master(font: &Font, master: &str, data: &GlyphData, propagates: bool, warnings: &mut Vec<String>) -> Font {
+    let inherited = if propagates { inherited_anchors(font, master, data, warnings) } else { None };
     let mut out = fontcraft_compile::prepare_source(font, warnings).into_owned();
     let mut budget = MAX_DECOMPOSED_ELEMENTS;
     let mut changes: Vec<(usize, Vec<Shape>)> = Vec::new();

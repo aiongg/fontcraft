@@ -331,7 +331,8 @@ Glyphs on the heavy static instances to get the same result in static fonts.
   (`mastersAsLayers.paletteListing`); the eye button keeps a non-active layer visible
   (`layers.toggleVisibility`).
 - Edit › Show All Masters (`edit.showAllMasters`) puts all master layers of the current glyph,
-  and its intermediate and alternate layers, into the Edit View tab.
+  and its intermediate and alternate layers, into the Edit View tab. They go after the edited glyph,
+  masters first, each a text item with its own layer (guess); clicking one makes its layer the active one.
 - Edit › Keep Layer Selection in Sync (`edit.keepLayerSelectionInSync`) carries the selection
   over when switching masters; works on compatible glyphs only.
 - `layers.reInterpolate` (recalled, not in the chapter) refills a layer from the interpolation of
@@ -353,7 +354,10 @@ Display:
   (`hoi.nodeMarkers`). The axis is chosen in a pop-up at the bottom right of the window
   (`hoi.selectAxis`).
 - Each linear path is a grey dotted line with a grey knob in the middle
-  (`hoi.knobOnDottedLine`).
+  (`hoi.knobOnDottedLine`). A curve is drawn with its knobs, and with lines to its handles or from
+  the rotation's centre (guess).
+- A click picks a knob, Shift+click adds one, a marquee picks several (guess). The right-click menu
+  of a knob offers Interpolation › Linear, Intermediate Point, Handles and Rotation.
 
 Types (`hoi.curveTypes`, `hoi.setInterpolationType`):
 
@@ -398,8 +402,12 @@ upper layer (1).
   weighted by the sum of the span's two layer weights; `s` is the upper layer's part of that sum.
   Outside its span a curve adds nothing, and the other axes stay linear (guesses).
 - Static instances, the preview, `interpolation.interpolateGlyph` and re-interpolated layers
-  follow the curves; the interpolated layer keeps none. Variable fonts do not carry them yet
-  (M9.33).
+  follow the curves; the interpolated layer keeps none.
+- A variable font follows them in straight lines between added sources: along each curved span
+  the fewest of 32 equal steps that keep every curved node within 0.5 unit, and beside it, at the
+  glyph's sources on the other axes, where the result would differ from the instance there. The
+  added sources move only the outline; advances keep the glyph's own sources
+  (`hoi.appliesToAllExports`, guess).
 - The timing graph's function is the fraction of the curve's length travelled at `s` (guess).
 
 ### 9.2 Commands

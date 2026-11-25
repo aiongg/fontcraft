@@ -1,6 +1,7 @@
 //! Show Master Compatibility: the View menu toggle that draws every source layer of the edited glyph beside it
-//! (`canvas::compatibility`), and Edit › Keep Layer Selection in Sync, which carries the canvas selection to another
-//! master of a compatible glyph ([`carried`]).
+//! (`canvas::compatibility`), Edit › Keep Layer Selection in Sync, which carries the canvas selection to another
+//! master of a compatible glyph ([`carried`]), and Edit › Match When Editing, which makes the window's structural edits
+//! on every compatible layer ([`with_matching`]).
 
 use craft::ui::runtime::commands::CommandRef;
 use fontcraft_engine::model::{Layer, Shape};
@@ -29,6 +30,13 @@ const COMMANDS: &[UiCommand] = &[
         shortcut: None,
         params: "{on?: bool} while on, editing another master of a compatible glyph keeps the selected nodes, shapes and anchors, matched by index (omitted: toggle)",
     },
+    UiCommand {
+        id: "edit.toggleMatchWhenEditing",
+        label: "Match When Editing",
+        menu: &["Edit"],
+        shortcut: None,
+        params: "{on?: bool} while on, inserting and deleting nodes, setting a start node and reversing contours in the window also edit every compatible layer of the glyph, in the same undo step (the `matchLayers` parameter of those commands); layers that differ are left alone and named in the status line (omitted: toggle)",
+    },
 ];
 
 fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
@@ -36,6 +44,7 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
     let flag = match command.id.as_str() {
         "view.showMasterCompatibility" => &mut display.master_compatibility,
         "edit.keepLayerSelectionInSync" => &mut display.keep_layer_selection_in_sync,
+        "edit.toggleMatchWhenEditing" => &mut display.match_when_editing,
         other => return Err(format!("unknown command `{other}`")),
     };
     let on = match command.params.get("on") {
@@ -45,6 +54,21 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
     };
     *flag = on;
     Ok(())
+}
+
+/// The commands that take `matchLayers`.
+pub const MATCHED: &[&str] = &["path.insertNode", "edit.delete", "path.makeNodeFirst", "path.reverseContours"];
+
+/// The parameters of a command the person ran: while Match When Editing is on, the structural edits get `matchLayers`
+/// unless they say.
+pub fn with_matching(app: &FontCraftApp, id: &str, mut params: Value) -> Value {
+    if app.view.display.match_when_editing
+        && MATCHED.contains(&id)
+        && let Some(map) = params.as_object_mut()
+    {
+        map.entry("matchLayers").or_insert(Value::Bool(true));
+    }
+    params
 }
 
 /// The selection the tools keep when the canvas moves from editing `old` to editing `new`, while Keep Layer Selection
@@ -90,6 +114,7 @@ mod tests {
     use craft::host::Host;
     use craft::ui::runtime::commands::CommandRef;
     use fontcraft_engine::Session;
+    use fontcraft_engine::model::Shape;
     use serde_json::{Value, json};
 
     use crate::app::{APP, FontCraftApp, Msg, ViewMsg};
@@ -139,5 +164,31 @@ mod tests {
         assert!(select_then_switch(&mut app, "o").is_empty(), "o cannot interpolate: nothing is carried");
         let checks = crate::app::menu_states::checks(&app);
         assert!(checks.contains(&("edit.keepLayerSelectionInSync", true)), "the Edit menu row is checked");
+    }
+
+    /// While Match When Editing is on, an edit in the window changes every compatible master in one undo step; off, and
+    /// for a request of the control channel, only the edited one.
+    #[test]
+    fn match_when_editing_edits_every_compatible_master() {
+        let mut app = two_masters();
+        let nodes = |app: &FontCraftApp| -> Vec<usize> {
+            let g = app.session.font().unwrap().glyph("n").unwrap();
+            g.layers.iter().filter_map(|l| if let Some(Shape::Path(p)) = l.shapes.first() { Some(p.nodes.len()) } else { None }).collect()
+        };
+        let before = nodes(&app);
+        assert_eq!(before.len(), 2);
+        let insert = json!({"glyph": "n", "segment": [0, 1]});
+        app.run_now(Msg::run("path.insertNode", insert.clone()), false).unwrap();
+        assert_eq!(nodes(&app), [before[0] + 1, before[1]], "off: the edited master only");
+        app.run_now(Msg::run("edit.undo", json!({})), false).unwrap();
+
+        shell(&mut app, "edit.toggleMatchWhenEditing", json!({}));
+        app.run_request(Msg::run("path.insertNode", insert.clone())).unwrap();
+        assert_eq!(nodes(&app), [before[0] + 1, before[1]], "a request says itself what it edits");
+        app.run_now(Msg::run("edit.undo", json!({})), false).unwrap();
+        app.run_now(Msg::run("path.insertNode", insert), false).unwrap();
+        assert_eq!(nodes(&app), [before[0] + 1, before[1] + 1], "on: both masters");
+        app.run_now(Msg::run("edit.undo", json!({})), false).unwrap();
+        assert_eq!(nodes(&app), before, "one undo step");
     }
 }

@@ -697,6 +697,7 @@ fn export_with_profiles(s: &mut Session, v: &Value) -> Result<Value> {
                 first_only: false,
                 autohinter: crate::external_autohint::trusted(s),
                 naming: Default::default(),
+                instance_outputs: true,
             };
             let mut sink = Sink::new(&req.dest, false, s.export_outside())?;
             for (k, i) in members {

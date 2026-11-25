@@ -1,5 +1,5 @@
 //! What `font.compile` and `font.compilePlan` build, and where each file goes (M2.8): the formats
-//! (static, variable, and the ones still refused), the instances picked by name or by pattern,
+//! (static, variable and interpolatable masters), the instances picked by name or by pattern,
 //! the variable fonts `variableFonts` picks, `familyName`, and the folder layout and naming of
 //! the files (`outputLayout`, `nameBy`).
 //!
@@ -14,7 +14,7 @@ use fontcraft_glyphquery::Pattern;
 use fontcraft_model::{Font, Instance};
 use serde_json::{Value, json};
 
-use super::compile::{Container, Dest, Job, Pick, Report, Request, Sink, format_name, outlines_name};
+use super::compile::{ByContainer, Container, Dest, Job, Pick, Report, Request, Sink, format_name, outlines_name};
 use crate::params::Params;
 use crate::{EngineError, Result};
 
@@ -43,6 +43,9 @@ pub(super) struct Naming {
     /// The request writes both TrueType and CFF outlines (static or variable): the flat layout
     /// then splits them into `ttf` and `otf` subfolders.
     pub split_outlines: bool,
+    /// The request writes interpolatable masters besides other formats: the flat layout then puts
+    /// them into subfolders named by their format, so they do not overwrite the static masters.
+    pub split_masters: bool,
 }
 
 /// What a by-format folder holds.
@@ -54,7 +57,6 @@ pub(super) enum FolderKind {
     Instance,
     Variable,
     /// Master fonts that keep their overlaps and share their point structure.
-    #[allow(dead_code)] // The interpolatable formats are refused until M2.9 builds them.
     Interpolatable,
 }
 
@@ -90,7 +92,8 @@ pub(super) fn naming(p: &Params, formats: &Formats) -> Result<Naming> {
     };
     let truetype = formats.statics.contains(&Flavour::TrueType) || formats.variable.contains(&VarFlavour::TrueType);
     let cff = formats.statics.contains(&Flavour::Cff) || formats.variable.contains(&VarFlavour::Cff2);
-    Ok(Naming { layout, postscript_names, split_outlines: truetype && cff })
+    let several = formats.statics.len() + formats.variable.len() + formats.masters.len() > 1;
+    Ok(Naming { layout, postscript_names, split_outlines: truetype && cff, split_masters: several })
 }
 
 // ---------- formats ----------
@@ -100,8 +103,12 @@ pub(super) fn naming(p: &Params, formats: &Formats) -> Result<Naming> {
 pub(super) struct Formats {
     /// Static fonts, one per instance or master picked.
     pub statics: Vec<Flavour>,
+    /// The static CFF fonts are written as CFF2 (`otf-cff2`, which does not go with `otf`).
+    pub cff2: bool,
     /// Variable fonts, one per variable font picked.
     pub variable: Vec<VarFlavour>,
+    /// Interpolatable masters, one font per master.
+    pub masters: Vec<Flavour>,
 }
 
 impl Formats {
@@ -124,7 +131,7 @@ impl Formats {
     /// The outline flavour of each format's files, static formats first: a static and a variable
     /// TrueType format give TrueType twice.
     pub(super) fn file_flavours(&self) -> Vec<Flavour> {
-        self.statics.iter().copied().chain(self.variable.iter().map(|&v| Self::file_flavour(v))).collect()
+        self.statics.iter().copied().chain(self.variable.iter().map(|&v| Self::file_flavour(v))).chain(self.masters.iter().copied()).collect()
     }
 }
 
@@ -160,16 +167,19 @@ pub(super) fn formats(p: &Params, font: &Font, project: bool, dest: &Dest) -> Re
             && !matches!(dest.extension(), Some("otf"))
             && !collection_destination(dest);
         return Ok(if variable {
-            Formats { statics: Vec::new(), variable: vec![VarFlavour::TrueType] }
+            Formats { variable: vec![VarFlavour::TrueType], ..Formats::default() }
         } else {
-            Formats { statics: vec![Flavour::TrueType], variable: Vec::new() }
+            Formats { statics: vec![Flavour::TrueType], ..Formats::default() }
         });
     };
     let mut out = Formats::default();
+    let mut cff1 = false;
     for name in names {
         match name {
-            "ttf" | "otf" => {
+            "ttf" | "otf" | "otf-cff2" => {
                 let flavour = if name == "ttf" { Flavour::TrueType } else { Flavour::Cff };
+                cff1 |= name == "otf";
+                out.cff2 |= name == "otf-cff2";
                 if !out.statics.contains(&flavour) {
                     out.statics.push(flavour);
                 }
@@ -180,8 +190,11 @@ pub(super) fn formats(p: &Params, font: &Font, project: bool, dest: &Dest) -> Re
                     out.variable.push(flavour);
                 }
             }
-            "otf-cff2" | "ttf-interpolatable" | "otf-interpolatable" => {
-                return Err(EngineError::Unsupported(format!("building {name} fonts (ROADMAP.md, M2.9)")));
+            "ttf-interpolatable" | "otf-interpolatable" => {
+                let flavour = if name == "ttf-interpolatable" { Flavour::TrueType } else { Flavour::Cff };
+                if !out.masters.contains(&flavour) {
+                    out.masters.push(flavour);
+                }
             }
             other => {
                 return Err(p.bad(format!(
@@ -190,23 +203,34 @@ pub(super) fn formats(p: &Params, font: &Font, project: bool, dest: &Dest) -> Re
             }
         }
     }
-    if out.statics.is_empty() && out.variable.is_empty() {
+    if out.statics.is_empty() && out.variable.is_empty() && out.masters.is_empty() {
         return Err(p.bad("`formats` names no format"));
     }
-    if !out.variable.is_empty() {
+    if cff1 && out.cff2 {
+        return Err(p.bad("\"otf\" and \"otf-cff2\" in `formats` would write the same files: build them in separate commands"));
+    }
+    if out.cff2 {
         if project {
-            return Err(p.bad("a project compile builds static fonts: leave the variable formats out of `formats`"));
+            return Err(p.bad("a project compile writes CFF outlines in a CFF table: leave \"otf-cff2\" out of `formats`"));
+        }
+        if p.get("collection").is_some_and(|v| v != &Value::Bool(false)) || collection_destination(dest) {
+            return Err(p.bad("a collection packs TrueType and CFF fonts: leave \"otf-cff2\" out of `formats`"));
+        }
+    }
+    if !out.variable.is_empty() || !out.masters.is_empty() {
+        if project {
+            return Err(p.bad("a project compile builds static fonts: leave the variable and interpolatable formats out of `formats`"));
         }
         if out.statics.is_empty()
             && let Some(key) = static_only(p)
         {
-            return Err(p.bad(format!("`{key}` applies to static fonts, and `formats` names only variable ones")));
+            return Err(p.bad(format!("`{key}` applies to static fonts, and `formats` names none")));
         }
         for key in ["collection", "interpolateBinaryLayout"] {
             if p.get(key).is_some_and(|v| v != &Value::Bool(false)) {
-                return Err(
-                    p.bad(format!("`{key}` cannot go with a variable format in `formats`: build the variable fonts in a request of their own"))
-                );
+                return Err(p.bad(format!(
+                    "`{key}` cannot go with a variable or interpolatable format in `formats`: build those fonts in a request of their own"
+                )));
             }
         }
     }
@@ -352,7 +376,7 @@ fn variable_options(req: &Request) -> Options {
         conversion_error: o.conversion_error,
         keep_direction: o.keep_direction,
         glyph_data: o.glyph_data.clone(),
-        components: o.components,
+        components: o.components.clone(),
         assets: o.assets.clone(),
         skip_features: o.skip_features,
         feature_dir: o.feature_dir.clone(),
@@ -360,19 +384,26 @@ fn variable_options(req: &Request) -> Options {
         version_stamp: o.version_stamp,
         curves: o.curves,
         stub_gsub: o.stub_gsub,
+        post_format: o.post_format,
         ..Options::default()
     }
 }
 
 /// The plan's description of the variable fonts a request builds, with the files they would be
 /// written to.
-pub(super) fn plan_variable(font: &Font, picks: &[VariablePick], flavours: &[VarFlavour], req: &Request) -> Result<Vec<Value>> {
+pub(super) fn plan_variable(
+    font: &Font,
+    picks: &[VariablePick],
+    flavours: &[VarFlavour],
+    req: &Request,
+    warnings: &mut Vec<String>,
+) -> Result<Vec<Value>> {
     let mut out = Vec::new();
     for pick in picks {
         let names = var::names::variable_names(font, pick.setting)?;
+        let containers = crate::export_steps::setting_containers(font, pick.setting, &req.containers, warnings);
         for &flavour in flavours {
-            let files: Vec<Value> = req
-                .containers
+            let files: Vec<Value> = containers
                 .iter()
                 .map(|&c| {
                     let name = variable_file_name(req, &pick.stem, flavour, c);
@@ -415,15 +446,25 @@ pub(super) fn build_variable(
 ) -> Result<()> {
     let options = variable_options(req);
     for pick in picks {
+        let containers = crate::export_steps::setting_containers(font, pick.setting, &req.containers, &mut report.warnings);
         for &flavour in flavours {
-            let built = var::compile_variable(font, pick.setting, &options, &VariableOptions { flavour, optimize_deltas })?;
-            if report.feature_code.is_none() {
-                report.feature_code.clone_from(&built.compiled.feature_code);
-            }
-            let mut files = Vec::with_capacity(req.containers.len());
-            for &container in &req.containers {
-                let data = container.wrap(&built.compiled.bytes)?;
-                let name = variable_file_name(req, &built.file_stem, flavour, container);
+            crate::work::check()?;
+            let mut stem = String::new();
+            let mut built = ByContainer::new(fontcraft_compile::export_params::may_differ_by_container(font));
+            let mut files = Vec::with_capacity(containers.len());
+            for &container in &containers {
+                let compiled = built.get(container, |web_container| {
+                    let v = var::compile_variable(
+                        font,
+                        pick.setting,
+                        &Options { web_container, ..options.clone() },
+                        &VariableOptions { flavour, optimize_deltas },
+                    )?;
+                    stem = v.file_stem;
+                    Ok(v.compiled)
+                })?;
+                let data = container.wrap(&compiled.bytes)?;
+                let name = variable_file_name(req, &stem, flavour, container);
                 let file = sink.put(name, container, data, &mut report.warnings)?;
                 let mut v = json!({ "name": file.name, "container": container.name(), "bytes": file.bytes });
                 if let (Some(path), Value::Object(m)) = (&file.path, &mut v) {
@@ -431,10 +472,14 @@ pub(super) fn build_variable(
                 }
                 files.push(v);
             }
+            let Some((compiled, warnings)) = built.finish() else { continue };
+            if report.feature_code.is_none() {
+                report.feature_code = compiled.feature_code;
+            }
             fonts.push(json!({
                 "instance": pick.label, "source": "variable", "format": Formats::variable_name(flavour),
-                "outlines": outlines_name(Formats::file_flavour(flavour)), "fileName": built.file_stem,
-                "glyphs": built.compiled.glyph_order.len(), "warnings": built.compiled.warnings, "files": files,
+                "outlines": outlines_name(Formats::file_flavour(flavour)), "fileName": stem,
+                "glyphs": compiled.glyph_order.len(), "warnings": warnings, "files": files,
             }));
         }
     }

@@ -87,6 +87,8 @@ pub struct Resolved {
     /// The font's enabled parameters, with the master's and then the instance's of the same name
     /// in their place.
     pub params: Params,
+    /// Some layer of the font has a vertical width or origin of its own.
+    pub vertical_layers: bool,
     /// The font's creation date, as the source states it.
     pub date: Option<String>,
     /// Style linking of the instance (none for a master).
@@ -390,6 +392,18 @@ impl Font {
                         if !transform.as_coeffs().iter().all(|v| v.is_finite()) {
                             return Err(bad("a component transform is not a number".into()));
                         }
+                        // A composite cannot refer to another master's drawing.
+                        if crate::pinned::is_redirected(self, c, layer)
+                            && let Ok(paths) = crate::pinned::component_paths(self, c, &master.id)
+                        {
+                            for p in paths {
+                                let contour = p.to_contour().map_err(bad)?;
+                                if !contour.elements().is_empty() {
+                                    out.contours.push(contour);
+                                }
+                            }
+                            continue;
+                        }
                         out.components.push(ResolvedComponent { base: c.glyph.clone(), transform });
                     }
                     Shape::Image(_) => {}
@@ -440,6 +454,7 @@ impl Font {
             stems_v: self.stem_widths(master, false),
             properties,
             params,
+            vertical_layers: self.glyphs.iter().flat_map(|g| &g.layers).any(|l| l.info.vert_width.is_some() || l.info.vert_origin.is_some()),
             date: self.info.date.clone(),
             style: instance.map(|i| StyleLinking { is_bold: i.is_bold, is_italic: i.is_italic, link_style: i.link_style.clone() }),
             instance: match target {

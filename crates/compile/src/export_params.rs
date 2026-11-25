@@ -28,17 +28,25 @@
 //! against every glyph, at most [`MAX_PATTERN_TESTS`] times per list. The engine's stage (Filter, PreFilter, Scale
 //! to UPM, linked sources, Export Folder) runs before resolving, in `engine/src/export_steps.rs`.
 //!
+//! The parameters that change how the font is written rather than which glyphs it holds are read
+//! here too, each where its stage needs it: [`curve_error`], [`post_type`], [`keeps_glyph_order`],
+//! [`vertical_table`], [`fractional_coordinates`], [`Web`] and [`automatic_disabled`]. Save as
+//! TrueType and Webfont Formats choose the files of an instance, so the engine reads them.
+//!
 //! Rows: `Export Glyphs`, `Keep Glyphs`, `Remove Glyphs`, `Rename Glyphs`, `Reencode Glyphs`,
-//! `Use Arabic Presentation Form Unicodes` (M7.9).
+//! `Use Arabic Presentation Form Unicodes` (M7.9); `Post Table Type`, `Remove post names for
+//! webfonts`, `Webfont Only`, `TrueType Curve Error`, `TrueType Keep GlyphOrder`, `Export vmtx
+//! Table`, `Grid Spacing`, `DisableAllAutomaticBehaviour`, `fontInfo.grid.fractionalCff` (M2.10).
 
 use std::cell::OnceCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use fontcraft_fontinfo::glyphset::{Entry, FlagKey, GlyphFacts, GlyphList, GlyphPattern, KernSide, MetricsSide, ReencodeList, RenameList};
 use fontcraft_model::glyphdata::GlyphData;
-use fontcraft_model::{Font, Glyph, Layer, NodeKind, PaletteEntry, Params, Resolved, ResolvedGlyph, Shape};
+use fontcraft_model::{Font, Glyph, Layer, NodeKind, PaletteEntry, Params, Resolved, ResolvedGlyph, Shape, param_flag};
 
 use crate::CompileError;
+use crate::info::{float, int};
 
 const EXPORT_GLYPHS: &str = "Export Glyphs";
 const KEEP_GLYPHS: &str = "Keep Glyphs";
@@ -46,6 +54,22 @@ const REMOVE_GLYPHS: &str = "Remove Glyphs";
 const RENAME_GLYPHS: &str = "Rename Glyphs";
 const REENCODE_GLYPHS: &str = "Reencode Glyphs";
 const ARABIC_FORMS: &str = "Use Arabic Presentation Form Unicodes";
+
+const POST_TABLE_TYPE: &str = "Post Table Type";
+const REMOVE_POST_NAMES: &str = "Remove post names for webfonts";
+const WEBFONT_ONLY: &str = "Webfont Only";
+const CURVE_ERROR: &str = "TrueType Curve Error";
+const KEEP_GLYPH_ORDER: &str = "TrueType Keep GlyphOrder";
+const EXPORT_VMTX: &str = "Export vmtx Table";
+const GRID_SPACING: &str = "Grid Spacing";
+/// The parameter that turns automatic export steps off ([`automatic_disabled`]).
+pub const DISABLE_AUTOMATIC: &str = "DisableAllAutomaticBehaviour";
+
+/// The name IDs Webfont Only leaves out: what describes the font to its owner, not to a browser
+/// (copyright, trademark, manufacturer, designer, the URLs and the licence).
+const WEBFONT_DROPPED_NAMES: [u16; 8] = [0, 7, 8, 9, 11, 12, 13, 14];
+/// The `OS/2` embedding bits Webfont Only writes: restricted licence embedding.
+const WEBFONT_FS_TYPE: u16 = 0x0002;
 
 /// Glyphs Keep Glyphs never drops.
 const ALWAYS_KEPT: [&str; 2] = [".notdef", "space"];
@@ -179,6 +203,100 @@ pub fn apply(font: Option<&Font>, resolved: &mut Resolved, warnings: &mut Vec<St
         arabic_forms(&mut resolved.glyphs, &data, warnings);
     }
     Ok(edits)
+}
+
+fn on(params: &Params, name: &str) -> bool {
+    params.get(name).and_then(param_flag) == Some(true)
+}
+
+/// Whether DisableAllAutomaticBehaviour is on: the export keeps the advance of non-spacing marks,
+/// compiles automatic feature code as stored, passes no anchors on from components and does not
+/// move the space glyph.
+pub fn automatic_disabled(params: &Params) -> bool {
+    on(params, DISABLE_AUTOMATIC)
+}
+
+/// Whether the glyph order follows TrueType Keep GlyphOrder, which fixes only the first two slots.
+pub(crate) fn keeps_glyph_order(params: &Params) -> bool {
+    on(params, KEEP_GLYPH_ORDER) && !automatic_disabled(params)
+}
+
+/// Export vmtx Table: `Some` forces or suppresses the vertical tables.
+pub(crate) fn vertical_table(params: &Params) -> Option<bool> {
+    params.get(EXPORT_VMTX).and_then(param_flag)
+}
+
+/// TrueType Curve Error: the cubic to quadratic tolerance in font units, at most one em.
+pub(crate) fn curve_error(params: &Params, units_per_em: f64) -> Option<f64> {
+    params.get(CURVE_ERROR).and_then(float).filter(|v| *v > 0.0).map(|v| v.min(units_per_em))
+}
+
+/// Post Table Type: 2 or 3. Any other value is reported and not applied.
+pub(crate) fn post_type(params: &Params, warnings: &mut Vec<String>) -> Option<u8> {
+    match int(params.get(POST_TABLE_TYPE)?) {
+        Some(2) => Some(2),
+        Some(3) => Some(3),
+        _ => {
+            warnings.push(format!("`{POST_TABLE_TYPE}` was not applied: it is 2 or 3"));
+            None
+        }
+    }
+}
+
+/// Whether CFF coordinates keep hundredths of a unit: the Grid Spacing parameter, else the
+/// source's grid spacing over its subdivision, is below 1 (`fontInfo.grid.fractionalCff`).
+pub(crate) fn fractional_coordinates(source: Option<&Font>, params: &Params) -> bool {
+    match params.get(GRID_SPACING).and_then(float).filter(|v| *v >= 0.0) {
+        Some(step) => step < 1.0,
+        None => source.is_some_and(|f| {
+            let s = &f.info.settings;
+            fontcraft_geom::grid_step(s.grid_length.unwrap_or(1.0), s.grid_sub_division.unwrap_or(1.0)) < 1.0
+        }),
+    }
+}
+
+/// Whether the font of these parameters is not the same in a web container (WOFF, WOFF2) as in a
+/// plain file, so each needs a compile of its own ([`crate::Options::web_container`]).
+pub fn differs_by_container(params: &Params) -> bool {
+    on(params, REMOVE_POST_NAMES) || on(params, WEBFONT_ONLY)
+}
+
+/// [`differs_by_container`] for any master or setting of `font`.
+pub fn may_differ_by_container(font: &Font) -> bool {
+    let masters = font.masters.iter().map(|m| &m.params);
+    let instances = font.instances.iter().map(|i| &i.params);
+    std::iter::once(&font.info.params).chain(masters).chain(instances).any(differs_by_container)
+}
+
+/// What the web font parameters leave out of one font.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Web {
+    /// No glyph names in `post`.
+    pub no_post_names: bool,
+    /// Webfont Only: no desktop-only data either.
+    pub only: bool,
+}
+
+impl Web {
+    /// Remove post names for webfonts applies in a web container; Webfont Only applies to every
+    /// file of its font, with a warning on a plain one, which cannot be installed then.
+    pub(crate) fn read(params: &Params, web_container: bool, warnings: &mut Vec<String>) -> Self {
+        let only = on(params, WEBFONT_ONLY);
+        if only && !web_container {
+            warnings.push(format!("`{WEBFONT_ONLY}` is on: desktop data was left out of a font that is not in a web container"));
+        }
+        Self { no_post_names: only || (web_container && on(params, REMOVE_POST_NAMES)), only }
+    }
+
+    /// Whether the name record `id` is written.
+    pub(crate) fn keeps_name(self, id: u16) -> bool {
+        !(self.only && WEBFONT_DROPPED_NAMES.contains(&id))
+    }
+
+    /// The embedding bits it sets.
+    pub(crate) fn fs_type(self) -> Option<u16> {
+        self.only.then_some(WEBFONT_FS_TYPE)
+    }
 }
 
 /// The glyph-set parameters of one export, read and parsed; a value that cannot be read is

@@ -91,6 +91,7 @@ fn export_static(s: &mut Session, p: &Value) -> Result<Value> {
         first_only,
         autohinter: crate::external_autohint::trusted(s),
         naming: Default::default(),
+        instance_outputs: true,
     };
     compile::check_size(&req, jobs.len())?;
     let mut report = Report::default();
@@ -181,7 +182,7 @@ fn document_request(p: &Params, title: &str, timestamp: i64, autohinter: Option<
     let containers = compile::containers(p, "containers", &dest)?;
     let mut options = export_options(p)?;
     options.timestamp = timestamp;
-    Ok(Request { flavours, containers, options, dest, first_only: false, autohinter, naming: Default::default() })
+    Ok(Request { flavours, containers, options, dest, first_only: false, autohinter, naming: Default::default(), instance_outputs: true })
 }
 
 fn export_all(s: &mut Session, v: &Value) -> Result<Value> {

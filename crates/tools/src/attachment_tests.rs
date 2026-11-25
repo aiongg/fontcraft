@@ -2,9 +2,9 @@
 //! components and brushes, click and `Shift`-click, the marquee leaving them out, and the
 //! selection keeping them through an edit.
 
-use fontcraft_geom::{ParamCurve, Point};
+use fontcraft_geom::{ParamCurve, Point, Shape as _};
 use fontcraft_model::attach::{Attachment, CapHint, SegmentHint};
-use fontcraft_model::corner::CornerHint;
+use fontcraft_model::corner::{CornerHint, CornerTarget};
 use fontcraft_model::{Anchor, Font, Node, NodeKind, Path, Shape};
 
 use crate::attachment::{AttachmentKind, copied_kind, selected, selected_corners};
@@ -32,6 +32,35 @@ fn corner_font() -> Font {
         layer.info.hints.push(CornerHint::new("_corner.one", 0, 0).to_hint());
     }
     font
+}
+
+/// A corner on an extra node is marked where the two paths cross, and a click on its outline selects it; a corner whose
+/// segments do not cross has no mark.
+#[test]
+fn a_corner_on_an_extra_node_is_marked_at_the_crossing() {
+    let mut font = corner_font();
+    {
+        let mut glyph = font.glyph_mut("A").unwrap();
+        let layer = glyph.layer_mut("m01").unwrap();
+        let bar = Path::new(true, vec![on(0.0, 400.0), on(500.0, 400.0), on(500.0, 500.0), on(0.0, 500.0)]);
+        let stem = Path::new(true, vec![on(200.0, 0.0), on(300.0, 0.0), on(300.0, 600.0), on(200.0, 600.0)]);
+        layer.shapes = vec![Shape::Path(bar), Shape::Path(stem)];
+        // The bar's bottom edge ends at its file node 0, the stem's left edge at file node 3 and its bottom edge at 0.
+        let corner = |other_node| CornerHint {
+            target: CornerTarget::Intersection { shape: 0, node: 0, other_shape: 1, other_node },
+            ..CornerHint::new("_corner.one", 0, 0)
+        };
+        layer.info.hints = vec![corner(0).to_hint(), corner(3).to_hint()];
+    }
+    let scene = Scene::from_font(&font, "A", None).unwrap();
+    let hints: Vec<usize> = scene.attachments.iter().map(|m| m.hint).collect();
+    assert_eq!(hints, vec![1]);
+    let mark = &scene.attachments[0];
+    let bounds = mark.outline.bounding_box();
+    assert!(bounds.inflate(1.0, 1.0).contains(Point::new(200.0, 400.0)), "{bounds:?}");
+    assert!(bounds.width() <= 150.0 && bounds.height() <= 150.0, "{bounds:?}");
+    let on_it = mark.outline.segments().next().unwrap().eval(0.5);
+    assert_eq!(hit_test_with_corners(&scene, &View::default(), on_it, 6.0).map(|h| h.hit), Some(Hit::Attachment { hint: 1 }));
 }
 
 /// Runs `kinds` at `p` through the Select tool and applies the selections it asks for; returns
@@ -187,6 +216,10 @@ fn caps_segments_and_brushes_are_marked_and_selected_by_a_click() {
     let scene = Scene::from_font(&font, "A", None).unwrap();
     let kinds: Vec<(usize, AttachmentKind)> = scene.attachments.iter().map(|m| (m.hint, m.kind)).collect();
     assert_eq!(kinds, vec![(0, AttachmentKind::Cap), (1, AttachmentKind::Segment), (2, AttachmentKind::Brush)]);
+    // The cap's band is its own outline, not the rectangle's two sides below it.
+    let cap = scene.attachments.iter().find(|m| m.kind == AttachmentKind::Cap).unwrap();
+    let ends: Vec<(f64, f64)> = cap.band.elements().iter().filter_map(|e| e.end_point()).map(|p| (p.x, p.y)).collect();
+    assert_eq!(ends, [(400.0, 480.0), (520.0, 530.0), (100.0, 530.0), (100.0, 480.0)]);
     let brush = scene.attachments.iter().find(|m| m.kind == AttachmentKind::Brush).unwrap();
     let ends: Vec<Point> = brush.band.elements().iter().filter_map(|e| e.end_point()).collect();
     assert!(ends.iter().any(|p| (p.x - 420.0).abs() < 1.0) && ends.iter().any(|p| (p.x - 380.0).abs() < 1.0), "{ends:?}");

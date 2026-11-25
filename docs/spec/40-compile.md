@@ -57,8 +57,23 @@ Input: the source model plus export options. Output: a list of errors and warnin
   unless the subset switch is off, as fontmake's `--no-subset` ignores them.
 - Source preparation, before the master is resolved, as both references do when they load a
   source: corner components are fitted into their paths, then smart components are drawn as
-  outlines (`fontcraft_compile::prepare_source`). A layer whose corners cannot be fitted, or a
+  outlines (`fontcraft_compile::prepare_source`). FontCraft then writes components pinned to
+  another master or layer (`masterId`) as the paths they draw, on every layer of the glyph, since
+  a composite refers to its base glyph at the same location; both references ignore the pin. The
+  two paths of a corner on an extra node become one outline before the corner is fitted; fontc
+  reads the first two numbers of such a corner's origin and fits it on that node. A layer whose corners cannot be fitted, or a
   smart component that cannot be interpolated, is written as it is, with a warning.
+- Erasing open corners (`openCorner.invisibleWhenSmall`): a path that runs past a corner, turns on
+  a straight segment and comes back across itself loses the loop beyond the crossing, when the
+  loop is on the outside and small next to the segments it belongs to (the shares of the two
+  segments beyond the crossing are both under 0.5, or one is under 0.3 and the other under 0.99;
+  glyphsLib's `eraseOpenCorners` filter, which fontc follows too). It runs on each resolved
+  glyph's own contours before they are decomposed, for both outline formats. A filter list in the
+  master's user data (else the font's) says which glyphs; without one, a `.glyphs` or native
+  source erases in every glyph and a UFO, a designspace or an opened compiled font in none. In a
+  variable font a glyph whose masters and intermediate layers do not all lose the same corners
+  keeps them, with a warning, so that it stays compatible; fontmake and fontc erase in each master
+  by itself and then refuse the glyph. A project compile does the same as any other compile.
 - Glyphs-style pre-steps when the source enables them: erase open corners, propagate anchors;
   propagation precedes any flattening (`compile.glyphsOutlinePreSteps`). Propagation reads the
   source as stored, so a smart component passes on its glyph's anchors, interpolated at the
@@ -85,7 +100,7 @@ convert curves.
      go first.
 2. **Overlaps.** Removed for static output by default, kept for variable output
    (`compile.removeOverlapsStatic`); variable TrueType glyphs get the overlap flags
-   (`compile.overlapFlags`, our choice). Before this step, a layer with strokes or masks is
+   (`compile.overlapFlags`, our choice: simple glyphs only). Before this step, a layer with strokes or masks is
    replaced by the composite of its shapes (`compositing.shapesCombineInOrder`): strokes
    expanded, masks applied in shape order. Details in § 3.8.
 3. **Curves** (TrueType only). Cubic to quadratic at 0.001 em tolerance (`compile.cu2quTolerance`),
@@ -107,6 +122,9 @@ convert curves.
   (`compile.glyphOrder`, `compile.notdefFirst`, `compile.notdefSynthesis`). AFDKO-style ordering is
   an alternative mode (`compile.glyphOrderMakeotf`); CID-keyed fonts use CID order
   (`compile.cidKeyedFonts`).
+- *TrueType Keep GlyphOrder* puts `space` second in a TrueType font and keeps the rest. Without it the
+  handbook moves `NULL`, `CR` and `space` behind `.notdef`; FontCraft keeps the source's order, as both
+  oracles do.
 - Compiler-made glyphs (bracket layers, colour layers) are appended (`compile.bracketLayerGlyphs`).
 - Production renaming and sanitising (`compile.productionNames`,
   `compile.productionNameSanitising`, `crates/compile/src/names.rs`): a glyph's stored production
@@ -224,7 +242,15 @@ Only when at least one axis has a range (`compile.variableOnlyTables`).
 - gvar: per-glyph deltas with phantom points, IUP at 0.5 units, shared tuples
   (`compile.gvarEveryGlyph`, `compile.gvarPhantomPoints`, `compile.gvarIupOptimisation`,
   `compile.gvarSharedTuples`).
-- HVAR and VVAR, smaller of direct and mapped stores (`compile.hvarStoreChoice`).
+- HVAR and VVAR, smaller of direct and mapped stores (`compile.hvarStoreChoice`). With vertical
+  metrics (`vhea` and `vmtx` at the origin by the static rule, `compile.verticalMetrics`): the
+  vertical phantom points of every source and VVAR. A layer without its own vertical width or
+  origin takes its master's typographic ascender and descender, an intermediate layer those of
+  the master it belongs to. CFF2 has VORG at the origin and the origin map in VVAR, always with
+  index maps.
+- Higher-order interpolation curves: added sources for the glyphs whose nodes keep them
+  (`hoi.appliesToAllExports`, § 9.1 of 10-interpolation.md). Their IUP tolerance is 0, as the
+  regions lie close together and errors add up.
 - MVAR for tagged global metrics.
 - Variable kerning and mark positions in GPOS, their deltas in the GDEF variation store
   (`compile.instanceLayoutInterpolation`). Kerning: the rules of every master; a master's value
@@ -315,7 +341,9 @@ writing fonts; `font.compilePlan` describes the same choices without building.
 |---|---|---|
 | Which fonts | The exportable static instances; the first master when the font has no static instance. Named instances are built whether they export or not. `font.compile` can add each master | `export.staticUsesInstancesOrDefault` |
 | Instances between masters | Built from the font interpolated at the instance; one that cannot be interpolated is skipped with a reason in the result. An export that builds nothing fails | `export.instancesBetweenMasters` |
-| File name | The instance's `fileName` parameter as written, else the PostScript name (name ID 6, as the compiler derives it, with the text tokens of the names expanded for the instance), plus `.ttf`, `.otf`, `.woff` or `.woff2`; characters a file name cannot hold are dropped. A font with no family name takes the family `Unnamed font` for the file name when its source is a .glyphs file or package, as fontmake does (`Unnamedfont-Bold.ttf`), and the source file's name without its extension when it is any other (`Draft.ufo` gives `Draft-Bold.ttf`, where fontc writes `-Bold.ttf`); the `name` table keeps the empty family | `export.fileNaming`, `compile.outputNaming` |
+| File name | The instance's `fileName` parameter as written, else, for a master of a designspace, the name of its UFO without the extension, as fontmake names it (`FontInfo-Thin.ufo` gives `FontInfo-Thin.ttf`; a sparse layer source has no UFO of its own), else the PostScript name (name ID 6, as the compiler derives it, with the text tokens of the names expanded for the instance), plus `.ttf`, `.otf`, `.woff` or `.woff2`; characters a file name cannot hold are dropped. A font with no family name takes the family `Unnamed font` for the file name when its source is a .glyphs file or package, as fontmake does (`Unnamedfont-Bold.ttf`), and the source file's name without its extension when it is any other (`Draft.ufo` gives `Draft-Bold.ttf`, where fontc writes `-Bold.ttf`); the `name` table keeps the empty family | `export.fileNaming`, `compile.outputNaming` |
+| Formats an instance sets | *Save as TrueType* gives the instance TrueType outlines and *Webfont Formats* its containers (`TTF` a plain file; EOT skipped with a warning), whatever the request says; a variable font setting's *Webfont Formats* counts too. The fonts of a collection keep its format; a one-file destination the parameters contradict skips the instance with a reason | `Save as TrueType`, `Webfont Formats` |
+| Web containers | With *Remove post names for webfonts* or *Webfont Only* the font is compiled once for the plain file and once for the WOFF and WOFF2 files | `Remove post names for webfonts`, `Webfont Only` |
 | Both flavours at once | Each into a `ttf` or `otf` subfolder; a repeated file name keeps the later font, with a warning | `export.flavourSubfolders` |
 | One file as destination | Its extension sets the flavour and container; it receives the first font that can be built | `export.singleFileDestination` |
 | Failure | Files are staged under temporary names and renamed only when every font is built; a failure leaves the destination as it was | `export.failingExportWritesNothing` |
@@ -335,8 +363,8 @@ fontTools does.
 
 fontmake's `--cff-round-tolerance`, `--optimize-cff`, `--max-subrs` and `--optimize-widths` are
 the models. FontCraft keeps the source's `defaultWidthX` and `nominalWidthX` unless asked;
-fontmake optimises them by default. `--erase-open-corners` waits for the export step that erases
-open corners (M3.31). The options with no counterpart are refused with the reason; the list is in
+fontmake optimises them by default. `--erase-open-corners` and `--no-erase-open-corners` override
+what the source asks (§ 1.2). The options with no counterpart are refused with the reason; the list is in
 the `compile` row's notes.
 
 ---
@@ -567,7 +595,7 @@ The differences that overlap removal causes are on `crates/oracle/allow.toml`, f
 | Difference | Why |
 |---|---|
 | A `glyf` or `CFF` outline whose coverage differs by less than a whole pixel anywhere and under 0.1% of the ink in total | An intersection point that falls near a half unit is rounded to the other side (327.5 written as 328 against fontmake's 327), or one engine leaves a point on a straight line where the other merges two segments |
-| `maxp.maxPoints` | The two engines leave different numbers of points where contours merge (FontCraft keeps a point on a straight line where two contours met, docs/plans/M3.md › M3.6, rule 7) |
+| `maxp.maxPoints` | The two engines leave different numbers of points where contours merge (FontCraft keeps a node drawn on a straight line, and a contour's start where the merge puts it on one, docs/plans/M3.md › M3.6, rule 7) |
 
 fontmake's overlap removal fails on five corpus sources that build with overlaps kept:
 booleanOperations takes no quadratic segments (`glyphs2/QCurve.glyphs`, `glyphs3/QCurve.glyphs`)
@@ -582,7 +610,7 @@ all five.
 |---|---|---|---|---|
 | Output flavours | TTF, CFF, CFF2, variable TTF and CFF2 | TrueType-flavoured static or variable only | CFF from one source; CFF2 by merging masters | all four |
 | Overlap removal | on for static, off for variable; two backends | never | not part of makeotf | on for static, off for variable; off in a project compile |
-| Overlap flag bits | not stated in the docs read | never set | n/a | set on variable TTF glyphs |
+| Overlap flag bits | never set | never set | n/a | `OVERLAP_SIMPLE` on variable TTF glyphs, `OVERLAP_COMPOUND` never |
 | cu2qu tolerance | 0.001 em, `-e` to change | upm/1000, fixed | n/a | 0.001 em, option |
 | Curve modes | cu2qu, mixed, keep-quad, keep-cubic | cu2qu only | n/a | cu2qu, keep-quad |
 | Contour direction | reversed for TTF | reversed for TTF | source direction | reversed for TTF |
@@ -661,6 +689,8 @@ table says otherwise. Each row is also on `crates/oracle/allow.toml` with the so
 | Names and panose of the variable font's export settings | merged into the font's | not used | they belong to the variable font (M9) and instances (M2.5) |
 | `openTypeNameRecords` of a UFO | written as English records whatever their language | each in its own language | the records state their language |
 | *Use Custom Naming* (`disablesNiceNames`) | ignored: production names are written | the source names are written | the handbook gives it the effect of *Don't use Production Names*; glyphsLib also ignores it (allow-listed for `CornerComponents.glyphs`) |
+| The export parameters *Post Table Type*, *Remove post names for webfonts*, *Webfont Only*, *TrueType Curve Error*, *TrueType Keep GlyphOrder*, *Export vmtx Table* and *DisableAllAutomaticBehaviour* | not read (nor by glyphsLib 6.15, which has a comment where the last would keep mark widths) | applied as the handbook describes them, with the rows' guesses. Without *TrueType Curve Error* the tolerance stays 0.001 em, the oracles' value, and not the handbook's 0.6 units | the handbook gives them these effects. No corpus source sets one, so this row has no allow-list entry |
+| A grid below one unit (*Grid Spacing*, or the source's spacing over its subdivision) in a CFF font | writes no CFF; fontmake rounds every coordinate to a whole unit | coordinates keep hundredths of a unit | `fontInfo.grid.fractionalCff`. No source of the comparison set has a grid below one unit |
 | A UFO that glyphsLib wrote, with a non-spacing mark's width as 0 in the GLIF and the drawn width in `com.schriftgestaltung.Glyphs.originalWidth` | advance 0 | the drawn width | the model reads the drawn width so the UFO converts back to the reference's format unchanged, and the compiler takes a UFO's widths as they are (allow-listed for the two `designspace_from_glyphs` sources) |
 | A pair in both the left-to-right and the right-to-left kerning of a master, and groups of glyphs with right-to-left kerning | the two tables are joined: the right-to-left value replaces the left-to-right one, and a glyph with right-to-left kerning in any master is given by its other group on each side of every pair | the same, with a warning that counts the replaced pairs and the glyphs whose groups swap sides in left-to-right pairs | fontc's join, kept so the values agree; glyphsLib shares the group names between the directions the same way. The warning tells the user that left-to-right kerning changed |
 | Variable `pos` values (`(wght=400:10 wght=700:20)`) in a static build of one master | compiled into the variable font | the static export stops: fea-rs refuses variable metrics outside a variable font; the variable export compiles them | a static build has no axes to resolve the locations against. `varpos*` and `variable_fea/VarFeaOneShot*` in the corpus |
@@ -679,6 +709,8 @@ table says otherwise. Each row is also on `crates/oracle/allow.toml` with the so
 | A designspace axis whose range is wider than its map (range 100–900, map 300–700) | refused: the map must reach the axis minimum, default and maximum (fontmake 3.12.1 refuses it too) | compiled: the map is read past its ends as fontTools' `piecewiseLinearMap` reads it (the same offset as the nearest point), and the `avar` points are those fontTools' normalization gives | refusing would leave such a source with no variable font; the result is a valid table and matches what fontTools computes before its check. Pinned by `an_axis_range_wider_than_the_map_extends_the_map` |
 | Rounding of `gvar` deltas | each delta rounded on its own, so a source's coordinates can come back one unit off | region by region, each later region taken from the rounded earlier ones, as fontmake's varLib rounds them | every master and intermediate layer comes back exactly as `glyf` would store it; fontmake gives the same font (`compile.gvarIupOptimisation`) |
 | Overlap flags in a variable font | never set | `OVERLAP_SIMPLE` on every simple glyph | a variable font keeps its overlaps, and some rasterizers need the flag to draw them (`compile.overlapFlags`) |
+| Vertical phantom points of the drawn `.notdef` at an intermediate location | unchanged, as FontCraft; fontmake moves them by the ascender (−800), because the temporary font it builds for a sparse master has no OS/2 table | vary with the masters' metrics only | an artefact of fontmake's build: `.notdef` has no layer there (`compile.gvarPhantomPoints`) |
+| Vertical origins (VVAR) of a CFF2 font with intermediate layers | no CFF2; fontmake gives every glyph without a layer at the intermediate location that sparse master's default vertical origin | interpolated from the glyph's own sources | the default belongs to other glyphs (`VVAR`) |
 | Kerning of alternate (bracket) glyphs in a variable font, for a pair between two glyphs that both have alternate layers | the pair is copied to every combination of the two glyphs and their alternate glyphs (`x x.BRACKET.varAlt01` −50 in `BracketTestFontKerning`) | copied as glyphsLib copies it, one alternate glyph at a time: (parent, x) gives (alternate, x), (x, parent) gives (x, alternate), (parent, parent) gives only (alternate, alternate) | fontmake builds the same pairs (`compile.bracketLayerGlyphs`, a guess until the reference app is checked). The variable measure counts the source as different in `GPOS` kerning against fontc |
 | Feature variations of a decreasing axis (`decreasing_axis/axis.glyphs`, whose `opsz` masters fall from 144 to 9) | `fvar` gives the axis as 144 to 9 and `avar` from-coordinates of −2, so no alternate glyph applies at any location | the axis ascends from 9 to 144, and `bar.BRACKET.varAlt01` applies inside its range | fontc's tables are outside what the format allows; fontmake does not build the source. The variable measure counts it as different against fontc |
 | `CPAL` of a source with `Color Palettes` and no colour layers | written on its own | not written, as fontmake writes it | no table refers to the palettes, so they change nothing in the font (`CPAL`) |
@@ -1022,6 +1054,8 @@ or shear, kept when the widths are kept, and dropped otherwise. No reference has
 | A dump with `head` or `OS/2` but no `hhea`, `vhea` or outline table, read into a CFF font | compiling `head` reads the Top DICT's FontBBox; no charstring is drawn | the same: charstrings that cannot be drawn do not stop the import |
 | The same with `hhea` or `vhea`, or into a CFF2 font | the extremes (and a CFF2 font's `head` box) draw every charstring; one that cannot be drawn fails the save | the import fails with the reason and changes nothing |
 | A font with `maxp`, `post` and `CFF `, and a dump without `CFF ` | loading the glyph order decompiles `CFF `; the save compiles it again, its FontBBox recalculated | the table is written as TTX and read back. When a name or string holds a control character (TTX text writes it as `?`), or the round trip fails, the table keeps its bytes and the result has a warning with the reason, since going through text would change the strings |
+| A font with `maxp` and `post` but no `CFF `, and a dump without `post` | the glyph order comes from `post`, so the save compiles that table again for the glyph order of the dump: names that are standard ones leave the name list, and a glyph the dump renames gets its new name | the same; a `post` table that cannot be read, or a dump that names another number of glyphs, leaves the table's bytes, with a warning, where fontTools stops |
+| A dump whose glyph order renames glyphs, read into a CFF font without a `CFF ` element | the charset keeps its names; the extremes of `hhea` and `vhea` look the new names up in it and fail the save | the charset keeps its names; the glyphs are matched by position, so the import goes on |
 | A font without `maxp` or `post` | `CFF ` is loaded only when `head` is compiled, after `CFF ` was written, so its bytes stay | the bytes stay; `head` and the extremes read them |
 
 ## 5. Commands and data touched
@@ -1042,9 +1076,9 @@ the binary only; compilation never changes the source.
 
 ## Open questions
 
-1. **Overlap flags in fontmake.** fontc never sets OVERLAP_SIMPLE / OVERLAP_COMPOUND. Whether the
-   fontmake/ufo2ft pipeline sets them on variable fonts was not determinable from the files read.
-   Check a fontmake-built variable font before fixing our default.
+1. **Overlap flags in fontmake.** Answered (M9.38): neither fontc 1.0.0 nor fontmake 3.12.1 sets
+   OVERLAP_SIMPLE or OVERLAP_COMPOUND in a variable font; `compile.overlapFlags` keeps
+   OVERLAP_SIMPLE as our choice.
 2. **Mac names and Mac cmap.** makeotf writes them by default; modern pipelines do not. Decide
    whether the AFDKO-compatible preset needs them at all, and which Mac encodings to support.
 3. **Measured versus fixed x-height and cap height.** The source model normally stores both, so the

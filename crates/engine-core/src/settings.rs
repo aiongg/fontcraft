@@ -438,6 +438,11 @@ impl UserSettings {
         }
     }
 
+    /// The stored ids and values, without the defaults: what a settings file keeps.
+    pub fn stored(&self) -> &BTreeMap<String, Value> {
+        &self.values
+    }
+
     /// The settings file: `{"version": 1, "settings": {id: value…}}`, ids sorted.
     pub fn to_json(&self) -> Vec<u8> {
         let file = json!({ "version": FILE_VERSION, "settings": self.values.as_ref() });
@@ -464,6 +469,12 @@ impl UserSettings {
             None => return Ok((UserSettings::new(), Vec::new())),
             Some(other) => return Err(SettingsError::File(format!("`settings` must be an object, found {}", kind_of(other)))),
         };
+        UserSettings::from_entries(entries)
+    }
+
+    /// The store of the ids and values another file layout holds (`config.toml`), checked as [`UserSettings::from_json`]
+    /// checks them.
+    pub fn from_entries(entries: &Map<String, Value>) -> Result<(UserSettings, Vec<String>), SettingsError> {
         if entries.len() > MAX_ENTRIES {
             return Err(SettingsError::TooLarge { what: "the number of settings".into(), size: entries.len(), limit: MAX_ENTRIES });
         }

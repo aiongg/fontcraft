@@ -68,6 +68,23 @@ fn a_click_on_a_node_lists_the_node_commands_and_runs_them_like_the_command() {
     call(&mut app, "ui.contextMenu.invoke", json!({"command": "path.openCorner"}));
     assert!(app.context_menus.canvas.is_none(), "running an item closes the menu");
 
+    // A menu opened on another layer or side of the glyph runs nothing.
+    call(&mut app, "ui.contextMenu.list", json!({"x": 300, "y": 100}));
+    app.run_now(Msg::Shell(CommandRef::new("path.editBackground")), false).unwrap();
+    let before = app.session.inspect();
+    let refused = control::dispatch(&mut app, "ui.contextMenu.invoke", &json!({"command": "guide.add"})).unwrap_err();
+    assert!(refused.contains("layer changed"), "{refused}");
+    assert!(app.context_menus.canvas.is_none() && app.session.inspect() == before);
+    app.run_now(Msg::Shell(CommandRef::new("path.editBackground")), false).unwrap();
+
+    // Several engine commands of one item are one step.
+    let step = |id: &str| Msg::run(id, json!({"glyph": "A"}));
+    let (several, steps) = super::one_transaction(vec![step("guide.add"), step("guide.add"), Msg::Shell(CommandRef::new("fontView.show"))], "Add");
+    assert!(several && steps.len() == 2, "{steps:?}");
+    assert!(matches!(&steps[0], Msg::Run(c) if c.id == "command.batch" && c.params["steps"].as_array().is_some_and(|s| s.len() == 2)));
+    let one = vec![step("guide.add"), Msg::Shell(CommandRef::new("fontView.show"))];
+    assert_eq!(super::one_transaction(one.clone(), "Add"), (false, one));
+
     let mut direct = edit_app();
     direct.session.execute("path.openCorner", &json!({"glyph": "A", "points": [[0, 2]]})).unwrap();
     assert_eq!(layer(&app), layer(&direct), "the item gives the same font as the command");

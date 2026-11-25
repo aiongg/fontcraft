@@ -5,12 +5,14 @@
 //! the [`camera`], then craft's `ToolHost` runs the active tool ([`ActiveTool`]) on the canvas's pass: the tool gets
 //! the background press, hover and keys and paints its feedback over the layers.
 
+pub mod access;
 pub mod annotation_editor;
 pub mod badges;
 pub mod camera;
 pub mod color;
 pub mod compatibility;
 pub mod hinting;
+pub mod hoi;
 pub mod images;
 pub mod layers;
 pub mod overlays;
@@ -27,6 +29,7 @@ use craft::behavior::kurbo::Size;
 use craft::ui::canvas::{Canvas, CanvasTool, NavigationOptions, NoTool, ToolHost, canvas_space, tool_pass};
 use craft::ui::contract::{Bind, ShowContainer as _, Tracked};
 use craft::ui::runtime::env::Env;
+use craft_ext::ui::runtime::access::{listening, report};
 use egui::Ui;
 
 use self::camera::Camera;
@@ -60,6 +63,8 @@ pub struct Display {
     pub image: bool,
     /// Edit › Keep Layer Selection in Sync: another master of a compatible glyph keeps the canvas selection.
     pub keep_layer_selection_in_sync: bool,
+    /// Edit › Match When Editing: structural edits go to every compatible layer (`shell::compatibility::with_matching`).
+    pub match_when_editing: bool,
 }
 
 impl Default for Display {
@@ -81,6 +86,7 @@ impl Default for Display {
             master_compatibility: false,
             image: true,
             keep_layer_selection_in_sync: false,
+            match_when_editing: false,
         }
     }
 }
@@ -156,10 +162,12 @@ pub fn show(ui: &mut Ui, props: &mut CanvasProps<'_>, sent: &mut Vec<Msg>) {
     let mut reply = None;
     let extent = scroll_bars::extent(document, text::text_rect(text, top, glyph.map_or(0.0, |g| g.descender)), top);
     let mut scrolled = None;
-    let _ = canvas.show(ui, |ui, body| {
+    let mut shown_by = None;
+    let shown = canvas.show(ui, |ui, body| {
         let Some(space) = canvas_space(&Env::of(ui).view()) else { return };
         let painter = ui.painter_at(space.view.rect);
         let camera = Camera::new(space.view, top);
+        shown_by = Some(camera);
         let cx = PaintCx {
             painter: &painter,
             rect: space.view.rect,
@@ -189,6 +197,13 @@ pub fn show(ui: &mut Ui, props: &mut CanvasProps<'_>, sent: &mut Vec<Msg>) {
             reply = Some(ToolHost::new().run(ui, &pass, &mut *tool));
         }
     });
+    if let (Some(camera), Some(glyph)) = (shown_by, glyph)
+        && listening(&shown.response)
+    {
+        let words = Env::of(ui).words::<access::AccessWords>();
+        let items = access::items(&words, glyph, display, &tool_view.selection, &camera, tokens);
+        report(&shown.response, camera.view.rect, access::MAX_ITEMS, items);
+    }
     // A secondary press the tool did not take, or the Menu key, opens the context menu (`shell::context_menu`).
     if let Some(at) = reply.as_ref().and_then(|r| r.context) {
         let params = serde_json::json!({ "x": at.at.x, "y": at.at.y, "alt": at.mods.alt });

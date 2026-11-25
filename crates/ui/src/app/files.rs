@@ -11,6 +11,7 @@
 //! | `file.saveAs` | a file to write, offered as the document's title with its format's extension |
 //! | `file.save` | as Save As, for a document without a file it can write back to (never saved, or a compiled font) |
 //! | `file.importOutlines` | several SVG or EPS files, into `files` |
+//! | `file.print` with `saveAs` | a PDF file to write the pages to, into `output` |
 //! | `project.save` | a `.fontcraftproject` file, for a project never saved |
 //! | `project.linkFont` | a font source for the project to link, into `font` |
 //! | `project.setExportDestination` | a folder to export into, into `folder` |
@@ -36,6 +37,7 @@ pub const PICKED: &[(&str, &str)] = &[
     ("file.saveAs", "path"),
     ("file.save", "path"),
     ("file.importOutlines", "files"),
+    ("file.print", "output"),
     ("project.save", "path"),
     ("project.linkFont", "font"),
     ("project.setExportDestination", "folder"),
@@ -126,6 +128,15 @@ fn request(session: &Session, command: &CommandRef) -> Option<(PickRequest, &'st
             (save_as(session, "Save")?, Fill::One)
         }
         "file.importOutlines" => (PickRequest::open_many("import").title("Import Outlines").filter("SVG or EPS", &["svg", "eps"]), Fill::All),
+        "file.print" => {
+            if command.params.get("saveAs").and_then(Value::as_bool) != Some(true) {
+                return None;
+            }
+            let title = session.active().map_or("Proof", |doc| doc.title.as_str());
+            let request =
+                PickRequest::save("print").title("Save as PDF").filter("PDF", &["pdf"]).file_name(format!("{title}.pdf")).suggested_extension("pdf");
+            (request, Fill::One)
+        }
         "project.save" => {
             let named = command.params.get("project").and_then(Value::as_u64);
             let project = match named {

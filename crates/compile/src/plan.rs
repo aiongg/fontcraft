@@ -62,7 +62,7 @@ fn plan_stages(font: Option<&Font>, mut resolved: Resolved, flavour: Flavour, op
     crate::export_params::without_subset_lists(&mut resolved, options.subset);
     let edits = crate::export_params::apply(font, &mut resolved, &mut warnings)?;
     let glyphs = preflight::run(std::mem::take(&mut resolved.glyphs), &mut warnings)?;
-    let glyphs = order::final_order(glyphs, &resolved, &mut warnings)?;
+    let glyphs = order::final_order(glyphs, &resolved, flavour, &mut warnings)?;
     let glyphs = match font {
         Some(font) if flavour == Flavour::Cff => crate::cid::plan(font, &resolved.params, glyphs, &options.cid, &mut warnings)?.0,
         _ => glyphs,
@@ -171,6 +171,7 @@ pub fn with_expanded_names<'a>(font: Option<&Font>, resolved: &'a Resolved) -> C
         instance: resolved.instance,
         instance_classes: resolved.instance_classes,
         production_names: resolved.production_names,
+        vertical_layers: resolved.vertical_layers,
         glyphs: Vec::new(),
         notes: Vec::new(),
     };

@@ -209,12 +209,79 @@ KNOWN[("overlapping_path_segments", "fb")] = (
     "purpose", "upstream compares end points only, so it also flags zero-length segments and curves "
     "that share their ends but not their handles; ours needs the handles to match too")
 
+KNOWN[("outline_direction", "fb")] = lambda font, fb, ours: (
+    "purpose", "upstream reports the single-point contours autohinters leave as counter-clockwise; "
+    "ours reports them as stray points") if fb.get("single_points") else None
+
 for _c in ("family/vertical_metrics", "family/win_ascent_and_descent", "googlefonts/vertical_metrics",
            "linegaps", "opentype/family/panose_familytype", "opentype/monospace", "os2_metrics_match_hhea",
            "typenetwork/font_is_centered_vertically", "typoascender_exceeds_Agrave",
            "adobefonts/nameid_1_win_english", "opentype/varfont/valid_default_instance_nameids",
            "notofonts/cmap/unexpected_subtables", "opentype/varfont/distinct_instance_records"):
     KNOWN.setdefault((_c, "fb"), ("purpose", NO_TABLE))
+
+
+
+def fonts(names: tuple[str, ...], cls: str, why: str, other=None):
+    """A difference explained on these fonts only (by file name); otherwise ask `other`."""
+    def f(font, fb, ours):
+        if font.name in names:
+            return (cls, why)
+        if callable(other):
+            return other(font, fb, ours)
+        return other
+    return f
+
+
+def also(key: tuple[str, str], entry) -> None:
+    """Adds an explanation to the ones KNOWN has for `key`: the first that answers wins."""
+    first = KNOWN.get(key)
+    if first is None:
+        KNOWN[key] = entry
+    elif callable(first):
+        KNOWN[key] = lambda font, fb, ours: first(font, fb, ours) or entry(font, fb, ours)
+
+
+NO_OS2 = "the font has no OS/2 table; upstream fails, our check skips and check.tables.requiredTables reports it"
+also(("opentype/xavgcharwidth", "fb"), only_codes({"lacks-OS/2"}, "purpose", NO_OS2))
+also(("typenetwork/family/valid_underline", "fb"), lacks(b"OS/2", "purpose", NO_OS2))
+also(("fontwerk/names_match_default_fvar", "fb"), only_codes(
+    {"missing-default-name-id"}, "purpose", "no named instance sits at the default location, which OpenType does not "
+    "ask for; ours compares the names of the instance that does"))
+also(("instances_name_length_req", "fb"), fonts(
+    ("I.otf",), "purpose", "ours reports the longest STAT style name in place of each named instance "
+    "(name/family_and_style_max_length agrees)"))
+also(("opentype/maxadvancewidth", "fc"), fonts(
+    ("I.otf", "Amstelvar-avar2.subset.ttf"), "data", "an earlier upstream check recompiles the open font, which "
+    "recalculates hhea.advanceWidthMax; run alone, the upstream check fails these fonts too"))
+also(("missing_small_caps_glyphs", "fc"), ("purpose", "upstream tests that the glyphs the lookups name exist; ours "
+                                           "also that every letter has a small cap"))
+also(("cjk_not_enough_glyphs", "fb"), aots_only("data", "conformance-suite font whose only cmap subtable is in a "
+                                                "legacy encoding, which upstream reads as Unicode"))
+also(("case_mapping", "fc"), aots_only("data", "conformance-suite font whose cmap subtables disagree; the two tools "
+                                       "take different ones"))
+for _c in ("notofonts/cmap/alien_codepoints", "typenetwork/PUA_encoded_glyphs"):
+    also((_c, "fc"), fonts(("cmap10_font1.otf",), "purpose", "upstream tests the private-use area of the Basic "
+                           "Multilingual Plane only; ours also planes 15 and 16"))
+also(("outline_direction", "fb"), fonts(
+    ("JetBrainsMono.woff2", "JetBrainsMono-Italic.woff2", "Oswald.glyphs"), "purpose", "mirrored components: ours "
+    "reports them in check.components.transformed, not in the direction check, which tests each layer's own paths"))
+also(("outline_alignment_miss", "fb"), only_codes(
+    {"skip-cap-x-height-alignment"}, "purpose", "upstream also warns that an OS/2 version below 2 has no x-height "
+    "and cap height to test; ours tests the lines the font has"))
+also(("outline_alignment_miss", "fb"), fonts(
+    ("Amstelvar-avar2.subset.ttf", "Oswald-Regular.ttf"), "purpose", "upstream counts implied on-curve points and the "
+    "points of decomposed components; ours counts each layer's own nodes"))
+also(("outline_short_segments", "fb"), fonts(
+    ("NotoSansArabic-Regular.quadratic.subset.ttf",), "purpose", "upstream measures each quadratic curve; ours the "
+    "whole spline between two on-curve points"))
+also(("overlapping_path_segments", "fc"), fonts(
+    ("Oswald[wght].ttf", "Oswald[wght].woff2", "Oswald.glyphs"), "data", "the segments coincide in a master other than "
+    "the default one, which upstream reads"))
+also(("microsoft/vertical_metrics", "fb"), ("purpose", SCHEME))
+also(("microsoft/fvar_STAT_axis_ranges", "fb"), fonts(
+    ("Amstelvar-avar2.subset.ttf",), "purpose", "upstream warns that STAT has no axis values; ours does so in "
+    "statValueQuality"))
 
 # FontBakery conditions that make upstream skip for a reason outside the check itself: how the
 # corpus is run (data), or a scope we chose to widen (purpose).
@@ -234,11 +301,16 @@ SKIP_CONDITIONS = {
 # several upstream checks share.
 # A code may carry "#<name ID>" when the finding names one record; without its own entry it
 # belongs where its bare code does.
+MANDATORY_NAMES = ("googlefonts/name/mandatory_entries", "typenetwork/name/mandatory_entries")
 CODE_OWNER = {
+    "check.outlines.pathDirection": {"counter-same-direction": "", "nested-clockwise": ""},
     "check.layout.gdefMarkClass": {"mark-chars": "opentype/gdef_mark_chars",
                                    "non-mark-chars": "opentype/gdef_non_mark_chars",
                                    "spacing-mark-glyphs": "opentype/gdef_spacing_marks"},
-    "check.names.requiredRecords": {"missing-recommended": "", "missing-recommended#0": "microsoft/copyright",
+    "check.names.requiredRecords": {"missing#1": ("name_id_1", "adobefonts/nameid_1_win_english", *MANDATORY_NAMES),
+                                    "missing#2": ("name_id_2", *MANDATORY_NAMES), "missing#4": MANDATORY_NAMES,
+                                    "missing#6": MANDATORY_NAMES, "missing": (),
+                                    "missing-recommended": "", "missing-recommended#0": "microsoft/copyright",
                                     "missing-recommended#7": "microsoft/trademark",
                                     "missing-recommended#8": "microsoft/manufacturer"},
     "check.names.postScriptNameCharacters": {"bad-psname": "opentype/postscript_name"},
@@ -246,11 +318,16 @@ CODE_OWNER = {
     "check.metrics.digitWidths": {"bad-digit-width": "notofonts/hmtx/encoded_latin_digits",
                                   "missing-digit": "notofonts/hmtx/encoded_latin_digits",
                                   "comma-period": "notofonts/hmtx/comma_period"},
-    "check.metrics.whitespaceWidths": {"bad-whitespace-advance": "notofonts/hmtx/whitespace_advances"},
     "check.names.copyrightInDescription": {"copyright-on-description": "name/no_copyright_on_description"},
     "check.tables.fsSelection": {"bad-regular": "opentype/fsselection"},
     "check.variations.statValueQuality": {"axis-order-invalid": "microsoft/STAT_table_axis_order",
-                                          "missing-axis-value": "googlefonts/STAT/compulsory_axis_values"},
+                                          "missing-axis-value": "googlefonts/STAT/compulsory_axis_values",
+                                      "no-axis-values": ("microsoft/STAT_axis_values",
+                                                             "microsoft/STAT_table_eliding_bit")},
+    "check.variations.instanceNameIds": {"missing-axis-name": "", "missing-name": "fvar_name_entries"},
+    "check.variations.statCoversInstances": {"ambiguous-axis-value": "microsoft/fvar_STAT_axis_ranges"},
+    "check.metrics.whitespaceWidths": {"bad-whitespace-advance": "notofonts/hmtx/whitespace_advances",
+                                       "zero-space": "whitespace_widths"},
     "check.variations.defaultInstanceNames": {
         "invalid-default-instance-postscript-name": "opentype/varfont/valid_default_instance_nameids"},
     "check.tables.weightClassRange": {"cff-below-250": ""},
@@ -439,6 +516,14 @@ def run_fc(cli: Path, font: Path, dest: Path, fresh: bool) -> Path:
 # ---------------------------------------------------------------- verdicts
 
 
+def only_single_points(text: str) -> bool:
+    """Is every glyph upstream's direction check lists one whose contour is a single point?"""
+    listed = {kind: {m.group(1) for m in re.finditer(r"\* (.+?) has a " + kind, text)}
+              for kind in ("counter-clockwise outer contour", "path with no bounds")}
+    turned, points = listed.values()
+    return bool(turned) and turned <= points and "more." not in text
+
+
 def fb_results(path: Path) -> dict[str, dict]:
     """FontBakery check id -> {"status", "codes"} for one font."""
     try:
@@ -462,10 +547,12 @@ def fb_results(path: Path) -> dict[str, dict]:
                 msg = str((log.get("message") or {}).get("message", ""))
                 if log.get("status") == "SKIP" and msg.startswith("Unfulfilled Conditions:"):
                     unmet |= {c.strip() for c in msg.split(":", 1)[1].split(",")}
+            text = "\n".join(str((log.get("message") or {}).get("message", "")) for log in check.get("logs", []))
             by_design = any("probably by design" in str((log.get("message") or {}).get("message", ""))
                             for log in check.get("logs", []))
             res[m.group(1)] = {"status": check.get("result", "ERROR"), "codes": codes,
-                               "unmet": sorted(unmet), "by_design": by_design}
+                               "unmet": sorted(unmet), "by_design": by_design,
+                               "single_points": only_single_points(text)}
     return res
 
 

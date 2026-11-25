@@ -45,6 +45,11 @@ pub const ROUND_TOLERANCE: f64 = 0.5;
 /// written out, not `2.0 / 3.0`, so the arithmetic is the reference's to the last bit.
 const TWO_THIRDS: f64 = 0.666_666_666_666_666_7;
 
+/// Whether `table` (a `CFF ` table) has subroutines.
+pub fn has_subroutines(table: &[u8]) -> bool {
+    cff::subr::charstrings_of_table(table, false).is_ok_and(|s| !s.global_subrs.is_empty() || s.local_subrs.iter().any(|l| !l.is_empty()))
+}
+
 pub(crate) fn table_error(e: cff::Error) -> CompileError {
     CompileError::Table { table: "CFF ", message: e.to_string() }
 }
@@ -55,8 +60,7 @@ pub(crate) fn table_error(e: cff::Error) -> CompileError {
 /// from, which holds the hints and the hint settings; without it the glyphs are unhinted.
 /// `hinting` holds the export's Autohint option and whether every hint is left out.
 /// `two_decimals`: keep coordinates to two decimals ([`two_decimals`]) instead of rounding them
-/// to integers, and every segment the outline draws. `cff_options`: the rounding tolerance and
-/// operators otherwise.
+/// by `rounding`, and every segment the outline draws. `cff_options`: the operators.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn build(
     source: Option<&Font>,
@@ -68,6 +72,7 @@ pub(crate) fn build(
     synthesised_notdef: bool,
     hinting: &HintingOptions,
     two_decimals: bool,
+    rounding: Rounding,
     cff_options: &crate::CffOptions,
     warnings: &mut Vec<String>,
 ) -> Result<cff::Built, CompileError> {
@@ -86,11 +91,12 @@ pub(crate) fn build(
     }
     let mut glyphs = Vec::with_capacity(order.len());
     for (gid, ((g, prepared), name)) in order.iter().zip(outlines).zip(names).enumerate() {
+        crate::check_stop()?;
         let mut path = match prepared {
             Prepared::Empty => Vec::new(),
             // The reference's converter also keeps each contour's line back to its start.
             Prepared::Simple(path) if two_decimals => path_ops(path, false).into_iter().map(two_decimal_op).collect(),
-            Prepared::Simple(path) => path_ops(path, !(gid == 0 && synthesised_notdef)),
+            Prepared::Simple(path) => rounding.apply(path_ops(path, !(gid == 0 && synthesised_notdef))),
             Prepared::Composite(_) | Prepared::Points(_) => {
                 return Err(CompileError::Glyph { glyph: g.name.clone(), message: "a CFF outline cannot hold components or TrueType points".into() });
             }
@@ -109,11 +115,48 @@ pub(crate) fn build(
         private,
         glyphs,
         widths: widths(font),
-        round_tolerance: if two_decimals { 0.0 } else { cff_options.round_tolerance },
+        round_tolerance: if two_decimals { 0.0 } else { rounding.tolerance() },
         specialise: cff_options.specialise,
     };
     // The reference's converter keeps every segment it is given.
     cff::build_with(&cff_font, cff::BuildOptions { keep_topology: two_decimals }).map_err(table_error)
+}
+
+/// How the coordinates of charstrings are rounded.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum Rounding {
+    /// To an integer, when that moves a coordinate by at most this much.
+    Tolerance(f64),
+    /// To hundredths of a unit (`fontInfo.grid.fractionalCff`).
+    Hundredths,
+}
+
+impl Rounding {
+    /// The tolerance the options ask for, else what the grid of `source` and the parameters of
+    /// `font`, resolved from it, ask for.
+    pub(crate) fn new(tolerance: Option<f64>, source: Option<&Font>, font: &Resolved) -> Self {
+        match tolerance {
+            Some(t) => Rounding::Tolerance(t),
+            None if crate::export_params::fractional_coordinates(source, &font.params) => Rounding::Hundredths,
+            None => Rounding::Tolerance(ROUND_TOLERANCE),
+        }
+    }
+
+    /// `ops` with the rounding that is done before the charstring is written.
+    pub(crate) fn apply(self, ops: Vec<PathOp>) -> Vec<PathOp> {
+        match self {
+            Rounding::Tolerance(_) => ops,
+            Rounding::Hundredths => ops.into_iter().map(|op| map_op(op, |v| ot_round(v * 100.0) / 100.0)).collect(),
+        }
+    }
+
+    /// The tolerance the charstring writer rounds with.
+    pub(crate) fn tolerance(self) -> f64 {
+        match self {
+            Rounding::Tolerance(t) => t,
+            Rounding::Hundredths => 0.0,
+        }
+    }
 }
 
 /// `v` rounded to two decimals in single precision, as the reference's CFF converter stores a
@@ -124,7 +167,11 @@ pub fn two_decimals(v: f64) -> f64 {
 }
 
 fn two_decimal_op(op: PathOp) -> PathOp {
-    let r = |(x, y): (f64, f64)| (two_decimals(x), two_decimals(y));
+    map_op(op, two_decimals)
+}
+
+fn map_op(op: PathOp, round: impl Fn(f64) -> f64) -> PathOp {
+    let r = |(x, y): (f64, f64)| (round(x), round(y));
     match op {
         PathOp::MoveTo(p) => PathOp::MoveTo(r(p)),
         PathOp::LineTo(p) => PathOp::LineTo(r(p)),

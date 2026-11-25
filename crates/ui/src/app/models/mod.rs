@@ -22,6 +22,7 @@ pub mod glyph;
 pub mod glyph_info;
 pub mod glyph_props;
 pub mod glyph_sections;
+pub mod glyph_sources;
 pub mod guide_box;
 pub mod hint_canvas;
 pub mod hinting;
@@ -48,6 +49,7 @@ use craft::ui::contract::Tracked;
 use fontcraft_engine::Session;
 
 use super::ViewState;
+use crate::shell::axis_sweep::{AxisSweep, STEPS};
 
 /// Every view model the panels read.
 #[derive(Default)]
@@ -121,6 +123,8 @@ pub struct Models {
     /// stamp, since they read the canvas's selection.
     pub palette: palette::PaletteModels,
     pub modules: palette_modules::ModulesModels,
+    /// The Glyph Sources panel (`panels::glyph_sources`).
+    pub glyph_sources: Tracked<glyph_sources::GlyphSourcesModel>,
     pub text: Tracked<text::TextModel>,
     /// The Space Center (`panels::space_center`).
     pub space_center: Tracked<space_center::SpaceCenterModel>,
@@ -146,6 +150,8 @@ pub struct Models {
     /// The Preview Area's and the Preview Panel's lines (`panels::preview`).
     pub preview_area: Tracked<preview::PreviewModel>,
     pub preview_panel: Tracked<preview::PreviewModel>,
+    /// The step of the axis sweep the previews were last projected at.
+    swept: Option<u32>,
     /// The Shape Order panel (`panels::shape_order`).
     pub shape_order: Tracked<shape_order::ShapeOrderModel>,
     /// The Bitmap Glyph Editor (`panels::bitmap_editor`).
@@ -232,9 +238,29 @@ impl Models {
         compatibility::project(&mut self.compatibility, cx);
         text::project_features(&mut self.features, &self.text, cx);
         preview::project_both(&mut self.preview_area, &mut self.preview_panel, cx);
+        glyph_sources::project(&mut self.glyph_sources, cx);
+        self.swept = cx.view.preview.sweep.as_ref().map(AxisSweep::step);
         shape_order::project(&mut self.shape_order, cx);
         bitmap_editor::project(&mut self.bitmap_editor, cx);
         true
+    }
+
+    /// Where the axis sweep is along its axis, 0 to 1: the clock of the timing graph's dots. `None` while no axis is
+    /// animated.
+    pub fn sweep_position(&self) -> Option<f64> {
+        self.swept.map(|step| f64::from(step) / f64::from(STEPS))
+    }
+
+    /// Projects what follows the axis sweep when its step moved: a step changes neither the engine nor the rest of
+    /// the view state, so the other models stay.
+    pub fn project_sweep(&mut self, cx: &mut ProjectCx<'_>) {
+        let step = cx.view.preview.sweep.as_ref().map(AxisSweep::step);
+        if step == self.swept {
+            return;
+        }
+        self.swept = step;
+        preview::project_both(&mut self.preview_area, &mut self.preview_panel, cx);
+        glyph_sources::project(&mut self.glyph_sources, cx);
     }
 }
 

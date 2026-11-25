@@ -764,13 +764,14 @@ Apparent duplicates and conflicting descriptions
 
 Behaviour left unclear
 - `Autohint`: PostScript, TrueType, or whichever applies to the output format? **Open for M10.**
-- `DisableAllAutomaticBehaviour`: only two of the "most" automatic steps are named. **Open for
-  M2's row.**
+- `DisableAllAutomaticBehaviour`: only two of the "most" automatic steps are named. **Guess** on
+  the row: zero-width marks, feature regeneration, anchor propagation and moving `space`.
 - `Export OpenType`: which tables count as "most OpenType tables"? **Open for M8.**
-- `Webfont Only`: which data is removed. **Open for M2's row.**
+- `Webfont Only`: which data is removed. **Guess** on the row: glyph names, name IDs 0, 7–9 and
+  11–14; fsType becomes restricted.
 - `Use Line Breaks`: the entry says checked means unescaped line breaks, then says unchecked helps
-  version control; which state is the default and which is meant to help diffs? **Open for M1's
-  row.**
+  version control; which state is the default and which is meant to help diffs? **Guess** on the
+  row: off is the default and on writes the raw line breaks, which only format version 2 escapes.
 - `Use Arabic Presentation Form Unicodes`: which glyphs get which code points; does it change
   `cmap` only? **Guess** on the row: unencoded positional and ligature forms get Unicode's
   presentation-form code points; cmap only. § 8 check 40.
@@ -792,12 +793,13 @@ Behaviour left unclear
   against an Autohint parameter that is off; a master's export reports it as not used
   (`filter.customParameter.autohinting`).
 - `Grid Spacing`: behaviour at exactly 1.0 is stated twice with slightly different bounds; treated
-  as "below 1 = hundredths, 1 or more = whole units". **Open for M2's row.**
+  as "below 1 = hundredths, 1 or more = whole units". **Guess** on the row.
 - `Scale to UPM`: does it scale kerning, metrics, hint values and guides as well as outlines, and
   how is rounding done? **Guess** (`font.info.scaleToUnitsPerEm`, shared): everything measured in
   units, rounded to the grid. § 8 check 43.
 - `TrueType Keep GlyphOrder` against `glyphOrder` and `DisableAllAutomaticBehaviour`: precedence.
-  **Open for M2's and M4's rows.**
+  **Guess** on the row: it keeps the order `glyphOrder` gives, and DisableAllAutomaticBehaviour
+  goes before it.
 - `Keep Glyphs`: "mutually exclusive" with `Remove Glyphs`; what happens when both are present?
   **Guess** on Keep Glyphs: Keep first, then Remove, with a warning. Check 37.
 - `Rename Glyphs` is described as a swap; what if `newname` does not exist? **Guess** on the row:

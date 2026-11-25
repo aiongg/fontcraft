@@ -91,6 +91,7 @@ pub const LAYERS: &[PaintLayer] = &[
     PaintLayer { id: "auditMarkers", paint: overlays::audit::markers },
     PaintLayer { id: "gradientKnobs", paint: color::knobs::paint },
     PaintLayer { id: "suggestOutlines", paint: overlays::suggest::paint },
+    PaintLayer { id: "interpolationPaths", paint: super::hoi::paint },
     PaintLayer { id: "toolOverlays", paint: tools::overlays::paint },
     PaintLayer { id: "dragBadges", paint: super::badges::paint },
     PaintLayer { id: "textCursor", paint: super::text::paint::cursor },

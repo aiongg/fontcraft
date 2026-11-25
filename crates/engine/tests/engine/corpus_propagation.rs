@@ -4,8 +4,8 @@
 //! `propagate_all_anchors`, the algorithm fontc follows, in names, order and positions within
 //! 0.001.
 //!
-//! The library's output is read from a JSON file made beforehand by a script outside the
-//! repository, run with the fontmake tool's Python: `{source path relative to the corpus:
+//! The library's output is read from a JSON file made beforehand by
+//! `crates/components/crosscheck/glyphslib_anchors.py`: `{source path relative to the corpus:
 //! {glyph: {master id: [[name, x, y], ...]}}}`, with `{"error": message}` for a source it could
 //! not load. The library is only run, never read: propagation is written from observed outputs.
 //!

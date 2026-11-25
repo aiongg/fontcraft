@@ -79,7 +79,8 @@ pub fn draw_smart_components(font: &Font) -> (Font, SmartOutlines) {
     (out, report)
 }
 
-/// The shapes the smart component `c` draws in master `master`, its transform applied: paths,
+/// The shapes the smart component `c` draws in master `master` (or in the master it is pinned
+/// to), its transform applied: paths,
 /// and the plain components of its pole layers with the transform combined. `Ok(None)` when its
 /// glyph is not a smart glyph or has one pole layer for the master (it is drawn as a plain
 /// component). Each smart component drawn, nested ones included, takes one from `draws_left`.
@@ -163,7 +164,9 @@ impl<'a> Ctx<'a> {
         self.draws_left = self.draws_left.checked_sub(1).ok_or_else(|| {
             format!("too many smart components to draw (at most {MAX_SMART_DRAWS_PER_LAYER} for one glyph layer and {MAX_SMART_DRAWS} for the font)")
         })?;
-        let Some(Interpolation { poles, model, at }) = interpolation(base, c, master)? else { return Ok(None) };
+        // A pinned component is drawn from its own master, and so are the components in it.
+        let read = c.pinned_layer(base).map_or(master, |l| l.master.as_str());
+        let Some(Interpolation { poles, model, at }) = interpolation(base, c, read)? else { return Ok(None) };
 
         // Nested smart components first; then the nodes of every path, in order.
         self.chain.push(&base.name);
@@ -203,7 +206,12 @@ impl<'a> Ctx<'a> {
                         p.reverse();
                     }
                 }
-                Shape::Component(inner) => inner.transform = Transform::Matrix((affine * inner.affine()).as_coeffs()),
+                Shape::Component(inner) => {
+                    inner.transform = Transform::Matrix((affine * inner.affine()).as_coeffs());
+                    if read != master && inner.info.master_id.is_none() {
+                        inner.info.master_id = Some(read.to_string());
+                    }
+                }
                 _ => {}
             }
         }
@@ -458,9 +466,14 @@ mod tests {
     #[test]
     fn reversing_keeps_the_start_and_moves_the_segment_kinds() {
         use NodeKind::*;
-        // A(line) c1 c2 B(curve) C(line), closed: glyphsLib gives B(line) c2 c1 A(curve) C(line).
+        // A(line) c1 c2 B(curve) C(line), closed: A(curve) C(line) B(line) c2 c1 (glyphsLib's nodes, which end with
+        // the start: C(line) B(line) c2 c1 A(curve)).
         let n = |x: f64, k| Node::new(x, 0.0, k);
         let mut p = Path::new(true, vec![n(1.0, Line), n(2.0, OffCurve), n(3.0, OffCurve), n(4.0, Curve), n(5.0, Line)]);
+        p.reverse();
+        assert_eq!(kinds(&p), [(1.0, Curve), (5.0, Line), (4.0, Line), (3.0, OffCurve), (2.0, OffCurve)]);
+        // Its handles may stand first in the list: c1 c2 B(curve) C(line) A(line).
+        let mut p = Path::new(true, vec![n(2.0, OffCurve), n(3.0, OffCurve), n(4.0, Curve), n(5.0, Line), n(1.0, Line)]);
         p.reverse();
         assert_eq!(kinds(&p), [(4.0, Line), (3.0, OffCurve), (2.0, OffCurve), (1.0, Curve), (5.0, Line)]);
         // Open: P0 c1 c2 P1(curve) P2(line) gives P2 P1(line) c2 c1 P0(curve).

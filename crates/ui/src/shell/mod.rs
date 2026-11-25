@@ -2,6 +2,7 @@
 //!
 //! The shell is the only UI code that holds `&mut FontCraftApp`. It hands each view its props and nothing else.
 
+pub mod axis_sweep;
 pub mod bars;
 pub mod bitmap_editor;
 pub mod command_palette;
@@ -28,6 +29,7 @@ pub mod font_view;
 pub mod getters;
 pub mod glyph_info;
 pub mod images;
+pub mod kept_layout;
 pub mod kerning_review;
 pub mod kerning_tools;
 pub mod kerning_window;
@@ -45,6 +47,7 @@ pub mod reference_font;
 pub mod selection;
 pub mod settings;
 pub mod shape_order;
+pub mod show_all_masters;
 pub mod sidebar;
 pub mod space_center;
 pub mod start;
@@ -93,8 +96,9 @@ pub fn show(app: &mut FontCraftApp, ui: &mut Ui) {
         })
         .status(true, |ui, _, app: &mut FontCraftApp| {
             let edit = bars::edit_state(app);
+            let hoi = crate::canvas::hoi::axis_choice(app);
             let FontCraftApp { status, models, sent, .. } = app;
-            bars::status(ui, bars::StatusProps { status, features: &models.features, edit, sent });
+            bars::status(ui, bars::StatusProps { status, features: &models.features, edit, hoi, sent });
         })
         .start(Slot::new("fontcraft.tools").size(SlotSize::RailWidth), |ui, _, app: &mut FontCraftApp| {
             let FontCraftApp { tool_slots, view, sent, .. } = app;
@@ -132,3 +136,7 @@ fn body(ui: &mut Ui, cx: &mut BodyCx<'_>, app: &mut FontCraftApp) {
         dialogs.with(|host| crate::dialogs::run(host, app));
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod access_tests;

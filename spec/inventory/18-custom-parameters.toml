@@ -566,6 +566,14 @@ effect = "other"
 summary = "Disables most automatic export steps. The source names two: moving .notdef and space to the start of the glyph order, and setting the advance width of non-spacing marks to zero; the full list is not given."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Built (M2.10). glyphsLib 6.15 has only a comment where it would be checked (the zero widths); fontc 1.0.0 does not read it."
+guesses = [
+  "At export it turns off the zero advance of non-spacing marks, the regeneration of automatic feature code and the passing on of anchors from components, and it keeps space where it is; component alignment stays.",
+  "`.notdef` still becomes glyph 0, which OpenType requires, although the handbook names its reordering as one of the steps turned off.",
+]
+observe = [
+  "Export one font with and without DisableAllAutomaticBehaviour (a wide nonspacing mark, `.notdef` and space late in the order, an outdated automatic class, a composite with an inherited anchor, an aligned composite moved by hand) and compare the glyph order, hmtx, GSUB, mark and glyf with ttx.",
+]
 
 [[parameter]]
 name = "Don't use Production Names"
@@ -804,6 +812,10 @@ effect = "other"
 summary = "Forces the vmtx table on or off. Setting it off gives a horizontal-only font even though the glyphs carry top and bottom sidebearings."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Built (M2.10): on writes vhea and vmtx (and VORG for CFF) with the defaults of `compile.verticalMetrics` where the source states nothing; off leaves all three out. Neither oracle reads it (fontc 1.0.0, glyphsLib 6.15)."
+observe = [
+  "Export a font without vertical metrics with Export vmtx Table on and read vhea, vmtx and VORG with ttx.",
+]
 
 [[parameter]]
 name = "Family Alignment Zones"
@@ -965,7 +977,10 @@ effect = "export-filter"
 summary = "Corresponds to grid spacing divided by subdivision from Other Settings. At export any value below 1 gives coordinates with hundredth-unit precision and any value of 1 or more gives whole-unit rounding; TrueType outlines are unaffected."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Checked when added or set (M7.21): a number of 0 or more."
+notes = "Checked when added or set (M7.21): a number of 0 or more. Built (M2.10): goes before the grid of Other Settings; below 1, static CFF coordinates are rounded to hundredths, from 1 on to whole units (`fontInfo.grid.fractionalCff`). Neither oracle reads it (fontc 1.0.0, glyphsLib 6.15)."
+guesses = [
+  "0 gives hundredths as every other value below 1, and 1 gives whole units.",
+]
 
 [[parameter]]
 name = "Hangul Composition Groups"
@@ -1579,9 +1594,12 @@ effect = "table-value"
 summary = "Integer choosing the post table version for the instance. Default 2 for TrueType and 3 for CFF fonts."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Checked when added or set (M7.21): one of the row's values, stored as a number."
+notes = "Checked when added or set (M7.21): one of the row's values, stored as a number. Built (M2.10): `post` 2 or 3 of the exported font; a CFF font with 2 keeps the names in both tables. font.compile's postFormat goes before it for TrueType outlines. Neither oracle reads it (fontc 1.0.0, glyphsLib 6.15)."
 guesses = [
   "Only 2 and 3 are accepted, the two versions the handbook names; versions 1, 2.5 and 4 are refused. Typing 4 in the reference app settles it.",
+]
+observe = [
+  "Export one instance as OTF with Post Table Type 2 and read the post version and names with ttx; repeat as TTF with 3.",
 ]
 
 [[parameter]]
@@ -1800,6 +1818,13 @@ effect = "other"
 summary = "When set, web font exports carry no glyph names, which makes the files smaller."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Built (M2.10): `post` 3 in WOFF and WOFF2 files; the plain file of the same export keeps its names. The names in the charset of a CFF web font stay. Neither oracle reads it (fontc 1.0.0, glyphsLib 6.15)."
+guesses = [
+  "It applies to WOFF and WOFF2 files alike and to no plain font file, a TTF listed in Webfont Formats included.",
+]
+observe = [
+  "With Remove post names for webfonts on, export WOFF, WOFF2 and a plain TTF of one instance and compare the post versions with ttx; repeat as CFF and look at the charset.",
+]
 
 [[parameter]]
 name = "Remove Prefixes"
@@ -1915,6 +1940,13 @@ effect = "other"
 summary = "Forces the instance to be written as a TTF, overriding the format chosen in the export dialog."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Built (M2.10): a static instance is exported with TrueType outlines only, whatever the command asks for (File › Export, export profiles, font.compile and its plan). The fonts of a collection keep its format, and an export to one .otf file is refused with the reason. Neither oracle reads it (fontc 1.0.0, glyphsLib 6.15)."
+guesses = [
+  "It replaces every outline format asked for, so an instance exported as both TTF and OTF gives one TTF, in the folder of TTF files.",
+]
+observe = [
+  "With Save as TrueType on one of two instances, export OTF: note where the TTF is written and whether an OTF of that instance is written too.",
+]
 
 [[parameter]]
 name = "SBIX to SVG"
@@ -2159,7 +2191,7 @@ effect = "export-filter"
 summary = "Float, default 0.6: the largest distance in units the quadratic approximation may deviate from the cubic outline. A larger value needs fewer quadratic segments and gives a smaller glyf table."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Checked when added or set (M7.21): a number above 0."
+notes = "Checked when added or set (M7.21): a number above 0. Built (M2.10): font units at the exported units per em, at most one em, for static and variable TrueType. font.compile's outlines.conversionError goes before it. Without the parameter the tolerance is 0.001 em, as in both oracles, and not the handbook's 0.6 units (`compile.cu2quTolerance`). Neither oracle reads it (fontc 1.0.0, glyphsLib 6.15)."
 
 [[parameter]]
 name = "TrueType Keep GlyphOrder"
@@ -2171,6 +2203,12 @@ effect = "other"
 summary = "When set, the order from the source is kept except that .notdef and space stay in the first two slots. When off (default) the first four glyphs become .notdef, NULL, CR, space; NULL and CR are only moved if present, while .notdef and space are generated when missing."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Built (M2.10): on, `.notdef` and `space` take the first two slots of a TrueType font and the rest keeps the order. Off, the order is the oracles' (the source's, `.notdef` first): FontCraft does not make the handbook's move of NULL, CR and space (40-compile.md § 1.4). Neither oracle reads it (fontc 1.0.0, glyphsLib 6.15)."
+guesses = [
+  "The order kept is the one the glyphOrder parameter gives.",
+  "DisableAllAutomaticBehaviour goes before it: space is not moved.",
+  "A missing space glyph is not generated, as no oracle generates one.",
+]
 
 [[parameter]]
 name = "TTFAutohint binary path"
@@ -2459,6 +2497,11 @@ effect = "other"
 summary = "When checked, line breaks inside feature code are saved as real line breaks rather than as the escape `\\012`. The source's wording about which state helps version control is ambiguous."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Built (M2.10): on the font, feature code is written with raw line breaks in format version 2, the only version that escapes them; versions 3 and 4 write every line break raw (M1). glyphsLib 6.15 writes them escaped in version 2 whatever it says."
+guesses = [
+  "It covers the code of prefixes, classes and features and no other text.",
+  "Code that holds a carriage return stays escaped.",
+]
 
 [[parameter]]
 name = "Use Typo Metrics"
@@ -2740,9 +2783,15 @@ effect = "other"
 summary = "List drawn from TTF, EOT, WOFF and WOFF2; the instance carrying it is exported in exactly those web formats, overriding the export dialog."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
-notes = "Checked when added or set (M7.21): each entry is one of the row's values."
+notes = "Checked when added or set (M7.21): each entry is one of the row's values. Built (M2.10): the containers of the instance's files, also for a variable font setting. The fonts of a collection stay plain, and an export to one file is refused when the list asks for others. Neither oracle reads it (fontc 1.0.0, glyphsLib 6.15)."
 guesses = [
   "A format matches in any case and is stored as the handbook spells it (`woff2` becomes `WOFF2`); a lowercase entry in the reference app settles it.",
+  "The list replaces the containers asked for and does not add to them.",
+  "TTF means a plain font file of the outline format the export chose.",
+  "EOT is skipped with a warning, because FontCraft writes no EOT; a list with nothing else leaves the containers asked for.",
+]
+observe = [
+  "With Webfont Formats WOFF2 on one instance, export OTF with WOFF checked in the dialog and list the files written.",
 ]
 
 [[parameter]]
@@ -2755,6 +2804,14 @@ effect = "other"
 summary = "When on, removes information that desktop use needs, making the web font harder to convert or install locally. The result is technically a damaged font that still works in browsers; the source does not say what is removed."
 ref = "Appendix › Custom Parameters"
 status = "handbook"
+notes = "Built (M2.10): what is left out is our choice (the guesses). A plain font file written with it gets a warning. Neither oracle reads it (fontc 1.0.0, glyphsLib 6.15)."
+guesses = [
+  "It writes `post` 3, leaves out name IDs 0, 7, 8, 9 and 11 to 14, and sets fsType to 2 (restricted).",
+  "It applies to every file of the font, not only to web containers, as the handbook states no container.",
+]
+observe = [
+  "Export one WOFF2 with Webfont Only on and one with it off and compare every table with ttx; repeat as a plain OTF.",
+]
 
 [[parameter]]
 name = "winAscent"

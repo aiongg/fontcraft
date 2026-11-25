@@ -195,7 +195,7 @@ ref = "Appendix › Custom Feature Code Snippets"
 status = "handbook"
 notes = "Documented, not yet observed. The engine command creates the folder when it is missing and returns its path; the app opens that path in the file manager. The web app has no snippet folder."
 guesses = [
-  "The snippet folder is `snippets` inside FontCraft's settings folder (the folder of `settings.json`), created when Show Snippet Folder is chosen; the reference's folder is inside its application support folder, which the running app would show.",
+  "The snippet folder is `snippets` inside FontCraft's settings folder (the folder of `config.toml`), created when Show Snippet Folder is chosen; the reference's folder is inside its application support folder, which the running app would show.",
 ]
 observe = [
   "In any font, choose Show Snippet Folder from the snippets menu: note which folder opens.",

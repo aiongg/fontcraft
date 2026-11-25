@@ -256,7 +256,7 @@ pub fn open(path: &Path, face: Option<u32>) -> Result<(Font, Vec<String>)> {
         }
         if path.join("fontinfo.plist").is_file() {
             let files = read_folder(path)?;
-            return Ok((fontcraft_io_glyphs::read_package(&files)?, Vec::new()));
+            return Ok(fontcraft_io_glyphs::read_package_reporting(&files)?);
         }
         if path.join("font.props").is_file() {
             let files = read_folder(path)?;
@@ -312,7 +312,7 @@ pub fn open(path: &Path, face: Option<u32>) -> Result<(Font, Vec<String>)> {
     if is_native(body) {
         return Ok((fontcraft_format::load(&bytes)?, Vec::new()));
     }
-    Ok((fontcraft_io_glyphs::read(text)?, Vec::new()))
+    Ok(fontcraft_io_glyphs::read_reporting(text)?)
 }
 
 /// Keeps in `font` the tables of the sfnt `sfnt` (a font or a collection) that a compile can copy

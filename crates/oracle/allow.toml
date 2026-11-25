@@ -7,68 +7,27 @@
 # A difference that FontCraft is meant to fix is not listed here: it stays "different" until the
 # compiler matches. Every entry names the package that removes it, where one does.
 
-# --- The reference builds a variable font (M9) -------------------------------------------------
-# fontc has no option for a static build of one master: from a multi-master source it builds a
-# variable font, compared at its default location, where FontCraft builds the origin master.
+# --- Glyphs of alternate layers in the layout tables of a static build -----------------------------
+# fontmake's master and instance builds hold a glyph of each alternate (bracket) layer. They leave
+# the classes and the rules about them before `GDEF`, `GPOS` and `GSUB` are compared.
 
 [[allow]]
-table = "glyf"
-key = "glyf manualcomponent structure"
-oracle = "fontc"
-sources = ["/WghtVar.glyphs", "/WghtVar.glyphspackage", "/WghtVar_Avar", "/WghtVar_Instances", "/WghtVar_OS2", "/WghtVarWithStylisticSet", "/TheBestNames.glyphs"]
-reason = "The reference is a variable font: fontc decomposes a composite whose component offsets differ between masters (`compile.inconsistentComponentsDecompose`). A static build of one master keeps it, as fontmake's master build does. Compared again with variable builds (M9)."
+table = "GDEF"
+key = "alternate glyphs"
+oracle = "fontmake"
+reason = "`alternateLayer.staticExport`: a static font has the layer in effect at its location and no glyph for an alternate layer, so no substitution feature is involved; fontmake's build keeps the alternate glyphs and lists them."
 
 [[allow]]
-table = "glyf"
-key = "glyf dong structure"
-oracle = "fontc"
-sources = ["oswald/sources/Oswald.glyphs"]
-reason = "The reference is a variable font: fontc decomposes a composite whose component transforms differ between masters (`compile.inconsistentComponentsDecompose`). A static build of one master keeps it. Compared again with variable builds (M9)."
+table = "GPOS"
+key = "alternate glyphs"
+oracle = "fontmake"
+reason = "`alternateLayer.staticExport`: a static font has the layer in effect at its location and no glyph for an alternate layer, so no substitution feature is involved; fontmake's build keeps the alternate glyphs and lists them."
 
 [[allow]]
-table = "maxp"
-key = "maxp.maxComposite*"
-keys = ["maxp.maxComponentElements", "maxp.maxComponentDepth"]
-oracle = "fontc"
-sources = ["/WghtVar.glyphs", "/WghtVar.glyphspackage", "/WghtVar_Avar", "/WghtVar_Instances", "/WghtVar_OS2", "/WghtVarWithStylisticSet", "/TheBestNames.glyphs"]
-reason = "Follows from the composite the variable reference decomposes (see glyf); M9."
-
-[[allow]]
-table = "glyf"
-key = "glyf * outline"
-keys = ["glyf * bounds"]
-oracle = "fontc"
-sources = ["/Oswald-AE-comb.glyphs", "oswald/sources/Oswald.glyphs", "/WorkSans-minimal-bracketlayer.glyphs", "/PropagateAnchorsTest"]
-reason = "The reference is a variable font: fontc converts each curve to quadratics in all masters together (`compile.cu2quAcrossMasters`), so a curve may get more segments than one master alone needs. Within the tolerance either way. Compared again with variable builds (M9)."
-
-[[allow]]
-table = "maxp"
-key = "maxp.maxPoints"
-keys = ["maxp.maxCompositePoints"]
-oracle = "fontc"
-sources = ["/Oswald-AE-comb.glyphs", "/Oswald-O.glyphs", "oswald/sources/Oswald.glyphs", "/WorkSans-minimal-bracketlayer.glyphs", "/IntermediateLayer.glyphs", "/PropagateAnchorsTest"]
-reason = "Curves converted across the variable reference's masters have more points (see glyf); M9."
-
-[[allow]]
-table = "hmtx"
-key = "hmtx * lsb"
-oracle = "fontc"
-sources = ["oswald/sources/Oswald.glyphs"]
-reason = "Side bearings follow the curves converted across the variable reference's masters, whose extremes shift by a unit or two; M9."
-
-[[allow]]
-table = "OS/2"
-key = "OS/2.panose"
-oracle = "fontc"
-sources = ["/WghtVarInstancePanose.glyphs"]
-reason = "fontc takes the panose of the variable font's export settings (an instance of kind variable) before the master's. A static build of a master has no such instance; instances are compiled from M2.5, variable fonts from M9."
-
-[[allow]]
-table = "name"
-key = "name *"
-oracle = "fontc"
-sources = ["/PreferableNames.glyphs"]
-reason = "fontc merges the names of the variable font's export settings (an instance of kind variable) into the font's. A static build of a master has no such instance; M2.5 (instances) and M9 (variable fonts)."
+table = "GSUB"
+key = "alternate glyphs"
+oracle = "fontmake"
+reason = "`alternateLayer.staticExport`: a static font has the layer in effect at its location and no glyph for an alternate layer, so no substitution feature is involved; fontmake's build keeps the alternate glyphs and lists them."
 
 # --- Glyphs the reference compiler makes (M8, M9, M11) -------------------------------------------
 

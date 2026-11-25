@@ -5,18 +5,22 @@
 //!
 //! Services: the in-memory compile of a source's instances, with the source map that lets
 //! binary findings name source glyphs and Font Info fields, and the master-compatibility report
-//! (`fontcraft_audit::structural_report`), and shaping through `fontcraft_shaping`. The TTX
+//! (`fontcraft_audit::structural_report`), shaping through `fontcraft_shaping`, and automatic
+//! alignment and the default anchors (`fontcraft_components`). The TTX
 //! round trip and rasterising answer "not available", which makes the checks that need them skip
 //! with the reason.
 
 use std::collections::HashSet;
+use std::sync::Arc;
 
 use fontcraft_audit::run::MAX_SOURCE_INSTANCES;
-use fontcraft_audit::services::{CompiledInstance, MAX_SHAPED_GLYPHS, ShapeRequest, ShapedGlyph};
+use fontcraft_audit::services::{Attachment, CompiledInstance, LayerAlignment, MAX_SHAPED_GLYPHS, ShapeRequest, ShapedGlyph};
 use fontcraft_audit::{AuditServices, CompatibilityReport, SourceMap, Unavailable};
 use fontcraft_compile::var::VariableOptions;
 use fontcraft_compile::{Flavour, Options};
-use fontcraft_model::{Font, Target};
+use fontcraft_components::{AnchorCache, align, default_anchors, propagate};
+use fontcraft_model::glyphdata::GlyphData;
+use fontcraft_model::{Font, Glyph, Layer, Target};
 use serde_json::{Map, Value, json};
 
 use super::*;
@@ -26,8 +30,15 @@ use crate::params::Params;
 mod outline_cleanup;
 
 /// The services the engine gives the audit.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct EngineServices;
+#[derive(Clone, Default)]
+pub struct EngineServices {
+    /// The glyph data of the font examined; `None` is the built-in database.
+    data: Option<Arc<GlyphData>>,
+}
+
+fn unavailable(e: impl std::fmt::Display) -> Unavailable {
+    Unavailable::new(e.to_string())
+}
 
 impl AuditServices for EngineServices {
     fn compile_instances(&self, font: &Font) -> std::result::Result<Vec<CompiledInstance>, Unavailable> {
@@ -44,6 +55,30 @@ impl AuditServices for EngineServices {
 
     fn shape(&self, bytes: &[u8], request: &ShapeRequest) -> std::result::Result<Vec<ShapedGlyph>, Unavailable> {
         shape_compiled(bytes, request)
+    }
+
+    fn alignment(&self, font: &Font, glyph: &Glyph, layer: &Layer) -> std::result::Result<LayerAlignment, Unavailable> {
+        let found = align::layer_alignment(font, glyph, layer, &mut AnchorCache::new()).map_err(unavailable)?;
+        Ok(LayerAlignment {
+            attachments: found
+                .attachments
+                .into_iter()
+                .map(|a| Attachment { shape: a.shape, stored: a.stored, wanted: a.wanted, horizontal: a.horizontal })
+                .collect(),
+            aligned: found.aligned,
+            width: found.width,
+        })
+    }
+
+    fn default_anchors(&self, font: &Font, glyph: &str) -> std::result::Result<Vec<String>, Unavailable> {
+        let data = self.glyph_data()?;
+        Ok(default_anchors::default_anchor_names(font, &data, glyph))
+    }
+
+    fn effective_anchors(&self, font: &Font, glyph: &str, layer: &str) -> std::result::Result<Vec<String>, Unavailable> {
+        let data = self.glyph_data()?;
+        let found = propagate::effective_anchors_with(font, Some(&*data), glyph, layer).map_err(unavailable)?;
+        Ok(found.into_iter().map(|a| a.name).collect())
     }
 }
 
@@ -106,6 +141,18 @@ fn shape_compiled(bytes: &[u8], request: &ShapeRequest) -> std::result::Result<V
 }
 
 impl EngineServices {
+    /// The services for a font whose glyph data is `data`.
+    pub fn with_glyph_data(data: Option<Arc<GlyphData>>) -> Self {
+        EngineServices { data }
+    }
+
+    fn glyph_data(&self) -> std::result::Result<Arc<GlyphData>, Unavailable> {
+        match &self.data {
+            Some(data) => Ok(data.clone()),
+            None => crate::glyph_data::builtin().map_err(unavailable),
+        }
+    }
+
     /// Compiles each exporting static instance of `font` (the default master when it has none),
     /// at most [`MAX_SOURCE_INSTANCES`], as TrueType, and the variable font when the source has
     /// several masters. Returns what compiled and one note per thing that did not.
@@ -277,6 +324,8 @@ fn registered<'a>(ids: impl IntoIterator<Item = &'a str>) -> Vec<&'a str> {
 const BASIC_CHECKS: [&str; 3] = ["check.outlines.coincidentPoints", "check.outlines.flatCurve", "check.outlines.collinearLines"];
 const OVERLAP_CHECKS: [&str; 2] = ["check.outlines.overlap", "check.outlines.tinyContour"];
 const EMPTY_GLYPHS: &str = "check.outlines.noContours";
+/// `maxResults` of the shortcut commands: the reference checkers list every finding.
+const ALL_FINDINGS: i64 = 1_000_000;
 
 fn check_outlines(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("audit.checkOutlines", v)?;
@@ -308,7 +357,7 @@ fn check_outlines(s: &mut Session, v: &Value) -> Result<Value> {
     checks.push(EMPTY_GLYPHS);
     let config = json!({
         "check.outlines.flatCurve": {"tolerance": tolerance},
-        "check.outlines.collinearLines": {"tolerance": tolerance},
+        "check.outlines.collinearLines": {"tolerance": tolerance, "maxAngle": 0.0},
         "check.outlines.tinyContour": {"minArea": min_area},
     });
     let mut q = Map::new();
@@ -316,6 +365,7 @@ fn check_outlines(s: &mut Session, v: &Value) -> Result<Value> {
     q.insert("profile".into(), json!("strict"));
     q.insert("checks".into(), json!(checks));
     q.insert("config".into(), config.clone());
+    q.insert("maxResults".into(), json!(ALL_FINDINGS));
     if all {
         q.insert("all".into(), json!(true));
     }
@@ -647,7 +697,7 @@ fn compare_family(s: &mut Session, v: &Value) -> Result<Value> {
             list
         }
     };
-    let q = json!({"target": target, "profile": "strict", "checks": wanted, "config": config});
+    let q = json!({"target": target, "profile": "strict", "checks": wanted, "config": config, "maxResults": ALL_FINDINGS});
     let mut report = s.execute("audit.run", &q)?;
     // The reference's -rm, -rn, -rp and -rf print their tables beside the test results.
     let mut tables = Map::new();
@@ -694,13 +744,13 @@ mod tests {
         let gid = |name: &str| compiled.glyph_order.iter().position(|n| n == name).unwrap() as u32;
         let request = |features: Vec<(String, bool)>| ShapeRequest { text: "fi".into(), features, ..ShapeRequest::default() };
 
-        let shaped = EngineServices.shape(&compiled.bytes, &request(vec![])).unwrap();
+        let shaped = EngineServices::default().shape(&compiled.bytes, &request(vec![])).unwrap();
         assert_eq!(shaped.iter().map(|g| g.glyph_id).collect::<Vec<_>>(), [gid("a")], "liga is on by default");
-        let off = EngineServices.shape(&compiled.bytes, &request(vec![("liga".into(), false)])).unwrap();
+        let off = EngineServices::default().shape(&compiled.bytes, &request(vec![("liga".into(), false)])).unwrap();
         assert_eq!(off.iter().map(|g| g.glyph_id).collect::<Vec<_>>(), [gid("f"), gid("i")]);
         assert_eq!(off.get(1).map(|g| g.cluster), Some(1));
-        assert!(EngineServices.shape(&compiled.bytes, &request(vec![("toolong".into(), true)])).is_err());
-        assert!(EngineServices.shape(b"not a font", &request(vec![])).is_err());
+        assert!(EngineServices::default().shape(&compiled.bytes, &request(vec![("toolong".into(), true)])).is_err());
+        assert!(EngineServices::default().shape(b"not a font", &request(vec![])).is_err());
     }
 
     /// A fix that lists many steps cleans up each changed layer once, and finding the distinct

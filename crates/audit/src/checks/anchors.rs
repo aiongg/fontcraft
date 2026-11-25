@@ -8,13 +8,13 @@
 use std::collections::{BTreeSet, HashSet};
 
 use fontcraft_geom::Point;
-use fontcraft_model::{Glyph, Layer};
+use fontcraft_model::{Font, Glyph, Layer};
 use read_fonts::tables::gsub::SubstitutionSubtables;
 use read_fonts::types::Tag;
 use read_fonts::{FontRef, TableProvider};
 
 use super::components::{Names, binary_glyph_name};
-use crate::{BinaryCtx, Hit, LayerInput, Location, Params, Sink, SourceCtx};
+use crate::{BinaryCtx, GlyphCtx, Hit, LayerInput, Location, Params, Sink, SourceCtx};
 
 /// Most ligature records read from one font's `liga` lookups.
 pub(crate) const MAX_LIGATURE_RECORDS: usize = 1_000_000;
@@ -106,6 +106,96 @@ pub(crate) fn unknown_name(ctx: &SourceCtx<'_>, _: &Params<'_>, sink: &mut Sink)
                     ..Location::default()
                 }));
             }
+        }
+    }
+}
+
+/// The names glyphs of the font attach to: `top` for an anchor called `_top`.
+pub(crate) fn mark_anchors(font: &Font) -> HashSet<String> {
+    let mut out = HashSet::new();
+    for g in font.glyphs.as_arcs().iter().filter(|g| !special_glyph(g)) {
+        for a in g.layers.iter().filter(|l| audited(l)).flat_map(|l| &l.anchors) {
+            if let Some(name) = a.name.strip_prefix('_').filter(|n| !n.is_empty()) {
+                out.insert(name.to_string());
+            }
+        }
+    }
+    out
+}
+
+/// The master layers of a glyph that hold something.
+fn drawn_masters(glyph: &Glyph) -> impl Iterator<Item = &Layer> {
+    glyph.layers.iter().filter(|l| l.is_master_layer() && !l.shapes.is_empty())
+}
+
+fn on_layer(layer: &Layer, anchors: Vec<String>) -> Location {
+    Location { layer: layer.id.clone(), master: Some(layer.master.clone()), anchors, ..Location::default() }
+}
+
+/// A base glyph without an anchor the glyph data expects of it and marks of the font attach to.
+/// Marks (glyphs the glyph data gives an attaching anchor) are left to
+/// [`mark_without_attachment`], and anchors a composite takes over from its components count.
+pub(crate) fn missing(ctx: &GlyphCtx<'_>, _: &Params<'_>, sink: &mut Sink) {
+    let (font, glyph) = (ctx.audit.font, ctx.glyph);
+    if !glyph.export || special_glyph(glyph) {
+        return;
+    }
+    let marks = ctx.audit.mark_anchors();
+    if marks.is_empty() {
+        return;
+    }
+    let mut wanted = match ctx.services.default_anchors(font, &glyph.name) {
+        Ok(names) => names,
+        Err(e) => return sink.skip(e.reason),
+    };
+    if wanted.iter().any(|n| n.starts_with('_')) {
+        return;
+    }
+    wanted.retain(|n| marks.contains(n));
+    if wanted.is_empty() {
+        return;
+    }
+    for layer in drawn_masters(glyph) {
+        let have = match ctx.services.effective_anchors(font, &glyph.name, &layer.id) {
+            Ok(names) => names,
+            Err(e) => {
+                sink.skip(e.reason);
+                continue;
+            }
+        };
+        let lacks: Vec<String> = wanted.iter().filter(|n| !have.contains(n)).cloned().collect();
+        if lacks.is_empty() {
+            continue;
+        }
+        let anchors = if lacks.len() == 1 { "anchor" } else { "anchors" };
+        let message = format!("{} has no {anchors} {}, which marks in the font attach to.", glyph.name, lacks.join(", "));
+        sink.push(Hit::new("missing-anchor", message).place(on_layer(layer, lacks)));
+    }
+}
+
+/// A mark the glyph data gives an attaching anchor that has none, of its own or from its
+/// components.
+pub(crate) fn mark_without_attachment(ctx: &GlyphCtx<'_>, _: &Params<'_>, sink: &mut Sink) {
+    let (font, glyph) = (ctx.audit.font, ctx.glyph);
+    if special_glyph(glyph) {
+        return;
+    }
+    let wanted = match ctx.services.default_anchors(font, &glyph.name) {
+        Ok(names) => names,
+        Err(e) => return sink.skip(e.reason),
+    };
+    let expected: Vec<String> = wanted.into_iter().filter(|n| n.starts_with('_')).collect();
+    if expected.is_empty() {
+        return;
+    }
+    for layer in drawn_masters(glyph) {
+        match ctx.services.effective_anchors(font, &glyph.name, &layer.id) {
+            Ok(have) if have.iter().any(|n| n.starts_with('_')) => {}
+            Ok(_) => {
+                let message = format!("{} is a combining mark without an attaching anchor (such as {}).", glyph.name, expected.join(", "));
+                sink.push(Hit::new("no-attaching-anchor", message).place(on_layer(layer, expected.clone())));
+            }
+            Err(e) => sink.skip(e.reason),
         }
     }
 }

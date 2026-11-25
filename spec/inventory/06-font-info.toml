@@ -143,6 +143,23 @@ guesses = [
 ]
 
 [[command]]
+id = "font.info.features.compile"
+label = "Compile Features in Background"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{}"
+area = "features"
+milestone = "M8"
+summary = "Compiles the active document's feature code for the master the window shows on a worker, as the Features tab's Compile button does; the result is kept as font.features.compile keeps it. The button is busy until the result lands, and an edit in between starts the compile again."
+ref = "Font Info › Features"
+status = "inferred"
+notes = "Our own command: the Compile button runs font.features.compile without holding up the window. The job does the whole compile (feature_state::compile_ahead) and the command takes its result."
+guesses = [
+  "An edit while the compile runs drops its result and compiles the font as it then is; whether the reference app keeps the window usable during Compile is for the Compile button's own check.",
+]
+
+[[command]]
 id = "font.info.get"
 label = "Get Font Info"
 menu = []
@@ -3019,7 +3036,7 @@ milestone = "M8"
 summary = "Per-instance feature changes are made with the custom parameters Add, Remove and Replace for Prefix, Class and Feature. Automatic classes and features need no such parameters because they are regenerated for the glyph set of each instance."
 ref = "Font Info › Features › Export-Specific Features"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft (M8.31): the six Add and Replace parameters are edited in a monospaced field of several lines, coloured as the feature code editor colours code (crates/ui/src/panels/font_info/param_value.rs); completion is not there yet. With one instance selected in the Exports tab, the instance compile (font.features.compile with `instance`) runs when the projection is made, and a parameter with an error shows an error icon and its first message, with the line in the parameter's code, under its field. Number values in the instance's code are those of the first master (or the master asked for), not interpolated at the instance's location."
+notes = "Documented, not yet observed. FontCraft (M8.31): the six Add and Replace parameters are edited in a monospaced field of several lines, coloured as the feature code editor colours code (crates/ui/src/panels/font_info/param_value.rs); completion is not there yet. With one instance selected in the Exports tab, the instance compile (font.features.compile with `instance`) runs on a worker while the tab shows (at once for an instance not compiled yet, half a second after the last edit otherwise; a result the font has moved past is dropped), and a parameter with an error shows an error icon and its first message, with the line in the parameter's code, under its field. Number values in the instance's code are those of the first master (or the master asked for), not interpolated at the instance's location."
 guesses = [
   "The Exports tab shows an error icon and the first message under a feature parameter whose code does not compile; the reference app may show the error only at export.",
   "An instance compile reads number values from the default master rather than at the instance's location.",
@@ -3119,6 +3136,7 @@ milestone = "M2"
 summary = "Fractional coordinates produced by a zero or subdivided grid may be written as they are into CFF-flavoured fonts; the compiler must not round them."
 ref = "Font Info › Other Settings › Grid Spacing & Subdivision"
 status = "handbook"
+notes = "Built for static CFF fonts, name-keyed and CID-keyed (M2.10): when the Grid Spacing parameter, else spacing over subdivision, is below 1, coordinates keep hundredths of a unit; otherwise they are whole. font.compile's cff.roundTolerance goes before it and a project compile keeps its own two decimals. Both oracles always write whole units (fontmake unless told otherwise); variable CFF2 masters are rounded as before (40-compile.md § 4a)."
 
 [[behavior]]
 id = "fontInfo.keyboardIncrements"

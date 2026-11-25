@@ -181,7 +181,7 @@ fn restricted(fs_type: u16, options: &TtAutohintOptions) -> bool {
 /// autohinted TrueType build, every composite is written as contours, so it is hinted as one
 /// outline.
 pub(crate) fn component_options(source: Option<&Font>, resolved: &Resolved, flavour: Flavour, options: &Options) -> ComponentOptions {
-    let mut out = options.components;
+    let mut out = options.components.clone();
     if flavour == Flavour::TrueType
         && !out.decompose_all
         && !options.hinting.strip
@@ -367,6 +367,7 @@ pub fn tt_hinting(
     let mut glyphs = Vec::new();
     let mut deltas_dropped = false;
     for (gid, instructions) in &instructed {
+        crate::check_stop()?;
         let (Some(g), Some(prepared)) = (order.get(*gid), outlines.get(*gid)) else { continue };
         if matches!(prepared, Prepared::Empty | Prepared::Composite(_)) {
             continue;

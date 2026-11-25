@@ -10,12 +10,13 @@
 //! corner gets a circular arc of the given radius. A curved neighbour is split where the arc
 //! meets it and keeps its shape. `d` is at most half of either neighbouring segment, so the
 //! radius shrinks where it does not fit; where two roundings meet in the middle of a segment, the
-//! segment goes.
+//! segment goes. Of a quadratic spline, the piece next to the corner is the neighbouring segment,
+//! and the arc next to a quadratic segment is quadratic.
 
 use std::collections::HashSet;
 use std::f64::consts::PI;
 
-use fontcraft_geom::{CubicBez, ParamCurve, Point, Vec2};
+use fontcraft_geom::{CubicBez, ParamCurve, Point, QuadBez, Vec2, cubics_to_quadratic_splines};
 
 use super::{Args, Context, Filter, Param, ParamKind, Slot, Value};
 use crate::contour::{Contour, Node, NodeKind, RNode, Ring, Seg, round_to_grid};
@@ -31,6 +32,11 @@ const MAX_VISUAL_FACTOR: f64 = 4.0;
 const MIN_TANGENT: f64 = 0.01;
 /// Two arc ends closer than this, in curve parameter, are one point.
 const SAME_T: f64 = 1e-9;
+/// Most distance, in units, between an arc next to a quadratic segment and its cubic.
+const ARC_TOLERANCE: f64 = 0.25;
+/// An on-curve point this close to the midpoint of the off-curve points around it is the implied
+/// point of one spline.
+const IMPLIED_EPSILON: f64 = 1e-6;
 /// Steps of the search along a curve for the point at a given distance from one end, then
 /// bisection steps between the two samples around it.
 const SEARCH_STEPS: usize = 64;
@@ -59,7 +65,7 @@ const PARAMS: &[Param] = &[
     },
 ];
 
-const DOC: &str = "{glyph: name | glyphs: [names], layer?: id | layers?: [ids] (default: the first master's layer), points?: [[shape, node]], segments?: [[shape, node]] (with one glyph and one layer), radius: units (0 to 1000000), visualCorrections?: bool (default false)} replaces corner nodes with arcs of the given radius. With points or segments, exactly the selected corners are rounded (selected nodes and the end nodes of selected segments), inward or outward; without them, only outward-pointing corners, and every corner of an open path. With visualCorrections every rounding starts `radius` units from its corner, so sharp corners get a smaller radius and blunt corners a larger one. The radius shrinks where it does not fit in half of a neighbouring segment. Smooth nodes and corners next to quadratic segments stay; components and locked paths are not changed; new points are rounded to the grid. Export string: RoundCorner; radius; visualcorrection → {glyphs: [names], skipped: [{glyph, layer?, reason}]}";
+const DOC: &str = "{glyph: name | glyphs: [names], layer?: id | layers?: [ids] (default: the first master's layer), points?: [[shape, node]], segments?: [[shape, node]] (with one glyph and one layer), radius: units (0 to 1000000), visualCorrections?: bool (default false)} replaces corner nodes with arcs of the given radius. With points or segments, exactly the selected corners are rounded (selected nodes and the end nodes of selected segments), inward or outward; without them, only outward-pointing corners, and every corner of an open path. With visualCorrections every rounding starts `radius` units from its corner, so sharp corners get a smaller radius and blunt corners a larger one. The radius shrinks where it does not fit in half of a neighbouring segment. Next to a quadratic spline that segment is the piece the corner touches, and the arc is quadratic. Smooth nodes stay; components and locked paths are not changed; new points are rounded to the grid. Export string: RoundCorner; radius; visualcorrection → {glyphs: [names], skipped: [{glyph, layer?, reason}]}";
 
 impl Filter for RoundCorners {
     fn id(&self) -> &'static str {
@@ -114,15 +120,15 @@ pub fn round_corners(contours: &[Contour], radius: f64, visual: bool, cx: &Conte
     let mut out = Vec::with_capacity(rings.len());
     let mut count = 0usize;
     for (i, ring) in rings.iter().enumerate() {
-        let pick = |j: usize, cross: f64| {
+        let pick = |src: Option<usize>, cross: f64| {
             if selected.is_empty() {
                 let side = sides.get(i).copied().unwrap_or(0.0);
                 side == 0.0 || cross * side > 0.0
             } else {
-                ring.nodes.get(j).and_then(|r| r.src).is_some_and(|s| selected.contains(&(i, s)))
+                src.is_some_and(|s| selected.contains(&(i, s)))
             }
         };
-        let contour = round_ring(ring, radius, visual, cx.grid, &pick).to_contour();
+        let contour = joined(round_ring(&expanded(ring), radius, visual, cx.grid, &pick), cx.grid).to_contour();
         for n in &contour.nodes {
             crate::check(n.point.x)?;
             crate::check(n.point.y)?;
@@ -174,7 +180,67 @@ struct Corner {
     d2: Vec2,
 }
 
-fn round_ring(ring: &Ring, radius: f64, visual: bool, grid: f64, pick: &impl Fn(usize, f64) -> bool) -> Ring {
+/// The ring with a marked node at each implied on-curve point of its quadratic splines, so every
+/// segment is one line, quadratic or cubic.
+fn expanded(ring: &Ring) -> Ring {
+    let mut nodes = Vec::with_capacity(ring.len());
+    let mut tail = Vec::new();
+    for (j, r) in ring.nodes.iter().enumerate() {
+        let mut implied = Vec::new();
+        let mut last = r.clone();
+        if r.node.kind == NodeKind::QCurve {
+            for pair in r.ctrl.windows(2) {
+                let [a, b] = pair else { continue };
+                let node = Node { smooth: true, ..Node::new(a.point.midpoint(b.point), NodeKind::QCurve) };
+                implied.push(RNode { node, ctrl: vec![*a], src: None, mark: true });
+            }
+            last.ctrl = r.ctrl.last().copied().into_iter().collect();
+        }
+        if j == 0 {
+            // The start stays first; the points of the closing segment go at the end.
+            tail = implied;
+        } else {
+            nodes.extend(implied);
+        }
+        nodes.push(last);
+    }
+    nodes.extend(tail);
+    Ring { closed: ring.closed, nodes }
+}
+
+/// [`expanded`] undone: a marked node still between two quadratic segments whose off-curve points
+/// imply it goes, and any other becomes a node on the grid.
+fn joined(mut ring: Ring, grid: f64) -> Ring {
+    let mut j = 1;
+    while j < ring.len() {
+        let len = ring.len();
+        let next = ring.nodes.get((j + 1) % len).filter(|n| n.node.kind == NodeKind::QCurve).and_then(|n| n.ctrl.first());
+        let Some(r) = ring.nodes.get(j) else { break };
+        let implied = r.mark
+            && r.node.kind == NodeKind::QCurve
+            && matches!((r.ctrl.last(), next), (Some(a), Some(b)) if r.node.point.distance(a.point.midpoint(b.point)) <= IMPLIED_EPSILON);
+        if implied {
+            let gone = ring.nodes.remove(j);
+            let len = ring.len().max(1);
+            if let Some(n) = ring.nodes.get_mut(j % len) {
+                let mut ctrl = gone.ctrl;
+                ctrl.append(&mut n.ctrl);
+                n.ctrl = ctrl;
+            }
+            continue;
+        }
+        if let Some(r) = ring.nodes.get_mut(j).filter(|r| r.mark) {
+            r.node.point = round_to_grid(r.node.point, grid);
+            r.mark = false;
+        }
+        j += 1;
+    }
+    ring
+}
+
+/// `ring` (its splines [`expanded`]) with the corners `pick` takes, by their index in the contour
+/// and their turn, rounded.
+fn round_ring(ring: &Ring, radius: f64, visual: bool, grid: f64, pick: &impl Fn(Option<usize>, f64) -> bool) -> Ring {
     let m = ring.len();
     let mut corners: Vec<Option<Corner>> = (0..m).map(|j| corner(ring, j, radius, visual, pick)).collect();
     let at = |corners: &[Option<Corner>], j: Option<usize>| j.and_then(|j| corners.get(j).copied().flatten());
@@ -217,10 +283,11 @@ fn round_ring(ring: &Ring, radius: f64, visual: bool, grid: f64, pick: &impl Fn(
         if !gone {
             nodes.push(RNode { node: Node { point: round(c.p1), smooth: true, ..r.node }, ctrl, src: r.src, mark: false });
         }
-        let (h1, h2) = arc_handles(&c);
+        let quadratic = [Some(seg.kind), ring.next(k).and_then(|n| ring.seg(n)).map(|s| s.kind)].contains(&Some(NodeKind::QCurve));
+        let (kind, points) = arc(&c, quadratic);
         nodes.push(RNode {
-            node: Node { point: round(c.p2), kind: NodeKind::Curve, smooth: true, tag: if gone { r.node.tag } else { None } },
-            ctrl: vec![Node::off(round(h1)), Node::off(round(h2))],
+            node: Node { point: round(c.p2), kind, smooth: true, tag: if gone { r.node.tag } else { None } },
+            ctrl: points.into_iter().map(|p| Node::off(round(p))).collect(),
             src: None,
             mark: false,
         });
@@ -229,7 +296,7 @@ fn round_ring(ring: &Ring, radius: f64, visual: bool, grid: f64, pick: &impl Fn(
 }
 
 /// The rounding of node `j`, or `None` when it is not a corner to round.
-fn corner(ring: &Ring, j: usize, radius: f64, visual: bool, pick: &impl Fn(usize, f64) -> bool) -> Option<Corner> {
+fn corner(ring: &Ring, j: usize, radius: f64, visual: bool, pick: &impl Fn(Option<usize>, f64) -> bool) -> Option<Corner> {
     if ring.len() < 2 || ring.nodes.get(j)?.node.smooth {
         return None;
     }
@@ -239,7 +306,7 @@ fn corner(ring: &Ring, j: usize, radius: f64, visual: bool, pick: &impl Fn(usize
     let cross = tin.cross(tout);
     let turn = cross.abs().atan2(tin.dot(tout));
     let min = MIN_TURN_DEGREES.to_radians();
-    if turn < min || turn > PI - min || !pick(j, cross) {
+    if turn < min || turn > PI - min || !pick(ring.nodes.get(j)?.src, cross) {
         return None;
     }
     // Half the corner's inner angle.
@@ -259,6 +326,16 @@ fn corner(ring: &Ring, j: usize, radius: f64, visual: bool, pick: &impl Fn(usize
         p2: outgoing.eval(t_out),
         d2: outgoing.direction(t_out).unwrap_or(tout),
     })
+}
+
+/// The arc of a corner: the kind of its end node and its off-curve points.
+fn arc(c: &Corner, quadratic: bool) -> (NodeKind, Vec<Point>) {
+    let (h1, h2) = arc_handles(c);
+    let spline = quadratic.then(|| cubics_to_quadratic_splines(&[CubicBez::new(c.p1, h1, h2, c.p2)], ARC_TOLERANCE)).flatten();
+    match spline.as_deref().and_then(<[_]>::first).map(|s| s.points()) {
+        Some([_, off @ .., _]) if !off.is_empty() => (NodeKind::QCurve, off.to_vec()),
+        _ => (NodeKind::Curve, vec![h1, h2]),
+    }
 }
 
 /// The handles of a cubic from `p1` to `p2` that leaves along `d1` and arrives along `d2`, sized
@@ -281,18 +358,20 @@ enum End {
     Last,
 }
 
-/// A straight or cubic segment.
+/// A straight, quadratic or cubic segment.
 #[derive(Clone, Copy, Debug)]
 enum Bez {
     Line(Point, Point),
+    Quad(QuadBez),
     Cubic(CubicBez),
 }
 
 impl Bez {
-    /// `None` for a quadratic segment.
+    /// `None` for a quadratic spline of several pieces.
     fn of(seg: &Seg) -> Option<Bez> {
         match (seg.kind, seg.ctrl) {
             (NodeKind::Line, []) => Some(Bez::Line(seg.from, seg.to)),
+            (NodeKind::QCurve, [c]) => Some(Bez::Quad(QuadBez::new(seg.from, c.point, seg.to))),
             (NodeKind::Curve, [a, b]) => Some(Bez::Cubic(CubicBez::new(seg.from, a.point, b.point, seg.to))),
             _ => None,
         }
@@ -301,6 +380,7 @@ impl Bez {
     fn eval(&self, t: f64) -> Point {
         match self {
             Bez::Line(a, b) => a.lerp(*b, t),
+            Bez::Quad(q) => q.eval(t),
             Bez::Cubic(c) => c.eval(t),
         }
     }
@@ -312,6 +392,7 @@ impl Bez {
     fn direction(&self, t: f64) -> Option<Vec2> {
         let v = match self {
             Bez::Line(a, b) => *b - *a,
+            Bez::Quad(q) => (q.p1 - q.p0) * (1.0 - t) + (q.p2 - q.p1) * t,
             Bez::Cubic(c) => {
                 let mt = 1.0 - t;
                 (c.p1 - c.p0) * (3.0 * mt * mt) + (c.p2 - c.p1) * (6.0 * mt * t) + (c.p3 - c.p2) * (3.0 * t * t)
@@ -323,6 +404,7 @@ impl Bez {
     fn sub(&self, s: f64, e: f64) -> Bez {
         match self {
             Bez::Line(..) => Bez::Line(self.eval(s), self.eval(e)),
+            Bez::Quad(q) => Bez::Quad(q.subsegment(s..e)),
             Bez::Cubic(c) => Bez::Cubic(c.subsegment(s..e)),
         }
     }
@@ -331,6 +413,7 @@ impl Bez {
     fn ctrl(&self) -> Vec<Point> {
         match self {
             Bez::Line(..) => Vec::new(),
+            Bez::Quad(q) => vec![q.p1],
             Bez::Cubic(c) => vec![c.p1, c.p2],
         }
     }
@@ -345,7 +428,7 @@ impl Bez {
                 let len = a.distance(*b);
                 (len > 0.0 && d <= len).then(|| at(d / len))
             }
-            Bez::Cubic(_) => {
+            Bez::Quad(_) | Bez::Cubic(_) => {
                 let far = |u: f64| self.eval(at(u)).distance(anchor) >= d;
                 let mut lo = 0.0;
                 for i in 1..=SEARCH_STEPS {
@@ -482,6 +565,36 @@ mod tests {
         smooth.nodes[1].smooth = true;
         let cx = Context { selection: &[(0, 1)], ..Context::default() };
         assert_eq!(round_corners(std::slice::from_ref(&smooth), 10.0, false, &cx).unwrap()[0], smooth);
+    }
+
+    #[test]
+    fn a_corner_next_to_a_quadratic_spline_gets_a_quadratic_arc() {
+        let o = |x: f64, y: f64| Node::off(Point::new(x, y));
+        // A quarter of a round shape: a spline with one implied point, (80, 80), from (100, 0) to
+        // (0, 100).
+        let c = Contour::new(
+            true,
+            vec![
+                Node::new(Point::new(0.0, 0.0), NodeKind::Line),
+                Node::new(Point::new(100.0, 0.0), NodeKind::Line),
+                o(100.0, 60.0),
+                o(60.0, 100.0),
+                Node::new(Point::new(0.0, 100.0), NodeKind::QCurve),
+            ],
+        );
+        let cx = Context { selection: &[(0, 1)], ..Context::default() };
+        let out = round_corners(std::slice::from_ref(&c), 10.0, false, &cx).unwrap().remove(0);
+        assert!(out.nodes.iter().all(|n| n.kind != NodeKind::Curve), "{out:?}");
+        let points = on_curve(&out);
+        assert!(points.contains(&(90.0, 0.0)) && points.contains(&(80.0, 80.0)), "{points:?}");
+        let spline = Ring::from_contour(&c).unwrap().to_bez();
+        let d = crate::coverage_difference(&[spline], &[out.to_bez().unwrap()]).unwrap();
+        // Only the corner goes: a square of 10 less a quarter circle, give or take the bend.
+        assert!(d.total < 25.0, "{d:?}");
+        // Corners away from the spline leave it as it is, implied point and all.
+        let cx = Context { selection: &[(0, 0)], ..Context::default() };
+        let out = round_corners(std::slice::from_ref(&c), 10.0, false, &cx).unwrap().remove(0);
+        assert!(out.nodes.windows(3).any(|w| w == &c.nodes[2..5]), "{out:?}");
     }
 
     #[test]

@@ -10,12 +10,12 @@
 //!
 //! While `sharing.enableExternalPreview` is on, it serves External Preview to the local network
 //! ([`external_preview`], run each frame through the UI's frame hook). [`preview_server`] is the
-//! web server behind it and behind the TrueType preview page. The user's settings and custom glyph data are read
-//! from the settings folder when the window opens and the settings written back whenever they change
-//! ([`user_files`]; `FONTCRAFT_SETTINGS_DIR` replaces the folder); the snippets and the extension folders (Modules
-//! and Macros) are in it too. The engine gets the system clock for Last Changed stamps. The PDF a drawing app puts on
+//! web server behind it and behind the TrueType preview page. The user's settings, the window's layout and custom glyph
+//! data are read from the settings folder when the window opens, and the settings and the layout written back whenever
+//! they change ([`user_files`]; `FONTCRAFT_SETTINGS_DIR` replaces the folder); the window's place, the snippets and the
+//! extension folders (Modules and Macros) are in it too. The engine gets the system clock for Last Changed stamps. The PDF a drawing app puts on
 //! the clipboard is read off the window's thread for a paste on the canvas ([`clipboard`]). The Extension Manager's
-//! HTTPS downloads are [`net`].
+//! HTTPS downloads are [`net`]. File › Print… prints through the system's queue ([`spooler`]).
 #![forbid(unsafe_code)]
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -23,9 +23,15 @@ mod clipboard;
 #[cfg(not(target_arch = "wasm32"))]
 mod external_preview;
 #[cfg(not(target_arch = "wasm32"))]
+mod layout_file;
+#[cfg(not(target_arch = "wasm32"))]
 mod net;
 #[cfg(not(target_arch = "wasm32"))]
 mod preview_server;
+#[cfg(not(target_arch = "wasm32"))]
+mod settings_file;
+#[cfg(not(target_arch = "wasm32"))]
+mod spooler;
 #[cfg(not(target_arch = "wasm32"))]
 mod user_files;
 
@@ -56,9 +62,10 @@ USAGE:
   -h, --help       this text
   -V, --version    the version
 
-  Settings and custom glyph data are read from the settings folder (FONTCRAFT_SETTINGS_DIR
-  replaces it), and the settings are written back there when they change; extension modules
-  and macros come from its Modules and Macros folders.
+  Settings, the window's layout and custom glyph data are read from the settings folder, and the
+  settings and the layout are written back there when they change; extension modules and macros
+  come from its Modules and Macros folders. FONTCRAFT_SETTINGS_DIR replaces the folder; set but
+  empty, it keeps everything in memory.
 ";
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -183,6 +190,7 @@ fn desktop(options: fontcraft_ui::Options) -> fontcraft_ui::Options {
     fontcraft_ui::Options {
         frame_hook: Some(frame_hook),
         preview_host: Some(Box::new(preview_server::Host::default())),
+        print_host: Some(std::sync::Arc::new(spooler::Spooler)),
         user_store: Some(Box::new(user_files::UserFiles::in_settings_folder())),
         opener: fontcraft_ui::Opener::system(),
         clipboard_reader: Some(fontcraft_ui::app::clipboard::system_text),

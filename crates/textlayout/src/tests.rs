@@ -361,6 +361,31 @@ fn a_picked_layer_gives_its_glyph_its_width() {
     assert_eq!((l.placed[0].advance, l.placed[1].advance), (900.0, 600.0), "a layer the glyph lacks is ignored");
 }
 
+/// An item's own layer moves with it through edits and gives that item, and no other, its width.
+#[test]
+fn insert_and_delete_keep_item_layers_aligned() {
+    let mut f = font();
+    f.glyph_mut("A").unwrap().layers.push(fontcraft_model::Layer::new("alt", 900.0));
+    let mut t = text(&f, "AAB");
+    assert!(t.set_layer(1, Some("alt")));
+    assert!(!t.set_layer(3, Some("alt")), "the text has no item 3");
+    let layers = |t: &Text| (0..t.len()).map(|i| t.layer(i).map(str::to_string)).collect::<Vec<_>>();
+    let own = Some("alt".to_string());
+    t.insert(0, vec![Item::glyph("o"), Item::LineBreak]).unwrap();
+    assert_eq!(layers(&t), [None, None, None, own.clone(), None]);
+    t.delete(0..2).unwrap();
+    t.replace(2..3, vec![Item::glyph("A"), Item::glyph("B")]).unwrap();
+    assert_eq!(layers(&t), [None, own.clone(), None, None]);
+    assert!(t.replace(0..9, Vec::new()).is_err());
+    assert_eq!(layers(&t), [None, own, None, None], "a refused edit changes nothing");
+    let picked = std::collections::BTreeMap::from([("A".to_string(), "m01".to_string())]);
+    let l = layout(&f, "m01", &t, &Options { layers: Some(&picked), kerning: KerningMode::None, ..Options::default() }).unwrap();
+    let advances: Vec<f64> = l.placed.iter().map(|p| p.advance).collect();
+    assert_eq!(advances, [600.0, 900.0, 600.0, 600.0], "the item's own layer comes before the layer picked for its glyph");
+    t.delete(1..2).unwrap();
+    assert_eq!(layers(&t), [None, None, None]);
+}
+
 #[test]
 fn a_prefix_reads_the_first_items_only() {
     let f = font();

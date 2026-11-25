@@ -10,7 +10,7 @@
 //! | drag an entry | `font.features.reorder` |
 //! | context menu: Disable or Enable, Update Entry, Rename, Copy, Paste, Delete | `font.features.setDisabled`, `font.features.updateEntry`, the rename field, `font.features.copyEntries` (its text goes to the clipboard), `font.info.features.paste` (the clipboard's text to `font.features.pasteEntries`), `font.features.remove` |
 //! | Copy, Paste, Select All (Cmd+C, Cmd+V, Cmd+A) while a group's list has the keyboard focus | as the menu's Copy and Paste; Select All `font.info.features.select` with every entry of the group |
-//! | minus, Update, Compile under the sidebar | `font.features.remove`, `font.features.update`, `font.features.compile` |
+//! | minus, Update, Compile under the sidebar | `font.features.remove`, `font.features.update`, `font.info.features.compile` (busy until that compile lands) |
 //! | Generate Feature Automatically, Update Entry | `font.features.setAutomatic`, `font.features.updateEntry` |
 //! | the stylistic set name rows | `font.features.setLabel`, `font.features.removeLabel` |
 //! | the code ([`code_editor`]) | `font.features.setCode` when it loses the keyboard; a Fix button `font.features.applyFix` |
@@ -50,7 +50,7 @@ use super::rows;
 use crate::app::Msg;
 use crate::app::models::font_features::{EntryPane, EntryRow, FeaturesModel, GroupModel, SnippetsModel};
 use crate::shell::font_info::{InfoDialog, open_params};
-use crate::shell::font_info_tabs::{EntryKey, EntryKind, PASTE_ENTRIES, select_entries};
+use crate::shell::font_info_tabs::{COMPILE, EntryKey, EntryKind, PASTE_ENTRIES, select_entries};
 
 craft::ui::words! {
     /// The words of the Features tab.
@@ -364,8 +364,8 @@ fn bottom_buttons(ui: &mut Ui, model: &FeaturesModel, words: &FeaturesWords, sen
         if Button::new(words.update.clone()).tooltip(words.update_tip.clone()).show(ui).clicked() {
             sent.push(Msg::run("font.features.update", json!({})));
         }
-        if Button::new(words.compile.clone()).tooltip(words.compile_tip.clone()).show(ui).clicked() {
-            sent.push(Msg::run("font.features.compile", model.master.as_ref().map_or_else(|| json!({}), |m| json!({ "master": m }))));
+        if Button::new(words.compile.clone()).tooltip(words.compile_tip.clone()).loading(model.compiling).show(ui).clicked() {
+            sent.push(Msg::Shell(CommandRef::new(COMPILE)));
         }
     });
 }

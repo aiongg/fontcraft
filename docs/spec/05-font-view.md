@@ -685,6 +685,11 @@ FontCraft does what every answer below says (M4, `docs/plans/M4.md` § 5 › Res
 the decomposition, anchor and mark data of question 1 (M6), the full Selection Info layout of
 question 15, question 16 (M6) and question 20 (M11).
 
+M4.20 (2026-11-25) read the reference's tutorials, release notes ("What's new in Glyphs",
+updates.glyphsapp.com), scripting documentation (docu.glyphsapp.com) and forum answers for every row
+with guesses. What they settle is in the rows' `notes` with the source; questions 21 to 25 list where
+FontCraft differs. Every guess left that the reference could settle has a step in `observe`.
+
 1. **Database fields not in the public data.** `sortName`, `sortNameKeep`, `decompose`, `anchors`
    and `accents` exist as columns but ship with no values in GlyphsInfo. What does the reference
    use, and can we derive equivalents (Unicode decomposition, our own anchor tables) well enough for
@@ -699,6 +704,9 @@ question 15, question 16 (M6) and question 20 (M11).
 2. **Default sort order.** ▶ **Answered for M4 (source and ours):** the tutorials say glyphs sort
    alphabetically within their category, adjustable by sort names. The key's details are ours
    (`glyphOrder.default`). An opened file keeps its order.
+   **Narrowed (release notes, tutorial):** from version 4 the reference sorts by script first, keeps
+   numbers and punctuation in groups per script, and compares sort names with the glyph names in
+   alphabetical order; question 23.
 3. **`unicodeLegacy`.** **Answered (source):** never assigned and never written into a font
    (`glyphData.legacyUnicode`).
 4. **Rename and stored Unicode.** ▶ **Answered for M4 (source and ours):** a base-name change takes
@@ -720,6 +728,8 @@ question 15, question 16 (M6) and question 20 (M11).
 9. **Find and Replace collisions.** ▶ **Answered for M4 (ours):** a batch with a clash or an
    invalid result is refused as a whole; renames update components, kerning, the `glyphOrder`
    parameter and metrics keys, not feature code (`edit.findAndReplace`, `glyph.rename`).
+   **Narrowed (release notes):** the reference prevents duplicate names here (build 3177) and, from
+   version 4, brings up a dialog about the uses of renamed glyphs (build 3854); question 25.
 10. **Smart filter operators.** ▶ **Answered for M4 (ours):** text rules offer is, is not,
     contains, does not contain, begins with, ends with and matches (regex); number rules =, ≠, <,
     ≤, >, ≥; yes-or-no rules is and is not; choice rules is and is not. The tutorial "Custom sidebar
@@ -727,11 +737,13 @@ question 15, question 16 (M6) and question 20 (M11).
     `CONTAINS`, `IN`, `BEGINSWITH` and `ENDSWITH`, which this set covers. *Case* offers minor too
     (`smartFilter.rule.case`).
 11. **Smart filter refresh.** **Answered for M4 (ours):** live, after every edit and on a master
-    change (`smartFilter.live`).
+    change (`smartFilter.live`). **Narrowed:** a developer confirms that the reference's filter for
+    invalid metrics keys is not always updated after a change (forum.glyphsapp.com/t/35652, 2026).
 12. **Invert Selection scope.** **Answered for M4 (ours):** the visible glyphs, as Select All
     (`fontView.invertSelection`).
 13. **Regex search anchoring and target.** **Answered for M4 (ours):** a regex matches a whole
-    field, in every field the magnifier menu selects (`fontView.search.regex`).
+    field, in every field the magnifier menu selects (`fontView.search.regex`). For plain terms see
+    question 22.
 14. **List View columns.** **Answered for M4 (source and ours):** one column per property of the
     Glyph Properties section (handbook). Ours: all shown by default; editable where a set command
     exists (`fontView.column.otherProperties`).
@@ -751,3 +763,34 @@ question 15, question 16 (M6) and question 20 (M11).
 20. **Batch image import.** ▶ **Answered for M11 (handbook, ours):** file names without extension
     match glyph names exactly, case included; each image goes on the current master's layer;
     unmatched files are listed in the result and create no glyph (`fontView.image.batchByFileName`).
+21. **Missing glyphs: by name or by character.** **Answered (source, version 2):** by glyph name; a
+    glyph that has the character under another name counts as missing (forum.glyphsapp.com/t/5422,
+    a developer's answer of 2016). FontCraft also counts a glyph that has the expected code point.
+    Code change: `Catalog::present` in `crates/glyphquery/src/sidebar.rs` (the name alone). The
+    source is old and the code point rule serves fonts with other naming schemes, so observe first
+    (`fontView.sidebar.missingBadge`).
+22. **Search terms.** **Answered in part (release notes):** a term can hold several name parts
+    (build 3201), and a search by character also finds its unencoded alternates (build 3193). How
+    parts are separated and combined stays open. Code change: `Matcher::new` and `Matcher::matches`
+    in `crates/glyphquery/src/search.rs`, which take the whole term as one part and match a
+    character by the code points alone (`fontView.search.fields`).
+23. **Sort key.** **Answered in part (release notes of version 4, tutorial):** script before
+    category, numbers and punctuation in a group per script, alphabetical order within a category,
+    and a sort name compared in that order in place of the glyph name. The order of the scripts
+    and of the categories stays open. Code change: `GlyphData::sort_key` in
+    `crates/glyphdata/src/order.rs`, which has no script, orders by code point and puts glyphs with
+    a sort name last (`group: 2`) (`glyphOrder.default`).
+24. **The user's glyph data files.** **Answered (tutorial, release notes):** the user's Info folder
+    and, from build 3837, a system-wide one are read. Code change: nothing in `crates/ui` calls
+    `Session::set_user_glyph_data` (`crates/engine/src/lib.rs`), so only files beside the document
+    apply (`glyphData.customFile`).
+25. **Features of the release notes without a row.** The detail view between grid and list
+    (build 3831), the note as a tooltip (3835), the Unicode information popover (3841), the option
+    that hides sidebar counts (3852), CJK blocks in the sidebar (3845), the smart filter rules
+    Metrics Keys Invalid (3315) and Has Background Image (3328), single characters in a list filter
+    (3177), production names as a seventh format of Copy Glyph Names (3330; code change:
+    `COPY_FORMATS` in `crates/engine/src/cmd/glyph_info.rs` and the menu in
+    `crates/ui/src/app/context_menu/glyph_menu.rs`), newly added glyphs shown whatever the filter
+    (3826), the dialog about uses of a renamed glyph (3854; `rename` in
+    `crates/engine/src/cmd/glyph_info.rs` renames without asking), and Find filled with the glyph
+    names in Find and Replace (3854). Each needs a row, or a change of one, when it is built.

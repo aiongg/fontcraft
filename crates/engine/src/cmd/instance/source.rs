@@ -1247,6 +1247,24 @@ mod tests {
         (dir, ds)
     }
 
+    /// A master of a designspace built as an instance is named after its UFO, as fontmake names it.
+    #[test]
+    fn masters_built_as_instances_are_named_after_their_ufos() {
+        let (dir, ds) = source("master-names");
+        let mut s = Session::new();
+        s.execute("file.open", &json!({ "path": ds })).unwrap();
+        let mut names = |extra: Value| {
+            let mut params = json!({ "formats": ["ttf"], "instances": false, "mastersAsInstances": true });
+            params.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+            let built = s.execute("font.compile", &params).unwrap();
+            let fonts = built["fonts"].as_array().unwrap();
+            fonts.iter().map(|f| f["files"][0]["name"].as_str().unwrap().to_string()).collect::<Vec<_>>()
+        };
+        assert_eq!(names(json!({})), ["Light.ttf", "Bold.ttf"]);
+        assert_eq!(names(json!({ "nameBy": "postscript-name" })), ["Test-Light.ttf", "Test-Bold.ttf"]);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
     /// The width and the x of every node of glyph `A` in the UFO at `path`.
     fn glyph_a(path: &Path) -> (f64, Vec<f64>) {
         let (font, _) = crate::io::open(path, None).unwrap();

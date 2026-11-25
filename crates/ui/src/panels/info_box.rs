@@ -84,6 +84,8 @@ craft::ui::words! {
 
 pub struct Props<'a> {
     pub model: &'a Tracked<InfoBoxModel>,
+    /// The clock of the timing graph's dots, 0 to 1, while an axis is animated.
+    pub clock: Option<f64>,
     pub sent: &'a mut Vec<Msg>,
 }
 
@@ -130,7 +132,7 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
         super::info_box_guide::view(ui, guide, sent);
     }
     if let Some(hoi) = &model.hoi {
-        super::info_box_hoi::view(ui, hoi, sent);
+        super::info_box_hoi::view(ui, hoi, props.clock, sent);
     }
 }
 
@@ -330,7 +332,7 @@ mod tests {
         let seen = Rc::clone(&posted);
         let mut fixture = Fixture::new(move |ui| {
             let mut sent = Vec::new();
-            show(ui, Props { model: &model, sent: &mut sent });
+            show(ui, Props { model: &model, clock: None, sent: &mut sent });
             seen.borrow_mut().extend(sent);
         });
         fixture.settle();
@@ -433,7 +435,7 @@ mod tests {
         let seen = Rc::clone(&posted);
         let mut fixture = Fixture::new(move |ui| {
             let mut sent = Vec::new();
-            show(ui, Props { model: &model, sent: &mut sent });
+            show(ui, Props { model: &model, clock: None, sent: &mut sent });
             seen.borrow_mut().extend(sent);
         });
         fixture.in_room(craft::ui::testing::Room::Panel).settle();

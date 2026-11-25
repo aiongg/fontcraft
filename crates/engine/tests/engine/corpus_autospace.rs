@@ -7,8 +7,15 @@
 //! For each side the relative difference is |ours − stored| ÷ |stored| (sides whose stored value
 //! is below 5 units in size are counted apart, as a relative difference means nothing there).
 //! Target: the median relative difference is at most 10% for lowercase and for capitals, in
-//! every master. The distribution per group (lowercase, capitals, figures, other letters) is
-//! printed. Speed target: one master of Inter under 500 ms in a release build.
+//! every master, with the default model. The distribution per group (lowercase, capitals,
+//! figures, other letters) is printed for the default and for `model: "area"`, with the median
+//! without the control glyphs, and the 20 sides of lowercase and capitals furthest off with the
+//! control side each took. Speed target: one master of Inter under 500 ms in a release build.
+//!
+//! Inter keeps few letters without keys (about 55 sides per group and master), mostly alternates
+//! and phonetic letters, so the figures jump by tens of percent with a handful of glyphs. A second
+//! table, without a target, therefore takes every letter and figure that is not aligned, its keys
+//! removed first: the sidebearings the source's keys give are the designer's spacing too.
 //!
 //! `cargo test --release -p fontcraft-engine --test engine corpus_autospace:: -- --ignored --nocapture`.
 //! `FONTCRAFT_CORPUS` names the corpus folder (default: the repository's `corpus/`).
@@ -52,8 +59,13 @@ fn compared(font: &Font, g: &Glyph, id: &str) -> Option<(f64, f64)> {
 #[derive(Default)]
 struct Tally {
     relative: Vec<f64>,
+    /// Those of glyphs other than the controls.
+    uncontrolled: Vec<f64>,
     small: Vec<f64>,
 }
+
+/// The glyphs the models calibrate on.
+const CONTROLS: [&str; 6] = ["n", "o", "v", "H", "O", "V"];
 
 fn median(v: &mut [f64]) -> f64 {
     if v.is_empty() {
@@ -70,54 +82,118 @@ fn percentile(v: &[f64], p: f64) -> f64 {
     v[((v.len() - 1) as f64 * p).round() as usize]
 }
 
+/// Compares one model's values with `stored` on one master and prints the table; returns the
+/// medians of lowercase and capitals, with the time taken.
+fn compare(
+    s: &mut Session,
+    font: &Font,
+    master: (&str, &str),
+    stored: &BTreeMap<String, (f64, f64)>,
+    model: &str,
+    worst: usize,
+) -> (BTreeMap<&'static str, f64>, Duration) {
+    let (id, name) = master;
+    let t = Instant::now();
+    let out = s.execute("spacing.autoSpace", &json!({"masters": [id], "model": model})).unwrap();
+    let took = t.elapsed();
+    s.execute("edit.undo", &json!({})).unwrap();
+    let mut tallies: BTreeMap<&'static str, Tally> = BTreeMap::new();
+    let mut off: Vec<(f64, String)> = Vec::new();
+    for (glyph, (left, right)) in stored {
+        let Some(v) = out["values"].get(glyph).and_then(|v| v.get(id)) else { continue };
+        let group = group(font.glyph(glyph).unwrap(), s);
+        let tally = tallies.entry(group).or_default();
+        for (side, theirs) in [("left", *left), ("right", *right)] {
+            let ours = v[side].as_f64().unwrap();
+            let diff = (ours - theirs).abs();
+            if theirs.abs() < 5.0 {
+                tally.small.push(diff);
+                continue;
+            }
+            let relative = diff / theirs.abs();
+            tally.relative.push(relative);
+            if !CONTROLS.contains(&glyph.as_str()) {
+                tally.uncontrolled.push(relative);
+            }
+            if matches!(group, "lowercase" | "capitals") {
+                let class = out["classes"][glyph][id][side].as_str().unwrap_or("-");
+                off.push((relative, format!("{glyph} {side} {theirs:.0} got {ours:.0} ({class})")));
+            }
+        }
+    }
+    println!("{name}, model {model}: {} glyphs compared, {took:?}, areas {}", stored.len(), out["areas"][id]);
+    let mut medians = BTreeMap::new();
+    for (group, t) in &mut tallies {
+        let med = median(&mut t.relative);
+        medians.insert(*group, med);
+        println!(
+            "  {group:14} sides {:5}  median {:5.1}%  without controls {:5.1}%  p75 {:5.1}%  p90 {:5.1}%  | stored under 5 units: {} sides, median {:.0} units off",
+            t.relative.len(),
+            med * 100.0,
+            median(&mut t.uncontrolled) * 100.0,
+            percentile(&t.relative, 0.75) * 100.0,
+            percentile(&t.relative, 0.9) * 100.0,
+            t.small.len(),
+            median(&mut t.small),
+        );
+    }
+    off.sort_by(|a, b| b.0.total_cmp(&a.0));
+    for (r, text) in off.iter().take(worst) {
+        println!("    {:6.0}%  {text}", r * 100.0);
+    }
+    (medians, took)
+}
+
+/// Removes every metrics key of the font.
+fn remove_keys(s: &mut Session, font: &Font) {
+    let names: Vec<String> = font.glyphs.iter().map(|g| g.name.clone()).collect();
+    s.edit("remove keys", |f| {
+        for name in &names {
+            let mut g = f.glyph_mut(name)?;
+            g.info.metrics_keys = Default::default();
+            for l in g.layers.iter_mut() {
+                l.info.metrics_keys = Default::default();
+            }
+        }
+        Ok(())
+    })
+    .unwrap();
+}
+
 /// Runs the measure on one source; returns the failures.
 fn measure(path: &Path, speed_limit: Option<Duration>) -> Vec<String> {
     let mut failures = Vec::new();
     let mut s = Session::new();
     s.execute("file.open", &json!({"path": path})).unwrap();
-    let font = s.font().unwrap().clone();
     let name = path.file_name().unwrap().to_string_lossy().to_string();
-    for m in font.masters.iter() {
-        let stored: BTreeMap<String, (f64, f64)> =
-            font.glyphs.iter().filter_map(|g| compared(&font, g, &m.id).map(|v| (g.name.clone(), v))).collect();
-        let t = Instant::now();
-        let out = s.execute("spacing.autoSpace", &json!({"masters": [m.id]})).unwrap();
-        let took = t.elapsed();
-        s.execute("edit.undo", &json!({})).unwrap();
-        let mut tallies: BTreeMap<&str, Tally> = BTreeMap::new();
-        for (glyph, (left, right)) in &stored {
-            let Some(v) = out["values"].get(glyph).and_then(|v| v.get(&m.id)) else { continue };
-            let g = font.glyph(glyph).unwrap();
-            let tally = tallies.entry(group(g, &s)).or_default();
-            for (ours, theirs) in [(v["left"].as_f64().unwrap(), *left), (v["right"].as_f64().unwrap(), *right)] {
-                let diff = (ours - theirs).abs();
-                if theirs.abs() < 5.0 {
-                    tally.small.push(diff);
-                } else {
-                    tally.relative.push(diff / theirs.abs());
+    for keyed in [false, true] {
+        if keyed {
+            let font = s.font().unwrap().clone();
+            remove_keys(&mut s, &font);
+            println!("{name}: every letter and figure, metrics keys removed");
+        }
+        let font = s.font().unwrap().clone();
+        for m in font.masters.iter() {
+            let stored: BTreeMap<String, (f64, f64)> =
+                font.glyphs.iter().filter_map(|g| compared(&font, g, &m.id).map(|v| (g.name.clone(), v))).collect();
+            let title = format!("{name} / {}", m.name);
+            for model in ["area", "classes"] {
+                let worst = if model == "classes" && !keyed { 20 } else { 0 };
+                let (medians, took) = compare(&mut s, &font, (m.id.as_str(), title.as_str()), &stored, model, worst);
+                if model == "area" || keyed {
+                    continue;
+                }
+                for (group, med) in medians {
+                    if matches!(group, "lowercase" | "capitals") && med > 0.10 {
+                        failures.push(format!("{title}: {group} median {:.1}% > 10%", med * 100.0));
+                    }
+                }
+                if let Some(limit) = speed_limit
+                    && took > limit
+                {
+                    failures.push(format!("{title}: {took:?} > {limit:?}"));
                 }
             }
-        }
-        println!("{name} / {}: {} glyphs compared, {:?}, areas {}", m.name, stored.len(), took, out["areas"][&m.id]);
-        for (group, t) in &mut tallies {
-            let med = median(&mut t.relative);
-            println!(
-                "  {group:14} sides {:5}  median {:5.1}%  p75 {:5.1}%  p90 {:5.1}%  | stored under 5 units: {} sides, median {:.0} units off",
-                t.relative.len(),
-                med * 100.0,
-                percentile(&t.relative, 0.75) * 100.0,
-                percentile(&t.relative, 0.9) * 100.0,
-                t.small.len(),
-                median(&mut t.small),
-            );
-            if matches!(*group, "lowercase" | "capitals") && med > 0.10 {
-                failures.push(format!("{name} / {}: {group} median {:.1}% > 10%", m.name, med * 100.0));
-            }
-        }
-        if let Some(limit) = speed_limit
-            && took > limit
-        {
-            failures.push(format!("{name} / {}: {took:?} > {limit:?}", m.name));
         }
     }
     failures

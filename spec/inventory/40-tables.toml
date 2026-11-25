@@ -166,6 +166,7 @@ milestone = "M2"
 summary = "Written only when the source carries vertical data. Version 1.1; ascender, descender and line gap from the vertical global metrics, vertical caret slope (defaults rise 0, run 1, offset 0), advanceHeightMax, minimum top and bottom side bearing and yMaxExtent from the built glyphs. A FEA table vhea block overrides VertTypoAscender, VertTypoDescender and VertTypoLineGap."
 ref = "fontc fontbe/src/vertical_metrics.rs, fontir/src/ir.rs; AFDKO hotconv/hot.cpp"
 status = "docs"
+notes = "Static builds M2.2. A variable font writes it at the origin by the static rule (M9.38); vertical line metrics vary through MVAR."
 
 [[table]]
 tag = "vmtx"
@@ -177,6 +178,7 @@ milestone = "M2"
 summary = "Written together with vhea. Advance height per glyph from the glyph's height (or the font default), top side bearing as vertical origin minus the glyph's yMax, with the same trailing-run compression as hmtx."
 ref = "fontc fontbe/src/vertical_metrics.rs"
 status = "docs"
+notes = "Static builds M2.2. A variable font writes it at the origin by the static rule; the other sources vary it through VVAR and, in a TrueType font, the vertical phantom points (M9.38)."
 
 # ---------------------------------------------------------------------------------------------------
 # Tables: layout (M8)
@@ -291,7 +293,7 @@ milestone = "M9"
 summary = "Advance height deltas, built exactly like HVAR (direct or indirect store, whichever is smaller) and only when the font has vertical metrics, that is when vmtx is written."
 ref = "fontc fontbe/src/vvar.rs; write-fonts src/tables/vvar.rs"
 status = "docs"
-notes = "Built by `var::hvar::build_vvar` (M9.6) with the HVAR rules; the variable compile asks for it only when it writes vmtx."
+notes = "Built by `var::hvar::build_vvar` (M9.6, M9.38) with the HVAR rules, whenever the font has vhea and vmtx, also when no height varies (fontc 1.0.0 and fontmake 3.12.1 write it then too, run on a synthetic source). A glyph's heights come from its own sources: a layer's own vertical width, else its master's typographic ascender minus descender; an intermediate layer without one takes the metrics of the master it belongs to, as both oracles read it. In a CFF2 font VVAR also maps the vertical origins (fontTools varLib/__init__.py `_add_VHVAR`): one store, the heights' delta sets added first and the origins' after them, both with an index map. fontTools gives a glyph that a sparse master does not hold that master's default origin; FontCraft interpolates it (docs/spec/40-compile.md § 4a)."
 
 [[table]]
 tag = "MVAR"
@@ -473,7 +475,7 @@ milestone = "M12"
 summary = "Default vertical origin Y and per-glyph exceptions for CFF fonts with vertical metrics. read-fonts reads it. write-fonts ships generated/generated_vorg.rs but no module includes it, so it is not usable as published. makeotf derives the default origin from the typo ascender."
 ref = "read-fonts src/tables/vorg.rs; write-fonts generated/generated_vorg.rs, src/tables.rs; AFDKO hotconv/hot.cpp"
 status = "docs"
-notes = "Written by crates/compile/src/extras.rs for a CFF font with vertical metrics, as ufo2ft's setupTable_VORG builds it: each glyph's origin is its own vertical origin or the typographic ascender, the most frequent origin is the default (the first in glyph order among equally frequent ones), and every other glyph gets a record."
+notes = "Written by crates/compile/src/extras.rs for a CFF font with vertical metrics, as ufo2ft's setupTable_VORG builds it: each glyph's origin is its own vertical origin or the typographic ascender, the most frequent origin is the default (the first in glyph order among equally frequent ones), and every other glyph gets a record. A CFF2 variable font writes the origin's values the same way and varies them through the origin map of VVAR (M9.38)."
 
 [[table]]
 tag = "kern"
@@ -837,10 +839,10 @@ guesses = [
 id = "compile.overlapFlags"
 area = "compile"
 milestone = "M9"
-summary = "write-fonts can set OVERLAP_SIMPLE (first point of the first contour) and OVERLAP_COMPOUND, but fontc's backend never sets either (no use of those fields in fontbe). Our choice: set them on glyphs of variable TrueType fonts, where overlaps are kept, and never on static fonts whose overlaps were removed."
+summary = "write-fonts can set OVERLAP_SIMPLE (first point of the first contour) and OVERLAP_COMPOUND, but fontc's backend never sets either (no use of those fields in fontbe), and neither does fontmake (ufo2ft and fontTools' varLib). Our choice: OVERLAP_SIMPLE on every simple glyph of a variable TrueType font, where overlaps are kept; OVERLAP_COMPOUND on no composite; neither on static fonts."
 ref = "write-fonts src/tables/glyf/simple.rs, glyf/composite.rs; fontc fontbe/src/glyphs.rs"
-status = "inferred"
-notes = "M9.5 sets OVERLAP_SIMPLE on every simple glyph of a variable font; OVERLAP_COMPOUND on composites is not written yet."
+status = "observed"
+notes = "M9.5 sets OVERLAP_SIMPLE on every simple glyph of a variable font. M9.38 ran fontc 1.0.0 and fontmake 3.12.1 on a two-master source with a composite: simple flags 0x01 and component flags 0x0004 in both, so no oracle sets either overlap bit and OVERLAP_COMPOUND stays off."
 
 [[behavior]]
 id = "compile.cu2quTolerance"
@@ -941,7 +943,7 @@ status = "observed"
 id = "compile.glyphOrder"
 area = "compile"
 milestone = "M2"
-summary = "Glyph order is the source's explicit order restricted to glyphs that exist, followed by the remaining glyphs sorted by name, then .notdef forced to index 0 (fontc reading a UFO's public.glyphOrder). Glyphs created by the compiler are appended after the source glyphs: for Glyphs sources the bracket-layer and colour-layer glyphs go last together in sorted name order (fontc, citing ufo2ft), and a split-off contour glyph is added when it is created. FontCraft keeps the model's order as read and never re-sorts it (M2 plan § 3, question 14); only .notdef moves."
+summary = "Glyph order is the source's explicit order restricted to glyphs that exist, followed by the remaining glyphs sorted by name, then .notdef forced to index 0 (fontc reading a UFO's public.glyphOrder). Glyphs created by the compiler are appended after the source glyphs: for Glyphs sources the bracket-layer and colour-layer glyphs go last together in sorted name order (fontc, citing ufo2ft), and a split-off contour glyph is added when it is created. FontCraft keeps the model's order as read and never re-sorts it (M2 plan § 3, question 14); only .notdef moves. With TrueType Keep GlyphOrder on, space follows .notdef in a TrueType font."
 ref = "fontc ufo2fontir/src/source.rs (glyph_order), fontir/src/glyph.rs"
 status = "docs"
 
@@ -1046,7 +1048,7 @@ guesses = ["The stub keeps a format 14 subtable of Unicode Variation Sequences, 
 id = "compile.postVersion"
 area = "compile"
 milestone = "M2"
-summary = "Glyph names: fontc and fontmake write post 2.0 with names for TrueType fonts; fontmake (ufo2ft) and makeotf write 3.0 (no names) for CFF because CFF stores them; buildcff2vf writes 3.0 for CFF2 unless -k asks for format 2 names. Our defaults: 2.0 for TrueType and CFF2, 3.0 for CFF (the names go into the CFF charset), with an option to force 3.0 everywhere for size (not yet). maxp is version 0.5 (glyph count only) in a CFF font."
+summary = "Glyph names: fontc and fontmake write post 2.0 with names for TrueType fonts; fontmake (ufo2ft) and makeotf write 3.0 (no names) for CFF because CFF stores them; buildcff2vf writes 3.0 for CFF2 unless -k asks for format 2 names. Our defaults: 2.0 for TrueType and CFF2, 3.0 for CFF (the names go into the CFF charset). maxp is version 0.5 (glyph count only) in a CFF font. Post Table Type chooses the version of one font (a CFF font with 2 then holds the names twice), before it postFormat for TrueType outlines; Remove post names for webfonts writes 3.0 in WOFF and WOFF2 files, Webfont Only in every file."
 ref = "fontc fontbe/src/post.rs; ufo2ft outlineCompiler.py (setupTable_post, OutlineOTFCompiler.setupTable_maxp); AFDKO hotconv/post.cpp, python/afdko/buildcff2vf.py (-k), docs/CFF2_Support.md; oracle runs against fontmake 3.12.1 (M2.3b)"
 status = "observed"
 
@@ -1324,7 +1326,7 @@ status = "observed"
 id = "compile.verticalMetrics"
 area = "compile"
 milestone = "M2"
-summary = "vhea and vmtx are written only with vertical data: for a .glyphs source when the font or a master has all three vhea parameters, or any layer has a vertical width or origin; for a UFO when the three openTypeVheaVertTypo values are all set. A glyph's advance height is its own or the typographic ascender minus descender; its vertical origin is the typographic ascender minus its own offset, or the typographic ascender. Defaults for a .glyphs source: vhea ascender half the em, descender minus half, line gap one em; for a UFO 0. The drawn .notdef's advance height is the ascender minus the descender. makeotf's defaults when values are missing: vertical typo ascender = half the em, descender = minus that, line gap = ascender - descender, default vertical advance = typo descender - typo ascender, default vertical origin Y = typo ascender."
+summary = "vhea and vmtx are written only with vertical data: for a .glyphs source when the font or a master has all three vhea parameters, or any layer has a vertical width or origin; for a UFO when the three openTypeVheaVertTypo values are all set. A glyph's advance height is its own or the typographic ascender minus descender; its vertical origin is the typographic ascender minus its own offset, or the typographic ascender. Defaults for a .glyphs source: vhea ascender half the em, descender minus half, line gap one em; for a UFO 0. The drawn .notdef's advance height is the ascender minus the descender. makeotf's defaults when values are missing: vertical typo ascender = half the em, descender = minus that, line gap = ascender - descender, default vertical advance = typo descender - typo ascender, default vertical origin Y = typo ascender. The Export vmtx Table parameter forces or suppresses vhea, vmtx and VORG."
 ref = "fontc fontbe/src/vertical_metrics.rs, fontir/src/ir/static_metadata.rs (build_vertical); AFDKO hotconv/hot.cpp; runs of fontc 1.0.0 on the corpus (M2.2)"
 status = "observed"
 
@@ -1468,9 +1470,17 @@ status = "docs"
 id = "compile.outputFormats"
 area = "compile"
 milestone = "M2"
-summary = "fontmake's -o accepts otf, ttf, otf-cff2, variable, variable-cff2, plus the intermediate otf-interpolatable, ttf-interpolatable and ufo; with no -o it builds otf and ttf for each master, and instances only with -i. fontc builds exactly one variable or static TrueType font per run. Our export covers static and variable TTF and OTF plus WOFF, WOFF2 and collections as wrappers; font.compile builds ttf, otf, variable and variable-cff2 in one request into one destination, and refuses otf-cff2, ttf-interpolatable and otf-interpolatable by name until M2.9 builds them."
-ref = "fontmake README.md (Output file format options); fontc README.md"
+summary = "fontmake's -o accepts otf, ttf, otf-cff2, variable, variable-cff2, plus the intermediate otf-interpolatable, ttf-interpolatable and ufo; with no -o it builds otf and ttf for each master, and instances only with -i. fontc builds exactly one variable or static TrueType font per run. Our export covers static and variable TTF and OTF plus WOFF, WOFF2 and collections as wrappers; font.compile builds all seven font formats in one request into one destination; otf and otf-cff2 exclude each other, as in fontmake. otf-cff2 is the otf build with its outlines in a CFF2 table and the glyph names in post format 2. The interpolatable formats write one font per master with the same points in every glyph, and a sparse font per location of intermediate layers."
+ref = "fontmake README.md (Output file format options), font_project.py (_run_from_designspace_interpolatable, _save_interpolatable_fonts, run_from_ufos); ufo2ft _compilers/interpolatableTTFCompiler.py, _compilers/interpolatableOTFCompiler.py, constants.py (SPARSE_TTF_MASTER_TABLES, SPARSE_OTF_MASTER_TABLES), outlineCompiler.py (makeMissingRequiredGlyphs); fontc README.md"
 status = "docs"
+notes = "Built in M2.9 (crates/compile/src/var/interpolatable.rs, crates/engine/src/cmd/compile_masters.rs). Observed with fontmake 3.12.1 on fontc's test sources: master_ttf_interpolatable and master_otf_interpolatable hold one font per master and one per intermediate layer named Family-Master-{600, 400}; a master font has its own GPOS and GDEF, the alternate-layer glyphs (no GSUB feature variations), post format 2 (TrueType) or CFF charstrings of rlineto and rrcurveto without subroutines, and keeps on-curve points that could be implied; a sparse font has only head, hmtx, maxp and the outline tables (with post for TrueType), the glyphs of the layer, and .notdef with the advance 65535 and no outline. Building both interpolatable formats in one fontmake run fails (the first compile replaces the sources in place), as does otf together with otf-cff2. fontmake also writes a designspace beside the masters; --emit-designspace is refused here. fontmake's otf-cff2 goes through cffsubr, whose tx writes temporary files."
+guesses = [
+  "Every sparse font's .notdef is empty with the advance 65535, also when the source has no .notdef, where fontmake draws the default box in it.",
+  "A glyph without a layer in one master is drawn there as the variable font would draw it, so every master has the same glyph order; fontmake leaves the glyph out of that master.",
+  "Interpolatable masters carry no hints: fontmake writes no PostScript hints, and TrueType instructions would be compiled against each master's own points.",
+  "In the flat folder layout, a request that writes other formats too puts interpolatable masters into a folder named by their format; fontmake has only its folder names.",
+  "A font with one master or without an axis is refused for the interpolatable formats; fontmake writes its one master.",
+]
 
 # ---------------------------------------------------------------------------------------------------
 # Behaviours: variation tables
@@ -1500,6 +1510,7 @@ milestone = "M9"
 summary = "Each glyph's point list ends with four phantom points: (0, 0), (advance width, 0), (0, vertical origin) and (0, vertical origin - advance height); the last two are (0, 0) when the font has no vertical metrics. For a composite the list is one point per component (its rounded offset) followed by the phantoms. Their deltas are stored like any other point, so advances vary even without HVAR."
 ref = "fontc fontbe/src/glyphs.rs (point_seqs_for_simple_glyph, point_seqs_for_composite_glyph)"
 status = "docs"
+notes = "Built in M9.5; the vertical phantom points in M9.38, checked against fontc 1.0.0 and fontmake 3.12.1 on a synthetic source with own, inherited and intermediate vertical metrics. The drawn .notdef varies with each master's metrics as in fontc; fontmake moves it by the ascender at a sparse master, whose temporary font has no OS/2 table (docs/spec/40-compile.md § 4a)."
 
 [[behavior]]
 id = "compile.gvarSharedTuples"
@@ -1561,7 +1572,7 @@ milestone = "M9"
 summary = "Because CFF2 drops data that CFF carried, a CFF2 font needs it elsewhere: advances in hmtx with HVAR, glyph names in post (when names are wanted), all naming strings in name, and the em size and font box in head. A CFF table's built-in encoding is ignored in favour of cmap."
 ref = "AFDKO docs/CFF2_Support.md (CFF2 Portability); fontTools varLib/__init__.py (post format 2 for CFF2)"
 status = "docs"
-notes = "Built in M9.13: hmtx and HVAR as the TrueType build writes them, post 2.0 with the glyph names (fontTools' varLib switches a CFF2 font's post to format 2), maxp 0.5, head and hhea boxes from the outlines at the origin; no glyf, loca or gvar. MVAR, fvar, avar, STAT and the layout tables are the TrueType build's."
+notes = "Built in M9.13: hmtx and HVAR as the TrueType build writes them, post 2.0 with the glyph names (fontTools' varLib switches a CFF2 font's post to format 2), maxp 0.5, head and hhea boxes from the outlines at the origin; no glyf, loca or gvar. MVAR, fvar, avar, STAT and the layout tables are the TrueType build's. Static CFF2 (M2.9, otf-cff2): the compiled CFF font converted as font.convert converts it (CFFToCFF2: widths and endchar out of the charstrings, hints kept), post format 2 with the names the charset held, subroutinised when the CFF table is; fontmake's post-processor sets post format 2 unless the source drops its glyph names."
 
 # ---------------------------------------------------------------------------------------------------
 # Behaviours: layout compilation
@@ -1901,6 +1912,6 @@ notes = "Built in M12.42: font.compile's subset (CLI --subset, --no-subset; on b
 id = "compile.oracleComparison"
 area = "compile"
 milestone = "M2"
-summary = "fontc validates itself by compiling thousands of families with both fontc and fontmake and diffing normalised dumps (its repository ships ttx_diff, otl-normalizer and fontc_crater for this). Our harness (crates/oracle, fontcraft-cli oracle) compares FontCraft's build with fontc's for TrueType and fontmake's for CFF, static, at the same master: a single-master source as it is, a designspace through its first source's UFO, a multi-master .glyphs source as fontc's variable font at its default location against FontCraft's build of the variable font origin, fontmake's output file of that master. Normalised: checksums, dates and offsets removed; name as a set of records without the reference's version stamp and without IDs 256 and up; cmap as code point to glyph name mappings; hmtx as advances and side bearings by glyph name; glyf and CFF as drawn outlines within half a unit with start points free; head, hhea, maxp, OS/2 and post field by field. GSUB, GPOS and GDEF are compared lookup by lookup (M8.7); the static comparison skips variation tables. `--variable` (M9.10) compares variable fonts with fontc's or fontmake's at the masters, virtual masters, instances inside the axes and midpoints between neighbouring masters: outlines, advances (HVAR and phantom points), MVAR deltas, the substitutions of GSUB feature variations, GPOS kerning and mark offsets with device deltas, and fvar, avar and STAT as structures. `--instances` (M9.10) compares each exported static instance with fontmake's `-i` build by the static comparison. A font FontCraft does not build yet counts as not built. Accepted differences are in crates/oracle/allow.toml with their reasons."
+summary = "fontc validates itself by compiling thousands of families with both fontc and fontmake and diffing normalised dumps (its repository ships ttx_diff, otl-normalizer and fontc_crater for this). Our harness (crates/oracle, fontcraft-cli oracle) compares FontCraft's build with fontc's for TrueType and fontmake's for CFF, static, at the same master: a single-master source as it is, a designspace through its first source's UFO, a multi-master .glyphs source as fontc's variable font against FontCraft's with the same master at its default, both at the default location (the static build of that master when the variable font cannot be built), fontmake's output file of that master. Normalised: checksums, dates and offsets removed; name as a set of records without the reference's version stamp and without IDs 256 and up; cmap as code point to glyph name mappings; hmtx as advances and side bearings by glyph name; glyf and CFF as drawn outlines within half a unit with start points free; head, hhea, maxp, OS/2 and post field by field. GSUB, GPOS and GDEF are compared lookup by lookup (M8.7); the static comparison skips variation tables. `--variable` (M9.10) compares variable fonts with fontc's or fontmake's at the masters, virtual masters, instances inside the axes and midpoints between neighbouring masters: outlines, advances (HVAR and phantom points), MVAR deltas, the substitutions of GSUB feature variations, GPOS kerning and mark offsets with device deltas, and fvar, avar and STAT as structures. `--instances` (M9.10) compares each exported static instance with fontmake's `-i` build by the static comparison. A font FontCraft does not build yet counts as not built. Accepted differences are in crates/oracle/allow.toml with their reasons."
 ref = "fontc README.md (Are we there yet?, Plan), ttx_diff/, otl-normalizer/; runs of fontc 1.0.0 and fontmake 3.12.1 on the corpus"
 status = "observed"

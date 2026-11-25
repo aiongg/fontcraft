@@ -15,8 +15,9 @@
 //! ([`fontcraft_engine::file_access`]), given with [`Server::with_roots`], confine the files the
 //! commands read and write: the server puts them in force around every request.
 //!
-//! The server reads one line and writes one reply, preceded by the log notifications the request
-//! produced. It never panics on input: malformed JSON, wrong types and unknown methods get
+//! The server answers one request at a time; a reply follows the notifications the request
+//! produced. While a request runs its progress can go out and it can be cancelled ([`stdio`],
+//! [`http`]), and a client can subscribe to resources ([`subscriptions`]). It never panics on input: malformed JSON, wrong types and unknown methods get
 //! JSON-RPC errors, and a bug inside a tool becomes an error result.
 #![forbid(unsafe_code)]
 
@@ -25,17 +26,24 @@ pub mod http;
 pub mod policy;
 mod prompts;
 mod resources;
+mod stdio;
+mod subscriptions;
 mod ui_tools;
 
+use std::cell::Cell;
 use std::collections::HashMap;
-use std::io::{BufRead, Write};
+use std::rc::Rc;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 pub use backend::{Backend, DEFAULT_ADDR, Headless, Remote};
 use fontcraft_engine::file_access::{self, AutomationRoots};
 use fontcraft_engine::guard;
+use fontcraft_engine::work::{self, Token};
 pub use policy::Policy;
 use serde_json::{Value, json};
+pub use stdio::{MAX_QUEUED, MAX_QUEUED_BYTES};
+pub use subscriptions::MAX_SUBSCRIPTIONS;
 
 /// Protocol revisions this server speaks, newest first. `2025-03-26` is left out on purpose: that
 /// revision requires JSON-RPC batches, which this server does not accept.
@@ -46,6 +54,12 @@ pub const MAX_LINE: usize = 4 << 20;
 pub const MAX_PENDING_NOTIFICATIONS: usize = 1_000;
 /// Most entries read from the backend's command catalogue.
 pub const MAX_CATALOGUE: usize = 100_000;
+/// Most progress notifications sent for one request, and the least time between two of them.
+pub const MAX_PROGRESS: u32 = 1_000;
+pub const PROGRESS_INTERVAL: Duration = Duration::from_millis(100);
+/// Longest progress message, in characters, and longest progress token or request id, in bytes of JSON.
+const MAX_PROGRESS_MESSAGE: usize = 200;
+const MAX_ID_LEN: usize = 256;
 
 const PARSE_ERROR: i64 = -32700;
 const INVALID_REQUEST: i64 = -32600;
@@ -104,10 +118,14 @@ pub struct Server {
     /// Command id → what the policy needs to know about it, read from the backend when the
     /// policy first needs it.
     catalogue: Option<HashMap<String, policy::CommandFacts>>,
-    /// Least severe level sent as a notification; `None` until the client sets one.
-    log_level: Option<LogLevel>,
+    /// What is kept for the client the current request comes from.
+    client: subscriptions::Client,
     /// Notifications produced while answering the current request.
     pending: Vec<Value>,
+    /// Sends a notification while a request runs; only a transport that can has one.
+    notify: Option<Rc<dyn Fn(&Value)>>,
+    /// Cancels the next request handled; a transport that takes cancellations gives one.
+    token: Option<Arc<Token>>,
 }
 
 /// The tools offered to agents. `run_command` reaches every command; the others save a round trip.
@@ -144,6 +162,22 @@ fn error(id: &Value, code: i64, message: impl Into<String>) -> Value {
     json!({"jsonrpc": "2.0", "id": id, "error": {"code": code, "message": message.into()}})
 }
 
+/// Whether `id` can be a request id or a progress token: a short string or a number.
+fn is_id(id: &Value) -> bool {
+    match id {
+        Value::String(text) => text.len() <= MAX_ID_LEN,
+        Value::Number(_) => true,
+        _ => false,
+    }
+}
+
+/// The id a request can be cancelled by: not a notification's, nor `initialize`'s.
+fn request_key(message: &Value) -> Option<String> {
+    let method = message.get("method").and_then(Value::as_str)?;
+    let id = message.get("id").filter(|id| is_id(id) && method != "initialize")?;
+    Some(id.to_string())
+}
+
 /// List methods take a cursor only to continue a list; this server returns every list whole.
 fn no_cursor(params: &Value) -> Result<(), (i64, String)> {
     match params.get("cursor") {
@@ -159,7 +193,7 @@ impl Server {
     }
 
     pub fn with_policy(backend: Box<dyn Backend>, policy: Policy) -> Self {
-        Self { backend, policy, roots: None, catalogue: None, log_level: None, pending: Vec::new() }
+        Self { backend, policy, roots: None, catalogue: None, client: Default::default(), pending: Vec::new(), notify: None, token: None }
     }
 
     /// Confines the files the commands read and write to `roots` (`None`: anywhere). The engine
@@ -188,7 +222,7 @@ impl Server {
     }
 
     fn log(&mut self, level: LogLevel, data: Value) {
-        if self.log_level.is_some_and(|min| level >= min) && self.pending.len() < MAX_PENDING_NOTIFICATIONS {
+        if self.client.log_level.is_some_and(|min| level >= min) && self.pending.len() < MAX_PENDING_NOTIFICATIONS {
             self.pending.push(json!({
                 "jsonrpc": "2.0",
                 "method": "notifications/message",
@@ -214,11 +248,39 @@ impl Server {
     }
 
     fn handle(&mut self, request: &Value) -> Option<Value> {
+        let token = self.token.take().unwrap_or_default();
         let roots = self.roots.clone();
-        file_access::confine(roots.as_ref(), || self.handle_confined(request))
+        let reply = file_access::confine(roots.as_ref(), || self.handle_confined(request, &token));
+        self.poll_updates();
+        reply
     }
 
-    fn handle_confined(&mut self, request: &Value) -> Option<Value> {
+    /// Sends the progress of a request whose `_meta` has a `progressToken`, at most every [`PROGRESS_INTERVAL`] and
+    /// [`MAX_PROGRESS`] times.
+    fn reporter(&self, params: &Value) -> Option<work::Report> {
+        let notify = self.notify.clone()?;
+        let token = params.get("_meta")?.get("progressToken").filter(|t| is_id(t))?.clone();
+        let (last, sent) = (Cell::new(None::<Instant>), Cell::new((0u32, 0u64)));
+        Some(Rc::new(move |done: u64, total: u64, message: &str| {
+            let (count, before) = sent.get();
+            let now = Instant::now();
+            // Progress only grows.
+            let due = last.get().is_none_or(|last| now.saturating_duration_since(last) >= PROGRESS_INTERVAL);
+            if !due || count >= MAX_PROGRESS || (count > 0 && done <= before) {
+                return;
+            }
+            last.set(Some(now));
+            sent.set((count + 1, done));
+            let message: String = message.chars().take(MAX_PROGRESS_MESSAGE).collect();
+            notify(&json!({
+                "jsonrpc": "2.0",
+                "method": "notifications/progress",
+                "params": {"progressToken": token, "progress": done, "total": total, "message": message},
+            }));
+        }))
+    }
+
+    fn handle_confined(&mut self, request: &Value, token: &Arc<Token>) -> Option<Value> {
         let Some(obj) = request.as_object() else {
             return Some(error(&Value::Null, INVALID_REQUEST, "a request is a JSON object (batches are not supported)"));
         };
@@ -236,7 +298,12 @@ impl Server {
         };
         let params = obj.get("params").cloned().unwrap_or(Value::Null);
         let id = id?;
-        let outcome = guard::catch_panic(|| self.dispatch(method, &params));
+        let report = self.reporter(&params);
+        let outcome = work::with(Arc::clone(token), report, || guard::catch_panic(|| self.dispatch(method, &params)));
+        // The client expects no reply to a request it cancelled, unless the cancel came too late.
+        if token.is_cancelled() {
+            return None;
+        }
         Some(match outcome {
             Ok(Ok(result)) => json!({"jsonrpc": "2.0", "id": id, "result": result}),
             Ok(Err((code, message))) => error(&id, code, message),
@@ -272,7 +339,7 @@ impl Server {
                 }
                 Ok(json!({
                     "protocolVersion": version,
-                    "capabilities": {"tools": {}, "prompts": {}, "resources": {}, "logging": {}, "completions": {}},
+                    "capabilities": {"tools": {}, "prompts": {}, "resources": {"subscribe": true}, "logging": {}, "completions": {}},
                     "serverInfo": {"name": "fontcraft", "version": env!("CARGO_PKG_VERSION")},
                     "instructions": instructions,
                 }))
@@ -304,7 +371,7 @@ impl Server {
                     .and_then(Value::as_str)
                     .and_then(LogLevel::parse)
                     .ok_or((INVALID_PARAMS, "`level` is one of debug, info, notice, warning, error, critical, alert, emergency".to_string()))?;
-                self.log_level = Some(level);
+                self.client.log_level = Some(level);
                 Ok(json!({}))
             }
             "prompts/list" => {
@@ -335,6 +402,8 @@ impl Server {
                 self.log(LogLevel::Debug, json!({"resource": uri}));
                 resources::read(uri, &resource, self).map_err(|e| (RESOURCE_NOT_FOUND, e))
             }
+            "resources/subscribe" => self.subscribe(params),
+            "resources/unsubscribe" => self.unsubscribe(params),
             "completion/complete" => self.complete(params),
             other => Err((METHOD_NOT_FOUND, format!("method `{other}` is not supported"))),
         }
@@ -444,37 +513,6 @@ impl Server {
         }
         Ok(all)
     }
-
-    /// Serves until `input` ends. Only protocol messages go to `output`.
-    pub fn serve(&mut self, mut input: impl BufRead, mut output: impl Write) -> std::io::Result<()> {
-        use std::io::Read as _;
-        loop {
-            // Read at most one byte past the limit, so a peer that never ends its line cannot
-            // fill memory; the rest of an oversized line is skipped.
-            let mut line = Vec::new();
-            let read = (&mut input).take(MAX_LINE as u64 + 1).read_until(b'\n', &mut line)?;
-            if read == 0 {
-                return Ok(());
-            }
-            let reply = if line.len() > MAX_LINE && !line.ends_with(b"\n") {
-                skip_line(&mut input)?;
-                Some(error(&Value::Null, INVALID_REQUEST, format!("a request line may be at most {MAX_LINE} bytes")).to_string())
-            } else {
-                match std::str::from_utf8(&line) {
-                    Ok(text) => self.handle_line(text),
-                    // A line that is not UTF-8 is a parse error, not the end of the session.
-                    Err(_) => Some(error(&Value::Null, PARSE_ERROR, "the request is not valid UTF-8").to_string()),
-                }
-            };
-            for notification in self.take_notifications() {
-                writeln!(output, "{notification}")?;
-            }
-            if let Some(reply) = reply {
-                writeln!(output, "{reply}")?;
-            }
-            output.flush()?;
-        }
-    }
 }
 
 impl resources::Reader for Server {
@@ -492,32 +530,30 @@ impl resources::Reader for Server {
     }
 }
 
-/// Discards input up to and including the next newline (or the end).
-fn skip_line(input: &mut impl BufRead) -> std::io::Result<()> {
-    loop {
-        let buffer = input.fill_buf()?;
-        if buffer.is_empty() {
-            return Ok(());
-        }
-        match buffer.iter().position(|b| *b == b'\n') {
-            Some(i) => {
-                input.consume(i + 1);
-                return Ok(());
-            }
-            None => {
-                let n = buffer.len();
-                input.consume(n);
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn server() -> Server {
         Server::new(Box::new(Headless::with_document()))
+    }
+
+    /// What the server writes for `input`, line by line.
+    fn served(s: &mut Server, input: Vec<u8>) -> Vec<Value> {
+        #[derive(Clone, Default)]
+        struct Output(Rc<std::cell::RefCell<Vec<u8>>>);
+        impl std::io::Write for Output {
+            fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+                self.0.borrow_mut().write(bytes)
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let output = Output::default();
+        s.serve(std::io::Cursor::new(input), output.clone()).unwrap();
+        let text = String::from_utf8(output.0.take()).unwrap();
+        text.lines().map(|l| serde_json::from_str(l).unwrap()).collect()
     }
 
     fn ask(s: &mut Server, request: Value) -> Value {
@@ -591,9 +627,7 @@ mod tests {
         let mut s = server();
         let mut input = vec![b'x'; MAX_LINE * 2];
         input.extend_from_slice(b"\n{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"ping\"}\n");
-        let mut output = Vec::new();
-        s.serve(&input[..], &mut output).unwrap();
-        let lines: Vec<Value> = String::from_utf8(output).unwrap().lines().map(|l| serde_json::from_str(l).unwrap()).collect();
+        let lines = served(&mut s, input);
         assert_eq!(lines.len(), 2);
         assert_eq!((lines[0]["error"]["code"].as_i64(), lines[1]["id"].as_i64()), (Some(INVALID_REQUEST), Some(5)));
     }
@@ -614,9 +648,7 @@ mod tests {
             &b"{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}\n"[..],
         ]
         .concat();
-        let mut output = Vec::new();
-        s.serve(&input[..], &mut output).unwrap();
-        let lines: Vec<Value> = String::from_utf8(output).unwrap().lines().map(|l| serde_json::from_str(l).unwrap()).collect();
+        let lines = served(&mut s, input);
         assert_eq!(lines.len(), 3);
         assert_eq!((lines[0]["id"].as_i64(), lines[1]["error"]["code"].as_i64(), lines[2]["id"].as_i64()), (Some(1), Some(PARSE_ERROR), Some(2)));
     }
@@ -850,9 +882,9 @@ mod tests {
         let r = ask(&mut s, json!({"jsonrpc": "2.0", "id": 3, "method": "logging/setLevel", "params": {"level": "loud"}}));
         assert_eq!(r["error"]["code"].as_i64(), Some(INVALID_PARAMS));
         // serve writes a request's notifications before its reply.
-        let mut output = Vec::new();
-        s.serve(&b"{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tools/call\",\"params\":{\"name\":\"run_command\",\"arguments\":{\"command\":\"glyph.newGlyph\",\"params\":{\"name\":\"a4\"}}}}\n"[..], &mut output).unwrap();
-        let lines: Vec<Value> = String::from_utf8(output).unwrap().lines().map(|l| serde_json::from_str(l).unwrap()).collect();
+        let call = json!({"jsonrpc": "2.0", "id": 9, "method": "tools/call",
+            "params": {"name": "run_command", "arguments": {"command": "glyph.newGlyph", "params": {"name": "a4"}}}});
+        let lines = served(&mut s, format!("{call}\n").into_bytes());
         assert_eq!((lines.len(), lines[0]["method"].as_str(), lines[1]["id"].as_i64()), (2, Some("notifications/message"), Some(9)));
     }
 

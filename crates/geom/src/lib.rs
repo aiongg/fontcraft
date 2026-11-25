@@ -6,12 +6,14 @@
 //! addresses, nearest points, splits, extremes, inflections, bounds and grid rounding.
 #![forbid(unsafe_code)]
 
+pub mod crossings;
 pub mod cu2qu_multi;
 pub mod expr;
 pub mod fit;
 pub mod qu2cu;
 pub mod segment;
 pub mod spiro;
+pub mod stop;
 pub mod variation;
 
 pub use kurbo::{

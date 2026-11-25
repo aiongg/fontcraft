@@ -256,7 +256,8 @@ fn table(
         }
         let same = a.table(tag) == b.table(tag);
         let rename: BTreeMap<String, String> = renamed.iter().map(|(_, ours, theirs)| (theirs.clone(), ours.clone())).collect();
-        return match crate::layout::compare(tag, a.bytes, b.bytes, &rename) {
+        let alternates: BTreeSet<String> = b.names.iter().filter(|n| n.contains(".BRACKET.") && !a.by_name.contains_key(*n)).cloned().collect();
+        return match crate::layout::compare(tag, a.bytes, b.bytes, &rename, &alternates) {
             Ok(differences) => result(tag, same, differences, Some("compared lookup by lookup as feature code".to_string())),
             Err(e) => skipped(tag, &format!("cannot be decompiled: {e}")),
         };

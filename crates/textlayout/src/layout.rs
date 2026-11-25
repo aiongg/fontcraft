@@ -270,8 +270,8 @@ fn finite_or_zero(v: f64) -> f64 {
     if v.is_finite() { v } else { 0.0 }
 }
 
-/// Lays `text` out in `master`. Widths and vertical metrics come from the layer
-/// `options.layers` picks for a glyph, else from the master whose metrics `master` shows (linked
+/// Lays `text` out in `master`. Widths and vertical metrics come from an item's own layer
+/// ([`Text::layer_of`]), else the layer `options.layers` picks for a glyph, else from the master whose metrics `master` shows (linked
 /// metrics); placeholders show the text's current glyph.
 pub fn layout(font: &Font, master: &str, text: &Text, options: &Options<'_>) -> Result<Layout, LayoutError> {
     let drawn = font.masters.iter().find(|m| m.id == master).ok_or_else(|| LayoutError::UnknownMaster(master.to_string()))?;
@@ -306,8 +306,9 @@ pub fn layout(font: &Font, master: &str, text: &Text, options: &Options<'_>) -> 
     };
 
     let current = text.current_glyph().and_then(|n| font.glyph(n).map(|g| (Arc::<str>::from(n), g)));
-    let metrics_of = |name: Arc<str>, glyph: &Glyph| {
-        let picked = options.layers.and_then(|l| l.get(&*name)).and_then(|id| glyph.layers.iter().find(|l| l.id == *id));
+    let metrics_of = |name: Arc<str>, glyph: &Glyph, item: usize| {
+        let own = text.layer_of(item, &name).and_then(|id| glyph.layers.iter().find(|l| l.id == id));
+        let picked = own.or_else(|| options.layers.and_then(|l| l.get(&*name)).and_then(|id| glyph.layers.iter().find(|l| l.id == *id)));
         let layer = picked.or_else(|| glyph.layer(&source.id)).or_else(|| glyph.layer(master));
         let width = finite_or_zero(layer.map_or(0.0, |l| l.width));
         let vo = finite_or_zero(layer.and_then(|l| l.info.vert_origin).unwrap_or(0.0));
@@ -348,17 +349,18 @@ pub fn layout(font: &Font, master: &str, text: &Text, options: &Options<'_>) -> 
     let mut items: Vec<Metrics> = text
         .items()
         .iter()
-        .map(|item| match item {
+        .enumerate()
+        .map(|(at, item)| match item {
             Item::Glyph { name, typed } => match font.glyph(name) {
                 Some(g) => {
-                    let mut m = metrics_of(name.clone(), g);
+                    let mut m = metrics_of(name.clone(), g, at);
                     m.is_space |= typed.is_some_and(char::is_whitespace);
                     m
                 }
                 None => blank(false, missing, false),
             },
             Item::Placeholder => match &current {
-                Some((name, g)) => metrics_of(name.clone(), g),
+                Some((name, g)) => metrics_of(name.clone(), g, at),
                 None => blank(false, missing, false),
             },
             Item::Missing(c) => blank(false, missing, c.is_whitespace()),
@@ -371,9 +373,9 @@ pub fn layout(font: &Font, master: &str, text: &Text, options: &Options<'_>) -> 
     if let Some(shaping) = options.shaping.as_ref() {
         let (shaped, error) = shape_items(font, text, direction, shaping);
         shaping_error = error;
-        for (m, glyphs) in items.iter_mut().zip(shaped) {
+        for (at, (m, glyphs)) in items.iter_mut().zip(shaped).enumerate() {
             let Some(glyphs) = glyphs else { continue };
-            let mut found = glyphs.into_iter().filter_map(|name| font.glyph(&name).map(|g| metrics_of(name.clone(), g)));
+            let mut found = glyphs.into_iter().filter_map(|name| font.glyph(&name).map(|g| metrics_of(name.clone(), g, at)));
             let Some(mut first) = found.next() else {
                 *m = Metrics { merged: true, ..blank(false, 0.0, false) };
                 continue;

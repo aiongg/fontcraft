@@ -483,7 +483,11 @@ segments. What is left becomes open paths, in the place of the original.
   uses 4% of the em (our choice); `path.openCorner`'s `overlap` parameter overrides both.
 - An opened corner whose triangle is small relative to the adjacent visible segments is treated
   as invisible in the result, so it may also sit on the outside of a shape; above the threshold
-  it shows (`openCorner.invisibleWhenSmall`).
+  it shows (`openCorner.invisibleWhenSmall`). The size test is glyphsLib's, and only a corner whose
+  loop lies on the outside and is closed by a straight segment counts (`40-compile.md` § 1.2). An
+  export erases such corners where the source asks; Fill Preview, the Preview panel and the preview
+  command fill the outline without them; and Remove Overlap erases them first in a font whose
+  export erases them in every glyph.
 - `path.sharpenCorner` (context menu, below Open Corner): seen in tutorial videos with nodes, a
   segment or a path selected; what it does is unknown (question 31).
 
@@ -748,9 +752,12 @@ Rules (our design where the handbook is silent):
   master, so a glyph lock does not block them.
 - An angle-locked guide refuses a new angle unless the same call sets `angleLocked: false`. A drag
   that rotates goes through `guide.setProperties`, so the lock holds whatever tool calls it.
-- The sidebearing reference is the guide's `alignment` key in `.glyphs` data: absent for left,
-  `right`, or `center` for both. Commands that change a glyph's width do not yet move guides that
-  follow the right side or both sides.
+- The sidebearing reference is the guide's `orientation` key in `.glyphs` data from version 3 on
+  (`alignment` in version 2): absent for left, `right`, or `center` for both. A right-referenced
+  guide's position counts from the right sidebearing, local and global alike, in the public SDK's
+  sample file; what `center` counts from is not documented. FontCraft keeps the reference as
+  `alignment` in every version and positions as absolute, and moves local guides with the width
+  (`guides.sidebearingReference` lists the departures).
 - A global guide's `filter` is kept as predicate text. Showing a global guide only on the glyphs
   its filter selects waits for the Smart Filter rules (M4).
 
@@ -887,14 +894,19 @@ Question 31 stays open and blocks only `path.sharpenCorner`.
 16. **Correct Path Direction**: the resulting shape order (sort key) and tie-breaks for the
     bottom-left start node.
     **Answered for M3 (our decision, 2026-10-09):** outer contours counter-clockwise and counters
-    clockwise, decided by nesting; shapes sorted by bounding box (left, then bottom); the start node
-    is the lowest, then leftmost, on-curve node (the `startPointPosition` rule).
+    clockwise, decided by nesting; shapes sorted from the bottom left to the top right, by the sum of the
+    coordinates of the bounding box's bottom-left corner, then by its left edge; the start node is the
+    lowest, then leftmost, on-curve node (the `startPointPosition` rule). What saved sources say is in
+    docs/plans/M3.md › M3.32.
 17. **Add Extremes**: the "very short segment" threshold and the "slightly off" tolerance; whether
     a selection limits the command; whether inflections can be added in bulk.
     **Answered for M3 (our decision, 2026-10-09):** an extreme is skipped when it would leave a
-    segment shorter than 3 units (the `shortSegments` threshold). A node within 2 units and 2° of an
-    extreme keeps its place and its handles are made exactly horizontal or vertical, which puts the
-    extreme on the node (the `almostOrthogonalHandle` thresholds). The command acts on the
+    segment shorter than 3 units (the `shortSegments` threshold), or shorter than both 10 units and a
+    tenth of the curve's chord. A smooth node between two cubics within 2 units or 1% of the curve's
+    chord of an extreme moves onto it and the two curves are refitted, when they stay within half a
+    unit of the old ones. Any other node within 2 units and 2° of an extreme keeps its place and its
+    handles are made exactly horizontal or vertical, which puts the extreme on the node (the
+    `almostOrthogonalHandle` thresholds). The command acts on the
     targets given, else the whole layer. Inflections in bulk: `path.addInflections`, our command,
     also the audit's fix.
 18. **Reverse Contours**: shortcut (none stated in this chapter) and the label of the Option

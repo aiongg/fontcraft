@@ -31,7 +31,26 @@ pub struct Coded {
     pub spellings: usize,
 }
 
-pub type Codec = fn(&Path) -> Result<Coded, String>;
+/// Why a codec gave nothing back.
+pub enum Failure {
+    Error(String),
+    /// The sample cannot be measured: what it needs is not in the corpus in a form we read.
+    NotApplicable(String),
+}
+
+impl From<String> for Failure {
+    fn from(e: String) -> Self {
+        Failure::Error(e)
+    }
+}
+
+impl From<&str> for Failure {
+    fn from(e: &str) -> Self {
+        Failure::Error(e.to_string())
+    }
+}
+
+pub type Codec = fn(&Path) -> Result<Coded, Failure>;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum Kind {
@@ -176,6 +195,7 @@ pub enum Outcome {
     Allowed(String),
     Failed(String),
     NoCodec,
+    NotApplicable(String),
 }
 
 impl fmt::Display for Outcome {
@@ -186,6 +206,7 @@ impl fmt::Display for Outcome {
             Outcome::Allowed(r) => write!(f, "allowed: {r}"),
             Outcome::Failed(e) => write!(f, "failed: {e}"),
             Outcome::NoCodec => write!(f, "no codec yet"),
+            Outcome::NotApplicable(r) => write!(f, "not applicable: {r}"),
         }
     }
 }
@@ -258,7 +279,8 @@ pub fn check(corpus: &Path, sample: &Sample, codec: Codec, allow: &BTreeMap<Stri
     let result = catch_unwind(AssertUnwindSafe(|| codec(&path)));
     let coded = match result {
         Err(_) => return (Outcome::Failed("the codec panicked".to_string()), 0),
-        Ok(Err(e)) => return (Outcome::Failed(e), 0),
+        Ok(Err(Failure::Error(e))) => return (Outcome::Failed(e), 0),
+        Ok(Err(Failure::NotApplicable(r))) => return (Outcome::NotApplicable(r), 0),
         Ok(Ok(c)) => c,
     };
     let difference = match coded.written {
@@ -298,10 +320,29 @@ fn allow_list(root: &Path) -> Result<BTreeMap<String, String>, String> {
     Ok(out)
 }
 
+/// Writes what `codec` makes of a sample to `folder`, at the sample's path (`--out`), for other
+/// readers to compare with the original. A sample the codec cannot write is left out.
+fn write_output(folder: &Path, corpus: &Path, sample: &Sample, codec: Codec) -> Result<(), String> {
+    let source = corpus.join(&sample.path);
+    let Ok(Ok(coded)) = catch_unwind(AssertUnwindSafe(|| codec(&source))) else { return Ok(()) };
+    let target = folder.join(&sample.path);
+    let put = |path: &Path, bytes: &[u8]| -> Result<(), String> {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+        }
+        std::fs::write(path, bytes).map_err(|e| format!("{}: {e}", path.display()))
+    };
+    match coded.written {
+        Written::File(bytes) => put(&target, &bytes),
+        Written::Tree(files) => files.iter().try_for_each(|(name, bytes)| put(&target.join(name), bytes)),
+    }
+}
+
 pub fn run(root: &Path, args: &[&str]) -> Result<(), String> {
     let mut mode = "plist";
     let mut kinds: Vec<Kind> = Kind::ALL.to_vec();
     let mut verbose = false;
+    let mut out: Option<PathBuf> = None;
     let mut it = args.iter();
     while let Some(a) = it.next() {
         match *a {
@@ -314,6 +355,7 @@ pub fn run(root: &Path, args: &[&str]) -> Result<(), String> {
                 let kind = Kind::ALL.into_iter().find(|x| x.name() == *k).ok_or_else(|| format!("unknown kind `{k}`"))?;
                 kinds = vec![kind];
             }
+            "--out" => out = Some(PathBuf::from(it.next().ok_or("--out needs a folder")?)),
             "-v" | "--verbose" => verbose = true,
             other => return Err(format!("unknown argument `{other}`")),
         }
@@ -327,10 +369,11 @@ pub fn run(root: &Path, args: &[&str]) -> Result<(), String> {
 
     // (kind, version, reference_written) → outcome counts and the spellings kept
     type Key = (Kind, String, bool);
-    let mut table: BTreeMap<Key, ([usize; 5], usize)> = BTreeMap::new();
+    let mut table: BTreeMap<Key, ([usize; 6], usize)> = BTreeMap::new();
     let mut details = Vec::new();
     for s in samples.iter().filter(|s| kinds.contains(&s.kind)) {
         let (outcome, spellings) = match codec(mode, s.kind) {
+            _ if mode == crate::stable::MODE => (crate::stable::check(&corpus, s), 0),
             Some(c) => check(&corpus, s, c, &allow),
             None => (Outcome::NoCodec, 0),
         };
@@ -340,6 +383,7 @@ pub fn run(root: &Path, args: &[&str]) -> Result<(), String> {
             Outcome::Different(_) => 2,
             Outcome::Failed(_) => 3,
             Outcome::NoCodec => 4,
+            Outcome::NotApplicable(_) => 5,
         };
         let key = (s.kind, s.version.clone().unwrap_or_else(|| "?".into()), s.reference_written);
         let row = table.entry(key).or_default();
@@ -347,6 +391,9 @@ pub fn run(root: &Path, args: &[&str]) -> Result<(), String> {
             *cell += 1;
         }
         row.1 += spellings;
+        if let (Some(folder), Some(c)) = (&out, codec(mode, s.kind)) {
+            write_output(folder, &corpus, s, c)?;
+        }
         if verbose || matches!(outcome, Outcome::Different(_) | Outcome::Failed(_)) {
             details.push(format!("  {}  {outcome}", s.path));
         }
@@ -354,23 +401,24 @@ pub fn run(root: &Path, args: &[&str]) -> Result<(), String> {
 
     println!("Round trip, mode `{mode}`: read each corpus source and write it back.\n");
     println!(
-        "{:<14} {:>7} {:>9}  {:>9} {:>7} {:>9} {:>6} {:>8} {:>9}",
-        "kind", "version", "reference", "identical", "allowed", "different", "failed", "no codec", "spellings"
+        "{:<14} {:>7} {:>9}  {:>9} {:>7} {:>9} {:>6} {:>8} {:>5} {:>9}",
+        "kind", "version", "reference", "identical", "allowed", "different", "failed", "no codec", "n/a", "spellings"
     );
-    let mut total = [0usize; 5];
+    let mut total = [0usize; 6];
     let mut total_spellings = 0;
     for ((kind, version, reference), (counts, spellings)) in &table {
-        let [a, b, c, d, e] = *counts;
+        let [a, b, c, d, e, n] = *counts;
         let reference = if *reference { "yes" } else { "no" };
-        println!("{:<14} {version:>7} {reference:>9}  {a:>9} {b:>7} {c:>9} {d:>6} {e:>8} {spellings:>9}", kind.name());
+        println!("{:<14} {version:>7} {reference:>9}  {a:>9} {b:>7} {c:>9} {d:>6} {e:>8} {n:>5} {spellings:>9}", kind.name());
         for (t, n) in total.iter_mut().zip(counts) {
             *t += n;
         }
         total_spellings += spellings;
     }
-    let [a, b, c, d, e] = total;
-    println!("{:<14} {:>7} {:>9}  {a:>9} {b:>7} {c:>9} {d:>6} {e:>8} {total_spellings:>9}", "total", "", "");
+    let [a, b, c, d, e, n] = total;
+    println!("{:<14} {:>7} {:>9}  {a:>9} {b:>7} {c:>9} {d:>6} {e:>8} {n:>5} {total_spellings:>9}", "total", "", "");
     println!("\n`reference` = saved by the format's reference tool; only those files are held to byte identity.");
+    println!("`n/a` = not applicable: a designspace whose masters are not UFOs in the corpus.");
     println!("`spellings` = scalars written as in the source because the canonical rules would differ.");
     if !details.is_empty() {
         println!();
@@ -427,17 +475,21 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("x.glyphs"), b"{}").unwrap();
         let sample = Sample { path: "x.glyphs".into(), kind: Kind::Glyphs, version: None, reference_written: false };
-        fn boom(_: &Path) -> Result<Coded, String> {
+        fn boom(_: &Path) -> Result<Coded, Failure> {
             panic!("boom")
         }
-        fn same(p: &Path) -> Result<Coded, String> {
-            std::fs::read(p).map(|b| Coded { written: Written::File(b), spellings: 0 }).map_err(|e| e.to_string())
+        fn same(p: &Path) -> Result<Coded, Failure> {
+            std::fs::read(p).map(|b| Coded { written: Written::File(b), spellings: 0 }).map_err(|e| e.to_string().into())
         }
         let allow = BTreeMap::new();
         let prev = std::panic::take_hook();
         std::panic::set_hook(Box::new(|_| {}));
         let failed = check(&dir, &sample, boom, &allow).0;
         std::panic::set_hook(prev);
+        fn no_masters(_: &Path) -> Result<Coded, Failure> {
+            Err(Failure::NotApplicable("no UFO".into()))
+        }
+        assert_eq!(check(&dir, &sample, no_masters, &allow).0, Outcome::NotApplicable("no UFO".into()));
         assert_eq!(failed, Outcome::Failed("the codec panicked".into()));
         assert_eq!(check(&dir, &sample, same, &allow).0, Outcome::Identical);
         let _ = std::fs::remove_file(dir.join("x.glyphs"));
@@ -452,10 +504,10 @@ mod tests {
         std::fs::write(pkg.join("fontinfo.plist"), b"{\n}\n").unwrap();
         std::fs::write(pkg.join("glyphs/A_.glyph"), b"{\nglyphname = A;\n}\n").unwrap();
         let sample = Sample { path: "x.glyphspackage".into(), kind: Kind::GlyphsPackage, version: None, reference_written: false };
-        fn same(p: &Path) -> Result<Coded, String> {
-            read_tree(p).map(|t| Coded { written: Written::Tree(t), spellings: 0 })
+        fn same(p: &Path) -> Result<Coded, Failure> {
+            Ok(Coded { written: Written::Tree(read_tree(p)?), spellings: 0 })
         }
-        fn drops_a_glyph(p: &Path) -> Result<Coded, String> {
+        fn drops_a_glyph(p: &Path) -> Result<Coded, Failure> {
             let mut t = read_tree(p)?;
             t.remove("glyphs/A_.glyph");
             Ok(Coded { written: Written::Tree(t), spellings: 0 })

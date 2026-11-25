@@ -19,13 +19,14 @@ use read_fonts::ps::cff::dict::{Entry, entries};
 use read_fonts::ps::cff::index::Index;
 use read_fonts::ps::string::Sid;
 use read_fonts::tables::cmap::CmapSubtable;
-use read_fonts::tables::glyf::Glyph as TtGlyph;
+use read_fonts::tables::glyf::{CompositeGlyphFlags, Glyf, Glyph as TtGlyph};
 use read_fonts::tables::layout::{FeatureList, ScriptList};
-use read_fonts::tables::loca::LocaGlyph;
+use read_fonts::tables::loca::{Loca, LocaGlyph};
 use read_fonts::tables::stat::AxisValue;
 use read_fonts::types::{GlyphId, Tag};
 use read_fonts::{FontRef, ReadError, TableProvider};
 use skrifa::MetadataProvider;
+use skrifa::metrics::GlyphMetrics;
 use skrifa::outline::{DrawSettings, OutlinePen};
 use skrifa::prelude::{LocationRef, Size};
 
@@ -61,6 +62,8 @@ const MAX_CHARSTRING_BYTES: usize = 32_767;
 const MAX_OUTLINE_POINTS: usize = 10_000_000;
 /// Largest coordinate magnitude the bounds check accepts.
 const MAX_COORDINATE: f64 = 32_766.0;
+/// Deepest chain of components that lend each other their metrics.
+const MAX_COMPONENT_DEPTH: usize = 32;
 /// STAT axis values read.
 const MAX_AXIS_VALUES: usize = 65_535;
 /// Code points one message lists.
@@ -1648,6 +1651,32 @@ impl OutlinePen for PointPen {
     fn close(&mut self) {}
 }
 
+/// How far left of its stored coordinates a composite glyph is drawn: the drawing puts the stored
+/// left edge of the glyph, or of the last component that lends its metrics, at its left side
+/// bearing.
+fn drawing_shift(loca: &Loca<'_>, glyf: &Glyf<'_>, metrics: &GlyphMetrics<'_>, gid: GlyphId) -> f64 {
+    let mut g = gid;
+    let mut x_min = 0.0;
+    for _ in 0..MAX_COMPONENT_DEPTH {
+        let lender = match loca.get(g, glyf) {
+            Some(LocaGlyph::Glyph(TtGlyph::Composite(c))) => {
+                x_min = f64::from(c.x_min());
+                c.components().filter(|c| c.flags.contains(CompositeGlyphFlags::USE_MY_METRICS)).last().map(|c| GlyphId::from(c.glyph))
+            }
+            Some(LocaGlyph::Glyph(TtGlyph::Simple(s))) => {
+                x_min = f64::from(s.x_min());
+                None
+            }
+            _ => return 0.0,
+        };
+        match lender {
+            Some(l) => g = l,
+            None => break,
+        }
+    }
+    x_min - f64::from(metrics.left_side_bearing(g).unwrap_or(0.0))
+}
+
 /// `check.outlines.pointsOutsideBBox` (FontBakery `opentype/points_out_of_bounds`): coordinates
 /// are rounded half to even before the comparison, as there.
 pub(crate) fn points_outside_bbox(ctx: &BinaryCtx<'_>, _: &Params<'_>, sink: &mut Sink) {
@@ -1656,6 +1685,7 @@ pub(crate) fn points_outside_bbox(ctx: &BinaryCtx<'_>, _: &Params<'_>, sink: &mu
         return;
     };
     let outlines = ctx.font.outline_glyphs();
+    let metrics = ctx.font.glyph_metrics(Size::unscaled(), LocationRef::default());
     let namer = Namer::new(ctx);
     let mut read = 0usize;
     for gid in 0..u32::from(maxp.num_glyphs()) {
@@ -1672,7 +1702,8 @@ pub(crate) fn points_outside_bbox(ctx: &BinaryCtx<'_>, _: &Params<'_>, sink: &mu
                 if glyph.draw(DrawSettings::unhinted(Size::unscaled(), LocationRef::default()), &mut pen).is_err() {
                     continue;
                 }
-                (bbox, pen.0)
+                let shift = drawing_shift(&loca, &glyf, &metrics, g);
+                (bbox, pen.0.into_iter().map(|(x, y)| (x + shift, y)).collect())
             }
             _ => continue,
         };

@@ -65,7 +65,10 @@ FontCraft is specified from public documentation of existing font tools (docs/re
 written without their code. Where a permissively licensed project's code or data is ported or
 bundled, the file says so in its header and the project is listed here with its licence:
 
-  glyphsLib (https://github.com/googlefonts/glyphsLib), Apache License 2.0. The key orders that
+  glyphsLib (https://github.com/googlefonts/glyphsLib), Apache License 2.0. The rule for invisible
+  open corners and the order they are erased in are ported from its eraseOpenCorners filter
+  (crates/pathops/src/open_corners.rs, from Lib/glyphsLib/filters/eraseOpenCorners.py), with the
+  crossing of two curves from fontTools (MIT, misc/bezierTools.py) that it cuts at. The key orders that
   format 2 of the .glyphs format uses for glyphs, layers, masters and instances, its default
   axes and its axis value defaults are taken from its format 2 writer (crates/io-glyphs/src/v2.rs);
   the rule that joins a format 2 master's name parts into its name is ported from its master
@@ -142,6 +145,7 @@ bundled, the file says so in its header and the project is listed here with its 
   designspace writer follows the element order of designspaceLib. crates/io-ufo/src/designspace/rules.rs
   ports varLib's overlayFeatureVariations, overlayBox and cleanupBox (featureVars.py), and
   crates/io-glyphs/src/lib.rs (quadratic_roots) the quadratic solver of misc/bezierTools.py.
+  crates/compile/src/var/hvar.rs follows varLib's _add_VHVAR for the origin map of VVAR.
   crates/interp/src/overlay.rs ports the same three functions, and crates/compile/src/var/featvar.rs the GSUB of addFeatureVariations, with the alternate glyph names and order of fontc's glyphs2fontir/src/source.rs and glyphsLib's builder/bracket_layers.py (the bracket glyphs, their component renaming and the copying of kerning to them) and builder/transformations/align_alternate_layers.py, and the merging of the feature variations into the feature code's GSUB of fontc's fontbe/src/features/feature_variations.rs (crates/fea/src/provider.rs) (Apache License 2.0).
   crates/tables/src/ttx (mod.rs, core.rs, core/) ports ttLib's TTX writer for the core tables and ttProgram's opcode table and disassembly.
   crates/tables/src/ttx/cff.rs and cff/ (M12.5) port cffLib's CFF and CFF2 reading and XML writing, psCharStrings' DICT and Type 2 charstring decompilers, the VarStore XML form of otData, and the VORG table's XML writer.
@@ -287,7 +291,7 @@ bundled, the file says so in its header and the project is listed here with its 
 
   crates/tables/src/interpolate_layout.rs and interpolate_layout/ port fontTools' varLib.interpolate_layout, the AligningMerger and InstancerMerger of varLib.merger (PairPos, PairSet, SinglePos, CursivePos, MarkBasePos, MarkMarkPos and Lookup merging, the pair subtable joining and class realignment), misc.classifyTools.Classifier and otlLib's buildSinglePos (MIT License); the masterFinder pattern of crates/engine/src/cmd/instance/layout.rs follows varLib's MasterFinder and _open_font. The same file follows fontmake's (Apache License 2.0) font_project.py for the compiled-instance path of --interpolate-binary-layout (save_otfs, _varLib_finder) and glyphsLib's (Apache License 2.0) builder/sources.py for the file names of the master UFOs of a Glyphs source.
 
-  The output selection of font.compile (crates/engine/src/cmd/compile_select.rs, M2.8) follows fontmake 3.12.1's (https://github.com/googlefonts/fontmake, Apache License 2.0) font_project.py: the folder names of _output_dir, the full-match instance and variable font patterns of _search_instances and build_variable_fonts; and glyphsLib's (Apache License 2.0) builder/builders.py filter_instances_by_family for the family name filter.
+  The output selection of font.compile (crates/engine/src/cmd/compile_select.rs, M2.8) follows fontmake 3.12.1's (https://github.com/googlefonts/fontmake, Apache License 2.0) font_project.py: the folder names of _output_dir, the full-match instance and variable font patterns of _search_instances and build_variable_fonts; and glyphsLib's (Apache License 2.0) builder/builders.py filter_instances_by_family for the family name filter. The interpolatable masters (crates/compile/src/var/interpolatable.rs, crates/engine/src/cmd/compile_masters.rs, M2.9) follow the same font_project.py and ufo2ft's (MIT License) interpolatableTTFCompiler.py, interpolatableOTFCompiler.py, constants.py and outlineCompiler.py for the tables and placeholder glyphs of sparse masters.
 
   The PostScript autohinter (crates/autohint, M10) is ported from otfautohint in AFDKO 5.0.1
   (https://github.com/adobe-type-tools/afdko), Apache License 2.0, Copyright 2021 Adobe: its

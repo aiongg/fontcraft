@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use fontcraft_engine::Session;
 use fontcraft_engine::model::{Anchor, Component, Guide, LayerSide, Path, Shape};
-use fontcraft_testkit::rect;
+use fontcraft_testkit::{oval, rect};
 use serde_json::{Value, json};
 
 fn run(s: &mut Session, id: &str, p: Value) -> Value {
@@ -421,6 +421,82 @@ fn the_string_form_and_the_parameter_form_give_the_same_font() {
 }
 
 #[test]
+fn the_export_string_changes_metrics_after_the_transformation() {
+    let width = |s: &Session, g: &str| s.font().unwrap().glyph(g).unwrap().layers[0].width;
+    let setup = || {
+        let mut s = Session::with_document();
+        for g in ["A", "B"] {
+            run(&mut s, "path.addPath", json!({"glyph": g, "nodes": rect(100.0, 0.0, 300.0, 700.0)}));
+            run(&mut s, "glyph.transformMetrics", json!({"glyph": g, "width": 500}));
+        }
+        s
+    };
+    let mut s = setup();
+    run(&mut s, "path.transformations", json!({"glyphs": ["A"], "string": "Transformations;LSB:+120;RSB:35;ScaleX:50;Origin:4;"}));
+    let n = nodes(&mut s, "A");
+    assert_eq!(n[0][1].0 - n[0][0].0, 100.0, "half as wide");
+    assert_eq!(width(&s, "A") - n[0][1].0, 35.0, "the right sidebearing is set");
+    let mut plain = setup();
+    run(&mut plain, "path.transformations", json!({"glyphs": ["A"], "scale": {"x": 50, "y": 100}}));
+    assert_eq!(n[0][0].0 - nodes(&mut plain, "A")[0][0].0, 120.0, "the left one grows");
+    // One undo step brings everything back.
+    run(&mut s, "edit.undo", json!({}));
+    assert_eq!((nodes(&mut s, "A"), width(&s, "A")), (nodes(&mut setup(), "A"), 500.0));
+
+    let mut s = setup();
+    run(&mut s, "path.transformations", json!({"string": "Transformations;Width:-40;Origin:4;include:B"}));
+    assert_eq!((width(&s, "A"), width(&s, "B")), (500.0, 460.0));
+    run(&mut s, "path.transformations", json!({"string": "Transformations;Width:610;Origin:4;include:B"}));
+    assert_eq!(width(&s, "B"), 610.0);
+}
+
+#[test]
+fn cursivy_keeps_round_strokes_and_straight_stems() {
+    let mut s = Session::with_document();
+    run(&mut s, "font.stems.add", json!({"orientation": "vertical", "values": {"m01": 80}}));
+    run(&mut s, "font.stems.add", json!({"orientation": "horizontal", "values": {"m01": 80}}));
+    // An o: a counter-clockwise oval with a clockwise one in it.
+    let mut inner = oval(300.0, 250.0, 170.0, 170.0);
+    inner.as_array_mut().unwrap()[1..].reverse();
+    run(&mut s, "path.addPath", json!({"glyph": "A", "nodes": oval(300.0, 250.0, 250.0, 250.0)}));
+    run(&mut s, "path.addPath", json!({"glyph": "A", "nodes": inner}));
+    run(&mut s, "path.addPath", json!({"glyph": "B", "nodes": rect(100.0, 0.0, 180.0, 700.0)}));
+    let start = font(&s);
+    run(&mut s, "path.transformations", json!({"glyphs": ["A", "B"], "slant": 12}));
+    let plain = (nodes(&mut s, "A"), nodes(&mut s, "B"));
+    run(&mut s, "edit.undo", json!({}));
+    // The export string with SlantCorrection runs the same.
+    run(&mut s, "path.transformations", json!({"glyphs": ["A", "B"], "string": "Transformations;Slant:12;SlantCorrection:1;Origin:4;"}));
+    let by_string = (nodes(&mut s, "A"), nodes(&mut s, "B"));
+    run(&mut s, "edit.undo", json!({}));
+    run(&mut s, "path.transformations", json!({"glyphs": ["A", "B"], "slant": 12, "cursivy": true}));
+    let cursivy = (nodes(&mut s, "A"), nodes(&mut s, "B"));
+    assert_eq!(cursivy, by_string);
+    assert_eq!(cursivy.1, plain.1, "a straight stem is slanted only");
+
+    // The middle of the first quarter, where the strokes run diagonally, of both ovals.
+    let mid = |p: &[(f64, f64)], quarter: usize| {
+        let at = |k: usize| p[(quarter * 3 + k) % 12];
+        let b = |f: fn((f64, f64)) -> f64| (f(at(0)) + 3.0 * f(at(1)) + 3.0 * f(at(2)) + f(at(3))) / 8.0;
+        (b(|q| q.0), b(|q| q.1))
+    };
+    // The inner oval runs the other way, so its last quarter lies by the outer one's first.
+    let across = |g: &[Vec<(f64, f64)>]| {
+        let (a, b) = (mid(&g[0], 0), mid(&g[1], 3));
+        (a.0 - b.0).hypot(a.1 - b.1)
+    };
+    let (thick, kept) = (across(&plain.0) / 80.0, across(&cursivy.0) / 80.0);
+    assert!(thick > 1.09, "a plain slant thickens the top right: {thick}");
+    assert!((kept - 1.0).abs() < 0.03 + 0.5 / 80.0, "{kept}");
+    // The tops and bottoms keep their places.
+    for k in [3, 9] {
+        assert_eq!(cursivy.0[0][k], plain.0[0][k]);
+    }
+    run(&mut s, "edit.undo", json!({}));
+    assert_eq!(font(&s), start);
+}
+
+#[test]
 fn transformations_follow_their_targets_and_refuse_what_they_cannot_do() {
     let mut s = Session::with_document();
     for g in ["A", "B"] {
@@ -440,7 +516,8 @@ fn transformations_follow_their_targets_and_refuse_what_they_cannot_do() {
     let before = font(&s);
     for bad in [
         json!({"glyphs": ["A"], "slant": 10, "cursivy": true}),
-        json!({"glyphs": ["A"], "string": "Transformations;LSB:10;Origin:4;"}),
+        json!({"glyphs": ["A"], "string": "Transformations;LSB:10;Width:500;Origin:4;"}),
+        json!({"glyph": "A", "points": [[0, 2]], "string": "Transformations;LSB:10;Origin:4;"}),
         json!({"glyphs": ["A"], "string": "Transformations;Origin:4;", "slant": 5}),
         json!({"glyphs": ["A"], "slant": 95}),
         json!({"glyphs": ["A"], "layers": ["nope"], "slant": 5}),

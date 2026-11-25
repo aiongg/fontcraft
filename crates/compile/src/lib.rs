@@ -10,7 +10,7 @@
 //! | Preflight | [`preflight`] | component cycles refused, missing components dropped, non-exported glyphs inlined and removed, code point conflicts refused |
 //! | Glyph data | [`fill_glyph_data`] | production names and categories a glyph does not store, from the glyph database; non-spacing marks get no advance |
 //! | Export parameters | [`export_params`] | Export, Keep, Remove, Rename and Reencode Glyphs and the Arabic presentation forms change the resolved glyphs; the renames and removals go to the kerning writers |
-//! | Glyph order | [`order`] | the export order, `.notdef` first and drawn when the font has none, at most 65,535 glyphs |
+//! | Glyph order | [`order`] | the export order, `.notdef` first and drawn when the font has none, `space` second with TrueType Keep GlyphOrder, at most 65,535 glyphs |
 //! | Component options | [`components_opt`] | decomposition and flattening the options, parameters and filter list ask for |
 //! | Layout | [`layout`] (with `kern` and `marks`) | the feature code for the target (automatic entries regenerated, instance parameters, tokens) compiled with the generated kerning and mark attachment: `GSUB`, `GPOS`, `GDEF`; a compile error stops the export |
 //! | Outline preparation | [`outline`] | decomposition (mixed glyphs, transforms beyond ±2, everything for CFF), overlap removal, cubic to quadratic, contour direction |
@@ -78,6 +78,7 @@ use fontcraft_model::glyphdata::GlyphData;
 use fontcraft_model::{Font, ModelError, Resolved, ResolvedGlyph, Target};
 use write_fonts::types::Tag;
 
+pub use fontcraft_geom::stop;
 pub use outline::Flavour;
 
 /// Largest coordinate, in font units, an outline point may have in a TrueType outline. `glyf`
@@ -128,6 +129,9 @@ pub const DEFAULT_CONVERSION_ERROR: f64 = 0.001;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CompileError {
+    /// The host asked the compile to stop ([`stop`]).
+    #[error("cancelled")]
+    Cancelled,
     #[error(transparent)]
     Model(#[from] ModelError),
     #[error("glyph `{glyph}`: {message}")]
@@ -171,8 +175,9 @@ pub struct Options {
     /// the clock; callers that want "now" pass it (the engine does, and honours `SOURCE_DATE_EPOCH`).
     pub timestamp: i64,
     /// The most a quadratic approximation may be from the cubic curve it replaces, in em (the
-    /// distance is this times the units per em). Not finite or not positive: the default.
-    pub conversion_error: f64,
+    /// distance is this times the units per em). `None`, or a value that is not a positive
+    /// finite number: the source's TrueType Curve Error, else [`DEFAULT_CONVERSION_ERROR`].
+    pub conversion_error: Option<f64>,
     /// Keep contours in the source's direction instead of reversing them for TrueType
     /// (`compile.reverseContourDirection`).
     pub keep_direction: bool,
@@ -246,6 +251,23 @@ pub struct Options {
     /// Set `USE_MY_METRICS` on the component that gives a TrueType composite its advance
     /// (`compile.useMyMetrics`); false writes the flag on no component.
     pub use_my_metrics: bool,
+    /// The `post` format of TrueType outlines (2 or 3), over the Post Table Type parameter.
+    /// `None`: the parameter, else 2.
+    pub post_format: Option<u8>,
+    /// The font goes into a web container (WOFF or WOFF2), which Remove post names for webfonts
+    /// and Webfont Only read ([`export_params::differs_by_container`]).
+    pub web_container: bool,
+}
+
+impl Options {
+    /// The cubic to quadratic tolerance of `resolved`, in font units ([`Self::conversion_error`]).
+    pub(crate) fn conversion_tolerance(&self, resolved: &Resolved) -> f64 {
+        let upm = f64::from(resolved.units_per_em);
+        match self.conversion_error.filter(|e| e.is_finite() && *e > 0.0) {
+            Some(em) => upm * em,
+            None => export_params::curve_error(&resolved.params, upm).unwrap_or(upm * DEFAULT_CONVERSION_ERROR),
+        }
+    }
 }
 
 /// Most subroutines one CFF index can hold, the largest [`CffOptions::max_subrs`].
@@ -256,8 +278,10 @@ pub const MAX_SUBRS_PER_INDEX: usize = fontcraft_cff::subr::MAX_SUBRS_PER_INDEX;
 #[derive(Clone, Debug, PartialEq)]
 pub struct CffOptions {
     /// Round a coordinate to an integer only when that moves it by at most this much
-    /// (`compile.cffRoundTolerance`): 0.5 rounds every coordinate, 0 none.
-    pub round_tolerance: f64,
+    /// (`compile.cffRoundTolerance`): 0.5 rounds every coordinate, 0 none. `None`: hundredths of
+    /// a unit when the source's grid is finer than a unit (`fontInfo.grid.fractionalCff`), else
+    /// 0.5.
+    pub round_tolerance: Option<f64>,
     /// Write the specialised operators (`hlineto`, `vhcurveto`…), not only `rlineto` and
     /// `rrcurveto`.
     pub specialise: bool,
@@ -270,12 +294,7 @@ pub struct CffOptions {
 
 impl Default for CffOptions {
     fn default() -> Self {
-        CffOptions {
-            round_tolerance: cff::ROUND_TOLERANCE,
-            specialise: true,
-            max_subrs: fontcraft_cff::subr::DEFAULT_MAX_SUBRS,
-            optimize_widths: false,
-        }
+        CffOptions { round_tolerance: None, specialise: true, max_subrs: fontcraft_cff::subr::DEFAULT_MAX_SUBRS, optimize_widths: false }
     }
 }
 
@@ -337,7 +356,7 @@ impl Default for Options {
     fn default() -> Self {
         Self {
             timestamp: 0,
-            conversion_error: DEFAULT_CONVERSION_ERROR,
+            conversion_error: None,
             keep_direction: false,
             style_name: String::new(),
             remove_overlap: true,
@@ -363,6 +382,8 @@ impl Default for Options {
             stub_gsub: false,
             cff: CffOptions::default(),
             use_my_metrics: true,
+            post_format: None,
+            web_container: false,
         }
     }
 }
@@ -400,8 +421,9 @@ pub fn compile(font: &Font, target: &Target, flavour: Flavour, options: &Options
 /// corner components of the other layers ([`fontcraft_model::corner::insert_all_corner_components`]), then every smart component
 /// drawn as outlines ([`fontcraft_model::smart::draw_smart_components`]), the order in which
 /// both reference compilers apply them when they load a source. Corners go first because a
-/// smart glyph's pole layers can hold corners. A layer whose corners cannot be fitted, and a
-/// smart component that cannot be drawn, stay as they are, with a warning. A font with neither
+/// smart glyph's pole layers can hold corners. Last, components pinned to another master or layer
+/// become the paths they draw ([`fontcraft_model::pinned::draw_pinned_components`]). A layer whose corners cannot be fitted, and a
+/// smart component that cannot be drawn, stay as they are, with a warning. A font with none
 /// is borrowed, not copied. Callers of [`compile_resolved_from`] resolve the prepared font and
 /// pass the source as it is stored.
 pub fn prepare_source<'a>(font: &'a Font, warnings: &mut Vec<String>) -> Cow<'a, Font> {
@@ -428,6 +450,14 @@ pub fn prepare_source<'a>(font: &'a Font, warnings: &mut Vec<String>) -> Cow<'a,
         warnings.extend(report.kept.into_iter().map(|e| format!("a smart component was written as a plain component: {e}")));
         out = Cow::Owned(drawn);
     }
+    let pinned = |l: &fontcraft_model::Layer| {
+        l.shapes.iter().any(|s| matches!(s, fontcraft_model::Shape::Component(c) if fontcraft_model::pinned::is_redirected(&out, c, l)))
+    };
+    if out.glyphs.iter().any(|g| g.layers.iter().any(pinned)) {
+        let (drawn, report) = fontcraft_model::pinned::draw_pinned_components(&out);
+        warnings.extend(report.kept.into_iter().map(|e| format!("a pinned component was written from its glyph's own layer: {e}")));
+        out = Cow::Owned(drawn);
+    }
     out
 }
 
@@ -449,11 +479,15 @@ pub fn sources_at<'a>(font: &'a Font, target: &Target, warnings: &mut Vec<String
 
 /// The static instance `target` names when the compile must interpolate it: it lies away from
 /// every master, it sets manual weights, InterpolationWeightY or Local Interpolation, it lies
-/// at a master where some glyph's alternate layer applies, or a designspace rule holds there.
+/// at a master where some glyph's alternate layer applies, a designspace rule holds there, or a
+/// glyph has a source left out of interpolation.
 pub fn needs_instance_font(font: &Font, target: &Target) -> Option<usize> {
     let Target::Instance(index) = *target else { return None };
     let inst = font.instances.get(index).filter(|i| i.kind.is_none())?;
-    if font.master_at(&inst.location).is_none() || fontcraft_interp::instance::adjusts_interpolation(font, index) {
+    if font.master_at(&inst.location).is_none()
+        || fontcraft_interp::instance::adjusts_interpolation(font, index)
+        || fontcraft_interp::sources::has_inactive(font)
+    {
         return Some(index);
     }
     // A designspace rule that holds at the instance swaps glyphs, which the instance font does.
@@ -574,7 +608,7 @@ pub(crate) fn glyph_stages(
     export_params::without_subset_lists(resolved, options.subset);
     export_params::apply(font, resolved, warnings)?;
     let glyphs = preflight::run(std::mem::take(&mut resolved.glyphs), warnings)?;
-    let glyphs = order::final_order(glyphs, resolved, warnings)?;
+    let glyphs = order::final_order(glyphs, resolved, flavour, warnings)?;
     let mut expansion = Expansion::new(MAX_EXPANDED_ELEMENTS);
     let components = tt_hints::component_options(font, resolved, flavour, options);
     components_opt::apply(font, resolved, glyphs, flavour, &components, &mut expansion, warnings)
@@ -593,9 +627,10 @@ pub(crate) fn compile_stages_with(
     info::expand_tokens(font, &mut resolved, &mut warnings);
     export_params::without_subset_lists(&mut resolved, options.subset);
     let edits = export_params::apply(font, &mut resolved, &mut warnings)?;
+    check_stop()?;
     let glyphs = preflight::run(std::mem::take(&mut resolved.glyphs), &mut warnings)?;
     let synthesised_notdef = !glyphs.iter().any(|g| g.name == ".notdef");
-    let glyphs = order::final_order(glyphs, &resolved, &mut warnings)?;
+    let glyphs = order::final_order(glyphs, &resolved, flavour, &mut warnings)?;
     let (glyphs, cid_plan) = match font {
         Some(font) if flavour == Flavour::Cff && var.is_none() => cid::plan(font, &resolved.params, glyphs, &options.cid, &mut warnings)?,
         _ => (glyphs, None),
@@ -613,16 +648,15 @@ pub(crate) fn compile_stages_with(
         color::plan(font, &resolved, options)
     };
     let (glyphs, made) = color::append_layer_glyphs(font, &mut color_plan, &resolved, glyphs, &mut warnings)?;
+    check_stop()?;
     let layout = layout_tables(font, glyph_data.as_deref(), &resolved, &glyphs, &edits, options, var_layout, &mut warnings)?;
-    let upm = f64::from(resolved.units_per_em);
-    let error =
-        if options.conversion_error.is_finite() && options.conversion_error > 0.0 { options.conversion_error } else { DEFAULT_CONVERSION_ERROR };
+    check_stop()?;
     let mut expansion = Expansion::new(MAX_EXPANDED_ELEMENTS);
     let components = tt_hints::component_options(font, &resolved, flavour, options);
     let glyphs = components_opt::apply(font, &resolved, glyphs, flavour, &components, &mut expansion, &mut warnings)?;
     let settings = outline::Settings {
         flavour,
-        tolerance: upm * error,
+        tolerance: options.conversion_tolerance(&resolved),
         keep_direction: options.keep_direction,
         curves: options.curves,
         drop_implied: options.drop_implied_on_curves,
@@ -642,10 +676,12 @@ pub(crate) fn compile_stages_with(
             (outlines, Extra::default(), kern_table)
         }
     };
+    check_stop()?;
     extra.math = math::plan(font, &resolved, &edits);
     extra.cid = cid_plan;
     let color_tables = color::build(font, &color_plan, &color::GlyphOrder::new(&glyphs, &made)?, options, &mut warnings)?;
     extra.cpal = color_tables.cpal;
+    check_stop()?;
     let bytes = build::assemble(
         font,
         &resolved,
@@ -669,6 +705,11 @@ pub(crate) fn compile_stages_with(
     }
     extras::finish(font, &mut compiled, options)?;
     Ok(compiled)
+}
+
+/// Stops the compile when the host asked it to: between stages and tables, and in the loops over a font's glyphs.
+pub(crate) fn check_stop() -> Result<(), CompileError> {
+    if stop::requested() { Err(CompileError::Cancelled) } else { Ok(()) }
 }
 
 /// The layout stage ([`layout::build`]), variable when `variable` gives the masters; nothing when
@@ -719,7 +760,8 @@ const STUB_GSUB: [u8; 16] = [0, 1, 0, 0, 0, 10, 0, 12, 0, 14, 0, 0, 0, 0, 0, 0];
 
 /// Fills what the glyphs do not store from the glyph database ([`Resolved::apply_glyph_data`])
 /// and gives non-spacing marks no advance (`compile.nonSpacingMarkWidth`), as fontc and glyphsLib
-/// write them for the reference's format; a UFO states its advances as they are. A built-in
+/// write them for the reference's format; a UFO states its advances as they are, and
+/// DisableAllAutomaticBehaviour keeps them. A built-in
 /// database that cannot be read leaves the stored values alone, with a warning.
 pub fn fill_glyph_data(resolved: &mut Resolved, options: &Options, warnings: &mut Vec<String>) {
     if fontcraft_model::is_ufo_family(resolved.format) {
@@ -731,6 +773,9 @@ pub fn fill_glyph_data(resolved: &mut Resolved, options: &Options, warnings: &mu
             Ok(data) => resolved.apply_glyph_data(&data),
             Err(e) => warnings.push(format!("production names and categories come only from the glyphs: {e}")),
         },
+    }
+    if export_params::automatic_disabled(&resolved.params) {
+        return;
     }
     for g in &mut resolved.glyphs {
         if g.category.as_deref() == Some("Mark") && g.sub_category.as_deref() == Some("Nonspacing") {

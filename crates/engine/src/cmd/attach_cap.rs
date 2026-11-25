@@ -46,7 +46,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Fit Cap to Stroke",
             [],
             None,
-            "{glyph: name, layer?: id, caps: [hint indices], fit: bool} turns Fit on or off: with Fit on, the cap's horizontal scale is the width of the stroke end over the cap's own width (node1 to node2, or its advance width) and the stored horizontal scale is kept but not used → {glyph, layer, caps, warning?, selection: {glyph, layer, caps}}",
+            "{glyph: name, layer?: id, caps: [hint indices], fit: bool} turns Fit on or off: with Fit on, the cap's horizontal scale is the width of the stroke end over the cap's own width (node1 to node2, or without them from one end of its path to the other; its drawn width, then its advance width, when that is 0) and the stored horizontal scale is kept but not used → {glyph, layer, caps, warning?, selection: {glyph, layer, caps}}",
             has_doc,
             set_fit
         ),

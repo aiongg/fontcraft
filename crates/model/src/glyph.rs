@@ -361,6 +361,14 @@ impl Component {
     pub fn affine(&self) -> Affine {
         self.transform.affine()
     }
+
+    /// The layer of its base glyph the component is pinned to (`master_id`): the master layer of
+    /// that master, or the layer with that id. `None` for a component that follows the layer it
+    /// is on, and for one pinned to a layer the base glyph does not have.
+    pub fn pinned_layer<'g>(&self, base: &'g Glyph) -> Option<&'g Layer> {
+        let id = self.info.master_id.as_deref()?;
+        base.layer(id).or_else(|| base.layers.iter().find(|l| l.id == id))
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -398,42 +406,29 @@ impl Path {
         Self { closed, nodes, info: PathInfoBox::default(), extra: Extra::new() }
     }
 
-    /// Reverses a path's direction. A closed path keeps its last node, which is where it starts in a
-    /// `.glyphs` file, as glyphsLib's `GSPath.reverse` does (a closed path that ends in off-curve
-    /// nodes is first turned to end on an on-curve node); each on-curve node takes the kind of the
-    /// segment that now ends at it.
+    /// Reverses a path's direction. A closed path keeps its start node, the first on-curve node, as
+    /// glyphsLib's `GSPath.reverse` does (the `.glyphs` format lists that node last), and the node
+    /// list then begins with it; each on-curve node takes the kind of the segment that now ends at
+    /// it.
     pub fn reverse(&mut self) {
-        let p = self;
-        if p.closed
-            && p.nodes.last().is_some_and(|n| n.kind == NodeKind::OffCurve)
-            && let Some(first_on) = p.nodes.iter().position(|n| n.kind != NodeKind::OffCurve)
-        {
-            p.nodes.rotate_left(first_on + 1);
-        }
-        let on: Vec<NodeKind> = p.nodes.iter().filter(|n| n.kind != NodeKind::OffCurve).map(|n| n.kind).collect();
-        let (Some(last_on), Some(last)) = (on.len().checked_sub(1), p.nodes.len().checked_sub(1)) else {
-            p.nodes.reverse();
-            return;
-        };
-        // The original on-curve index of each on-curve node of the reversed path.
-        let order: Vec<usize> = if p.closed {
-            if let Some(head) = p.nodes.get_mut(..last) {
-                head.reverse();
+        if self.closed {
+            if let Some(start) = self.nodes.iter().position(Node::on_curve) {
+                self.nodes.rotate_left(start);
             }
-            (0..last_on).rev().chain([last_on]).collect()
+            if let Some(rest) = self.nodes.get_mut(1..) {
+                rest.reverse();
+            }
         } else {
-            p.nodes.reverse();
-            (0..=last_on).rev().collect()
-        };
-        // The segment that ends at an on-curve node of the reversed path is the one that ended at the
-        // next on-curve node of the original path. An open path's first node starts no segment.
-        let skip = usize::from(!p.closed);
-        let ons = p.nodes.iter_mut().filter(|n| n.kind != NodeKind::OffCurve);
-        for (n, &orig) in ons.zip(&order).skip(skip) {
-            let next = if p.closed && orig == last_on { 0 } else { orig + 1 };
-            if let Some(&kind) = on.get(next) {
-                n.kind = kind;
-            }
+            self.nodes.reverse();
+        }
+        // A segment of the reversed path ended, before, at the on-curve node it now starts from: the
+        // one before its end in the new order, so the kinds move on by one node. An open path's
+        // first node ends no segment.
+        let mut on: Vec<&mut Node> = self.nodes.iter_mut().filter(|n| n.on_curve()).collect();
+        let kinds: Vec<NodeKind> = on.iter().map(|n| n.kind).collect();
+        let before = if self.closed { kinds.last() } else { kinds.first() };
+        for (n, kind) in on.iter_mut().zip(before.into_iter().chain(&kinds)) {
+            n.kind = *kind;
         }
     }
 

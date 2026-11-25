@@ -26,9 +26,9 @@ pub struct Directed {
 /// runs clockwise. A contour is inside another when that one is larger, its box holds the
 /// contour's box, and most of the contour's sample points (nodes and segment midpoints) lie
 /// inside it, so two contours that only overlap are both outer. Each closed contour then starts
-/// at its lowest, then leftmost, on-curve node, and the contours are sorted by their bounding
-/// boxes: left edge, then bottom edge. Open contours keep their direction and start and are
-/// sorted with the rest. Contours with no area keep their direction.
+/// at its lowest, then leftmost, on-curve node, and the contours are sorted by [`shape_order`].
+/// Open contours keep their direction and start and are sorted with the rest. Contours with no
+/// area keep their direction.
 pub fn correct_direction(contours: &[Contour]) -> Result<Directed, PathOpError> {
     let total: usize = contours.iter().map(|c| c.nodes.len()).sum();
     if total > crate::MAX_NODES {
@@ -64,13 +64,16 @@ pub fn correct_direction(contours: &[Contour]) -> Result<Directed, PathOpError> 
     }
     let boxes: Vec<Option<Rect>> = rings.iter().map(Ring::bounds).collect();
     let mut order: Vec<usize> = (0..rings.len()).collect();
-    let corner = |i: usize| boxes.get(i).copied().flatten().map_or((f64::INFINITY, f64::INFINITY), |r| (r.x0, r.y0));
-    order.sort_by(|&a, &b| {
-        let (ka, kb) = (corner(a), corner(b));
-        ka.0.total_cmp(&kb.0).then(ka.1.total_cmp(&kb.1))
-    });
+    let place = |i: usize| shape_order(boxes.get(i).copied().flatten());
+    order.sort_by(|&a, &b| place(a).0.total_cmp(&place(b).0).then(place(a).1.total_cmp(&place(b).1)));
     let contours = order.iter().filter_map(|&i| rings.get(i)).map(Ring::to_contour).collect();
     Ok(Directed { contours, order })
+}
+
+/// Where a shape with these bounds comes in the shape order, from the bottom left to the top right:
+/// by the bottom-left corner's `x + y`, then by its `x`. Shapes without bounds come last.
+pub fn shape_order(bounds: Option<Rect>) -> (f64, f64) {
+    bounds.map_or((f64::INFINITY, f64::INFINITY), |r| (r.x0 + r.y0, r.x0))
 }
 
 /// What the nesting test needs of one closed contour.
@@ -134,7 +137,7 @@ mod tests {
         let inner = rect(100.0, 100.0, 200.0, 200.0).tagged();
         let outer = rect(0.0, 0.0, 300.0, 300.0);
         let out = correct_direction(&[inner, outer]).unwrap();
-        assert_eq!(out.order, vec![1, 0], "sorted by left edge");
+        assert_eq!(out.order, vec![1, 0], "the outer contour is nearer the bottom left");
         let areas: Vec<f64> = out.contours.iter().map(|c| c.to_bez().unwrap().area()).collect();
         assert_eq!(areas, vec![90_000.0, -10_000.0]);
         // The counter starts at its lowest, leftmost node and keeps its node tags.
@@ -146,6 +149,17 @@ mod tests {
         assert_eq!(tags, vec![0, 1, 2, 3]);
         // A second run changes nothing.
         assert_eq!(correct_direction(&out.contours).unwrap().contours, out.contours);
+    }
+
+    #[test]
+    fn contours_run_from_the_bottom_left_to_the_top_right() {
+        // The bar of a t reaches past its stem's left edge, high up: the stem comes first.
+        let stem = rect(60.0, 0.0, 160.0, 800.0);
+        let bar = rect(-5.0, 600.0, 310.0, 680.0);
+        assert_eq!(correct_direction(&[bar, stem]).unwrap().order, vec![1, 0]);
+        // Two dots side by side: the left one first.
+        let dots = [rect(250.0, 660.0, 380.0, 800.0), rect(40.0, 660.0, 170.0, 800.0)];
+        assert_eq!(correct_direction(&dots).unwrap().order, vec![1, 0]);
     }
 
     #[test]

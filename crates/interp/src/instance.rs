@@ -165,21 +165,43 @@ fn clean(mut scalars: Vec<f64>) -> Vec<f64> {
 /// The layer of `sources`' glyph at `location`, interpolated; its id and master are the origin
 /// master's.
 pub fn interpolate_layer(font: &Font, sources: &GlyphSources, location: &Location, options: &InterpOptions) -> Result<Layer, InterpError> {
-    let designspace = Designspace::new(font)?;
+    interpolate_layer_in(font, &Designspace::new(font)?, sources, location, options)
+}
+
+/// [`interpolate_layer`] in `designspace` (`sources` and `location` are in its axes): a variable
+/// font setting's, for one.
+pub fn interpolate_layer_in(
+    font: &Font,
+    designspace: &Designspace,
+    sources: &GlyphSources,
+    location: &Location,
+    options: &InterpOptions,
+) -> Result<Layer, InterpError> {
     let origin = designspace.origin().map(|m| m.id.clone()).ok_or_else(|| InterpError::BadMasterSetup("the font has no masters".into()))?;
     let glyph = font.glyph(&sources.glyph).ok_or_else(|| InterpError::UnknownGlyph(sources.glyph.clone()))?;
-    let at = At { x: location.clone(), y: y_location(&designspace, location, options) };
+    let at = At { x: location.clone(), y: y_location(designspace, location, options) };
     let mut cache = ModelCache::new();
-    let (layers, locations, weights) = glyph_inputs(&designspace, glyph, sources, &at, None, options, &mut cache)?;
+    let (layers, locations, weights) = glyph_inputs(designspace, glyph, sources, &at, None, options, &mut cache)?;
     match combine(&layers, &weights, false)? {
         Some(mut layer) => {
             if options.hoi {
-                apply_hoi(&designspace, &layers, &locations, &weights, &mut layer)?;
+                apply_hoi(designspace, &layers, &locations, &weights, &mut layer)?;
             }
             Ok(as_master_layer(layer, &origin))
         }
         None => Err(incompatible(font, sources)),
     }
+}
+
+/// The weight of each source `sources`' glyph interpolates from at `location`, by layer id. The
+/// weights sum to 1; a source alternate layers replace there, and an empty layer the
+/// interpolation skips, have no entry.
+pub fn source_weights(font: &Font, sources: &GlyphSources, location: &Location, options: &InterpOptions) -> Result<Vec<(String, f64)>, InterpError> {
+    let designspace = Designspace::new(font)?;
+    let glyph = font.glyph(&sources.glyph).ok_or_else(|| InterpError::UnknownGlyph(sources.glyph.clone()))?;
+    let at = At { x: location.clone(), y: None };
+    let (layers, _, weights) = glyph_inputs(&designspace, glyph, sources, &at, None, options, &mut ModelCache::new())?;
+    Ok(layers.iter().map(|l| l.id.clone()).zip(weights.x).collect())
 }
 
 /// `font` reduced to one master at the location of the instance at `instance` (an index into

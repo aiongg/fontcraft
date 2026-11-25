@@ -5,6 +5,9 @@
 //! Every glyph is drawn in the current master; `layers.select` shows single glyphs in another layer (another
 //! master's, or a backup). The shown glyph's layer is the active layer: the canvas draws it and the tools edit it.
 //! The metric lines and zones are those of its master.
+//!
+//! An item of the edit view's text can have its own layer (`edit.showAllMasters`). While such an item is the edited
+//! one, its layer is the active layer, and the Layers panel and the master icons change that item alone.
 
 use std::collections::BTreeMap;
 
@@ -34,7 +37,7 @@ const COMMANDS: &[UiCommand] = &[
         label: "Select Master",
         menu: &[],
         shortcut: None,
-        params: "{master: index (0 is the first master) | id | name} draw every glyph in this master; layers picked for single glyphs and the row selection are dropped",
+        params: "{master: index (0 is the first master) | id | name} draw every glyph in this master; layers picked for single glyphs and the row selection are dropped. A text item with its own layer keeps it, except the edited one, which shows this master",
     },
     UiCommand {
         id: "layers.onlyShowLayersFromCurrentMaster",
@@ -66,6 +69,8 @@ pub struct LayersView {
     pub master: Option<String>,
     /// The layer single glyphs are shown in instead of their layer of `master`, by glyph name.
     pub layers: BTreeMap<String, String>,
+    /// The glyph and the own layer of the edited text item, when it has one; `canvas::text::sync_layer` keeps it.
+    pub item: Option<(String, String)>,
     /// The selected rows of the shown glyph; empty selects the active layer's row.
     pub selection: Vec<String>,
     /// "Only Show Layers from Current Master".
@@ -96,8 +101,20 @@ pub fn current_master_id(font: &Font, view: &LayersView) -> Option<String> {
     current_master(font, view).map(|m| m.id.clone())
 }
 
-/// The layer `glyph` is shown in: the one picked for it, else its layer of the current master.
+/// The layer `glyph` is shown in: the edited text item's own, else [`base_layer`].
 pub fn shown_layer<'f>(font: &'f Font, view: &LayersView, glyph: &'f Glyph) -> Option<&'f Layer> {
+    if let Some((name, id)) = &view.item
+        && *name == glyph.name
+        && let Some(layer) = glyph.layers.iter().find(|l| l.id == *id)
+    {
+        return Some(layer);
+    }
+    base_layer(font, view, glyph)
+}
+
+/// The layer `glyph` is shown in where no text item has its own: the one picked for it, else its layer of the current
+/// master.
+pub fn base_layer<'f>(font: &'f Font, view: &LayersView, glyph: &'f Glyph) -> Option<&'f Layer> {
     if let Some(id) = view.layers.get(&glyph.name)
         && let Some(layer) = glyph.layers.iter().find(|l| l.id == *id)
     {
@@ -191,11 +208,16 @@ fn select_layer(app: &mut FontCraftApp, params: &Value) -> Result<(), String> {
         return Err("`extend` works on the rows of the shown glyph only".into());
     }
     let mut next = app.view.layers.clone();
+    let mut own = None;
     let active = font.glyph(&edited).and_then(|g| shown_layer(font, &app.view.layers, g)).map(|l| l.id.clone());
     match extend {
         None => {
             let master = current_master(font, &app.view.layers).map(|m| m.id.clone());
             for name in &glyphs {
+                if *name == edited && next.item.is_some() {
+                    own = Some(layer.clone());
+                    continue;
+                }
                 let Some(l) = font.glyph(name).and_then(|g| g.layers.iter().find(|l| l.id == layer)) else { continue };
                 if l.is_master_layer() && master.as_deref() == Some(l.master.as_str()) {
                     next.layers.remove(name);
@@ -227,6 +249,9 @@ fn select_layer(app: &mut FontCraftApp, params: &Value) -> Result<(), String> {
         }
     }
     app.view.layers = next;
+    if let Some(layer) = own {
+        crate::canvas::text::set_item_layer(app, Some(&layer));
+    }
     Ok(())
 }
 
@@ -247,10 +272,18 @@ fn select_master(app: &mut FontCraftApp, params: &Value) -> Result<(), String> {
         _ => return Err("`master` must be an index, an id or a name".into()),
     };
     let id = master.id.clone();
+    // The edited item keeps a layer of its own while the glyph has one in the master.
+    let own = match &app.view.layers.item {
+        Some((glyph, _)) => Some(font.glyph(glyph).is_some_and(|g| g.layer(&id).is_some())),
+        None => None,
+    };
     let view = &mut app.view.layers;
-    view.master = Some(id);
+    view.master = Some(id.clone());
     view.layers.clear();
     view.selection.clear();
+    if let Some(has) = own {
+        crate::canvas::text::set_item_layer(app, has.then_some(id.as_str()));
+    }
     Ok(())
 }
 

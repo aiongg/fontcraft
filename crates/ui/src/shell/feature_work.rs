@@ -6,19 +6,27 @@
 //!   desktop; at once on the web and in tests with inline jobs), with the font of the revision shown then. One check
 //!   runs at a time; a check whose draft is no longer the one typed when it lands is dropped, and the newest draft is
 //!   checked next. The answer goes to the view state (`FeaturesView::checked`), which the code editor underlines.
-//! - **Compile.** After `font.features.setCode`, `update` or `updateEntry`, the preview fonts of the current master are
-//!   built in the background once the document has stood still for [`CHECK_PAUSE`] seconds
-//!   (`fontcraft_engine::feature_state::prebuild`). When the build lands on the revision it read, `font.features.compile`
-//!   runs on the window's thread and takes that build instead of compiling; an edit in between starts it again.
+//! - **Compile.** After `font.features.setCode`, `update` or `updateEntry`, the current master is compiled in the
+//!   background once the document has stood still for [`CHECK_PAUSE`] seconds, and at once when the tab's Compile button
+//!   asks ([`ask`]; the button is busy meanwhile). The job runs all of `font.features.compile` but the keeping of its
+//!   result (`fontcraft_engine::feature_state::compile_ahead`). When it lands on the revision it read,
+//!   `font.features.compile` runs on the window's thread and takes that result; an edit in between starts it again.
+//! - **Instance compile.** While the Exports tab shows one instance with feature-code parameters, that instance's code
+//!   is compiled the same way (`fontcraft_engine::cmd::features_check::compile_instance`): at once for an instance not
+//!   compiled yet, after the pause when the document changed. A result of a revision or an instance no longer shown is
+//!   dropped. The answer goes to the view state (`ExportsView::problems`), which the tab shows under the parameters.
 
 use std::sync::{Arc, Mutex};
 
-use fontcraft_engine::cmd::features_check::{CheckContext, check_context, check_font};
-use fontcraft_engine::feature_state::SessionFeaturesExt as _;
+use craft::behavior::dock::PanelState;
+use fontcraft_engine::cmd::features_check::{CheckContext, check_context, check_font, compile_instance};
+use fontcraft_engine::feature_state::{AheadCompile, SessionFeaturesExt as _, compile_ahead};
 use serde_json::{Value, json};
 
-use crate::app::FontCraftApp;
-use crate::shell::font_info_tabs::{CheckedDraft, FeatureDraft};
+use crate::app::{FontCraftApp, Msg};
+use crate::shell::dock::PanelId;
+use crate::shell::font_info::FontInfoTab;
+use crate::shell::font_info_tabs::{CheckedDraft, FeatureDraft, InstanceProblems, ParamProblem};
 
 /// How long, in seconds, a draft or a document must stand still before it is checked or compiled.
 pub const CHECK_PAUSE: f64 = 0.5;
@@ -31,6 +39,12 @@ type Landing<T> = Arc<Mutex<Option<T>>>;
 /// What a compile job read: the document's id and revision, and the master.
 type CompileKey = (u64, u64, String);
 
+/// What an instance compile reads: the document's id and revision, and the instance's index.
+type InstanceKey = (u64, u64, usize);
+
+/// An instance compile under way: what it reads, the parameters it compiles, and its result to come.
+type InstanceJob = (InstanceKey, Vec<ParamProblem>, Landing<Result<Value, String>>);
+
 /// The checks and compiles under way and what waits for them.
 #[derive(Default)]
 pub struct FeatureWork {
@@ -42,8 +56,14 @@ pub struct FeatureWork {
     compile_wanted: bool,
     /// The document revision last seen while a compile waits, and the time it was first seen.
     still: Option<((u64, u64), f64)>,
-    /// The build under way.
-    compile: Option<(CompileKey, Landing<()>)>,
+    /// The compile under way.
+    compile: Option<(CompileKey, Landing<Option<AheadCompile>>)>,
+    /// The document and master the Compile button asked for, until that compile lands.
+    asked: Option<(u64, String)>,
+    /// The instance the Exports tab shows, and the time it was first seen at this revision.
+    shown: Option<(InstanceKey, f64)>,
+    /// The instance compile under way.
+    instance: Option<InstanceJob>,
 }
 
 impl FeatureWork {
@@ -56,6 +76,9 @@ impl FeatureWork {
         if let Some((_, since)) = &mut self.still {
             *since = f64::NEG_INFINITY;
         }
+        if let Some((_, since)) = &mut self.shown {
+            *since = f64::NEG_INFINITY;
+        }
     }
 }
 
@@ -63,6 +86,32 @@ impl FeatureWork {
 pub fn after_run(app: &mut FontCraftApp, id: &str) {
     if matches!(id, "font.features.setCode" | "font.features.update" | "font.features.updateEntry") {
         app.feature_work.compile_wanted = true;
+    }
+}
+
+/// Compiles the active document's current master in the background now: the Features tab's Compile button. A compile
+/// of the same revision and master under way is the one asked for.
+pub fn ask(app: &mut FontCraftApp) -> Result<(), String> {
+    let doc = app.session.active().ok_or("no document is open")?;
+    let id = doc.id;
+    let master = crate::shell::masters::current_master_id(&doc.font, &app.view.layers).ok_or("the font has no master")?;
+    check_context(&app.session).map_err(|e| e.to_string())?;
+    app.feature_work.asked = Some((id, master));
+    if app.feature_work.compile.is_none() {
+        app.feature_work.compile_wanted = false;
+        app.feature_work.still = None;
+        start_compile(app);
+    }
+    show_busy(app);
+    Ok(())
+}
+
+/// The Compile button is busy while the compile it asked for is under way.
+fn show_busy(app: &mut FontCraftApp) {
+    let busy = app.feature_work.asked.is_some();
+    if app.view.font_info.features.compiling != busy {
+        app.view.font_info.features.compiling = busy;
+        app.view_changed();
     }
 }
 
@@ -76,12 +125,9 @@ pub fn logic(app: &mut FontCraftApp, ctx: &egui::Context) {
 
 /// [`logic`] at time `now`, in seconds; returns how many seconds until a frame should look again.
 pub fn step(app: &mut FontCraftApp, now: f64) -> Option<f64> {
-    let check = step_check(app, now);
-    let compile = step_compile(app, now);
-    match (check, compile) {
-        (Some(a), Some(b)) => Some(a.min(b)),
-        (a, b) => a.or(b),
-    }
+    let waits = [step_check(app, now), step_compile(app, now), step_instance(app, now)];
+    show_busy(app);
+    waits.into_iter().flatten().reduce(f64::min)
 }
 
 fn take<T>(landing: &Landing<T>) -> Option<T> {
@@ -160,16 +206,22 @@ fn run_check(font: &fontcraft_engine::model::Font, cx: &CheckContext, params: &V
 
 fn step_compile(app: &mut FontCraftApp, now: f64) -> Option<f64> {
     let active = app.session.active().map(|d| (d.id, d.revision));
+    if app.feature_work.asked.as_ref().is_some_and(|(id, _)| active.map(|a| a.0) != Some(*id)) {
+        app.feature_work.asked = None;
+    }
     if let Some((key, landing)) = &app.feature_work.compile
-        && take(landing).is_some()
+        && let Some(result) = take(landing)
     {
         let key = key.clone();
         app.feature_work.compile = None;
         if active == Some((key.0, key.1)) {
-            // The build of this revision is kept: the compile takes it and only maps the diagnostics.
-            let _ = app.session.execute("font.features.compile", &json!({ "master": key.2 }));
+            land_compile(app, key, result);
         } else {
             app.feature_work.compile_wanted = true;
+        }
+        if app.feature_work.asked.is_some() && !app.feature_work.compile_wanted {
+            // The compile that landed was of another master.
+            start_compile(app);
         }
     }
     let work = &mut app.feature_work;
@@ -198,29 +250,44 @@ fn step_compile(app: &mut FontCraftApp, now: f64) -> Option<f64> {
     app.feature_work.compile.is_some().then_some(POLL)
 }
 
-/// Starts the background build of the active document's current master.
+/// Keeps the compile that landed on the revision it read: `font.features.compile` takes it and only maps the
+/// diagnostics. A compile that failed has no result; the command then says why.
+fn land_compile(app: &mut FontCraftApp, (doc, _, master): CompileKey, result: Option<AheadCompile>) {
+    if let Some(compile) = result {
+        app.session.keep_ahead_compile(compile);
+    }
+    let params = json!({ "master": master });
+    if app.feature_work.asked.as_ref().is_some_and(|(d, m)| *d == doc && *m == master) {
+        app.feature_work.asked = None;
+        if let Err(error) = app.apply_msg(Msg::run("font.features.compile", params)) {
+            app.status = error;
+        }
+    } else {
+        let _ = app.session.execute("font.features.compile", &params);
+    }
+}
+
+/// Starts the background compile of the active document: of the master the Compile button asked for, else of the
+/// current one. Nothing waits for a compile that cannot start.
 fn start_compile(app: &mut FontCraftApp) {
+    let asked = app.feature_work.asked.take();
     let Some(doc) = app.session.active() else { return };
     let (id, revision, font) = (doc.id, doc.revision, Arc::clone(&doc.font));
-    let Some(master) = crate::shell::masters::current_master_id(&font, &app.view.layers) else { return };
+    let asked_master = asked.filter(|(d, _)| *d == id).map(|(_, m)| m);
+    let Some(master) = asked_master.clone().or_else(|| crate::shell::masters::current_master_id(&font, &app.view.layers)) else { return };
     let Ok(cx) = check_context(&app.session) else { return };
-    let options = fontcraft_engine::compile::Options {
-        glyph_data: fontcraft_engine::compile::DataRef(Some(cx.glyph_data)),
-        feature_dir: cx.include_dir,
-        include_check: fontcraft_engine::file_access::include_check(),
-        ..fontcraft_engine::compile::Options::default()
-    };
+    app.feature_work.asked = asked_master.map(|m| (id, m));
+    let previous = app.session.feature_state_of(id);
     let builds = app.session.preview_builds();
-    let landing: Landing<()> = Arc::default();
+    let landing: Landing<Option<AheadCompile>> = Arc::default();
     let out = Arc::clone(&landing);
     let wake = app.window.clone();
     let key: CompileKey = (id, revision, master);
     let job_master = key.2.clone();
     let job = move || {
-        let _ =
-            fontcraft_engine::guard::catch_panic(|| fontcraft_engine::feature_state::prebuild(&font, id, revision, &job_master, &options, &builds));
+        let result = fontcraft_engine::guard::catch_panic(|| compile_ahead(&font, id, revision, &job_master, &cx, previous, &builds));
         if let Ok(mut slot) = out.lock() {
-            *slot = Some(());
+            *slot = Some(result.ok().flatten());
         }
         if let Some(ctx) = wake {
             ctx.request_repaint();
@@ -228,4 +295,99 @@ fn start_compile(app: &mut FontCraftApp) {
     };
     app.feature_work.compile = Some((key, landing));
     app.host.jobs().spawn("feature code compile", Box::new(job));
+}
+
+/// The one instance the Exports tab shows while Font Info shows that tab.
+fn shown_instance(app: &FontCraftApp) -> Option<InstanceKey> {
+    if app.view.font_info.tab != FontInfoTab::Exports || app.view.workspace.layout.panel_state(&PanelId::FontInfo) == PanelState::Hidden {
+        return None;
+    }
+    let doc = app.session.active()?;
+    let selected = crate::app::models::font_exports::shown_selection(&app.view.font_info.exports.selected, doc.font.instances.len());
+    match selected.as_slice() {
+        [one] => Some((doc.id, doc.revision, *one)),
+        _ => None,
+    }
+}
+
+fn step_instance(app: &mut FontCraftApp, now: f64) -> Option<f64> {
+    let wanted = shown_instance(app);
+    if let Some((key, _, landing)) = &app.feature_work.instance
+        && let Some(result) = take(landing)
+    {
+        let key = *key;
+        let job = app.feature_work.instance.take();
+        if let Some((_, mut params, _)) = job
+            && wanted == Some(key)
+        {
+            if let Ok(reply) = result {
+                crate::app::models::font_exports::place_problems(&mut params, &reply);
+            }
+            keep_problems(app, key, params);
+        }
+    }
+    let Some(wanted) = wanted else {
+        app.feature_work.shown = None;
+        return None;
+    };
+    if app.feature_work.instance.is_some() {
+        return Some(POLL);
+    }
+    let known = app.view.font_info.exports.problems.as_ref().map(|p| (p.doc, p.revision, p.instance));
+    if known == Some(wanted) {
+        return None;
+    }
+    let since = match app.feature_work.shown {
+        Some((seen, since)) if seen == wanted => since,
+        _ => {
+            app.feature_work.shown = Some((wanted, now));
+            now
+        }
+    };
+    // An instance compiled before waits until the document stands still.
+    let wait = CHECK_PAUSE - (now - since);
+    if known.is_some_and(|(doc, _, instance)| (doc, instance) == (wanted.0, wanted.2)) && wait > 0.0 {
+        return Some(wait.max(POLL));
+    }
+    start_instance(app, wanted);
+    app.feature_work.instance.is_some().then_some(POLL)
+}
+
+/// The Exports tab shows `params`, what the compile of `key` found.
+fn keep_problems(app: &mut FontCraftApp, (doc, revision, instance): InstanceKey, params: Vec<ParamProblem>) {
+    let found = Some(InstanceProblems { doc, revision, instance, params });
+    let before = app.view.font_info.exports.problems.as_ref().map(|p| &p.params);
+    let changed = before != found.as_ref().map(|p| &p.params);
+    app.view.font_info.exports.problems = found;
+    if changed {
+        app.view_changed();
+    }
+}
+
+/// Starts the instance compile of `key`, when the instance has a feature-code parameter switched on.
+fn start_instance(app: &mut FontCraftApp, key: InstanceKey) {
+    let Some(doc) = app.session.active() else { return };
+    let font = Arc::clone(&doc.font);
+    let params = crate::app::models::font_exports::code_params(&font, key.2);
+    if params.is_empty() {
+        keep_problems(app, key, params);
+        return;
+    }
+    let Ok(cx) = check_context(&app.session) else { return };
+    let landing: Landing<Result<Value, String>> = Arc::default();
+    let out = Arc::clone(&landing);
+    let wake = app.window.clone();
+    let instance = key.2;
+    let job = move || {
+        let raw = json!({ "instance": instance });
+        let result = fontcraft_engine::guard::catch_panic(|| compile_instance(&font, &cx, &raw).map_err(|e| e.to_string()));
+        if let Ok(mut slot) = out.lock() {
+            *slot = Some(result.unwrap_or_else(Err));
+        }
+        if let Some(ctx) = wake {
+            ctx.request_repaint();
+        }
+    };
+    app.feature_work.instance = Some((key, params, landing));
+    app.host.jobs().spawn("instance feature code compile", Box::new(job));
 }

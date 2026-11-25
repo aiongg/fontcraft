@@ -13,8 +13,8 @@
 
 use fontcraft_geom::{BezPath, ParamCurve, ParamCurveExtrema, ParamCurveNearest, Point};
 use fontcraft_model::attach::{Attachment, attachment, fit_brush, fit_cap, fit_segment};
-use fontcraft_model::corner::{CornerTarget, corner_hint, insert_corners, is_corner};
-use fontcraft_model::{Font, Hint, Layer, Path, Shape};
+use fontcraft_model::corner::{CornerHint, CornerTarget, corner_hint, fit_extra_corners, insert_corners, is_corner};
+use fontcraft_model::{Font, Hint, Layer, Node, Path, Shape};
 
 use crate::geometry::finite;
 use crate::scene::Scene;
@@ -84,27 +84,40 @@ pub struct AttachmentMark {
     pub kind: AttachmentKind,
     /// The host path's shape index.
     pub shape: usize,
-    /// The segments of the fitted host path that touch an inserted node, in font units.
+    /// What the canvas highlights, in font units: the segments of the fitted host path that touch
+    /// an inserted node; for a cap only its own outline, without the stem's two sides.
     pub band: BezPath,
     /// The segments between two inserted nodes: the attachment's own outline, which a click hits.
     pub outline: BezPath,
 }
 
 /// The fitted attachments of `layer` whose kind `wanted` accepts, in hint order, at most
-/// [`MAX_ATTACHMENTS`]. An attachment that does not fit (its glyph is missing, it sits on an
-/// extra node) has no mark.
+/// [`MAX_ATTACHMENTS`]. An attachment that does not fit (its glyph is missing, its extra node is no
+/// longer a crossing) has no mark. A corner on an extra node is marked on the outline of the two
+/// paths with their overlap removed, where it is drawn; its host is the first of the two.
 pub fn marks(font: &Font, layer: &Layer, wanted: impl Fn(AttachmentKind) -> bool) -> Vec<AttachmentMark> {
     let mut out = Vec::new();
+    let extra = if wanted(AttachmentKind::Corner) { extra_corners(font, layer) } else { Vec::new() };
     for (i, hint) in layer.info.hints.iter().enumerate() {
         if out.len() >= MAX_ATTACHMENTS {
             break;
         }
         let Some(k) = kind(hint).filter(|k| wanted(*k)) else { continue };
         let fitted = match k {
-            AttachmentKind::Corner => corner_hint(hint).ok().flatten().and_then(|corner| match corner.target {
-                CornerTarget::Node { shape, .. } => insert_corners(font, &with_one_hint(layer, i)).ok().flatten().map(|shapes| (shape, shapes)),
-                CornerTarget::Intersection { .. } => None,
-            }),
+            AttachmentKind::Corner => match corner_hint(hint) {
+                Ok(Some(CornerHint { target: CornerTarget::Node { shape, .. }, .. })) => {
+                    insert_corners(font, &with_one_hint(layer, i)).ok().flatten().map(|shapes| (shape, shapes))
+                }
+                Ok(Some(CornerHint { target: CornerTarget::Intersection { shape, .. }, .. })) => {
+                    if let Some((_, before, after)) = extra.iter().find(|(at, ..)| *at == i)
+                        && let Some((band, outline)) = inserted(before, after, &[])
+                    {
+                        out.push(AttachmentMark { hint: i, kind: k, shape, band, outline });
+                    }
+                    continue;
+                }
+                _ => None,
+            },
             AttachmentKind::Cap => match attachment(hint) {
                 Ok(Some(Attachment::Cap(cap))) => fit_cap(font, &layer.master, &layer.shapes, &cap).ok().map(|shapes| (cap.shape, shapes)),
                 _ => None,
@@ -114,7 +127,7 @@ pub fn marks(font: &Font, layer: &Layer, wanted: impl Fn(AttachmentKind) -> bool
                     let Ok(shapes) = fit_segment(font, &layer.master, &layer.shapes, &seg) else { continue };
                     let mark = match (layer.shapes.get(seg.shape), shapes.get(seg.shape)) {
                         (Some(Shape::Path(before)), Some(Shape::Path(after))) => {
-                            inserted(before, after).or_else(|| host_segment(before, seg.node).map(|b| (b.clone(), b)))
+                            inserted(before, after, &[]).or_else(|| host_segment(before, seg.node).map(|b| (b.clone(), b)))
                         }
                         _ => None,
                     };
@@ -143,12 +156,33 @@ pub fn marks(font: &Font, layer: &Layer, wanted: impl Fn(AttachmentKind) -> bool
         };
         let Some((shape, shapes)) = fitted else { continue };
         if let (Some(Shape::Path(before)), Some(Shape::Path(after))) = (layer.shapes.get(shape), shapes.get(shape))
-            && let Some((band, outline)) = inserted(before, after)
+            && let Some((band, outline)) = inserted(before, after, &cap_nodes(before, hint))
         {
+            // The two sides the cap cuts belong to the stem (`cap.highlightAndSelection`).
+            let band = if k == AttachmentKind::Cap { outline.clone() } else { band };
             out.push(AttachmentMark { hint: i, kind: k, shape, band, outline });
         }
     }
     out
+}
+
+/// The corners of `layer` on extra nodes that fit, at most [`MAX_ATTACHMENTS`]: the hint's index, and the joined path
+/// before and after the corner is fitted into it.
+fn extra_corners(font: &Font, layer: &Layer) -> Vec<(usize, Path, Path)> {
+    let (at, corners): (Vec<usize>, Vec<CornerHint>) = layer
+        .info
+        .hints
+        .iter()
+        .enumerate()
+        .filter_map(|(i, h)| Some((i, corner_hint(h).ok().flatten()?)))
+        .filter(|(_, c)| matches!(c.target, CornerTarget::Intersection { .. }))
+        .take(MAX_ATTACHMENTS)
+        .unzip();
+    if corners.is_empty() {
+        return Vec::new();
+    }
+    let fitted = fit_extra_corners(font, &layer.master, &layer.shapes, &corners);
+    at.into_iter().zip(fitted).filter_map(|(i, paths)| paths.map(|(before, after)| (i, before, after))).collect()
 }
 
 /// `layer` with only the hint at `index`.
@@ -174,15 +208,23 @@ fn host_segment(path: &Path, file_node: usize) -> Option<BezPath> {
     Some(out)
 }
 
+/// The nodes of `path` that the cap `hint` stores takes the place of; none for another hint.
+fn cap_nodes(path: &Path, hint: &Hint) -> Vec<usize> {
+    let Ok(Some(Attachment::Cap(cap))) = attachment(hint) else { return Vec::new() };
+    let len = path.nodes.len();
+    if path.closed && len > 0 { vec![(cap.node + 1) % len, (cap.node + 2) % len] } else { vec![cap.node, cap.node + 1] }
+}
+
 /// What fitting an attachment into `before` put into `after`: the segments touching a node
-/// `before` lacks, and those of them whose two end nodes are both new. `None` when nothing was
-/// put in.
-fn inserted(before: &Path, after: &Path) -> Option<(BezPath, BezPath)> {
+/// `before` lacks, and those of them whose two end nodes are both new. The nodes `replaced` of
+/// `before` do not count as its own: the attachment's end nodes may lie on them. `None` when
+/// nothing was put in.
+fn inserted(before: &Path, after: &Path, replaced: &[usize]) -> Option<(BezPath, BezPath)> {
     if after.nodes.len() > MAX_BAND_NODES || before.nodes.len() > MAX_BAND_NODES {
         return None;
     }
-    let fresh: Vec<bool> =
-        after.nodes.iter().map(|n| !before.nodes.iter().any(|o| (o.x - n.x).abs() < SAME_NODE && (o.y - n.y).abs() < SAME_NODE)).collect();
+    let kept: Vec<&Node> = before.nodes.iter().enumerate().filter(|(i, _)| !replaced.contains(i)).map(|(_, n)| n).collect();
+    let fresh: Vec<bool> = after.nodes.iter().map(|n| !kept.iter().any(|o| (o.x - n.x).abs() < SAME_NODE && (o.y - n.y).abs() < SAME_NODE)).collect();
     let is_fresh = |i: usize| fresh.get(i).copied().unwrap_or(false);
     let node = |i: usize| after.nodes.get(i).map(|n| Point::new(n.x, n.y));
     let mut band = BezPath::new();

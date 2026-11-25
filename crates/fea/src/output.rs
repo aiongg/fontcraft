@@ -37,6 +37,8 @@ pub struct MetricsValues {
     pub ascender: Option<i16>,
     pub descender: Option<i16>,
     pub line_gap: Option<i16>,
+    pub caret_slope_rise: Option<i16>,
+    pub caret_slope_run: Option<i16>,
 }
 
 /// The values a `table OS/2` block sets; `None` fields keep the value the compiler computes.
@@ -61,6 +63,24 @@ pub struct Os2Values {
     pub typo_line_gap: Option<i16>,
     pub lower_optical_point_size: Option<u16>,
     pub upper_optical_point_size: Option<u16>,
+    pub subscript_x_size: Option<i16>,
+    pub subscript_x_offset: Option<i16>,
+    pub subscript_y_size: Option<i16>,
+    pub subscript_y_offset: Option<i16>,
+    pub superscript_x_size: Option<i16>,
+    pub superscript_x_offset: Option<i16>,
+    pub superscript_y_size: Option<i16>,
+    pub superscript_y_offset: Option<i16>,
+    pub strikeout_size: Option<i16>,
+    pub strikeout_position: Option<i16>,
+}
+
+/// An anonymous block: data the code carries for another program.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct AnonymousBlock {
+    pub tag: String,
+    /// The lines between the braces, as written.
+    pub text: String,
 }
 
 /// The result of a compile. Tables are serialised; `None` when the code and the generated
@@ -84,6 +104,8 @@ pub struct Compiled {
     pub gdef_from_code: bool,
     /// Where each lookup came from, when [`crate::CompileRequest::debug_lookups`] asks for it.
     pub lookup_debug: Option<LookupDebug>,
+    /// The code's anonymous blocks, in order; each is also quoted in a warning.
+    pub anonymous: Vec<AnonymousBlock>,
     /// Warnings that did not stop the compile.
     pub warnings: Vec<Diagnostic>,
 }

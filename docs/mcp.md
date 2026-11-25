@@ -53,8 +53,10 @@ here. Headless, they are not listed, and a call answers that the tool needs the 
 |---|---|---|---|
 | `screenshot` | `{}` | `ui.screenshot` | the window as a PNG image, then `{width, height, pixelsPerPoint}` as text |
 | `render` | `{glyphs?, text?, master?, layer?, size?, scale?}` | `ui.render` | the glyphs filled black on white as a PNG image, then `{width, height, glyphs, master?}` as text |
+| `elements` | `{prefix?, role?, window?, offset?, limit?}` | `ui.elements` | what the windows show: `{elements, total, truncated}` |
 | `pointer` | `{events}` | `ui.pointer` | the active tool's state, selection and errors |
-| `click` | `{id}` or `{x, y, button?, count?, mods?, shift?, alt?, cmd?, ctrl?}` | `ui.click` | a dialog control's result, or `{queued, pending}` for a window click |
+| `click` | `{id}`; or `{element}` or `{x, y}`, with `button?, count?, mods?, shift?, alt?, cmd?, ctrl?` | `ui.click` | a dialog control's result, or `{queued, window}` for a window click |
+| `set` | `{element, value}` | `ui.set` | `{changed, queued?, window?}`, and the `value` a slider reached |
 | `key` | `{key, shift?, alt?, cmd?, ctrl?, action?}` | `ui.key` | whether anything took the key; the command and result of a menu shortcut |
 | `text` | `{text}` | `ui.text` | `{field}`, or `{keys, handled}` |
 | `menu` | `{}` | `ui.menu.list` | the menu tree |
@@ -68,12 +70,14 @@ here. Headless, they are not listed, and a call answers that the tool needs the 
   `render` take no `path`: the server writes no file.
 - A window click is handed to the window over the next frames. Take a `screenshot` to see the
   result.
+- `elements` gives the ids that `click` and `set` take; [Control protocol](control-protocol.md#elements)
+  has the fields of an element and what each kind of element takes.
 - Open a dialog with `run_command` and the UI command `dialog.open`.
 - Under `--read-only`, `--allow` or `--deny` the server cannot see in advance which command a
-  click or key will run. So `pointer`, `click`, `key` and `text` are not listed and are refused.
+  click or key will run. So `pointer`, `click`, `set`, `key` and `text` are not listed and are refused.
   `menu` checks its command, and `dialog_set` and `dialog_confirm` check the open dialog's
   command and parameters, before they act; a dialog that names no command is refused.
-  `screenshot`, `render`, `dialog_inspect` and `dialog_cancel` always run.
+  `screenshot`, `render`, `elements`, `dialog_inspect` and `dialog_cancel` always run.
 
 ## Permissions
 
@@ -220,6 +224,19 @@ the task, in order; when the server refuses some of them, the text says which.
 `resources/templates/list`. Names in URIs are percent-encoded. A resource that does not exist,
 or that the server's rules refuse, is error `-32002`.
 
+### Subscriptions
+
+`resources/subscribe {uri}` asks to hear of changes of `fontcraft://document` or of a glyph; the
+other resources cannot be subscribed to. The resource must be readable. `resources/unsubscribe
+{uri}` ends it. A client has at most 64 subscriptions.
+
+`notifications/resources/updated {uri}` says that the resource reads differently than before. It
+is sent once for each request that changed it, before that request's reply. Attached to a running
+app, the server also looks once a second while it waits for requests, so the person's changes are
+announced too; several changes within that second are one notification. Over HTTP a session hears
+of changes, its own and other sessions', with the reply to its next request, when the client
+accepts a stream.
+
 ## Completion
 
 `completion/complete` completes the variables of the resource templates (glyph names, command
@@ -243,19 +260,58 @@ before the client sets a level.
 
 Notifications go out before the reply to the request that caused them; at most 1,000 per request.
 
+## Progress and cancellation
+
+A request with `_meta: {progressToken}` (a number or a string of at most 256 bytes) gets, on stdio
+and over HTTP when the client accepts a stream,
+`notifications/progress {progressToken, progress, total, message}` while it runs: `progress` and
+`total` count units of work (`total` can grow as more work is found), and `message` names the last
+one, at most 200 characters. At most one is sent every 100 ms and 1,000 for a request. These
+commands report:
+
+| Command | Unit |
+|---|---|
+| `audit.run` | a layer examined, a layer run through a check module, and the stages compiling, source checks and binary checks |
+| `font.compile`, the static and variable exports | a font built; `font.compilePlan`: an instance planned |
+| `command.batch` | a step |
+
+`notifications/cancelled {requestId}` cancels a request that runs or waits, on stdio and over HTTP
+(sent on another connection, in the same session). Unknown and finished requests are ignored, and
+`initialize` is never cancelled.
+
+- A cancelled request changes nothing. A command stops between its units of work, or before its
+  next step, and is undone whole; one without such places runs to its end and is then undone. A
+  compile and a variable export stop between two glyphs or tables of one font; the commands that
+  work through glyphs (overlap removal and the other path filters, autohinting, auto-spacing,
+  auto-kerning, detecting composites, tracing, the audit's fixes) stop between two glyphs or pairs.
+  One glyph's overlap removal runs to its end or its time limit.
+- A `command.batch` that fails or is cancelled after a step wrote files undoes the documents; the
+  files stay, and the error names them. A client that cancelled reads it in the
+  [logging](#logging) message, as its request gets no reply of its own.
+- Exported files are written under temporary names and moved into place at the end. A cancel
+  before that removes them. Once files are written the request stands.
+- A cancelled request gets no reply on stdio, and error `-32800` over HTTP. A cancel that comes
+  after the change was kept is too late: the request is answered as usual.
+- Attached to a running app, the server passes both on ([Control protocol](control-protocol.md)):
+  commands of `run_command` report progress and can be cancelled while they run. A window tool can
+  be cancelled before it starts, `elements`, `click` and `set` also while they wait for frames; what
+  `set` did before that stays.
+
 ## Protocol behaviour
 
 - `initialize`, `ping`, `tools/list`, `tools/call`, `prompts/list`, `prompts/get`, `resources/list`,
-  `resources/templates/list`, `resources/read`, `completion/complete`, `logging/setLevel`.
+  `resources/templates/list`, `resources/read`, `resources/subscribe`, `resources/unsubscribe`,
+  `completion/complete`, `logging/setLevel`.
   Notifications from the client are accepted and never answered. Lists come whole: a `cursor` is
   refused.
 - Malformed JSON is `-32700`; a request that is not an object, lacks `method`, or exceeds 4 MiB is
   `-32600`; an unknown method is `-32601`; an unknown tool, prompt or log level, a missing tool name, or wrong prompt arguments are `-32602`; a bug
   inside a tool is `-32603` and the server keeps serving.
 - A line that is not UTF-8 gets a parse error and the session continues.
-- One line in, one reply out: while a tool call runs the server reads nothing. Progress,
-  cancellation, resource subscriptions and server-to-client requests therefore do not exist yet (the
-  sibling apps have the same limit, for the same reason).
+- Requests are answered one at a time, in arrival order. On stdio the server goes on reading
+  while a request runs, so it sees a cancellation; at most 256 messages or 16 MiB wait for an
+  answer, and beyond that it reads no further until there is room. The server sends no requests
+  to the client.
 
 ## HTTP transport
 
@@ -271,7 +327,7 @@ claude mcp add --transport http fontcraft http://127.0.0.1:7986/mcp
 
 | Request | Answer |
 |---|---|
-| `POST /mcp`, one JSON-RPC request | `200` with `application/json`; `text/event-stream` instead when the request produced log notifications and `Accept` lists the stream type (the notifications, then the reply) |
+| `POST /mcp`, one JSON-RPC request | `200` with `application/json`; `text/event-stream` instead when there are notifications (log messages, changed resources, progress) and `Accept` lists the stream type (the notifications, then the reply). Progress goes out while the request runs, as a chunked body (to an HTTP/1.0 client, as one the end of the connection ends) |
 | `POST /mcp`, a notification or a client response | `202`, no body |
 | `POST /mcp` with `initialize` | as a request, plus an `Mcp-Session-Id` header. Every later request sends it back |
 | `DELETE /mcp` with `Mcp-Session-Id` | `200`; the session ends |
@@ -282,7 +338,7 @@ Sessions:
 - A request without `Mcp-Session-Id` (other than `initialize`) gets `400`; an unknown or ended
   session gets `404`, and the client starts again with `initialize`.
 - An `MCP-Protocol-Version` header that names a revision this server does not speak gets `400`.
-- Each session has its own log level. All sessions share one backend, so they edit the same
+- Each session has its own log level and subscriptions. All sessions share one backend, so they edit the same
   document, one request at a time in arrival order.
 - At most 64 sessions are open; a new one ends the session unused for longest.
 

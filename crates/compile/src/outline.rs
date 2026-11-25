@@ -1,5 +1,7 @@
 //! Outline preparation (`docs/spec/40-compile.md` § 1.3), in the reference compilers' filter
 //! order (`compile.filterOrder`): decompose, remove overlaps, convert curves, fix the direction.
+//! Invisible open corners are erased before all of these ([`erase_open_corners`],
+//! `compile.glyphsOutlinePreSteps`), so a component draws its base without them.
 //!
 //! 1. **Decompose** (`compile.mixedGlyphsBecomeSimple`,
 //!    `compile.overflowingComponentTransformDecompose`, `compile.otfDecomposesAllComponents`): a
@@ -123,6 +125,21 @@ pub enum Prepared {
     Points(write_fonts::tables::glyf::SimpleGlyph),
 }
 
+/// Erases the invisible open corners ([`fontcraft_pathops::erase_invisible_corners`]) of the
+/// contours of the glyphs `erased` names.
+pub(crate) fn erase_open_corners(glyphs: &mut [ResolvedGlyph], erased: impl Fn(&str) -> bool) {
+    for g in glyphs {
+        if g.contours.is_empty() || !erased(&g.name) {
+            continue;
+        }
+        for contour in &mut g.contours {
+            if let Some(closed) = fontcraft_pathops::erase_invisible_corners(contour) {
+                *contour = closed;
+            }
+        }
+    }
+}
+
 /// Does a component's 2×2 transform hold a value that `glyf` cannot store?
 fn overflows(c: &ResolvedComponent) -> bool {
     c.transform.as_coeffs().iter().take(4).any(|v| !(-2.0..=2.0).contains(v))
@@ -141,6 +158,7 @@ pub fn prepare(glyphs: &[ResolvedGlyph], s: &Settings, warnings: &mut Vec<String
     let mut expansion = Expansion::new(s.max_expanded);
     let mut out = Vec::with_capacity(glyphs.len());
     for (i, g) in glyphs.iter().enumerate() {
+        crate::check_stop()?;
         let contours = if decompose.get(i) == Some(&true) && s.single_precision {
             let mut out = Vec::new();
             let mut budget = MAX_OUTLINE_ELEMENTS;

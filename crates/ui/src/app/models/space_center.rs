@@ -325,11 +325,11 @@ fn art(
 
 /// The outline of `layer` of `glyph` with its components resolved in `master`: the layer is put in the master's
 /// place, so a layer other than the master's draws through the same resolution.
-fn layer_outline(font: &Font, glyph: &fontcraft_engine::model::Glyph, layer: &Layer, master: &str) -> BezPath {
+pub(crate) fn layer_outline(font: &Font, glyph: &fontcraft_engine::model::Glyph, layer: &Layer, master: &str) -> BezPath {
     if layer.id == master {
         return font.outline_of(glyph, master).unwrap_or_default();
     }
-    let mut stand_in = glyph.clone();
+    let mut stand_in = fontcraft_engine::model::Glyph::new(glyph.name.clone());
     let mut moved = layer.clone();
     moved.id = master.to_string();
     moved.master = master.to_string();

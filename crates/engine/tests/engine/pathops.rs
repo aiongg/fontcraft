@@ -203,7 +203,7 @@ fn correct_path_direction_nests_restarts_and_sorts_components_among_paths() {
     run(&mut s, "path.correctPathDirection", json!({"glyph": "O"}));
     let all = shapes(&s, "O", None);
     let kinds: Vec<&str> = all.iter().map(|s| if matches!(s, Shape::Path(_)) { "path" } else { "component" }).collect();
-    assert_eq!(kinds, ["path", "path", "component"], "sorted by left edge");
+    assert_eq!(kinds, ["path", "path", "component"], "the component lies farthest to the right");
     let ps = paths(&s, "O", None);
     assert!(area(&ps[0]) > 0.0, "outer counter-clockwise");
     assert!(area(&ps[1]) < 0.0, "counter clockwise");
@@ -288,6 +288,38 @@ fn a_cut_splits_a_square_into_two_closed_pieces() {
     areas.sort_by(f64::total_cmp);
     assert_eq!(areas, [4_000.0, 6_000.0]);
     assert_eq!(r["selection"]["points"].as_array().map(Vec::len), Some(4));
+}
+
+#[test]
+fn a_cut_across_two_overlapping_rectangles_joins_them_along_the_line() {
+    let mut s = Session::with_document();
+    add(&mut s, "A", rect(0.0, 0.0, 100.0, 100.0));
+    add(&mut s, "A", rect(50.0, -20.0, 150.0, 120.0));
+    run(&mut s, "path.cutWithLine", json!({"glyph": "A", "from": [-10, 50], "to": [160, 50]}));
+    // The four crossings pair up from the left, so each piece has one half of each rectangle.
+    let ps = paths(&s, "A", None);
+    assert_eq!(ps.len(), 2);
+    for p in &ps {
+        assert!(p.closed);
+        assert_eq!(p.nodes.len(), 8, "{:?}", xy(p));
+        assert!((area(p) - 12_000.0).abs() < 1e-6, "{:?}", xy(p));
+        for x in [0.0, 50.0, 100.0, 150.0] {
+            assert!(xy(p).contains(&(x, 50.0)), "{:?}", xy(p));
+        }
+    }
+}
+
+#[test]
+fn remove_overlap_leaves_no_point_where_a_descender_joins_its_stem() {
+    let mut s = Session::with_document();
+    add(&mut s, "A", rect(0.0, 0.0, 100.0, 500.0));
+    add(&mut s, "A", rect(0.0, -200.0, 100.0, 50.0));
+    run(&mut s, "path.removeOverlap", json!({"glyph": "A"}));
+    let ps = paths(&s, "A", None);
+    assert_eq!(ps.len(), 1);
+    // The stem's start (0, 0) lies on the joined side and stays the start; nothing else is left
+    // on the sides.
+    assert_eq!(xy(&ps[0]), [(0.0, 0.0), (0.0, -200.0), (100.0, -200.0), (100.0, 500.0), (0.0, 500.0)]);
 }
 
 #[test]
@@ -436,4 +468,26 @@ fn bad_parameters_change_nothing() {
         assert!(s.execute(id, &p).is_err(), "{id} {p}");
         assert_eq!(snapshot(&s), before, "{id} {p}");
     }
+}
+
+#[test]
+fn remove_overlap_closes_the_open_corners_an_export_erases() {
+    let ear =
+        |ear: f64| json!([{"x": 0, "y": 0}, {"x": 100, "y": 0}, {"x": 100, "y": 100.0 + ear}, {"x": 100.0 + ear, "y": 100}, {"x": 0, "y": 100}]);
+    let points = |s: &mut Session| -> Vec<(i64, i64)> {
+        let v = s.execute("layer.inspect", &json!({"glyph": "A"})).unwrap();
+        let nodes = v["shapes"].as_array().unwrap().iter().flat_map(|p| p["nodes"].as_array().unwrap().clone());
+        let mut out: Vec<(i64, i64)> = nodes.map(|n| (n["x"].as_f64().unwrap() as i64, n["y"].as_f64().unwrap() as i64)).collect();
+        out.sort_unstable();
+        out
+    };
+    let mut s = Session::with_document();
+    s.execute("path.addPath", &json!({"glyph": "A", "nodes": ear(40.0)})).unwrap();
+    s.execute("path.removeOverlap", &json!({"glyph": "A"})).unwrap();
+    assert_eq!(points(&mut s), [(0, 0), (0, 100), (100, 0), (100, 100)]);
+    // A larger ear is part of the shape.
+    let mut s = Session::with_document();
+    s.execute("path.addPath", &json!({"glyph": "A", "nodes": ear(150.0)})).unwrap();
+    s.execute("path.removeOverlap", &json!({"glyph": "A"})).unwrap();
+    assert!(points(&mut s).contains(&(250, 100)));
 }

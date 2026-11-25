@@ -307,9 +307,66 @@ fn compile_plan_describes_what_compile_builds_without_writing() {
     let summary = run(&mut s, "font.compile", json!({"instances": ["Bold"], "formats": ["otf"]}));
     assert_eq!(summary["fonts"][0]["files"][0]["name"], "TestSans-Heavy.otf");
     assert!(summary["fonts"][0]["files"][0].get("dataBase64").is_none());
-    // Formats that are not built yet are refused by name.
-    let e = s.execute("font.compile", &json!({"formats": ["otf-cff2"]})).unwrap_err().to_string();
-    assert!(e.contains("otf-cff2") && e.contains("M2.9"), "{e}");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn compile_writes_cff2_fonts_and_interpolatable_masters_where_the_plan_says() {
+    let dir = temp("cff2-masters");
+    let mut s = two_masters(&dir, TWO_MASTERS);
+    let out_dir = dir.join("out");
+    let request = json!({
+        "formats": ["otf-cff2", "ttf-interpolatable", "otf-interpolatable"], "instances": ["Regular"], "destination": out_dir, "timestamp": 0,
+        "outputLayout": "by-format",
+    });
+    let plan = run(&mut s, "font.compilePlan", request.clone());
+    assert!(!out_dir.exists(), "a plan writes nothing");
+    let built = run(&mut s, "font.compile", request);
+    let field = |v: &Value, list: &str, key: &str| -> Vec<Value> { v[list].as_array().unwrap().iter().map(|f| f[key].clone()).collect() };
+    for key in ["instance", "source", "format"] {
+        assert_eq!(field(&plan, "outputs", key), field(&built, "fonts", key));
+    }
+    assert_eq!(
+        field(&built, "fonts", "format"),
+        [json!("otf-cff2"), json!("ttf-interpolatable"), json!("ttf-interpolatable"), json!("otf-interpolatable"), json!("otf-interpolatable")]
+    );
+    for (planned, font) in plan["outputs"].as_array().unwrap().iter().zip(built["fonts"].as_array().unwrap()) {
+        assert_eq!(planned["files"][0]["path"], font["files"][0]["path"]);
+    }
+    assert_eq!(
+        names(&out_dir),
+        [
+            "instance_otf/TestSans-Regular.otf",
+            "master_otf_interpolatable/TestSans-Bold.otf",
+            "master_otf_interpolatable/TestSans-Regular.otf",
+            "master_ttf_interpolatable/TestSans-Bold.ttf",
+            "master_ttf_interpolatable/TestSans-Regular.ttf",
+        ]
+    );
+
+    // The CFF2 font has no CFF table and keeps its glyph names in post; the plan lists its tables.
+    let cff2 = tables(&std::fs::read(out_dir.join("instance_otf/TestSans-Regular.otf")).unwrap());
+    let tags: Vec<&str> = cff2.iter().map(|(tag, _)| tag.as_str()).collect();
+    assert!(tags.contains(&"CFF2") && !tags.contains(&"CFF "), "{tags:?}");
+    assert_eq!(plan["outputs"][0]["tables"], json!(tags));
+    let post = &cff2.iter().find(|(tag, _)| tag == "post").unwrap().1;
+    assert_eq!(post[..4], [0, 2, 0, 0]);
+
+    // In one folder, the masters of a request that writes other fonts too keep their own folder.
+    let flat = dir.join("flat");
+    run(
+        &mut s,
+        "font.compile",
+        json!({"formats": ["ttf", "ttf-interpolatable"], "mastersAsInstances": true, "instances": false, "destination": flat}),
+    );
+    assert!(flat.join("TestSans-Regular.ttf").exists() && flat.join("ttf-interpolatable/TestSans-Regular.ttf").exists());
+
+    for (formats, why) in [(json!(["otf", "otf-cff2"]), "same files"), (json!(["otf-cff2"]), "collection"), (json!(["ttf-interpolatable"]), "static")]
+    {
+        let collection = why == "collection";
+        let e = s.execute("font.compile", &json!({"formats": formats, "collection": collection, "cbdt": why == "static"})).unwrap_err().to_string();
+        assert!(e.contains(why), "{e}");
+    }
     std::fs::remove_dir_all(&dir).unwrap();
 }
 
@@ -709,4 +766,44 @@ fn compile_picks_instances_by_pattern_and_by_family() {
     assert_eq!(names(&out), ["Other-Bold.ttf", "Other-Regular.ttf"]);
     assert_eq!(r["skipped"].as_array().unwrap().len(), 3, "{r}");
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// Regular saves as TrueType and lists its web font formats; Bold follows the request. The plan
+/// names the files written, web containers alone lose their glyph names, and a one-file
+/// destination the parameters contradict is refused.
+#[test]
+fn save_as_truetype_and_webfont_formats_choose_the_files_of_their_instance() {
+    let dir = temp("instance-outputs");
+    let source = dir.join("TwoMasters.glyphs");
+    let params = "customParameters = (\n{\nname = \"Save as TrueType\";\nvalue = 1;\n},\n{\nname = \"Webfont Formats\";\nvalue = (\nWOFF2,\nEOT,\nTTF\n);\n},\n{\nname = \"Remove post names for webfonts\";\nvalue = 1;\n}\n);\nname = Regular;\n},\n{\naxesValues = (\n550";
+    let text = TWO_MASTERS.replacen("name = Regular;\n},\n{\naxesValues = (\n550", params, 1);
+    assert_ne!(text, TWO_MASTERS);
+    std::fs::write(&source, text).unwrap();
+    let mut s = Session::new();
+    run(&mut s, "file.open", json!({ "path": source }));
+    let request = json!({"formats": ["otf"], "containers": ["plain"], "instances": ["Regular", "Bold"], "destination": dir.join("out")});
+    let names = |fonts: &Value| -> Vec<String> {
+        let files = fonts.as_array().unwrap().iter().flat_map(|f| f["files"].as_array().unwrap());
+        files.map(|f| f["name"].as_str().unwrap().to_string()).collect()
+    };
+    let plan = run(&mut s, "font.compilePlan", request.clone());
+    let built = run(&mut s, "font.compile", request.clone());
+    let expected = ["TestSans-Regular.woff2", "TestSans-Regular.ttf", "TestSans-Heavy.otf"];
+    assert_eq!(names(&built["fonts"]), expected, "{built}");
+    assert_eq!(names(&plan["outputs"]), expected, "{plan}");
+    assert!(built["warnings"].as_array().unwrap().iter().any(|w| w.as_str().unwrap().contains("EOT")), "{built}");
+    let post = |file: &str| {
+        let bytes = std::fs::read(dir.join("out").join(file)).unwrap();
+        let bytes = if file.ends_with("woff2") { container::woff2::decode(&bytes).unwrap().sfnt } else { bytes };
+        skrifa::raw::TableProvider::post(&skrifa::FontRef::new(&bytes).unwrap()).unwrap().version().to_major_minor().0
+    };
+    assert_eq!((post("TestSans-Regular.woff2"), post("TestSans-Regular.ttf")), (3, 2));
+
+    let e = s.execute("font.compile", &json!({"formats": ["otf"], "instances": ["Regular"], "destination": dir.join("one.otf")})).unwrap_err();
+    assert!(e.to_string().contains("Save as TrueType"), "{e}");
+    assert!(!dir.join("one.otf").exists());
+    // The fonts of a collection keep its format.
+    run(&mut s, "font.compile", json!({"formats": ["otf"], "instances": ["Regular", "Bold"], "destination": dir.join("all.otc")}));
+    assert!(dir.join("all.otc").is_file());
+    let _ = std::fs::remove_dir_all(&dir);
 }

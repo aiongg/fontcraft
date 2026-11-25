@@ -509,7 +509,7 @@ specification v1.27.
 
 ### Compliance checklist
 
-177 constructs. fea-rs status from its sources and tests: 154 yes, 7 partial, 5 no,
+177 constructs. fea-rs status from its sources and tests: 155 yes, 6 partial, 5 no,
 11 unknown. Tick a box when FontCraft has a passing test for the construct.
 
 **Lexical structure**
@@ -657,7 +657,7 @@ specification v1.27.
 
 - [ ] `fea.aalt.featureReference` — aalt built from other features · fea-rs: yes
 - [ ] `fea.aalt.extraRules` — Explicit rules in aalt · fea-rs: yes
-- [ ] `fea.aalt.grouping` — aalt output shape · fea-rs: partial
+- [ ] `fea.aalt.grouping` — aalt output shape · fea-rs: yes
 - [ ] `fea.aalt.restrictions` — What aalt may not contain · fea-rs: yes
 - [ ] `fea.size.parameters` — size feature parameters · fea-rs: yes
 - [ ] `fea.size.sizemenuname` — sizemenuname · fea-rs: yes
@@ -726,9 +726,8 @@ specification v1.27.
 
 | Row | fea-rs | Detail |
 |---|---|---|
-| `fea.gsub8.null` | no | rsub_null is an expected parse error |
-| `fea.aalt.grouping` | partial | the fontTools spec8a_2 comparison is on its ignore list |
-| `fea.table.base.minMax` | partial | parsed, minmax parse test; the compile step is marked not yet implemented |
+| `fea.gsub8.null` | no | rsub_null is an expected parse error, as in feaLib; FontCraft's message says why |
+| `fea.table.base.minMax` | partial | the extents are written, the per-feature ones dropped |
 | `fea.table.gdef.ligatureCaretByDev` | no | the statement is parsed and discarded |
 | `fea.table.hhea` | partial | CaretOffset, Ascender, Descender and LineGap only; the caret slope keywords are not in its grammar |
 | `fea.table.os2.scriptAndStrikeout` | no | these keywords do not appear in its grammar |
@@ -738,6 +737,12 @@ specification v1.27.
 | `fea.var.locationUnits` | partial | the unit suffix is optional and described as experimental; how a value without unit is read is for the caller's variation info to decide |
 | `fea.var.locationDef` | no | keyword not present |
 | `fea.var.tableValues` | partial | parsed; the validator rejects variable metrics in several table blocks as not yet supported |
+
+FontCraft compiles what the table lists from `fea.table.*` down to `fea.legacy.except`:
+`crates/fea/src/lift.rs` takes those statements out of the code before fea-rs parses it (keeping
+message positions) and applies them to what fea-rs builds, and `base.rs` adds the per-feature
+extents of `BASE`. Measured against makeotf (the caret slope, `OS/2` and `except` statements) and
+feaLib (`MinMax` extents); `LigatureCaretByDev` and per-feature extents exist in neither.
 
 Glyphs extensions fea-rs lacks, to be handled by FontCraft's lowering step or contributed
 upstream: `delete`, `standalone`, optional lookup end name, empty `lookupflag;`, `#ifdef`,

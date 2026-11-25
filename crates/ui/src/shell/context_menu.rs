@@ -132,7 +132,7 @@ pub fn show(ui: &mut Ui, cx: &mut BodyCx<'_>, app: &mut FontCraftApp) {
     take_paste(ui, app);
     let opener = ui.response();
     if let Some(menu) = app.context_menus.canvas.clone() {
-        let still = menus::scene_glyph(app).is_some_and(|g| g == menu.glyph) && app.dialogs.open.is_none();
+        let still = menus::still(app, &menu) && app.dialogs.open.is_none();
         let answer = if still { views::canvas_menu(ui, &opener, &menu, menu.alt) } else { views::Answer { picked: None, open: false } };
         // `contextMenu.invoke` closes the menu after it checked the item against it.
         if !answer.open && !matches!(answer.picked, Some(Pick::Item(_) | Pick::Choice(..))) {

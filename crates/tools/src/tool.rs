@@ -118,6 +118,11 @@ pub trait Tool: Send {
     fn overlays(&self) -> Vec<Overlay> {
         Vec::new()
     }
+
+    /// The picked interpolation knobs (the Higher-Order Interpolation tool).
+    fn hoi_picks(&self) -> &[crate::hoi::Knob] {
+        &[]
+    }
 }
 
 /// A tool as `tool.list` describes it.
@@ -151,6 +156,7 @@ pub const TOOLS: &[ToolInfo] = &[
     ToolInfo { id: "rapid", label: "Rapid", shortcut: "", group: "" },
     ToolInfo { id: "spiro", label: "Spiro", shortcut: "", group: "" },
     ToolInfo { id: "trueTypeInstructor", label: "TrueType Instructor", shortcut: "I", group: "" },
+    ToolInfo { id: crate::hoi::ID, label: "Higher-Order Interpolation", shortcut: "I", group: "" },
     ToolInfo { id: "annotationSelect", label: "Annotation Selection", shortcut: "A", group: "annotation" },
     ToolInfo { id: "annotationText", label: "Text Annotation", shortcut: "A", group: "annotation" },
     ToolInfo { id: "annotationArrow", label: "Arrow Annotation", shortcut: "A", group: "annotation" },
@@ -181,6 +187,7 @@ pub fn make_tool(id: &str) -> Option<Box<dyn Tool>> {
         "rapid" => Box::new(crate::rapid::RapidTool::default()),
         "spiro" => Box::new(crate::spiro::SpiroTool::default()),
         "trueTypeInstructor" => Box::new(crate::tt_instructor::TtInstructorTool::default()),
+        crate::hoi::ID => Box::new(crate::hoi::HoiTool::default()),
         _ if id.starts_with("annotation") => Box::new(AnnotateTool::new(id)?),
         _ => return None,
     };

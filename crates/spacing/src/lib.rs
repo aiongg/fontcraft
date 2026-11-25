@@ -25,6 +25,10 @@
 //! white area, mean white and optical gap taken from them: the measures of auto-spacing and
 //! auto-kerning. The module's own doc comment lists its API.
 //!
+//! # Shape classes ([`space_model`])
+//! The sidebearing of a side from the control side it resembles most: the model behind the
+//! optical method of auto-spacing.
+//!
 //! # Evaluation ([`eval`])
 //! [`effective_key`] is the key that applies to one field of one layer (the layer's own key wins
 //! over the glyph's). [`evaluate`] gives the value of that key, [`evaluate_key`] of any parsed
@@ -96,6 +100,7 @@ pub mod link;
 pub mod measure;
 pub mod pfm;
 pub mod profile;
+pub mod space_model;
 pub mod sync;
 
 #[cfg(test)]

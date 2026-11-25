@@ -132,28 +132,42 @@ pub fn build_previews(font: &Font, master: &str, options: &Options) -> Result<Pr
 /// Whether a document's last compile still describes it, by document id: for (revision, source hash).
 type Answers = Arc<Mutex<HashMap<u64, ((u64, u64), bool)>>>;
 
-/// Builds the preview fonts of document `doc` at `revision` for `master` and keeps the build in `builds` under the
-/// input hash `font.features.compile` keys its compiles with, so a compile of the same revision that follows takes it
-/// instead of compiling: the Features tab runs this on a worker thread after the code changes. `options` are the ones
-/// the compile reads (the glyph data and the include folder of `crate::cmd::features_check::check_context`). Nothing is
-/// kept when the code does not assemble or includes files the hash cannot cover.
-pub fn prebuild(font: &Font, doc: u64, revision: u64, master: &str, options: &Options, builds: &PreviewBuilds) {
-    let Some(data) = options.glyph_data.0.as_ref() else { return };
-    let Ok(values) = fontcraft_features::MasterValues::new(font, data, master) else { return };
-    let Ok(prepared) = crate::cmd::features_compile::prepare(font, &font.features, master, options.feature_dir.as_deref(), &values) else {
-        return;
-    };
-    if !prepared.keyed {
-        return;
-    }
-    let result = build_previews(font, master, options).map(Arc::new).map_err(Arc::new);
-    builds.put(SharedBuild { doc, revision, master: master.to_string(), source_hash: Some(prepared.hash), result });
+/// A compile of one document revision and master done before `font.features.compile` asks for it
+/// ([`compile_ahead`]); the command of that revision and master takes it instead of compiling.
+#[derive(Clone, Debug)]
+pub struct AheadCompile {
+    pub doc: u64,
+    pub revision: u64,
+    pub state: FeatureState,
+    /// The compile reused the document's last one.
+    pub cached: bool,
+    /// Why the preview font could not be built, when the code itself compiles.
+    pub preview_message: Option<String>,
+}
+
+/// Compiles `font`, document `doc` at `revision`, for `master` as `font.features.compile` does, on any thread and
+/// without the session: the Features tab runs it on a worker and hands the result to
+/// [`SessionFeaturesExt::keep_ahead_compile`]. `cx` is `crate::cmd::features_check::check_context`'s, `previous` the
+/// document's last compile, `builds` the session's preview builds, which Text Preview reads too. Nothing is changed
+/// besides `builds`. `None` when the compile fails; the command then says why.
+pub fn compile_ahead(
+    font: &Font,
+    doc: u64,
+    revision: u64,
+    master: &str,
+    cx: &crate::cmd::features_check::CheckContext,
+    previous: Option<Arc<FeatureState>>,
+    builds: &PreviewBuilds,
+) -> Option<AheadCompile> {
+    crate::cmd::features_compile::compile_ahead(font, doc, revision, master, cx, previous, builds)
 }
 
 /// The features area's session slot.
 #[derive(Default)]
 struct FeaturesSlot {
     states: HashMap<u64, Arc<FeatureState>>,
+    /// The last compile done ahead of `font.features.compile`.
+    ahead: Option<Arc<AheadCompile>>,
     preview_builds: PreviewBuilds,
     /// [`FeatureState::is_current`]'s answers, kept through `&Session`.
     answers: Answers,
@@ -180,6 +194,12 @@ pub trait SessionFeaturesExt {
     /// documents no longer open are dropped.
     fn set_feature_state(&mut self, doc_id: u64, state: FeatureState);
 
+    /// Keeps `compile` for the `font.features.compile` of the same revision and master, in place of the one kept before.
+    fn keep_ahead_compile(&mut self, compile: AheadCompile);
+
+    /// The compile kept ahead for the document with this id.
+    fn ahead_compile_of(&self, doc_id: u64) -> Option<Arc<AheadCompile>>;
+
     /// Forgets the document's last compile.
     fn clear_feature_state(&mut self, doc_id: u64);
 }
@@ -200,6 +220,8 @@ impl SessionFeaturesExt for Session {
     fn set_feature_state(&mut self, doc_id: u64, state: FeatureState) {
         let open: Vec<u64> = self.documents().iter().map(|d| d.id).collect();
         let slot = self.slot_mut::<FeaturesSlot>();
+        // A later compile of the same revision may read changed included files.
+        slot.ahead = None;
         slot.states.retain(|id, _| open.contains(id));
         slot.preview_builds.retain(&open);
         if let Ok(mut answers) = slot.answers.lock() {
@@ -208,6 +230,14 @@ impl SessionFeaturesExt for Session {
         if open.contains(&doc_id) {
             slot.states.insert(doc_id, Arc::new(state));
         }
+    }
+
+    fn keep_ahead_compile(&mut self, compile: AheadCompile) {
+        self.slot_mut::<FeaturesSlot>().ahead = Some(Arc::new(compile));
+    }
+
+    fn ahead_compile_of(&self, doc_id: u64) -> Option<Arc<AheadCompile>> {
+        self.slot::<FeaturesSlot>()?.ahead.as_ref().filter(|a| a.doc == doc_id).cloned()
     }
 
     fn clear_feature_state(&mut self, doc_id: u64) {

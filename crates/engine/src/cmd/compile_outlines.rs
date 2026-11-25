@@ -4,7 +4,7 @@
 //! `post` format, tables to leave out and raw table files.
 //!
 //! Three kinds of step, in build order:
-//! - Compile options ([`OutputRequest::read`] sets them): the CFF rounding tolerance, operators,
+//! - Compile options ([`OutputRequest::read`] sets them): open corners, the CFF rounding tolerance, operators,
 //!   subroutine cap and widths, `USE_MY_METRICS`, the autohint switch.
 //! - A copy of the font before the build ([`OutputRequest::font`]): the glyph subset (every other
 //!   glyph stops exporting, so the feature code is compiled against the reduced set, as the
@@ -148,6 +148,7 @@ impl OutputRequest {
             None => None,
             Some(n) => u8::try_from(n).ok(),
         };
+        options.post_format = out.post_format;
         out.bump = bump(p)?;
         out.exclude = tags(p, "excludeTables")?;
         if let Some(tag) = out.exclude.iter().find(|t| REQUIRED_TABLES.contains(t)) {
@@ -183,18 +184,18 @@ impl OutputRequest {
         Ok(out)
     }
 
-    /// Refuses what does not go with the rest of the request: `variable` (variable formats are
-    /// asked for) and `collection`.
+    /// Refuses what does not go with the rest of the request: `variable` (variable or interpolatable
+    /// formats are asked for) and `collection`.
     pub(super) fn check(&self, variable: bool, collection: bool) -> Result<()> {
         let rewrites = self.rewrites();
         if variable && rewrites {
             return Err(EngineError::Unsupported(
-                "`postFormat`, `excludeTables` and `tables` with a variable format: they rewrite static fonts; build the variable fonts in a separate command".into(),
+                "`postFormat`, `excludeTables` and `tables` with a variable or interpolatable format: they rewrite static fonts; build the other fonts in a separate command".into(),
             ));
         }
         if variable && self.no_compatibility_check {
             return Err(EngineError::Unsupported(
-                "`checkCompatibility: false` with a variable format: a variable font cannot be built from incompatible glyphs".into(),
+                "`checkCompatibility: false` with a variable or interpolatable format: such fonts cannot be built from incompatible glyphs".into(),
             ));
         }
         if collection && rewrites {
@@ -343,11 +344,7 @@ fn read_outlines(p: &Params, options: &mut Options) -> Result<()> {
             "`outlines.preferSimpleGlyphs: false` (a glyph's contours moved into a new glyph used as a component): a glyph with contours and components is always written as contours".into(),
         ));
     }
-    if group_flag(p, group, "outlines", "eraseOpenCorners")? == Some(true) {
-        return Err(EngineError::Unsupported(
-            "`outlines.eraseOpenCorners`: it runs the export step that erases open corners, which is not built yet (M3.31)".into(),
-        ));
-    }
+    options.components.erase_open_corners = group_flag(p, group, "outlines", "eraseOpenCorners")?;
     if group_flag(p, group, "outlines", "propagateAnchors")?.is_some() {
         return Err(EngineError::Unsupported(
             "`outlines.propagateAnchors`: anchors are propagated as the source asks (always for the reference's format, by the filter list for a UFO), and the compile has no switch that overrides it yet".into(),
@@ -372,7 +369,7 @@ fn read_cff(p: &Params, options: &mut Options) -> Result<()> {
     }
     if let Some(v) = group.get("roundTolerance").filter(|v| !v.is_null()) {
         let t = v.as_f64().filter(|t| t.is_finite() && (0.0..=0.5).contains(t));
-        options.cff.round_tolerance = t.ok_or_else(|| p.bad("`cff.roundTolerance` must be a number from 0 to 0.5"))?;
+        options.cff.round_tolerance = Some(t.ok_or_else(|| p.bad("`cff.roundTolerance` must be a number from 0 to 0.5"))?);
     }
     if let Some(v) = group.get("optimize").filter(|v| !v.is_null()) {
         let level = v.as_u64().filter(|n| *n <= 2).ok_or_else(|| p.bad("`cff.optimize` is 0, 1 or 2"))?;

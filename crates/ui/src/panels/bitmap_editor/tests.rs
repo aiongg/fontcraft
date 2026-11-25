@@ -141,3 +141,64 @@ fn shades_show_only_on_grey_strikes() {
     s.fixture.click(&one).settle();
     assert!(s.posted.borrow().contains(&set(json!({"level": 1}))), "{:?}", s.posted.borrow());
 }
+
+/// Magnify: a click asks for the next pixel size up, with Alt the next down, and the pixel clicked is then in the middle
+/// of the view; nothing is drawn.
+#[test]
+fn magnify_steps_the_pixel_size_around_the_pixel_clicked() {
+    let mut s = shown(BitmapEditorModel { pixel_size: Some(12), ..model(1, "magnify") });
+    let at = centre(&s.canvas, 5, 1);
+    s.fixture.click_at(at).settle();
+    assert!(s.posted.borrow().contains(&set(json!({"pixelSize": 16}))), "{:?}", s.posted.borrow());
+    let focus = s.canvas.borrow().focus.expect("the pixel clicked");
+    assert_eq!(focus.map(|v| v.floor() as i32), [5, 1]);
+    s.fixture.hold(egui::Modifiers::ALT);
+    s.fixture.click_at(at).settle();
+    s.fixture.hold(egui::Modifiers::NONE);
+    assert!(s.posted.borrow().contains(&set(json!({"pixelSize": 8}))), "{:?}", s.posted.borrow());
+    assert!(inputs(&s.posted.borrow()).is_empty(), "nothing is drawn");
+
+    let mut large = shown(BitmapEditorModel { pixel_size: Some(48), advance: 40, ..model(1, "pencil") });
+    large.canvas.borrow_mut().focus = Some([30.5, 3.0]);
+    large.canvas.borrow_mut().centred = None;
+    large.fixture.settle();
+    let canvas = large.canvas.borrow();
+    let middle = canvas.tool.frame().and_then(|f| f.to_pixels(canvas.view.rect.center())).expect("a pixel position");
+    assert!((middle[0] - 30.5).abs() < 1.0, "{middle:?}");
+}
+
+/// Hand: a drag moves the view and draws nothing.
+#[test]
+fn the_hand_moves_the_view() {
+    let mut s = shown(BitmapEditorModel { pixel_size: Some(48), advance: 40, ..model(1, "hand") });
+    let before = s.canvas.borrow().view.center;
+    let at = centre(&s.canvas, 20, 1);
+    s.fixture.drag_at(at, egui::vec2(60.0, 40.0)).settle();
+    assert_ne!(s.canvas.borrow().view.center, before);
+    assert!(inputs(&s.posted.borrow()).is_empty(), "{:?}", s.posted.borrow());
+}
+
+/// The canvas menu picks the shape tools, transforms this glyph's bitmap and opens Set Width, which is off in a font
+/// with outlines; the actual-size preview shows in the top row.
+#[test]
+fn the_canvas_menu_posts_its_items() {
+    let pick = |outlines: bool, item: &str| {
+        let mut s = shown(BitmapEditorModel { has_outlines: outlines, ..model(1, "pencil") });
+        assert!(s.fixture.by_label("Actual Size").is_some());
+        let pos = centre(&s.canvas, 1, 1);
+        let button = |pressed| egui::Event::PointerButton { pos, button: egui::PointerButton::Secondary, pressed, modifiers: egui::Modifiers::NONE };
+        s.fixture.frame(vec![egui::Event::PointerMoved(pos)]).frame(vec![button(true)]).frame(vec![button(false)]).settle();
+        let row = s.fixture.by_label(item).unwrap_or_else(|| panic!("{item} in the menu"));
+        s.fixture.click(&row).settle();
+        let posted = s.posted.borrow().clone();
+        posted
+    };
+    assert!(pick(true, "Filled Ellipse").contains(&set(json!({"tool": "filledEllipse"}))));
+    let strike = json!({"ppem": 12, "depth": 1});
+    let flip = Msg::run("bitmap.transform", json!({"glyphs": ["A"], "strike": strike, "op": "flipH"}));
+    assert!(pick(true, "Flip Horizontally").contains(&flip));
+    let width = json!({"dialog": "dialog.bitmapWidth", "params": {"glyph": "A", "strike": strike}});
+    let width = Msg::Shell(CommandRef::with_params("dialog.open", width));
+    assert!(pick(false, "Set Width…").contains(&width));
+    assert!(!pick(true, "Set Width…").contains(&width), "the width follows the outline");
+}

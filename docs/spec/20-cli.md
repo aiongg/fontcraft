@@ -243,7 +243,7 @@ Each section gives the usage line, behaviour the options alone do not convey, an
 
 ### `compile`
 
-Compiles sources into binary fonts: static TTF or OTF per instance or master and variable TTF (gvar) or CFF2, each plain or wrapped as WOFF or WOFF2; later, static CFF2 and interpolatable masters (M2.9). Sources are a native project, a .glyphs file or package, a designspace or a UFO; later also a bare outline font (CFF, CFF2, TrueType, Type 1) that receives the remaining OpenType tables from a feature file and name data. Without --format a source with one master yields a static TTF and one with several masters and an axis a variable TTF.
+Compiles sources into binary fonts: static TTF or OTF per instance or master and variable TTF (gvar) or CFF2, each plain or wrapped as WOFF or WOFF2, static CFF2, and interpolatable masters. Sources are a native project, a .glyphs file or package, a designspace or a UFO; later also a bare outline font (CFF, CFF2, TrueType, Type 1) that receives the remaining OpenType tables from a feature file and name data. Without --format a source with one master yields a static TTF and one with several masters and an axis a variable TTF.
 
 ```
 fontcraft-cli compile SOURCE... [--format FMT]... [--container plain|woff|woff2]... [-o PATH | --output-dir DIR] [options]
@@ -316,7 +316,8 @@ version then becomes 4 where both states carry meaning.
 **Output naming.** `-o` names one file and takes one SOURCE. The build must give exactly one file,
 and the file's extension must match its format and container (`.woff` or `.woff2` chooses that
 container when `--container` is not given). Otherwise each
-file is named by the instance's `fileName` parameter, else by its PostScript name, inside
+file is named by the instance's `fileName` parameter, else, for a master of a designspace, by its UFO,
+else by its PostScript name, inside
 `--output-dir` (default: the current folder); with both formats, each goes into a `ttf` or `otf`
 subfolder. A source without a family name: a `.glyphs` or `.glyphspackage` source takes
 glyphsLib's default family, `Unnamed font`, as fontmake does (`Unnamedfont-Regular.ttf`); any
@@ -2850,6 +2851,13 @@ differences that do not matter. The comparison methods are described after the t
 | `oracle`, `run`, `commands`, `mcp`, `bench`, `completion`, `help` | none | Own tests |
 | `tables show` | none | Tests on fonts built in code: every field of the tables we model appears with its name and value |
 | `sources diff`, `sources merge` | none | Round trip: merging every change of A → B gives a document equal to B; a source compared with itself gives no change |
+
+The measures of `dump --normalize`, `outlines to-quadratic`, `outlines componentize`, `outlines decompose`,
+`metrics --statistics`, `glyphs reorder`, `diff`, `collection` and `dehint` run from
+`crates/tables/crosscheck/python_tools.py` (M12.71); those of `tables extract`, `delete`, `add` and `checksum`, the
+`spot` listings, `diff --detail offset`, `metrics`, `metrics --format afm`, `glyphs rename` and `dehint` against AFDKO's
+C tools from `crates/tables/crosscheck/afdko_c_tools.py` (M12.72). A difference a measure finds is fixed, or listed
+here with its reason and in the script's `EXPECTED`.
 
 ### Method: compiler normalisation (fontc's `ttx_diff`)
 

@@ -18,6 +18,7 @@ pub type Inspect = fn(&FontCraftApp, &mut Map<String, Value>);
 pub const INSPECT: &[Inspect] = &[
     crate::shell::kerning_window::inspect,
     crate::canvas::text::inspect,
+    crate::canvas::hoi::inspect,
     crate::shell::space_center::inspect,
     crate::app::close::inspect,
     crate::shell::start::inspect,
@@ -35,6 +36,7 @@ pub const INSPECT: &[Inspect] = &[
     crate::shell::tabs::inspect,
     crate::dialogs::axis_mappings::inspect,
     crate::dialogs::cross_axis::inspect,
+    crate::dialogs::print::inspect,
     crate::shell::getters::inspect,
     super::window_input::inspect,
 ];

@@ -145,8 +145,8 @@ fn labels(font: &Font, indices: &[usize]) -> Vec<String> {
     indices.iter().filter_map(|i| font.bitmap_strikes.get(*i)).map(BitmapStrike::label).collect()
 }
 
-/// Whether any glyph has a path or component on any layer.
-fn has_outlines(font: &Font) -> bool {
+/// Whether any glyph has a path or component on any layer: a bitmap's advance then follows its glyph's width.
+pub fn has_outlines(font: &Font) -> bool {
     font.glyphs.iter().any(|g| g.layers.iter().any(|l| !l.shapes.is_empty()))
 }
 

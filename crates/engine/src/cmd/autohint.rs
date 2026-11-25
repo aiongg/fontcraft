@@ -192,6 +192,7 @@ fn hint_layers(
         dicts.push(entry);
     }
     for name in glyphs {
+        crate::work::check()?;
         let glyph = font.glyph(name).ok_or_else(|| p.bad(format!("there is no glyph `{name}`")))?;
         crate::check_unlocked(glyph)?;
         // The layers to hint, with their charstring paths.

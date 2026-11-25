@@ -305,6 +305,56 @@ pub(crate) struct ReadUfo {
     pub kerning: MasterKerning,
     pub files: BTreeMap<String, Arc<[u8]>>,
     pub format_version: u32,
+    /// What was read in a plainer form than the files state, or left out.
+    pub warnings: Vec<String>,
+}
+
+/// The master extra key of the glyphs whose files were skipped: UFO layer directory → glyph name →
+/// file name. Their `contents.plist` entries are written back.
+const SKIPPED: &str = "skippedGlifs";
+/// Most names a warning lists.
+const MAX_LISTED: usize = 10;
+/// Most warnings about layers one UFO gives.
+const MAX_WARNINGS: usize = 100;
+
+/// `names` as a warning lists them.
+fn listed(names: &[String]) -> String {
+    let mut out = names.iter().take(MAX_LISTED).cloned().collect::<Vec<_>>().join(", ");
+    if names.len() > MAX_LISTED {
+        out.push_str(&format!(" and {} more", names.len() - MAX_LISTED));
+    }
+    out
+}
+
+/// Gives the layers of a `layercontents.plist` that share a name a name each, in `pairs` and in
+/// the list as it was read: a layer's id and place in the document follow from its name.
+fn rename_doubled_layers(pairs: &mut [(String, String)], root: &mut Value, warnings: &mut Vec<String>) {
+    let mut taken: HashSet<String> = pairs.iter().map(|(n, _)| n.clone()).collect();
+    let mut seen: HashSet<String> = pairs.iter().filter(|(_, d)| d == DEFAULT_DIR).map(|(n, _)| n.clone()).collect();
+    let mut next: HashMap<String, usize> = HashMap::new();
+    for (i, (name, dir)) in pairs.iter_mut().enumerate() {
+        if dir == DEFAULT_DIR || seen.insert(name.clone()) {
+            continue;
+        }
+        let number = next.entry(name.clone()).or_insert(2);
+        let mut new = format!("{name} #{number}");
+        while taken.contains(&new) {
+            *number += 1;
+            new = format!("{name} #{number}");
+        }
+        if warnings.len() < MAX_WARNINGS {
+            warnings.push(format!("{LAYERCONTENTS} lists two layers named `{name}`: the one in `{dir}` is read as `{new}`"));
+        }
+        taken.insert(new.clone());
+        seen.insert(new.clone());
+        if let Value::Array(list) = &mut *root
+            && let Some(Value::Array(pair)) = list.items.get_mut(i)
+            && let Some(slot) = pair.items.first_mut()
+        {
+            *slot = str_value(&new);
+        }
+        *name = new;
+    }
 }
 
 /// The id of the master layer's layer in a non-default UFO layer.
@@ -351,6 +401,7 @@ pub(crate) fn read_master(files: &Files, master_id: &str) -> Result<ReadUfo> {
     mx.push(Family::Ufo, "plistStyle", plist_style.to_value());
     mx.push(Family::Ufo, METAINFO, Value::Dict(meta));
     let mut plists = Plists { files, style: plist_style, styles: Dict::new() };
+    let mut warnings: Vec<String> = Vec::new();
 
     // fontinfo.plist; a UFO 1's lib holds some of its values.
     let mut info = plists.dict(FONTINFO)?;
@@ -371,6 +422,10 @@ pub(crate) fn read_master(files: &Files, master_id: &str) -> Result<ReadUfo> {
         Some(lib) => lib,
         None => plists.dict(LIB).ok().flatten(),
     };
+    if lib.is_none() && files.contains_key(LIB) {
+        warnings
+            .push(format!("{LIB} is not a property list of a dictionary and was not read; it is kept, and replaced when the font's lib is written"));
+    }
     // A style-map style outside the four that the writer moved to the lib ([`write_master`]).
     if let (Some(info), Some(v)) = (&mut info, lib.as_ref().and_then(|d| d.get(STYLE_MAP_STYLE_LIB)))
         && info.get(STYLE_MAP_STYLE).is_none()
@@ -419,7 +474,7 @@ pub(crate) fn read_master(files: &Files, master_id: &str) -> Result<ReadUfo> {
 
     // layers
     let layer_list: Vec<(String, String)> = match plists.value(LAYERCONTENTS)? {
-        Some(root) => {
+        Some(mut root) => {
             let pairs = root.as_array().ok_or_else(|| bad(LAYERCONTENTS, "the file does not hold a list"))?;
             let mut out = Vec::new();
             for item in &pairs.items {
@@ -431,6 +486,7 @@ pub(crate) fn read_master(files: &Files, master_id: &str) -> Result<ReadUfo> {
                     _ => return Err(bad(LAYERCONTENTS, "an entry is not a pair of strings")),
                 }
             }
+            rename_doubled_layers(&mut out, &mut root, &mut warnings);
             master.extra.push(Family::Ufo, LAYERCONTENTS, root);
             out
         }
@@ -446,6 +502,7 @@ pub(crate) fn read_master(files: &Files, master_id: &str) -> Result<ReadUfo> {
     }
     let mut layerinfo = Dict::new();
     let mut contents_kept = Dict::new();
+    let mut skipped_glifs = Dict::new();
     let mut missing_dirs: Vec<Value> = Vec::new();
     let mut glyphs: Vec<Glyph> = Vec::new();
     let mut index: HashMap<String, usize> = HashMap::new();
@@ -458,9 +515,10 @@ pub(crate) fn read_master(files: &Files, master_id: &str) -> Result<ReadUfo> {
         }
         let contents_path = format!("{dir}/{CONTENTS}");
         let Some(contents) = plists.dict(&contents_path)? else {
-            // Listed but absent (a test file's shortcut): an empty layer, and written as one.
-            if is_default {
-                return Err(bad(&contents_path, "missing"));
+            // Listed but absent: an empty layer, and written as one. Files in its directory stay
+            // in the document's files.
+            if warnings.len() < MAX_WARNINGS {
+                warnings.push(format!("{contents_path} is missing: the layer `{layer_name}` is read as empty"));
             }
             missing_dirs.push(Value::String(dir.as_str().into()));
             continue;
@@ -471,14 +529,34 @@ pub(crate) fn read_master(files: &Files, master_id: &str) -> Result<ReadUfo> {
             layerinfo.insert(layer_name.as_str(), v);
             consumed.insert(info_path);
         }
-        for (name, file) in &contents.entries {
+        // A glyph listed more than once has the file its last entry names, as ufoLib reads it.
+        let last: HashMap<&str, &Value> = contents.entries.iter().map(|(n, f)| (n.as_str(), f)).collect();
+        let mut seen: HashSet<&str> = HashSet::new();
+        let (mut doubled, mut absent, mut empty) = (Vec::new(), Vec::new(), Vec::new());
+        let mut skipped = Dict::new();
+        for (name, entry) in &contents.entries {
             let name = name.as_str();
+            let file = last.get(name).copied().unwrap_or(entry);
+            if entry.as_str().is_some() && entry.as_str() != file.as_str() {
+                doubled.push(format!("{name} ({})", entry.as_str().unwrap_or_default()));
+            }
+            if !seen.insert(name) {
+                continue;
+            }
             let file = file.as_str().ok_or_else(|| bad(&contents_path, format!("`{name}` has no file name")))?;
             if !is_plain_file(file) {
                 return Err(bad(&contents_path, format!("`{file}` is not a file name")));
             }
             let path = format!("{dir}/{file}");
-            let glif_text = text(files, &path)?.ok_or_else(|| bad(&path, "missing"))?;
+            let glif_text = match text(files, &path)? {
+                Some(t) if !t.trim_start_matches('\u{feff}').trim().is_empty() => t,
+                found => {
+                    let list = if found.is_some() { &mut empty } else { &mut absent };
+                    list.push(format!("{name} ({file})"));
+                    skipped.insert(name, str_value(file));
+                    continue;
+                }
+            };
             consumed.insert(path.clone());
             let id = if is_default { master_id.to_string() } else { layer_id(master_id, layer_name) };
             let g = glif::read(glif_text, &path, &id, master_id)?;
@@ -535,7 +613,26 @@ pub(crate) fn read_master(files: &Files, master_id: &str) -> Result<ReadUfo> {
             }
             glyph.layers.push(layer);
         }
+        for (what, names) in [
+            ("names files that are missing; the glyphs were skipped and stay listed", &absent),
+            ("names empty files; the glyphs were skipped and their files stay", &empty),
+            ("lists glyphs again with other files, which were not read and stay", &doubled),
+        ] {
+            if !names.is_empty() {
+                warnings.push(format!("{contents_path} {what}: {}", listed(names)));
+            }
+        }
+        if seen.len() < contents.entries.len() && doubled.is_empty() {
+            warnings.push(format!("{contents_path} lists a glyph more than once; it was read once"));
+        }
+        drop((last, seen));
+        if !skipped.is_empty() {
+            skipped_glifs.insert(dir.as_str(), Value::Dict(skipped));
+        }
         contents_kept.insert(dir.as_str(), Value::Dict(contents));
+    }
+    if !skipped_glifs.is_empty() {
+        master.extra.push(Family::Ufo, SKIPPED, Value::Dict(skipped_glifs));
     }
     master.extra.push(Family::Ufo, "contents", Value::Dict(contents_kept));
     if !missing_dirs.is_empty() {
@@ -693,6 +790,7 @@ pub(crate) fn read_master(files: &Files, master_id: &str) -> Result<ReadUfo> {
         kerning,
         files: rest,
         format_version,
+        warnings,
     })
 }
 
@@ -1003,9 +1101,10 @@ pub fn read_reporting(files: &Files) -> Result<(Font, Vec<String>)> {
         bitmap_strikes: Arc::default(),
         extra: Arc::default(),
     };
+    let mut warnings = r.warnings;
     glyphkeys::read(&mut font, &master_id);
     libkeys::read(&mut font, false, &master_id);
-    let warnings: Vec<String> = crate::colorkeys::read(&mut font).into_iter().collect();
+    warnings.extend(crate::colorkeys::read(&mut font));
     crate::gdef::strip_derived(&mut font, &master_id);
     font.check()?;
     Ok((font, warnings))
@@ -1278,6 +1377,7 @@ pub(crate) fn write_master(font: &Font, target: &Target<'_>) -> Result<Files> {
         .and_then(Value::as_array)
         .map(|a| a.items.iter().filter_map(Value::as_str).collect())
         .unwrap_or_default();
+    let skipped_glifs = ufo_get(&master.extra, SKIPPED).and_then(Value::as_dict);
     let mut layers: Vec<(String, String)> = Vec::new();
     let kept_layers: Vec<(String, String)> = ufo_get(&master.extra, LAYERCONTENTS)
         .and_then(Value::as_array)
@@ -1298,7 +1398,7 @@ pub(crate) fn write_master(font: &Font, target: &Target<'_>) -> Result<Files> {
     let mut used: Vec<String> = vec![default_name.clone()];
     used.extend(plan.iter().map(|(n, _)| n.clone()));
     for (n, d) in &kept_layers {
-        if used.contains(n) || d == DEFAULT_DIR || missing.contains(&d.as_str()) {
+        if used.contains(n) || d == DEFAULT_DIR || missing.contains(&d.as_str()) || skipped_glifs.is_some_and(|s| s.get(d).is_some()) {
             layers.push((n.clone(), d.clone()));
         }
     }
@@ -1501,6 +1601,24 @@ pub(crate) fn write_master(font: &Font, target: &Target<'_>) -> Result<Files> {
                 files_taken.insert(file.to_lowercase());
             }
         }
+        // A new glyph does not take the name of a file that was not read as a glyph, or that a
+        // skipped glyph is listed with; a glyph of the skipped one's name does.
+        let skipped = skipped_glifs.and_then(|s| s.get(dir)).and_then(Value::as_dict);
+        let in_dir = format!("{}{dir}/", target.prefix);
+        for (path, bytes) in font.files.0.range(in_dir.clone()..).take_while(|(p, _)| p.starts_with(in_dir.as_str())) {
+            if let Some(file) = path.strip_prefix(in_dir.as_str())
+                && !bytes.is_empty()
+            {
+                files_taken.insert(file.to_lowercase());
+            }
+        }
+        for (name, file) in skipped.into_iter().flat_map(|s| &s.entries) {
+            if let Some(file) = file.as_str()
+                && !entries.iter().any(|(n, _, _, _, _)| n == name.as_str())
+            {
+                files_taken.insert(file.to_lowercase());
+            }
+        }
         for (name, file, g, layer, is_background) in &mut entries {
             if file.is_empty() {
                 *file = glyph_file_name(name, &files_taken).ok_or_else(|| bad(name, "no free file name for the glyph"))?;
@@ -1595,7 +1713,11 @@ pub(crate) fn write_master(font: &Font, target: &Target<'_>) -> Result<Files> {
         // The kept contents, for its order and spellings; then the model's glyphs.
         if let Some(kept) = kept_contents.and_then(|c| c.get(dir)).and_then(Value::as_dict) {
             contents = kept.clone();
-            contents.entries.retain(|(k, _)| entries.iter().any(|(n, _, _, _, _)| n == k.as_str()));
+            let files: HashSet<&str> = entries.iter().map(|(_, f, _, _, _)| f.as_str()).collect();
+            contents.entries.retain(|(k, v)| {
+                let still_skipped = skipped.is_some_and(|s| s.get(k.as_str()).is_some()) && v.as_str().is_some_and(|f| !files.contains(f));
+                entries.iter().any(|(n, _, _, _, _)| n == k.as_str()) || still_skipped
+            });
         }
         for (name, file, _, _, _) in &entries {
             patch(&mut contents, name, Some(str_value(file)));
@@ -2407,6 +2529,126 @@ mod tests {
         format!("    <array>\n{items}    </array>\n")
     }
 
+    /// A one-master UFO with the glyphs Alpha, Beta and Gamma, and a layer `sketch` with
+    /// Alpha.
+    fn lenient_ufo() -> Files {
+        let mut font = Font::new("Lenient");
+        let master = font.masters[0].id.clone();
+        for name in ["Alpha", "Beta", "Gamma"] {
+            font.add_glyph(name, Vec::new(), 500.0).unwrap();
+        }
+        let mut sketch = Layer::new(&master, 400.0);
+        sketch.id = "sketch-id".into();
+        sketch.info.name = Some("sketch".into());
+        font.glyph_mut("Alpha").unwrap().layers.push(sketch);
+        write(&font).unwrap()
+    }
+
+    /// The warnings of reading `files`, which must come back unchanged when written.
+    fn unchanged(files: &Files) -> (Font, Vec<String>) {
+        let (font, warnings) = read_reporting(files).unwrap();
+        let out = write(&font).unwrap();
+        assert_eq!(out.keys().collect::<Vec<_>>(), files.keys().collect::<Vec<_>>());
+        for (path, bytes) in files {
+            assert_eq!(s(bytes), s(&out[path]), "{path}");
+        }
+        (font, warnings)
+    }
+
+    fn one(warnings: &[String], needle: &str) {
+        assert!(warnings.len() == 1 && warnings[0].contains(needle), "{warnings:?}");
+    }
+
+    #[test]
+    fn a_missing_glif_is_skipped_and_stays_listed() {
+        let mut files = lenient_ufo();
+        assert!(unchanged(&files).1.is_empty());
+        files.remove("glyphs/B_eta.glif").unwrap();
+        let (mut font, warnings) = unchanged(&files);
+        one(&warnings, "missing; the glyphs were skipped and stay listed: Beta (B_eta.glif)");
+        assert!(font.glyph("Beta").is_none() && font.glyph("Alpha").is_some());
+        // A new glyph of that name takes the entry's place.
+        font.add_glyph("Beta", Vec::new(), 321.0).unwrap();
+        let out = write(&font).unwrap();
+        assert!(s(&out["glyphs/B_eta.glif"]).contains("321"));
+        let (font, warnings) = read_reporting(&out).unwrap();
+        assert!(warnings.is_empty() && font.glyph("Beta").is_some(), "{warnings:?}");
+    }
+
+    #[test]
+    fn an_empty_glif_is_skipped_and_its_file_stays() {
+        let mut files = lenient_ufo();
+        files.insert("glyphs/G_amma.glif".into(), b"\n".to_vec());
+        let (font, warnings) = unchanged(&files);
+        one(&warnings, "empty files; the glyphs were skipped and their files stay: Gamma (G_amma.glif)");
+        assert!(font.glyph("Gamma").is_none());
+    }
+
+    #[test]
+    fn a_layer_without_contents_is_read_as_empty_and_its_files_stay() {
+        let mut files = lenient_ufo();
+        let dir = files.keys().find(|k| k.contains("sketch") && k.ends_with(CONTENTS)).unwrap().rsplit_once('/').unwrap().0.to_string();
+        files.remove(&format!("{dir}/{CONTENTS}")).unwrap();
+        files.remove(&format!("{dir}/{LAYERINFO}"));
+        let (font, warnings) = read_reporting(&files).unwrap();
+        one(&warnings, "the layer `sketch` is read as empty");
+        assert_eq!(font.glyph("Alpha").unwrap().layers.len(), 1);
+        let out = write(&font).unwrap();
+        assert_eq!(out[LAYERCONTENTS], files[LAYERCONTENTS]);
+        assert_eq!(out[&format!("{dir}/A_lpha.glif")], files[&format!("{dir}/A_lpha.glif")]);
+        assert!(!out.contains_key(&format!("{dir}/{CONTENTS}")));
+        // The default layer too: a new glyph does not take a file that is there.
+        let mut files = lenient_ufo();
+        files.remove("glyphs/contents.plist").unwrap();
+        files.remove("glyphs/layerinfo.plist");
+        let (mut font, warnings) = read_reporting(&files).unwrap();
+        assert!(warnings.iter().any(|w| w.contains("glyphs/contents.plist is missing")), "{warnings:?}");
+        assert!(font.glyph("Beta").is_none());
+        font.add_glyph("Beta", Vec::new(), 321.0).unwrap();
+        let out = write(&font).unwrap();
+        assert_eq!(out["glyphs/B_eta.glif"], files["glyphs/B_eta.glif"], "the file that was not read");
+        assert!(s(&out["glyphs/contents.plist"]).contains("<key>Beta</key>"));
+    }
+
+    #[test]
+    fn layers_of_one_name_and_glyphs_listed_twice_are_told_apart() {
+        let mut files = lenient_ufo();
+        let path = files.keys().find(|k| k.contains("sketch") && k.ends_with(CONTENTS)).unwrap().clone();
+        let dir = path.rsplit_once('/').unwrap().0.to_string();
+        let copies: Vec<(String, Vec<u8>)> =
+            files.iter().filter(|(k, _)| k.starts_with(&format!("{dir}/"))).map(|(k, v)| (k.replacen(&dir, "glyphs.copy", 1), v.clone())).collect();
+        files.extend(copies);
+        let mut list = s(&files[LAYERCONTENTS]).to_string();
+        let end = list.rfind("</array>").unwrap();
+        list.insert_str(end, "<array><string>sketch</string><string>glyphs.copy</string></array>");
+        files.insert(LAYERCONTENTS.into(), list.into_bytes());
+        let (font, warnings) = read_reporting(&files).unwrap();
+        assert!(warnings.iter().any(|w| w.contains("the one in `glyphs.copy` is read as `sketch #2`")), "{warnings:?}");
+        // Both layers' libs give the id `sketch-id`: the second layer has one of its own.
+        let names: Vec<Option<&str>> = font.glyph("Alpha").unwrap().layers.iter().map(|l| l.info.name.as_deref()).collect();
+        assert!(names.contains(&Some("sketch")) && names.contains(&Some("sketch #2")), "{names:?}");
+        let out = write(&font).unwrap();
+        assert!(out.contains_key("glyphs.copy/A_lpha.glif") && out.contains_key(&format!("{dir}/A_lpha.glif")));
+        assert!(read_reporting(&out).unwrap().0.glyph("Alpha").unwrap().layers.len() == 3);
+
+        // A glyph listed twice with one file is read once; with two, the last entry counts and
+        // the other file stays.
+        let mut files = lenient_ufo();
+        let contents = s(&files["glyphs/contents.plist"]).to_string();
+        let with =
+            |entry: &str| contents.replace("  </dict>", &format!("    <key>Alpha</key>\n    <string>{entry}</string>\n  </dict>")).into_bytes();
+        files.insert("glyphs/contents.plist".into(), with("A_lpha.glif"));
+        one(&unchanged(&files).1, "lists a glyph more than once");
+        let other = s(&files["glyphs/A_lpha.glif"]).replace("500", "510");
+        files.insert("glyphs/A_two.glif".into(), other.into_bytes());
+        files.insert("glyphs/contents.plist".into(), with("A_two.glif"));
+        let (font, warnings) = read_reporting(&files).unwrap();
+        one(&warnings, "were not read and stay: Alpha (A_lpha.glif)");
+        assert_eq!(font.glyph("Alpha").unwrap().layers[0].width, 510.0);
+        let out = write(&font).unwrap();
+        assert_eq!((&out["glyphs/A_lpha.glif"], &out["glyphs/A_two.glif"]), (&files["glyphs/A_lpha.glif"], &files["glyphs/A_two.glif"]));
+    }
+
     #[test]
     fn a_format_2_ufo_written_as_format_3_lists_its_layers() {
         let mut font = read(&ufo_with("", "", 2)).unwrap();
@@ -2801,9 +3043,9 @@ mod tests {
         let mut v4 = good.clone();
         v4.insert("metainfo.plist".into(), s(&good["metainfo.plist"]).replace("<integer>3</integer>", "<integer>4</integer>").into_bytes());
         assert!(read(&v4).is_err());
-        let mut missing_glif = good.clone();
-        missing_glif.remove("glyphs/a.glif");
-        assert!(read(&missing_glif).is_err());
+        let mut bad_glif = good.clone();
+        bad_glif.insert("glyphs/a.glif".into(), b"<glyph name=\"a\"".to_vec());
+        assert!(read(&bad_glif).is_err());
         let mut escape = good.clone();
         escape.insert(
             "glyphs/contents.plist".into(),

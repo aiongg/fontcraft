@@ -247,7 +247,8 @@ fn reads_realigned(
     layer.shapes.iter().any(|s| {
         let Shape::Component(c) = s else { return false };
         let Some(base) = font.glyphs.position(&c.glyph).filter(|b| affected.contains(b)) else { return false };
-        let read = c.info.master_id.as_deref().unwrap_or(&layer.master);
+        let pinned = font.glyphs.as_arcs().get(base).and_then(|g| c.pinned_layer(g));
+        let read = pinned.map_or(layer.master.as_str(), |l| l.master.as_str());
         masters.contains(read) || followed.get(&base).is_some_and(|m| m.contains(read))
     })
 }

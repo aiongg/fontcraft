@@ -115,6 +115,58 @@ pub fn aligned_placement(font: &Font, glyph: &str, layer: &str) -> Result<Vec<Pl
     Ok(plan.parts.into_iter().filter_map(|p| p.mode.map(|mode| Placement { shape: p.shape, mode, transform: p.transform })).collect())
 }
 
+/// A component attached through its anchors to a glyph before it on the layer.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Attachment {
+    /// Index into `Layer::shapes`.
+    pub shape: usize,
+    /// Where the component is.
+    pub stored: Point,
+    /// Where its anchor pair puts it.
+    pub wanted: Point,
+    /// The component is aligned horizontally only.
+    pub horizontal: bool,
+}
+
+/// What automatic alignment says about a layer as it is stored.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct LayerAlignment {
+    /// The components attached through anchors that automatic alignment applies to: the aligned
+    /// ones, and on a layer of components only also those whose alignment is turned off.
+    pub attachments: Vec<Attachment>,
+    /// The components aligned now, in shape order.
+    pub aligned: Vec<usize>,
+    /// The width the aligned components give the layer; `None` when it is not derived (none is
+    /// aligned, the layer has paths, or a component's glyph is missing).
+    pub width: Option<f64>,
+}
+
+/// Where automatic alignment puts what is on `layer`, without changing it. Components whose
+/// alignment is off stand where they are, as [`align_layer`] leaves them. Empty when the font
+/// turns automatic alignment off.
+pub fn layer_alignment(font: &Font, glyph: &Glyph, layer: &Layer, cache: &mut AnchorCache) -> Result<LayerAlignment, ComponentsError> {
+    let Some(plan) = layout(font, glyph, layer, cache, true)? else { return Ok(LayerAlignment::default()) };
+    let has_paths = LayerFacts::of(layer).has_paths;
+    let mut out = LayerAlignment::default();
+    for p in &plan.parts {
+        let Some(Shape::Component(c)) = layer.shapes.get(p.shape) else { continue };
+        if p.mode.is_some() {
+            out.aligned.push(p.shape);
+        }
+        let applies = p.mode.is_some() || (!has_paths && c.info.alignment == Alignment::Disabled);
+        if let Some(wanted) = p.attached.filter(|_| applies) {
+            let [.., x, y] = c.affine().as_coeffs();
+            let horizontal = p.mode == Some(AlignMode::Horizontal);
+            let wanted = if horizontal { Point::new(wanted.x, y) } else { wanted };
+            out.attachments.push(Attachment { shape: p.shape, stored: Point::new(x, y), wanted, horizontal });
+        }
+    }
+    if !out.aligned.is_empty() && plan.parts.iter().all(|p| p.source.is_some()) {
+        out.width = plan.width;
+    }
+    Ok(out)
+}
+
 /// `glyph`'s layer `layer` with its aligned components placed and its width and sidebearings
 /// derived ([`crate::metrics::derived_metrics`]); `None` when nothing would change.
 pub fn align_layer(font: &Font, glyph: &str, layer: &str) -> Result<Option<Layer>, ComponentsError> {
@@ -211,6 +263,8 @@ pub(crate) struct Planned {
     pub(crate) transform: Transform,
     /// Placed as a base (not attached through an anchor).
     pub(crate) base: bool,
+    /// Where the anchor pair of an attached component puts it, aligned or not.
+    attached: Option<Point>,
     /// The base glyph and the id of its layer that was read; `None` when the glyph is missing.
     pub(crate) source: Option<(String, String)>,
 }
@@ -227,6 +281,11 @@ type Cluster = HashMap<String, Point>;
 
 /// The layout of `layer`; `None` when no component of it is aligned.
 pub(crate) fn plan_layer(font: &Font, glyph: &Glyph, layer: &Layer, cache: &mut AnchorCache) -> Result<Option<LayerPlan>, ComponentsError> {
+    layout(font, glyph, layer, cache, false)
+}
+
+/// [`plan_layer`]; with `always` also for a layer none of whose components is aligned.
+fn layout(font: &Font, glyph: &Glyph, layer: &Layer, cache: &mut AnchorCache, always: bool) -> Result<Option<LayerPlan>, ComponentsError> {
     if alignment_off(font) {
         return Ok(None);
     }
@@ -243,7 +302,7 @@ pub(crate) fn plan_layer(font: &Font, glyph: &Glyph, layer: &Layer, cache: &mut 
             _ => None,
         })
         .collect();
-    if modes.iter().all(|(_, _, m)| m.is_none()) {
+    if !always && modes.iter().all(|(_, _, m)| m.is_none()) {
         return Ok(None);
     }
     let derives_width = !facts.has_paths;
@@ -284,6 +343,7 @@ pub(crate) fn plan_layer(font: &Font, glyph: &Glyph, layer: &Layer, cache: &mut 
             anchors.iter().map(|an| (swap_names(&an.name, flip_x, flip_y), Point::new(a * an.x + cc * an.y, b * an.x + d * an.y))).collect();
 
         let attach = find_target(&local, c.info.anchor.as_deref(), &clusters);
+        let attached = attach.map(|(_, own, target)| Point::new(target.x - own.x, target.y - own.y));
         let (tx, ty, cluster_at, is_base) = match attach {
             Some((cluster, own, target)) => {
                 let (x, y) = match mode {
@@ -328,7 +388,7 @@ pub(crate) fn plan_layer(font: &Font, glyph: &Glyph, layer: &Layer, cache: &mut 
         }
         let transform = if mode.is_some() { with_translation(&c.transform, tx, ty) } else { c.transform };
         let source = base_glyph.zip(base_layer).map(|(g, l)| (g.name.clone(), l.id.clone()));
-        parts.push(Planned { shape, mode, transform, base: is_base, source });
+        parts.push(Planned { shape, mode, transform, base: is_base, attached, source });
     }
     let width = if derives_width {
         let w = keep_if_same(pen + right, layer.width);

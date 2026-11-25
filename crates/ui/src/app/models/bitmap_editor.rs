@@ -38,8 +38,12 @@ pub struct BitmapEditorModel {
     pub advance: i32,
     /// The glyph's outline in the default master, in strike pixels from the glyph origin.
     pub guide: Arc<CellArt>,
-    /// The tool's word (`fontcraft_tools::bitmap::BitmapTool::word`).
+    /// The tool's word (`shell::bitmap_editor::EditorTool::word`).
     pub tool: String,
+    /// Points a pixel shows at; `None` fits the pixels to the window.
+    pub pixel_size: Option<u8>,
+    /// The font has outlines, so the advance follows the glyph's width.
+    pub has_outlines: bool,
     /// The level the tools draw with, and the strike's top level.
     pub level: u8,
     pub max_level: u8,
@@ -79,6 +83,8 @@ fn editor(font: &Font, view: &ViewState) -> BitmapEditorModel {
         tool: state.tool.word().to_string(),
         show_outline: state.outline,
         show_grid: state.grid,
+        pixel_size: state.pixel_size,
+        has_outlines: fontcraft_engine::cmd::bitmap_edit::has_outlines(font),
         has_strikes: !font.bitmap_strikes.is_empty(),
         ..BitmapEditorModel::default()
     };

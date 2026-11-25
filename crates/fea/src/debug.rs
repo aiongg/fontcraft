@@ -155,6 +155,8 @@ pub(crate) struct Positions<'a> {
     pub(crate) rewritten: Option<&'a str>,
     /// The file and byte offset in it of a position in the compiled tree.
     pub(crate) locate: &'a dyn Fn(usize) -> Option<(String, usize)>,
+    /// The byte offset in a file as written of an offset in the text fea-rs read it as.
+    pub(crate) source: &'a dyn Fn(&str, usize) -> usize,
 }
 
 /// One lookup as fea-rs writes it: the table (`true` for `GPOS`), the lookup index, the place
@@ -166,8 +168,15 @@ struct Raw {
     name: Option<String>,
 }
 
-/// The origins of the lookups `c` holds, from the places fea-rs recorded for them.
-pub(crate) fn build(tree: &ParseTree, c: &Compilation, files: &Loaded, positions: &Positions<'_>) -> Result<LookupDebug, Diagnostic> {
+/// The origins of the lookups `c` holds, from the places fea-rs recorded for them in `files`;
+/// `sources` are the files as written.
+pub(crate) fn build(
+    tree: &ParseTree,
+    c: &Compilation,
+    files: &Loaded,
+    sources: &Loaded,
+    positions: &Positions<'_>,
+) -> Result<LookupDebug, Diagnostic> {
     let unreadable = || Diagnostic::request(Severity::Error, "the compiler's lookup debug information could not be read");
     let raw = match &c.debg {
         Some(bytes) => {
@@ -207,9 +216,12 @@ pub(crate) fn build(tree: &ParseTree, c: &Compilation, files: &Loaded, positions
                 }
             },
         });
-        wanted.push(at);
+        wanted.push(at.map(|(file, offset)| {
+            let offset = (positions.source)(&file, offset);
+            (file, offset)
+        }));
     }
-    let places = resolve_places(&wanted, files);
+    let places = resolve_places(&wanted, sources);
     for (entry, place) in raw.into_iter().zip(places) {
         let origins = if entry.gpos { &mut debug.gpos } else { &mut debug.gsub };
         if let Some(origin) = origins.get_mut(entry.index) {

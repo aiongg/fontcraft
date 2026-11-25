@@ -55,6 +55,9 @@ pub struct CubicSources {
     pub paths: Vec<Vec<BezPath>>,
     /// Per source, the layer it is drawn from, for its hints; `None` leaves the glyph unhinted.
     pub layers: Vec<Option<SourceLayer>>,
+    /// How many of the sources, the last ones, only sample the outline between the others
+    /// ([`super::hoi`]): they have no layer, and hints there are interpolated.
+    pub samples: usize,
 }
 
 /// The layer one source of a glyph is drawn from.
@@ -237,6 +240,17 @@ fn round_op(op: &PathOp) -> PathOp {
     }
 }
 
+/// Per sampling source of `g`, the weights of its other sources there.
+fn sample_weights(g: &CubicSources) -> Result<Vec<Vec<f64>>, String> {
+    let own = g.locations.len().saturating_sub(g.samples);
+    let (Some(own), Some(sampled)) = (g.locations.get(..own), g.locations.get(own..)) else { return Ok(Vec::new()) };
+    if sampled.is_empty() {
+        return Ok(Vec::new());
+    }
+    let model = VariationModel::new(own, false).map_err(|e| e.to_string())?;
+    Ok(sampled.iter().map(|l| model.master_scalars(l)).collect())
+}
+
 /// The blended hints of glyph `g`, whose sources draw `ops`, over `model` (`None` for a glyph
 /// that does not vary), or `None` for an unhinted charstring.
 fn glyph_hints(
@@ -248,6 +262,8 @@ fn glyph_hints(
 ) -> Result<Option<Cff2Hints>, CompileError> {
     let name = g.glyph.as_str();
     let mut notes = Vec::new();
+    let ops = ops.get(..ops.len().saturating_sub(g.samples)).unwrap_or(ops);
+    let sampled = sample_weights(g).map_err(|message| CompileError::Glyph { glyph: name.to_string(), message })?;
     let plans: Vec<Plan> =
         ops.iter().enumerate().map(|(slot, path)| plan(ctx, g.layers.get(slot).and_then(Option::as_ref), name, path, &mut notes)).collect();
     let dicts: Vec<&FdDict> = plans
@@ -303,7 +319,10 @@ fn glyph_hints(
             return Ok(None);
         }
     };
-    let blend = |values: Vec<f64>| -> Result<Blend, CompileError> {
+    let blend = |mut values: Vec<f64>| -> Result<Blend, CompileError> {
+        for weights in &sampled {
+            values.push(weights.iter().zip(&values).map(|(w, v)| w * v).sum());
+        }
         match model {
             Some(m) => blend_with(m, &values, round_tolerant).map_err(|e| CompileError::Glyph { glyph: name.to_string(), message: e }),
             None => Ok(Blend::fixed(values.first().copied().unwrap_or(0.0))),
@@ -551,6 +570,7 @@ pub fn cff2_font(
     let mut models = Models::default();
     let mut out = Vec::with_capacity(glyphs.len());
     for g in glyphs {
+        crate::check_stop()?;
         let ops = source_ops(g)?;
         let shape = ops.first().map_or(&[][..], Vec::as_slice);
         if g.locations.len() < 2 {
