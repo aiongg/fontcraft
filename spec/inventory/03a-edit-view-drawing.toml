@@ -485,13 +485,14 @@ observe = [
 id = "draw.curveTypeFollowsGlyph"
 area = "drawing"
 milestone = "M3"
-summary = "The Draw tool draws quadratic curves in a glyph whose curves are quadratic, and cubic ones otherwise; in a glyph without a curve the font's curves decide. Convert Segment to Curve and a corner turned smooth follow the same rule, after the path's own curves."
+summary = "The Draw tool draws quadratic curves in a glyph whose curves are quadratic, and cubic ones otherwise; in a glyph without a curve the font's curves decide. A path that has curves is continued with its own type. Convert Segment to Curve and a corner turned smooth follow the same rule, after the path's own curves."
 ref = "updates.glyphsapp.com/Glyphs4.1-4100.html, build 3848"
 status = "docs"
 notes = "The release note says that new segments take the curve type of the glyph. One quadratic segment makes a layer quadratic; the font's type is that of its first layer with a curve, in glyph order."
 guesses = [
   "A quadratic segment drawn with two dragged handles has them as its two off-curve points; with one handle it has that one off-curve point.",
-  "A layer that mixes both types draws quadratic curves.",
+  "A new path in a layer that mixes both types is quadratic.",
+  "Two paths of different types that are joined keep their own curves; the joining segment has the type of the path being drawn.",
 ]
 observe = [
   "In a TrueType master, draw a circle with four drags: note the number of off-curve points of each segment and whether they lie where the handles were dragged.",

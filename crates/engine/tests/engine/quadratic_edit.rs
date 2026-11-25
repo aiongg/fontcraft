@@ -197,7 +197,7 @@ fn random_moves_of_quadratic_outlines_keep_types_and_smooth_nodes() {
             let (glyph, layer, shape) = found[random(found.len())].clone();
             let path = |s: &Session| match &s.font().unwrap().glyph(&glyph).unwrap().layers.iter().find(|l| l.id == layer).unwrap().shapes[shape] {
                 Shape::Path(p) => p.clone(),
-                _ => unreachable!("the shape was a path"),
+                _ => panic!("the shape was a path"),
             };
             let before = path(&s);
             let node = random(before.nodes.len());

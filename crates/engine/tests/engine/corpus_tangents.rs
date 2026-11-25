@@ -103,7 +103,7 @@ fn random_moves_keep_tangents_on_their_lines() {
             let (glyph, layer, shape) = found[random(found.len())].clone();
             let path = |s: &Session| match &s.font().unwrap().glyph(&glyph).unwrap().layers.iter().find(|l| l.id == layer).unwrap().shapes[shape] {
                 Shape::Path(p) => p.clone(),
-                _ => unreachable!("the shape was a path"),
+                _ => panic!("the shape was a path"),
             };
             let before = path(&s);
             let tangents: Vec<usize> = (0..before.nodes.len()).filter(|&k| off_line(&before, k).is_some()).collect();

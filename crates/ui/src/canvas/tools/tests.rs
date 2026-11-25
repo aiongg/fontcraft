@@ -158,6 +158,42 @@ fn undo_redo_and_backspace_keep_the_drawing() {
     assert_eq!(path_xy(&app, 2), [(520.0, 240.0)]);
 }
 
+/// A path with curves keeps its own curve type when it is continued, whatever else the glyph has. The path being drawn
+/// is not taken for another of the same node count once it is deleted.
+#[test]
+fn a_continued_path_keeps_its_curve_type_and_a_deleted_one_ends() {
+    let mut app = edit_app();
+    let quad = json!([{"x": 800, "y": 620}, {"x": 850, "y": 670, "type": "offcurve"}, {"x": 900, "y": 620, "type": "qcurve"}]);
+    run(&mut app, "path.addPath", json!({"glyph": "A", "closed": false, "nodes": quad}));
+    let cubic = json!([
+        {"x": 400, "y": 400}, {"x": 420, "y": 430, "type": "offcurve"}, {"x": 460, "y": 450, "type": "offcurve"}, {"x": 500, "y": 450, "type": "curve"}
+    ]);
+    run(&mut app, "path.addPath", json!({"glyph": "A", "closed": false, "nodes": cubic}));
+    call(&mut app, "ui.tool.select", json!({"tool": "draw"}));
+    press_and_release(&mut app, 500.0, 450.0);
+    pointer(
+        &mut app,
+        json!([
+            {"kind": "move", "x": 560, "y": 380}, {"kind": "down", "x": 560, "y": 380}, {"kind": "drag", "x": 560, "y": 320}, {"kind": "up", "x": 560, "y": 320}
+        ]),
+    );
+    let kinds = |app: &FontCraftApp, shape: usize| match layer(app).shapes.get(shape) {
+        Some(Shape::Path(p)) => p.nodes.iter().map(|n| n.kind).collect::<Vec<_>>(),
+        other => panic!("shape {shape} is not a path: {other:?}"),
+    };
+    let drawn = kinds(&app, 3);
+    assert!(drawn.len() > 4 && !drawn.contains(&NodeKind::QCurve), "{drawn:?}");
+
+    let count = drawn.len();
+    let other: Vec<_> = (0..count).map(|k| json!({"x": 300 + 20 * k, "y": 650 + 10 * (k % 2)})).collect();
+    run(&mut app, "path.addPath", json!({"glyph": "A", "closed": false, "nodes": other}));
+    pointer(&mut app, json!([{"kind": "move", "x": 561, "y": 250}]));
+    run(&mut app, "edit.delete", json!({"glyph": "A", "shapes": [3]}));
+    press_and_release(&mut app, 560.0, 250.0);
+    assert_eq!(kinds(&app, 3).len(), count, "the path that took the index is not continued");
+    assert_eq!(path_xy(&app, 4), [(560.0, 250.0)], "the click starts a path");
+}
+
 /// In a glyph with quadratic curves the Draw tool draws quadratic curves: a circle of four dragged nodes stays within
 /// a unit of the true one.
 #[test]

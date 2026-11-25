@@ -460,6 +460,8 @@ pub struct DrawTool {
     /// The handle that left the end node when the path had each node count: what an undo or a
     /// redo to that count gives back.
     trail: BTreeMap<usize, Option<Point>>,
+    /// The layer's shape count as the tool last saw it.
+    shapes: usize,
     /// The drawn curves are quadratic.
     quadratic: bool,
     hover: Option<Point>,
@@ -472,16 +474,23 @@ impl DrawTool {
     /// changed its path. Ends it when the path is gone.
     fn refresh(&mut self, scene: &Scene) {
         match self.drawing.and_then(|d| self.follow(scene, d)) {
-            Some((d, end, other)) => self.resume(d, Some(end), Some(other)),
+            Some((d, end, other)) => self.resume(d, Some(end), Some(other), scene.layer.shapes.len()),
             None => self.stop(),
         }
-        if self.drawing.is_some() {
-            self.quadratic = scene.draws_quadratic();
-        }
+        self.quadratic = self.draws_quadratic(scene);
     }
 
-    fn resume(&mut self, d: Drawing, end: Option<Point>, other: Option<Point>) {
+    /// Whether the next segment is quadratic: as the curves of the path being drawn, else as the layer's new curves.
+    fn draws_quadratic(&self, scene: &Scene) -> bool {
+        self.drawing
+            .and_then(|d| scene.layer.shapes.get(d.shape))
+            .and_then(|shape| fontcraft_model::curve_type::quadratic_curves(std::slice::from_ref(shape)))
+            .unwrap_or_else(|| scene.draws_quadratic())
+    }
+
+    fn resume(&mut self, d: Drawing, end: Option<Point>, other: Option<Point>, shapes: usize) {
         self.drawing = Some(d);
+        self.shapes = shapes;
         self.end_pos = end;
         self.other_pos = other;
         self.trail.insert(d.count, d.pending);
@@ -496,7 +505,8 @@ impl DrawTool {
 
     /// The drawing `d` in `scene`, and where its two ends are: its path by the place of either
     /// end node; a path of another index that has the other end node and a node count the drawing
-    /// had; else the path at its index with its node count (moved as a whole).
+    /// had; else the path at its index with its node count (moved as a whole), in a layer with as many shapes as
+    /// before: after a deletion another path has that index.
     fn follow(&self, scene: &Scene, d: Drawing) -> Option<(Drawing, Point, Point)> {
         let is = |known: Option<Point>, p: Point| known.is_some_and(|q| dist(p, q) <= SAME_PLACE);
         let found = |shape: usize, (count, end, other): (usize, Point, Point)| {
@@ -513,7 +523,7 @@ impl DrawTool {
             .find(|&(_, (count, _, other))| self.trail.contains_key(&count) && is(self.other_pos, other));
         match elsewhere {
             Some((shape, path)) => Some(found(shape, path)),
-            None => here.filter(|&(count, _, _)| count == d.count).map(|path| found(d.shape, path)),
+            None => here.filter(|&(count, _, _)| count == d.count && scene.layer.shapes.len() == self.shapes).map(|path| found(d.shape, path)),
         }
     }
 
@@ -556,7 +566,7 @@ impl DrawTool {
         };
         let next = Drawing { pending: self.trail.get(&next.count).copied().flatten(), ..next };
         let other = if next.count == 1 { Some(node.point()) } else { self.other_pos };
-        self.resume(next, Some(node.point()), other);
+        self.resume(next, Some(node.point()), other, cx.scene.layer.shapes.len());
         out.push(Action::Run { invocation });
         out.push(select_point(next.shape, next.end_index()));
         Some(out)
@@ -582,7 +592,7 @@ impl DrawTool {
         self.space = false;
         let scene = cx.scene;
         self.refresh(scene);
-        let quadratic = scene.draws_quadratic();
+        let quadratic = self.draws_quadratic(scene);
         let base = Selection::new().targets(scene);
         let shapes = scene.layer.shapes.len();
         let hit = hit_test(scene, &cx.view, ev.pos, cx.settings.hit_tolerance).filter(|h| !h.locked);
@@ -687,7 +697,7 @@ impl DrawTool {
                 if self.drawing.is_none_or(|old| old.shape != d.shape) {
                     self.stop();
                 }
-                self.resume(d, Some(h.node), self.other_pos);
+                self.resume(d, Some(h.node), self.other_pos, cx.scene.layer.shapes.len());
                 self.refresh(cx.scene);
                 out.push(select_point(d.shape, d.end_index()));
             }
@@ -701,12 +711,12 @@ impl DrawTool {
                 match (drawing, &p.kind) {
                     (Some(d), Kind::Start { .. }) => {
                         self.stop();
-                        self.resume(d, Some(p.h.node), Some(p.h.node));
+                        self.resume(d, Some(p.h.node), Some(p.h.node), p.shapes.saturating_add(1));
                     }
                     (Some(d), _) => {
                         // What was undone beyond this node cannot be redone.
                         self.trail.retain(|&count, _| count < d.count);
-                        self.resume(d, Some(p.h.node), self.other_pos);
+                        self.resume(d, Some(p.h.node), self.other_pos, p.shapes);
                     }
                     (None, _) => self.stop(),
                 }
