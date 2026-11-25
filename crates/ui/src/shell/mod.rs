@@ -133,3 +133,7 @@ fn body(ui: &mut Ui, cx: &mut BodyCx<'_>, app: &mut FontCraftApp) {
         dialogs.with(|host| crate::dialogs::run(host, app));
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod access_tests;

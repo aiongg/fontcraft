@@ -74,6 +74,8 @@ craft::ui::words! {
         one_match: "fontcraftTextPreview.oneMatch" = "1 match";
         matches: template "fontcraftTextPreview.matches" = "{count} matches";
         text: "fontcraftTextPreview.text" = "Preview text";
+        /// The drawn text, as assistive technology names it.
+        page: "fontcraftTextPreview.page" = "Preview page";
         too_long: template "fontcraftTextPreview.tooLong" = "{length} characters: the field edits texts of up to {limit}; Find and Replace change any text.";
         no_font: "fontcraftTextPreview.noFont" = "No font is open";
         area: "fontcraftTextPreview.area" = "Preview";
@@ -377,6 +379,7 @@ fn area(ui: &mut Ui, model: &TextPreviewModel, words: &TextPreviewWords, selecti
     let mut seen = None;
     Stack::new().scroll(Scroll::both()).fill().show(ui, |ui, _| {
         let (rect, response) = ui.allocate_exact_size(content, Sense::click());
+        response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Image, true, words.page.as_str()));
         let visible = rect.intersect(ui.clip_rect());
         let origin = rect.min;
         let asc = page.ascender as f32;

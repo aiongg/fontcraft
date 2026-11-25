@@ -1,7 +1,6 @@
 # 0008: The Craft suite's shared libraries
 
-**Status:** accepted 2026-10-13 (pilot approved by the owner). Review at M14, when craft-ui is
-adopted.
+**Status:** accepted 2026-10-13 (pilot approved by the owner). craft-ui is adopted (M14.9).
 
 ## Context
 
@@ -44,14 +43,9 @@ apart, and fixes made in one app do not reach the other.
      both stay.
    - craft-window's placement store keeps the window's place (`window.json`). The dock's layout is
      FontCraft's own file (`ui.json`), written through `fontcraft_format::write_atomic`.
-4. **Planned:**
-
-   | Crate | What it does for FontCraft | When |
-   |---|---|---|
-   | craft-quit | the desktop shell's close handling (unsaved documents on quit) | with that work |
-   | craft-ui | docking, tabs, icon buttons and the widget-state theme | the 1.0 UI polish milestone, M14 |
-   | craft-print | the PDF proof | M12.36 |
-
+4. **Adopted with the craft framework: craft-ui** (docking, tabs, icon buttons, the widget theme)
+   **and craft-quit**, through the `craft` facade at one pin (M14.9, M14.3). **craft-print** is
+   pinned on its own for the PDF proof (M12.36).
 5. **Not planned: craft-cms.** It manages colour profiles. FontCraft's colour fonts use sRGB, as
    the font formats define, so there is nothing for it to convert.
 

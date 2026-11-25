@@ -214,7 +214,7 @@ impl serde::Serialize for PanelId {
 
 impl<'de> serde::Deserialize<'de> for PanelId {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let id = String::deserialize(deserializer)?;
+        let id = <String as serde::Deserialize>::deserialize(deserializer)?;
         PanelId::from_id(&id).ok_or_else(|| serde::de::Error::custom(format!("no panel `{id}`")))
     }
 }
