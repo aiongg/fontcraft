@@ -709,8 +709,10 @@ fn read_snippet(v: &Value, name_key: &str) -> Option<Snippet> {
     Some(Snippet { name, code, automatic, disabled, notes, labels, file_name: None, extra: into_extra(d) })
 }
 
-fn write_snippet(s: &Snippet, name_key: &str) -> Value {
-    let mut e = vec![(name_key.into(), string(&s.name)), ("code".into(), string(&s.code))];
+/// `raw_lines`: the line breaks of the code are written as they are, in every format version.
+fn write_snippet(s: &Snippet, name_key: &str, raw_lines: bool) -> Value {
+    let code = if raw_lines { Value::String(Str::with_raw_line_breaks(&s.code)) } else { string(&s.code) };
+    let mut e = vec![(name_key.into(), string(&s.name)), ("code".into(), code)];
     if s.automatic {
         e.push(("automatic".into(), int(1)));
     }
@@ -726,15 +728,19 @@ fn write_snippet(s: &Snippet, name_key: &str) -> Value {
     Value::Dict(finish(e, &s.extra))
 }
 
+/// The font parameter that writes feature code with raw line breaks.
+const USE_LINE_BREAKS: &str = "Use Line Breaks";
+
 /// The prefixes, the classes (the font's groups after the feature classes) and the features.
 fn push_features(e: &mut Vec<(Str, Value)>, font: &Font, tag_key: &str) {
     let f = &font.features;
+    let raw_lines = font.info.params.get(USE_LINE_BREAKS).and_then(fontcraft_model::param_flag) == Some(true);
     let classes = groups::classes(font);
     for (key, list_of, name_key) in
         [("featurePrefixes", f.prefixes.as_slice(), "name"), ("classes", &classes, "name"), ("features", f.features.as_slice(), tag_key)]
     {
         if !list_of.is_empty() {
-            e.push((key.into(), list(list_of.iter().map(|s| write_snippet(s, name_key)).collect())));
+            e.push((key.into(), list(list_of.iter().map(|s| write_snippet(s, name_key, raw_lines)).collect())));
         }
     }
 }

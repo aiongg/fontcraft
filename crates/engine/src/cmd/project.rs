@@ -540,6 +540,7 @@ fn export(s: &mut Session, v: &Value) -> Result<Value> {
         first_only: false,
         autohinter: crate::external_autohint::trusted(s),
         naming: Default::default(),
+        instance_outputs: true,
     };
 
     let (mut font, mut warnings) = crate::project::read_font(&font_path)?;

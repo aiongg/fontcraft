@@ -1274,3 +1274,24 @@ fn version_2_top_level_keys_in_a_version_3_file_read_as_glyphslib_reads_them() {
     assert_eq!((s.disables_nice_names, s.grid_length, s.keyboard_increment_big), (None, None, Some(20.0)));
     assert_eq!(write(&font).unwrap(), text);
 }
+
+/// Use Line Breaks writes feature code with raw line breaks in format version 2, where other
+/// text has them escaped; versions 3 and 4 write every line break raw.
+#[test]
+fn use_line_breaks_writes_feature_code_with_raw_line_breaks() {
+    let plain = V2
+        .replace("familyName = Old;\n", "familyName = Old;\nnote = \"two\\012lines\";\n")
+        .replace("fontMaster = (", "features = (\n{\ncode = \"sub a by b;\\012sub c by \\\\d;\";\nname = liga;\n}\n);\nfontMaster = (");
+    let font = read(&plain).unwrap();
+    assert_eq!(font.features.features[0].code, "sub a by b;\nsub c by \\d;");
+    assert!(write(&font).unwrap().contains("code = \"sub a by b;\\012sub c by \\\\d;\";"), "{}", write(&font).unwrap());
+
+    let mut on = font.clone();
+    std::sync::Arc::make_mut(&mut on.info).params.0.push(fontcraft_model::Param::new("Use Line Breaks", int(1)));
+    let text = write(&on).unwrap();
+    assert!(text.contains("code = \"sub a by b;\nsub c by \\\\d;\";"), "{text}");
+    assert!(text.contains("\"two\\012lines\""), "other text stays escaped: {text}");
+    let again = read(&text).unwrap();
+    assert_eq!(again.features, font.features);
+    assert_eq!(write(&again).unwrap(), text, "a round trip");
+}

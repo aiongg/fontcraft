@@ -203,6 +203,14 @@ impl Str {
         Self { text, spelling }
     }
 
+    /// `text` written with its line breaks as they are, where the dialect would escape them
+    /// (format version 2). Text with a carriage return is spelled canonically: a raw one would
+    /// not survive a file with CRLF line ends.
+    pub fn with_raw_line_breaks(text: &str) -> Self {
+        let raw = text.contains('\n') && !text.contains('\r');
+        Self { text: text.to_string(), spelling: raw.then(|| crate::openstep::canonical_string(text).into()) }
+    }
+
     /// A dictionary key that reads as a number, spelled without quotes, as the reference app
     /// writes the number keys of an `Axis Mappings` map; `None` for any other text.
     pub fn number_key(text: &str) -> Option<Self> {
