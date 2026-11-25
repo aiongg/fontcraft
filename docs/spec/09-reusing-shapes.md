@@ -463,18 +463,21 @@ cap test font (`docs/plans/M13.md` § 8) settles them:
 - Left and right alignment lay the cap's y axis along the side they follow. On a clockwise path the
   side lies on the other hand of the stem end, so the axis points away from it: the cap's x axis
   runs from the first node to the second on every path.
-- Fit on an origin-only cap: the horizontal scale is the stem end over the advance width. A cap
-  with its ends at x 0 and 200, on a 400-unit stem end from (550, 550) to (150, 550):
+- Fit on an origin-only cap: the horizontal scale is the stem end over the distance between the two
+  ends of the cap path along x, so both ends land on the stem's sides. When the ends lie over each
+  other the width of the drawn path counts, and the advance width when that is 0. A cap with its
+  ends at x 0 and 200 and an advance width of 600, on a 400-unit stem end from (550, 550) to
+  (150, 550):
 
-  | Fit | Advance width | Scale | Cap ends at x |
-  |---|---|---|---|
-  | on | 200 | 400 / 200 = 2 | 550 and 150: both sides stay straight |
-  | on | 600 (a new glyph's) | 400 / 600 = 0.67 | 550 and 417: the side after the cap slants to it |
-  | off | any | 1 | 550 and 350: the same side slants |
+  | Fit | Scale | Cap ends at x |
+  |---|---|---|
+  | on | 400 / 200 = 2 | 550 and 150: both sides stay straight |
+  | off | 1 | 550 and 350: the side after the cap slants to it |
 
   The handbook says that Fit matches the size of the cap to the size of the stroke, not how the
-  size of an origin-only cap is measured; the observe steps of `capComponent.setFit` tell the
-  advance width, the distance between the path's end nodes and the width of the drawn path apart.
+  size of an origin-only cap is measured; the distance between its ends is the plain reading. The
+  observe steps of `capComponent.setFit` tell it apart from the width of the drawn path and the
+  advance width.
 - Outline resolution fits caps first, then moves the corner hints of the layer to the nodes they
   sat on and fits the corners. A layer whose caps cannot be fitted is drawn with its corners only.
 - Limits: a scale (stored, or computed by Fit) beyond ±100 (10,000 %), a stem end shorter than

@@ -72,7 +72,7 @@ fn add_glyph(app: &mut FontCraftApp, name: &str, closed: bool, nodes: &[(f64, f6
 /// shown at one point per unit. `_segment.peak` and `_brush.wide` are spare glyphs of their kinds.
 fn attach_app() -> FontCraftApp {
     let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
-    add_glyph(&mut app, "_cap.flag", false, &[(0.0, 20.0), (-40.0, -30.0), (100.0, -30.0), (100.0, 20.0)], &[("origin", 0.0, 0.0)]);
+    add_glyph(&mut app, "_cap.flag", false, &[(0.0, 20.0), (-60.0, -30.0), (100.0, -30.0), (100.0, 20.0)], &[("origin", 0.0, 0.0)]);
     let ends = [("start", 0.0, 0.0), ("end", 200.0, 0.0)];
     add_glyph(&mut app, "_segment.wave", false, &[(0.0, 0.0), (100.0, 60.0), (200.0, 0.0)], &ends);
     add_glyph(&mut app, "_segment.peak", false, &[(0.0, 0.0), (100.0, 90.0), (200.0, 0.0)], &ends);

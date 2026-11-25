@@ -32,7 +32,9 @@
 //! onto the side before the first node, right onto the side after the second, with its x axis
 //! always on the second node's side of the first, whichever way the path runs; none does not turn
 //! it. With Fit on, the horizontal scale is the host nodes' distance over the cap's reference
-//! width (the `node1` to `node2` distance, or the advance width for an origin-only cap).
+//! width: the `node1` to `node2` distance, or for an origin-only cap the distance between the two
+//! ends of its path along x (its drawn width when they lie over each other, its advance width
+//! when that is 0 too).
 //!
 //! ## How segment components and brushes are bent
 //! Both read their glyph in a frame whose x axis runs from the `start` anchor to the `end`
@@ -50,7 +52,7 @@
 //! the brush outline before `start` and after `end` does not stretch: it moves rigidly with the
 //! host's direction at that end. Fitting order: caps, then segment components, then brushes.
 
-use fontcraft_geom::{Affine, CubicBez, ParamCurve, ParamCurveNearest, Point, QuadBez, Vec2};
+use fontcraft_geom::{Affine, CubicBez, ParamCurve, ParamCurveNearest, Point, QuadBez, Shape as _, Vec2};
 use fontcraft_plist::{Array, Dict, Layout, Num, Number, Str, Value};
 
 use crate::corner::{CORNER_HINT, CornerAlignment};
@@ -599,7 +601,7 @@ struct CapGlyph {
     reference: Point,
     /// The angle of the `node1` to `node2` line, 0 for an origin-only cap.
     angle: f64,
-    /// What Fit sizes to the stem: the `node1` to `node2` distance, or the advance width.
+    /// What Fit sizes to the stem: the `node1` to `node2` distance, or [`own_width`].
     width: f64,
 }
 
@@ -620,13 +622,22 @@ impl CapGlyph {
                 let v = n2 - n1;
                 (n1, v.y.atan2(v.x), v.hypot())
             }
-            _ => (anchor("origin").unwrap_or(Point::ZERO), 0.0, layer.width),
+            _ => (anchor("origin").unwrap_or(Point::ZERO), 0.0, own_width(&path, layer.width)),
         };
         if !(in_range(reference.x) && in_range(reference.y) && width.is_finite() && angle.is_finite()) {
             return Err("the cap glyph's anchors or width are not numbers".into());
         }
         Ok(Self { path, others: paths.collect(), reference, angle, width })
     }
+}
+
+/// The width of a cap without `node1` and `node2`, along the x axis Fit scales: from one end of
+/// its path to the other; when the ends lie over each other the width of the drawn path, and the
+/// advance width when the path has none.
+fn own_width(path: &Path, advance: f64) -> f64 {
+    let usable = |w: &f64| w.is_finite() && w.abs() > MIN_STEM;
+    let ends = path.nodes.first().zip(path.nodes.last()).map(|(a, b)| b.x - a.x).filter(usable);
+    ends.or_else(|| path.to_bez().ok().map(|b| b.bounding_box().width()).filter(usable)).unwrap_or(advance)
 }
 
 /// The transform that places the cap on the host nodes `p1`, `p2`; `before` and `after` are the
@@ -639,7 +650,7 @@ fn cap_transform(cap: &CapGlyph, hint: &CapHint, p1: Point, p2: Point, before: O
     }
     let sx = if hint.fit {
         if !cap.width.is_finite() || cap.width.abs() <= MIN_STEM {
-            return Err("the cap glyph has no width to fit: its node1 and node2 anchors coincide, or its advance width is 0".into());
+            return Err("the cap glyph has no width to fit: its node1 and node2 anchors coincide, or its path and its advance width have none".into());
         }
         distance / cap.width.abs()
     } else {
