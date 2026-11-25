@@ -13,7 +13,7 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
 use fontcraft_engine::work::Token;
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use crate::{INVALID_REQUEST, MAX_LINE, PARSE_ERROR, Server, error, request_key};
 
@@ -260,6 +260,7 @@ pub(crate) mod tests {
     use std::sync::mpsc;
 
     use fontcraft_engine::work;
+    use serde_json::json;
 
     use super::*;
     use crate::{Backend, Headless};

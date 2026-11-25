@@ -225,6 +225,7 @@ fn answer(app: &mut FontCraftApp, method: &str, params: &Value) -> Answer {
 
 /// Frames a host that draws its own draws before [`handle`] answers a request: none, or enough for the windows'
 /// elements to be read.
+#[cfg(test)]
 pub(crate) fn frames_before(app: &FontCraftApp, method: &str, params: &Value) -> u64 {
     match &app.window {
         Some(ctx) if elements::reads(method, params) => {
