@@ -9,6 +9,7 @@
 //! | [`other_tab`] | Other Settings |
 //! | [`notes_tab`] | the font note |
 //! | [`exports_tab`] | Exports: the export list and the selected entries' fields and parameters |
+//! | [`exported_names`] | the Exports tab's As Exported section |
 //! | [`features_tab`] | Features: the sidebar of prefixes, classes and features, and the shown entry |
 //! | [`code_editor`] | the Features tab's code field and its diagnostics |
 //! | [`masters_tab`] | Masters: the master list and the selected masters' sections |
@@ -22,6 +23,7 @@ pub mod code_editor;
 pub mod code_find;
 #[cfg(test)]
 mod dialogs_tests;
+pub mod exported_names;
 pub mod exports_tab;
 pub mod features_tab;
 pub mod font_tab;

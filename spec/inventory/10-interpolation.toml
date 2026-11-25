@@ -323,7 +323,7 @@ status = "handbook"
 # ───────────────────────────────────────────────────────────────────────────────
 # Outline compatibility
 # ───────────────────────────────────────────────────────────────────────────────
-notes = "Documented, not yet observed. Only the default-language family name reaches name ID 1; a family name in another language gets a record in that language (M7.8, tested in crates/compile/src/instance_names_tests.rs)."
+notes = "Documented, not yet observed. Only the default-language family name reaches name ID 1; a family name in another language gets a record in that language (M7.8, tested in crates/compile/src/instance_names_tests.rs). The Exports tab shows each entry's style-linked family before export (font.instance.names, M7.32)."
 
 [[behavior]]
 id = "compatibility.rules"

@@ -161,6 +161,9 @@ pub fn rows(ui: &mut Ui, rows: &[RowModel], target: &Target, masters: &[(String,
         if let Some(action) = action {
             sent.extend(commands(target, row, &action));
         }
+        for warning in &row.warnings {
+            Text::new(sentence(warning)).tone(Tone::Warn).show(ui);
+        }
         // A run that only measures shows nothing to click.
         if !ui.is_sizing_pass() {
             select(ui, rows, at, places, fill, target, sent);

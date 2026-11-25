@@ -24,6 +24,9 @@
 //! coordinates, style linking) edit the selected static instances and do not show when the first selected entry is
 //! a variable font setting. A selected instance beyond the masters on some axis shows the extrapolation warning; the
 //! warnings `font.instance.list` gives (style name, weight class, style linking) show under their fields.
+//!
+//! The As Exported section ([`exported_names`]) shows what the first selected entry's export writes; the list marks the
+//! entries that take a name another active entry takes.
 
 use std::borrow::Cow;
 
@@ -46,6 +49,7 @@ use egui::Ui;
 use fontcraft_engine::fontinfo::Scope;
 use serde_json::{Value, json};
 
+use super::exported_names::{self, ExportedWords};
 use super::param_value::number_json;
 use super::rows;
 use crate::app::Msg;
@@ -176,6 +180,9 @@ pub fn view(ui: &mut Ui, model: &ExportsModel, masters: &[(String, String)], sen
             if plus {
                 posted.push(open(InfoDialog::ParameterPicker(target)));
             }
+            if let Some(exported) = &model.exported {
+                exported_names::view(ui, exported);
+            }
             sent.extend(posted);
         });
     });
@@ -189,6 +196,7 @@ fn remove_selected(model: &ExportsModel) -> Option<Msg> {
 /// The list: selects, drags and removes entries.
 fn export_list(ui: &mut Ui, model: &ExportsModel, words: &ExportsWords, sent: &mut Vec<Msg>) {
     let entries = &model.entries;
+    let conflict = Env::of(ui).words::<ExportedWords>().conflict.clone();
     let lead = model.selected.first().copied();
     let before = Selection::new(model.selected.clone(), lead, lead);
     let mut after = before.clone();
@@ -211,6 +219,9 @@ fn export_list(ui: &mut Ui, model: &ExportsModel, words: &ExportsWords, sent: &m
             }
             if e.variable {
                 row = row.trailing_strong(words.variable.clone(), words.variable.clone());
+            }
+            if model.conflicts.contains(at) {
+                row = row.trailing_icon(IconId::new("warning"), conflict.clone());
             }
             row
         });

@@ -1113,3 +1113,48 @@ fn next_shows_the_selected_match_while_the_query_has_the_keyboard() {
     fixture.click(&next).settle();
     assert_eq!(filled(&mut fixture), vec!["a".to_string()]);
 }
+
+/// The Exports tab shows what the shown entry's export writes once the query landed, marks the entries of one name, and
+/// puts a token that names nothing under its row.
+#[test]
+fn the_exports_tab_shows_the_exported_names_and_marks_the_entries_that_share_one() {
+    use crate::shell::export_names::step;
+    let host = Host::builder(APP).jobs(Arc::new(craft::host::InlineJobs)).build();
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(host));
+    app.sent.push(Msg::run("font.instance.add", json!({ "styleName": "Twin" })));
+    app.sent.push(Msg::run("font.instance.add", json!({ "styleName": "Twin" })));
+    app.drain();
+    let all = app.session.font().expect("a font").instances.len();
+    let (first, second) = (all - 2, all - 1);
+    let designer = json!({ "scope": "instance", "targets": [second], "values": { "designers": "{{{no such}}}" } });
+    app.sent.push(Msg::run("font.info.set", designer));
+    app.sent.push(shell("font.info", json!({ "tab": "exports" })));
+    app.sent.push(shell("font.info.exports.select", json!({ "instances": [second] })));
+    app.drain();
+    assert!(app.models.font_info.exports.exported.is_none(), "not known yet");
+    step(&mut app, 10.0);
+    step(&mut app, 10.1);
+    app.drain();
+    let model = app.models.font_info.exports.clone();
+    assert_eq!(model.conflicts, vec![first, second]);
+    let exported = model.exported.clone().expect("the names");
+    let name = |id: u64| exported.names.iter().find(|n| n.id == id && n.place.is_empty()).map(|n| n.text.clone());
+    assert_eq!(name(17).as_deref(), Some("Twin"));
+    assert!(exported.conflicts.iter().any(|c| c.field == "fileName" && c.with == "Twin"), "{:?}", exported.conflicts);
+    let row = model.rows.iter().find(|r| r.key == "designers").expect("the row");
+    assert!(row.warnings.iter().any(|w| w.contains("{{{no such}}}")), "{:?}", row.warnings);
+    // An edit leaves the last answer until the next lands, which a removed entry does not.
+    app.sent.push(Msg::run("font.instance.remove", json!({ "instances": [first] })));
+    app.drain();
+    assert!(app.models.font_info.exports.exported.is_none(), "another number of entries");
+    step(&mut app, 20.0);
+    step(&mut app, 20.6);
+    step(&mut app, 20.7);
+    app.drain();
+    assert!(app.models.font_info.exports.conflicts.is_empty());
+
+    let mut shown = FontInfoModel { open: true, tab: FontInfoTab::Exports, exports: model, ..FontInfoModel::default() };
+    shown.exports.params.clear();
+    let (fixture, _) = panel(shown);
+    assert!(fixture.texts().iter().any(|t| t.text.contains("As Exported")), "the section shows");
+}

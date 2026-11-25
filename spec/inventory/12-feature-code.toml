@@ -213,7 +213,7 @@ milestone = "M7"
 summary = "Query: returns a text field value with every triple-brace token replaced, in the context of a font, master or instance. Not a reference command; lets agents preview name fields."
 ref = "Appendix › Text Tokens"
 status = "inferred"
-notes = "Our own query. Returns the expanded text, the tokens that named nothing and the context used; `master` and `instance` take an id, a name or an index. M7 plan § 4: M7.13."
+notes = "Our own query. Returns the expanded text, the tokens that named nothing and the context used; `master` and `instance` take an id, a name or an index. M7 plan § 4: M7.13. font.instance.names lists the tokens of an export that name nothing, with the row that holds each (M7.32)."
 guesses = [
   "Tokens that name nothing are left as written and listed; a name field with an unknown token exported from the running app would settle it.",
 ]

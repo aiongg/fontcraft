@@ -167,7 +167,7 @@ const SETTING_ONLY: &[&str] = &[
 
 /// `font` with the parameters of the variable font setting at `setting` in place of the font's
 /// own of the same name (`variableFontSetting.wholeFontParameters`).
-fn setting_font(font: &Font, setting: Option<usize>) -> std::borrow::Cow<'_, Font> {
+pub(crate) fn setting_font(font: &Font, setting: Option<usize>) -> std::borrow::Cow<'_, Font> {
     let Some(inst) = setting.and_then(|s| font.instances.get(s)) else { return std::borrow::Cow::Borrowed(font) };
     let passed: Vec<&fontcraft_model::Param> = inst.params.0.iter().filter(|p| !p.disabled && !SETTING_ONLY.contains(&p.name.as_str())).collect();
     if passed.is_empty() {
@@ -324,15 +324,8 @@ pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, 
     let mut notes: Vec<String> = Vec::new();
     let font = setting_font(font, setting);
     let font: &Font = &font;
-    let designspace = match setting {
-        Some(s) => fontcraft_interp::Designspace::for_setting(font, s)?,
-        None => fontcraft_interp::Designspace::new(font)?,
-    };
+    let designspace = variable_designspace(font, setting)?;
     notes.extend(designspace.warnings().iter().cloned());
-    if !designspace.axes().iter().any(|a| a.external.minimum < a.external.maximum) || designspace.masters().len() < 2 {
-        return Err(CompileError::Table { table: "fvar", message: "a variable font needs two masters and an axis with a range".into() });
-    }
-    designspace.check_variable_origin()?;
     let origin = designspace.origin().cloned().ok_or(CompileError::NotYetImplemented("a designspace without an origin"))?;
     let axis_count = u16::try_from(designspace.axes().len()).map_err(|_| CompileError::Table { table: "fvar", message: "too many axes".into() })?;
 
@@ -449,16 +442,7 @@ pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, 
     let mut resolved = crate::drawing::resolve(prepared, &Target::Master(origin.id.clone()))?;
     resolved.family_name.clone_from(&vnames.family);
     let gvar_options = gvar::GvarOptions { optimize: var.optimize_deltas.unwrap_or_else(|| optimize_deltas(font)) };
-    let static_names = {
-        let mut probe = resolved.clone();
-        crate::fill_glyph_data(&mut probe, &options, &mut Vec::new());
-        crate::info::derive(&probe, &options.style_name, &mut Vec::new())
-            .names
-            .into_iter()
-            .filter(|r| r.platform == 3 && r.language == 0x409)
-            .map(|r| (NameId::new(r.id), r.text))
-            .collect::<Vec<_>>()
-    };
+    let static_names = static_names(&resolved, &options.style_name);
     // The masters `cvar` varies with: each master source and its normalized location.
     let cvar_masters: Vec<(String, Vec<f64>)> = sources.iter().filter_map(|s| Some((s.master.clone()?, s.normalized.clone()))).collect();
     let ctx = Outlines { designspace: &designspace, prepared, origin: &origin.id, sources: &sources, glyph_sources: &glyph_sources, flavour };
@@ -486,10 +470,7 @@ pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, 
         }
         let advances = ctx.advances(&per_glyph)?;
         let axes = VarAxes::from_designspace(&designspace)?;
-        let instances = fvar::named_instances(font, &designspace)?;
-        let mut allocator = names::NameAllocator::with_static(static_names.clone());
-        let fvar = fvar::build_fvar(&axes, &instances, &mut allocator)?;
-        let stat = stat::stat_input(font, &designspace)?.map(|input| stat::build_stat(&input, &mut allocator)).transpose()?;
+        let NameTables { fvar, stat, names, .. } = name_tables(font, &designspace, &axes, &vnames, static_names.clone())?;
         let dump = |tag: &'static str, r: Result<Vec<u8>, write_fonts::error::Error>| {
             r.map_err(|e| CompileError::Table { table: tag, message: e.to_string() })
         };
@@ -507,19 +488,68 @@ pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, 
         if let Some(stat) = stat {
             extra.tables.push((Tag::new(b"STAT"), dump("STAT", write_fonts::dump_table(&stat))?));
         }
-        extra.names = allocator.records().iter().map(|(id, text)| (id.to_u16(), text.clone())).collect();
-        if let Some(ps) = &vnames.postscript_name {
-            extra.names.push((6, ps.clone()));
-        }
-        if let Some(prefix) = &vnames.postscript_prefix {
-            extra.names.push((25, prefix.clone()));
-        }
+        extra.names = names;
         Ok((outlines, extra))
     };
     let mut compiled = crate::compile_stages_with(Some(font), resolved, flavour, &options, Some(&mut stage), Some(&variable_layout))?;
     notes.append(&mut compiled.warnings);
     compiled.warnings = notes;
     Ok(VariableFont { compiled, setting, file_stem: vnames.file_stem })
+}
+
+/// The designspace of the variable font of `setting`, refused when no variable font can be built from it.
+pub(crate) fn variable_designspace(font: &Font, setting: Option<usize>) -> Result<fontcraft_interp::Designspace, CompileError> {
+    let designspace = match setting {
+        Some(s) => fontcraft_interp::Designspace::for_setting(font, s)?,
+        None => fontcraft_interp::Designspace::new(font)?,
+    };
+    if !designspace.axes().iter().any(|a| a.external.minimum < a.external.maximum) || designspace.masters().len() < 2 {
+        return Err(CompileError::Table { table: "fvar", message: "a variable font needs two masters and an axis with a range".into() });
+    }
+    designspace.check_variable_origin()?;
+    Ok(designspace)
+}
+
+/// The English Windows names of the static tables of `resolved`, its tokens as written: `fvar` and `STAT` reuse their IDs.
+pub(crate) fn static_names(resolved: &fontcraft_model::Resolved, style: &str) -> Vec<(NameId, String)> {
+    crate::info::derive(resolved, style, &mut Vec::new())
+        .names
+        .into_iter()
+        .filter(|r| r.platform == 3 && r.language == 0x409)
+        .map(|r| (NameId::new(r.id), r.text))
+        .collect()
+}
+
+/// The tables of a variable font that name its instances and axis values, and what they were built from.
+pub(crate) struct NameTables {
+    pub fvar: write_fonts::tables::fvar::Fvar,
+    pub stat: Option<write_fonts::tables::stat::Stat>,
+    pub instances: Vec<VarInstance>,
+    pub stat_input: Option<stat::StatInput>,
+    /// The records they add to the `name` table ([`crate::info::add_names`]), with the font's own PostScript names.
+    pub names: Vec<(u16, String)>,
+}
+
+pub(crate) fn name_tables(
+    font: &Font,
+    designspace: &fontcraft_interp::Designspace,
+    axes: &VarAxes,
+    vnames: &names::VariableNames,
+    static_names: Vec<(NameId, String)>,
+) -> Result<NameTables, CompileError> {
+    let instances = fvar::named_instances(font, designspace)?;
+    let mut allocator = names::NameAllocator::with_static(static_names);
+    let fvar = fvar::build_fvar(axes, &instances, &mut allocator)?;
+    let stat_input = stat::stat_input(font, designspace)?;
+    let stat = stat_input.as_ref().map(|input| stat::build_stat(input, &mut allocator)).transpose()?;
+    let mut names: Vec<(u16, String)> = allocator.records().iter().map(|(id, text)| (id.to_u16(), text.clone())).collect();
+    if let Some(ps) = &vnames.postscript_name {
+        names.push((6, ps.clone()));
+    }
+    if let Some(prefix) = &vnames.postscript_prefix {
+        names.push((25, prefix.clone()));
+    }
+    Ok(NameTables { fvar, stat, instances, stat_input, names })
 }
 
 /// Optimize Variable Deltas, or its second name; on unless one is off.

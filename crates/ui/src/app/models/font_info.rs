@@ -168,6 +168,8 @@ pub struct RowModel {
     pub holders: Vec<usize>,
     pub mark: RowMark,
     pub editor: Editor,
+    /// What is wrong with the value, one sentence each, shown under the row.
+    pub warnings: Vec<String>,
 }
 
 impl RowModel {
@@ -423,6 +425,7 @@ fn row_model(row: &Row, scope: Scope, masters: &[(&str, &str)]) -> RowModel {
                 holders: Vec::new(),
                 mark: RowMark::None,
                 editor,
+                warnings: Vec::new(),
             }
         }
         RowKind::Param => RowModel {
@@ -436,6 +439,7 @@ fn row_model(row: &Row, scope: Scope, masters: &[(&str, &str)]) -> RowModel {
             holders: Vec::new(),
             mark: RowMark::None,
             editor: param_editor(&row.key, &row.value, scope, masters),
+            warnings: Vec::new(),
         },
     }
 }

@@ -425,7 +425,7 @@ ref = "Font Info › Font; Font Info › Exports; Font Info › Features › Nam
 status = "handbook"
 
 # ───────────────────────────── Font tab ─────────────────────────────
-notes = "Documented, not yet observed. glyphsLib expands `{{{key}}}` in font properties and in instance names and properties by looking the key up on its font or instance object; fontc 1.0.0 expands no tokens. FontCraft expands them through `fontinfo::tokens::expand`, which the compiler calls on the names of each export (M7.8) and `font.expandTextTokens` previews. M7 plan § 4: M7.13."
+notes = "Documented, not yet observed. glyphsLib expands `{{{key}}}` in font properties and in instance names and properties by looking the key up on its font or instance object; fontc 1.0.0 expands no tokens. FontCraft expands them through `fontinfo::tokens::expand`, which the compiler calls on the names of each export (M7.8) and `font.expandTextTokens` previews. M7 plan § 4: M7.13. A token that names nothing shows a warning under the row of the Exports tab that holds it, or in the tab's As Exported section when the font or the master holds it (M7.32)."
 
 [[panel]]
 id = "fontInfo.font"
@@ -598,7 +598,7 @@ milestone = "M7"
 summary = "An export that carries its own familyNames field uses that family name instead of the one on the Font tab."
 ref = "Font Info › Font › Family Name; Font Info › Exports › Style Linking"
 status = "handbook"
-notes = "A static instance's default-language familyNames is its family in name IDs 1, 4, 6 and 16 and in the file name (M7.8; tests in crates/compile/src/instance_names_tests.rs, and against fontmake's output for Inter in crates/engine/tests/engine/corpus_instance_names.rs)."
+notes = "A static instance's default-language familyNames is its family in name IDs 1, 4, 6 and 16 and in the file name (M7.8; tests in crates/compile/src/instance_names_tests.rs, and against fontmake's output for Inter in crates/engine/tests/engine/corpus_instance_names.rs). The Exports tab shows the resulting names before export (M7.32)."
 
 [[behavior]]
 id = "fontInfo.unitsPerEm.limits"
@@ -1829,7 +1829,7 @@ milestone = "M7"
 summary = "Third tab of Font Info: the list of fonts that File > Export produces, static instances and variable font settings, with the properties of the selected entries."
 ref = "Font Info › Exports"
 status = "handbook"
-notes = "Documented, not yet observed. The preview control comes from the Instance Preview parameter's description. Add Instance for Each Master, Instance as Master, Add Variable Font Setting run their M9 commands. Axes Coordinates act through font.instance.setAxisLocation on every selected entry (M9.27). M7 plan § 4: M7.18. M7.30: the list stays while the fields scroll."
+notes = "Documented, not yet observed. The preview control comes from the Instance Preview parameter's description. Add Instance for Each Master, Instance as Master, Add Variable Font Setting run their M9 commands. Axes Coordinates act through font.instance.setAxisLocation on every selected entry (M9.27). M7 plan § 4: M7.18. M7.30: the list stays while the fields scroll. M7.32: an As Exported section of ours below the parameters, and a warning mark on entries that share a name."
 guesses = [
   "Active, Style Name, Weight Class, Width Class, the Axes Coordinates and Style Linking sit under the General heading, above the added fields; the Exports tab of the reference app settles the order.",
   "A variable font setting shows Active, its name and its custom parameters, without classes, axes or style linking; selecting a variable font setting in the reference app settles it.",
@@ -2044,6 +2044,24 @@ status = "inferred"
 notes = "A query of ours for the warning under the Axes Coordinates in Font Info › Exports. It makes the static export's test, so the panel, the command's warnings and the export report agree. A variable font setting has no placement."
 guesses = [
   "A query of ours: the reference app shows extrapolation only in the Exports tab and in the export; the reply's shape is ours.",
+]
+
+[[command]]
+id = "font.instance.names"
+label = "Exported Names"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{instances?: [id|name|index]}"
+area = "font-info"
+milestone = "M7"
+summary = "Returns what the export of each entry writes besides the glyphs: the file name, the name records with their tokens expanded, the classes and style flags, the style-linked family, a variable font's named instances and axis values, the tokens that name nothing, and the entries that take the same file name, PostScript name or style-linked style."
+ref = "Font Info › Exports"
+status = "inferred"
+notes = "A query of ours (M7.32) for the As Exported section of Font Info › Exports. It runs the compiler's own rules (crates/compile/src/exported.rs) on the font without the glyphs no token reads, so it agrees with the export: crates/engine/tests/engine/instance_names.rs compares it with the compiled tables. Not in it: names that feature code, colour palettes and autohinting add, linked sources (Import Font, Import Master), and what Filter, PreFilter and Scale to UPM change in a glyph or the UPM a token reads."
+guesses = [
+  "A query of ours: the reference app shows no exported names before export; the section, its place below Custom Parameters and the marks in the list are ours.",
+  "Entries of one kind (static or variable) conflict when both are active; a variable font may share its PostScript name with a static instance.",
 ]
 
 [[command]]
@@ -2336,7 +2354,7 @@ milestone = "M7"
 summary = "Style linking connects only fonts with an identical family name. All instances inherit the Font tab's family name unless they carry a familyNames field, and instances from different source files (a roman and an italic file) can share a family name and link to each other."
 ref = "Font Info › Exports › Style Linking"
 status = "handbook"
-notes = "Documented, not yet observed. M7 plan § 4: M7.7 (test over the compiled name tables of two linked instances). The message comes from fontcraft_fontinfo::warnings (M7.23): the linking commands return it, and font.instance.list, font.instance.get and font.info.get list it under `warnings` with field styleLinking, for the Exports tab to show under Style Linking."
+notes = "Documented, not yet observed. M7 plan § 4: M7.7 (test over the compiled name tables of two linked instances). The message comes from fontcraft_fontinfo::warnings (M7.23): the linking commands return it, and font.instance.list, font.instance.get and font.info.get list it under `warnings` with field styleLinking, for the Exports tab to show under Style Linking. The Exports tab names the style-linked family, the exports linked in it and the entries that take the same style (M7.32)."
 guesses = [
   "font.instance.setStyleLinking and font.instance.set link anyway but warn when the base instance named in the same file exports under another family name (its familyNames field); a base in another file is not checked. Linking two instances with different familyNames in the reference app settles whether it warns.",
 ]

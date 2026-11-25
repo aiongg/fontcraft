@@ -10,6 +10,7 @@ use fontcraft_engine::model::{Font, Instance, StyleClass};
 use serde_json::{Value, json};
 
 use super::ProjectCx;
+use super::exported_names::{self, ExportedModel};
 use super::font_info::{Editor, FieldWarning, MAX_SHOWN, MAX_WARNINGS, RowModel, field_warnings, rows};
 use crate::shell::font_info::Target;
 use crate::shell::font_info_tabs::ParamProblem;
@@ -74,6 +75,10 @@ pub struct ExportsModel {
     /// The added General fields and the custom parameters of the selected entries.
     pub rows: Vec<RowModel>,
     pub params: Vec<RowModel>,
+    /// What the export of the first selected entry writes; `None` until it is known.
+    pub exported: Option<ExportedModel>,
+    /// The entries that take a file name, PostScript name or style-linked slot another entry takes.
+    pub conflicts: Vec<usize>,
 }
 
 /// One entry of the list.
@@ -143,7 +148,9 @@ pub fn project(cx: &mut ProjectCx<'_>) -> ExportsModel {
         [one] => code_problems(cx, *one, params),
         _ => params,
     };
-    ExportsModel { entries, selected, plus, fields, rows: rows_, params }
+    let mut model = ExportsModel { entries, selected, plus, fields, rows: rows_, params, ..ExportsModel::default() };
+    exported_names::place(&mut model, cx);
+    model
 }
 
 /// Most diagnostics of an instance compile read for the parameters' problems.

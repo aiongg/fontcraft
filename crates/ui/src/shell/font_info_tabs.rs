@@ -9,6 +9,8 @@
 //! The selection is view state: the projection resolves it against the font (an entry that moved or was renamed
 //! keeps its place in the selection), so a stale selection never names an entry the font lacks.
 
+use std::sync::Arc;
+
 use craft::ui::contract::PlainData;
 use craft::ui::runtime::commands::CommandRef;
 use fontcraft_engine::model::{Features, Snippet};
@@ -253,6 +255,16 @@ pub struct ExportsView {
     pub selected: Vec<usize>,
     /// What the last instance compile found (`crate::shell::feature_work`).
     pub problems: Option<InstanceProblems>,
+    /// What the exports write, as last computed (`crate::shell::export_names`).
+    pub names: Option<ExportedNames>,
+}
+
+/// The reply of `font.instance.names` for a document revision.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExportedNames {
+    pub doc: u64,
+    pub revision: u64,
+    pub reply: Arc<Value>,
 }
 
 /// What the compile of one instance's code found in its feature-code parameters.

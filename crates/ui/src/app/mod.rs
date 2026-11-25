@@ -280,6 +280,8 @@ pub struct FontCraftApp {
     /// holds the keyboard focus ([`clipboard::to_focused_list`]).
     /// The Features tab's checks and compiles off the window's thread.
     pub(crate) feature_work: crate::shell::feature_work::FeatureWork,
+    /// The Exports tab's names as exported, computed off the window's thread.
+    pub(crate) export_names: crate::shell::export_names::ExportNamesWork,
     pub(crate) window: Option<egui::Context>,
     #[cfg(not(target_arch = "wasm32"))]
     file_panels: Option<craft::dialogs::service::FilePanels>,
@@ -339,6 +341,7 @@ impl FontCraftApp {
             graphics: None,
             control: crate::control::Control::default(),
             feature_work: Default::default(),
+            export_names: Default::default(),
             window: None,
             #[cfg(not(target_arch = "wasm32"))]
             file_panels: None,
@@ -769,6 +772,7 @@ impl ShellApp for FontCraftApp {
         self.set_system_dark(appearance::system_dark(&self.root, ctx));
         models::text_preview::logic(&mut self.models.text_preview, ctx);
         crate::shell::feature_work::logic(self, ctx);
+        crate::shell::export_names::logic(self, ctx);
         dropped::take(self, ctx);
         crate::shell::external_changes::on_focus(self, ctx);
         crate::canvas::images::logic(self, ctx);
