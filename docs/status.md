@@ -13,6 +13,8 @@ _Updated: 2026-11-24: M12.81 (the FontBakery verdict measure), M13.41 (segment c
   - Check on a desktop: the window's move, resize and maximise come back; an unplugged monitor; an empty
     `FONTCRAFT_SETTINGS_DIR` writes nothing; Print to a printer; Show All Masters and the Higher-Order Interpolation tool
     (nothing of either has been seen); the timing graph's dots run while Animate Axis does.
+  - X.fix113 (open): docked short, the Command Console opens with its body scrolled past the input line, so `ui.set` refuses that field;
+    the ignored test `a_field_with_suggestions_keeps_the_text_it_was_given` shows it.
   - Known gaps: interpolatable masters of a font with inactive sources (M2.9 with M9.37) are untested; previews close
     open corners on the resolved outline, so a mirrored component's ears show; window tools cannot be stopped by a cancel;
     a batch cancelled after a step wrote files keeps them; `path.correctPathDirection` would reverse overlapping
@@ -665,11 +667,10 @@ _Updated: 2026-11-24: M12.81 (the FontBakery verdict measure), M13.41 (segment c
   running window. Conventions for writing it are in `docs/ui.md`. UI.49 (on `w-UI.49`, not yet built) removes
   `crates/ui-egui`, its desktop app and the vendored egui-winit 0.36, and points `cargo xtask parity` at the
   window's shell commands.
-- 960 of the 1,039 inventory commands exist (`docs/parity.md`). Per milestone: M1 (11), M2 (5), M3 (185), M5 (100),
-  M6 (47), M10 (60) and M11 (42) are all live; M4 62 of 68, M7 66 of 69, M8 44 of 45, M9 64 of 66, M12 99 of 103,
-  M13 167 of 197, M14 3 of 32. The inventory has 3,786 rows. Feature parity is about 38% (ROADMAP.md › Parity
+- 1,040 of the 1,069 inventory commands exist (`docs/parity.md`). Per milestone: M0 to M12 are all live; M13 198 of 205,
+  M14 9 of 27, the fidelity pass 0 of 4. The inventory has 3,831 rows. Feature parity is about 38% (ROADMAP.md › Parity
   estimate; 38.4, was 37.2), graded on the egui window and on engine and CLI behaviour; the window's parts are not
-  regraded yet. 3,081 guesses on 1,606 rows are listed in `docs/guesses.md`; `docs/observe.md` lists 1,500 rows. CLI option coverage: 672 of
+  regraded yet. 3,420 guesses on 1,742 rows are listed in `docs/guesses.md`; `docs/observe.md` lists 1,618 rows. CLI option coverage: 672 of
   770 reference options present (`docs/cli-options.md`).
 - Packages built (done of total, counted from commit subjects; the totals include the depth packages that carry a
   new number): M6 21 of 26, M7 21 of 24, M8 27 of 36, M9 30 of 40, M10 35 of 42, M11 20 of 22, M12 77 of 87, M13 66
