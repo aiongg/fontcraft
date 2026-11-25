@@ -55,7 +55,7 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
         let s = &model.selection;
         Msg::run(
             "edit.storeSelection",
-            json!({ "glyph": glyph, "layer": layer, "name": name, "points": s.points, "shapes": s.shapes, "anchors": s.anchors }),
+            json!({ "glyph": glyph, "layer": layer, "side": model.side, "name": name, "points": s.points, "shapes": s.shapes, "anchors": s.anchors }),
         )
     };
     let out = TextField::new(words.name.clone(), Bind::given(String::new())).placeholder(words.name.clone()).enabled(can_store).show(ui);
@@ -129,6 +129,44 @@ mod tests {
         let remove = fixture.by_label("Remove").expect("the Remove button");
         fixture.click(&remove).settle();
         assert_eq!(*posted.borrow(), vec![Msg::run("edit.removeStoredSelection", json!({"glyph": "A", "name": "corners"}))]);
+    }
+
+    /// With nodes selected on the canvas, Enter in the name field stores them and Update replaces an entry with them;
+    /// with nothing selected both are off.
+    #[test]
+    fn the_canvas_selection_is_stored_and_updates_an_entry() {
+        let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
+        app.sent.push(Msg::run("path.addRectangle", json!({"glyph": "A", "x": 100, "y": 100, "width": 200, "height": 200})));
+        app.sent.push(Msg::run("edit.storeSelection", json!({"glyph": "A", "name": "corners", "points": [[0, 1]]})));
+        app.sent.push(Msg::View(ViewMsg::SelectGlyph("A".into())));
+        app.sent.push(Msg::View(ViewMsg::TogglePanel(PanelId::Selections)));
+        app.drain();
+        assert!(app.models.selections.selection.is_empty(), "nothing is selected");
+
+        app.tools.selection.points = [(0, 0), (0, 2)].into();
+        app.drain();
+        assert_eq!(app.models.selections.selection.points, [[0, 0], [0, 2]]);
+
+        let model = Tracked::new((*app.models.selections).clone());
+        let posted = Rc::new(RefCell::new(Vec::new()));
+        let seen = Rc::clone(&posted);
+        let mut fixture = Fixture::new(move |ui| {
+            let mut sent = Vec::new();
+            show(ui, Props { model: &model, sent: &mut sent });
+            seen.borrow_mut().extend(sent);
+        });
+        fixture.settle();
+        let update = fixture.by_label("Update").expect("the Update button");
+        fixture.click(&update).settle();
+        app.sent.extend(posted.borrow_mut().drain(..));
+        app.drain();
+        assert!(app.status.is_empty(), "{}", app.status);
+        let found = app.session.query("edit.getStoredSelections", &json!({"glyph": "A"})).unwrap();
+        assert_eq!(found["selections"][0]["points"], json!([[0, 0], [0, 2]]));
+
+        app.tools.selection.points.clear();
+        app.drain();
+        assert!(app.models.selections.selection.is_empty());
     }
 
     /// Clicking a stored selection's name selects its nodes on the edited layer.

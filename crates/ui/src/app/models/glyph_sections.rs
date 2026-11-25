@@ -4,10 +4,13 @@
 use craft::behavior::dock::PanelState;
 use craft::ui::contract::{PlainData, Tracked};
 use fontcraft_engine::cmd::related::{RelatedChar, related_glyphs};
+use fontcraft_engine::model::LayerSide;
+use fontcraft_tools::Selection;
 use serde_json::{Value, json};
 
-use super::ProjectCx;
 use super::glyph::shown_glyph;
+use super::{ProjectCx, Stamp};
+use crate::canvas::tools::{self, Tools};
 use crate::shell::dock::PanelId;
 use crate::shell::masters;
 
@@ -131,17 +134,35 @@ impl SelectionLists {
 pub struct SelectionsModel {
     pub glyph: Option<String>,
     pub layer: Option<String>,
+    /// The side of the layer the edit view edits, as the commands spell it.
+    pub side: String,
     pub entries: Vec<StoredEntry>,
-    /// The edit view's selection, which Store and Update keep. The canvas has no node selection yet, so it stays empty
-    /// until the tools bridge projects one.
+    /// The edit view's selection, which Store and Update keep.
     pub selection: SelectionLists,
 }
 
-pub fn project_selections(model: &mut Tracked<SelectionsModel>, cx: &mut ProjectCx<'_>) {
+/// What the Selections panel was last projected at.
+pub type SelectionsStamp = (Stamp, Selection);
+
+pub fn project_selections(
+    model: &mut Tracked<SelectionsModel>,
+    seen: &mut Option<SelectionsStamp>,
+    cx: &mut ProjectCx<'_>,
+    tools: &Tools,
+    stamp: Stamp,
+) {
+    let key = (stamp, tools.selection.clone());
+    if seen.as_ref() == Some(&key) {
+        return;
+    }
+    *seen = Some(key);
     let (glyph, layer) = (shown_glyph(cx), shown_layer(cx));
-    let mut value = SelectionsModel { glyph: glyph.clone(), layer: layer.clone(), ..SelectionsModel::default() };
+    // Font View's cells draw the foreground, whatever the canvas behind it edits.
+    let side = if cx.view.tabs.font_view_shows() { LayerSide::Foreground } else { tools::side(cx.view) }.as_str().to_string();
+    let mut value = SelectionsModel { glyph: glyph.clone(), layer: layer.clone(), side: side.clone(), ..SelectionsModel::default() };
     if let (Some(glyph), Some(layer), true) = (glyph, layer, shows(cx, PanelId::Selections)) {
-        let found = cx.session.query("edit.getStoredSelections", &json!({ "glyph": glyph, "layer": layer })).unwrap_or(Value::Null);
+        let found = cx.session.query("edit.getStoredSelections", &json!({ "glyph": glyph, "layer": layer, "side": side })).unwrap_or(Value::Null);
+        value.selection = canvas_selection(cx, tools, &glyph, &layer).unwrap_or_default();
         let list = found.get("selections").and_then(Value::as_array).map(Vec::as_slice).unwrap_or_default();
         value.entries = list
             .iter()
@@ -153,6 +174,26 @@ pub fn project_selections(model: &mut Tracked<SelectionsModel>, cx: &mut Project
             .collect();
     }
     super::set(model, value);
+}
+
+/// The canvas selection, when the canvas edits `layer` of `glyph`.
+fn canvas_selection(cx: &ProjectCx<'_>, tools: &Tools, glyph: &str, layer: &str) -> Option<SelectionLists> {
+    if cx.view.tabs.font_view_shows() {
+        return None;
+    }
+    let font = cx.session.font().ok()?;
+    let scene = tools::scene(font, cx.session.glyph_data().ok().as_deref(), cx.view, None)?;
+    if scene.glyph != glyph || scene.layer_id != layer {
+        return None;
+    }
+    let mut selection = tools.selection.clone();
+    // An undo or another edit may have taken some of it away since the canvas last drew.
+    selection.retain_valid(&scene);
+    Some(SelectionLists {
+        points: selection.points.iter().map(|&(shape, node)| [shape as u64, node as u64]).collect(),
+        shapes: selection.shapes.iter().map(|&shape| shape as u64).collect(),
+        anchors: selection.anchors.iter().cloned().collect(),
+    })
 }
 
 /// One metric of the master: its height and, except for the italic angle, its overshoot zone.

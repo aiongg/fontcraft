@@ -576,6 +576,7 @@ impl FontCraftApp {
         models::compare::project_fonts(&mut self.models.compare_fonts, &mut cx);
         models::text_preview::project(&mut self.models.text_preview, &mut cx, &self.host);
         models::color::project(&mut self.models.color, &mut cx, &self.tools, stamp);
+        self.models.project_selections(&mut cx, &self.tools, stamp);
         // Last: it takes the whole app, so `cx` must be done.
         crate::canvas::overlays::refresh(self);
         crate::canvas::reporters::refresh(self);

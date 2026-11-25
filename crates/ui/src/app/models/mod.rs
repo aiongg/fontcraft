@@ -78,6 +78,7 @@ pub struct Models {
     pub related_glyphs: Tracked<glyph_sections::RelatedModel>,
     /// The shown glyph's stored selections (`panels::selections`).
     pub selections: Tracked<glyph_sections::SelectionsModel>,
+    selections_seen: Option<glyph_sections::SelectionsStamp>,
     /// The shown master's metrics and stems (`panels::measurements`).
     pub measurements: Tracked<glyph_sections::MeasurementsModel>,
     /// The shown master's Dimensions notepad (`panels::dimensions`).
@@ -213,7 +214,6 @@ impl Models {
         tabs::project(&mut self.tabs, cx);
         font_info::project(&mut self.font_info, cx);
         glyph_sections::project_related(&mut self.related_glyphs, cx);
-        glyph_sections::project_selections(&mut self.selections, cx);
         glyph_sections::project_measurements(&mut self.measurements, cx);
         dimensions::project(&mut self.dimensions, cx);
         glyph_sections::project_reference_font(&mut self.reference_font, cx);
@@ -243,6 +243,11 @@ impl Models {
         shape_order::project(&mut self.shape_order, cx);
         bitmap_editor::project(&mut self.bitmap_editor, cx);
         true
+    }
+
+    /// Projects the Selections panel; outside [`Models::project`], since it reads the canvas's selection.
+    pub fn project_selections(&mut self, cx: &mut ProjectCx<'_>, tools: &Tools, stamp: Stamp) {
+        glyph_sections::project_selections(&mut self.selections, &mut self.selections_seen, cx, tools, stamp);
     }
 
     /// Where the axis sweep is along its axis, 0 to 1: the clock of the timing graph's dots. `None` while no axis is
