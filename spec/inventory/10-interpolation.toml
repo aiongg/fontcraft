@@ -277,6 +277,14 @@ milestone = "M9"
 summary = "A variable font setting acts on the whole variable font, so it accepts the parameters that static instances cannot pass on: filters, glyph removal, added features. If such a parameter leaves outlines incompatible, export stops with an error."
 ref = "Interpolation › Setting up Instances › Variable Font Settings"
 status = "handbook"
+notes = "The setting's parameters stand in for the font's of the same name, so Keep, Remove, Rename and Reencode Glyphs apply to every source. M12.101 runs its PreFilter and Filter strings on every master, the composites drawn as contours first for Filter. Intermediate layers are not filtered: a filter that changes their point structure stops the export."
+guesses = [
+  "A variable font runs the Filter and PreFilter parameters of its setting only, not those of the font or its masters; a font-wide Filter exported as a variable font would settle it.",
+]
+observe = [
+  "Add Remove Glyphs and Rename Glyphs to a variable font setting, export it, and list the glyph order of the font.",
+  "Add a Filter parameter to the font (not the setting), export a variable font, and note whether its outlines are filtered.",
+]
 
 [[behavior]]
 id = "variableFontSetting.defaultWhenNone"

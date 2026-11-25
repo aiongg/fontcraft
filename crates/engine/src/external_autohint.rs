@@ -274,6 +274,9 @@ impl Scratch {
     /// with `text` in a file created inside it.
     fn with_control(text: &str) -> std::io::Result<Self> {
         use std::io::Write;
+        if fontcraft_format::output::dry_run() {
+            return Err(std::io::Error::other("a dry run writes no files"));
+        }
         let mut last = None;
         for _ in 0..8 {
             let dir = std::env::temp_dir().join(format!("fontcraft-autohint-{}-{:x}", std::process::id(), unique()));

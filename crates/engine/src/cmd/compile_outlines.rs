@@ -30,6 +30,7 @@ use std::sync::Arc;
 use serde_json::{Map, Value};
 
 use fontcraft_compile::{DataRef, Options};
+use fontcraft_components::propagate::PROPAGATE_ANCHORS_PARAM;
 use fontcraft_container::sfnt;
 use fontcraft_model::glyphdata::{GlyphData, xml};
 use fontcraft_model::{DONT_USE_PRODUCTION_NAMES, Font, Shape, plist};
@@ -45,14 +46,18 @@ pub(super) const OUTLINE_KEYS: [&str; 5] = ["preferSimpleGlyphs", "eraseOpenCorn
 const CFF_KEYS: [&str; 6] = ["roundTolerance", "optimize", "maxSubrs", "optimizeWidths", "cidKeyed", "warnUnhinted"];
 
 /// The parameters of options with no counterpart, each with why it is refused.
-const REFUSED: [(&str, &str); 9] = [
+const REFUSED: [(&str, &str); 10] = [
     ("masterFinder", "variable fonts are built from the source's masters, not from compiled master files"),
     ("sparseGlyphs", "a sparse master is a master layer that leaves glyphs out, read from the source itself"),
+    (
+        "roundInstances",
+        "an instance's coordinates are rounded where the outlines are written, to whole units unless `cff.roundTolerance` or Grid Spacing 0 keeps decimals",
+    ),
+    ("debugLookups", "the compiled features carry no lookup names; `features.debugFile` writes the code they come from"),
     ("emitDesignspace", "the build reads the source directly and writes no intermediate designspace"),
     ("ufoStructure", "the build writes no intermediate master or instance sources"),
     ("buildDir", "the build keeps nothing in a working folder"),
     ("emitDebug", "the build has no intermediate representation to write; `features.debugFile` writes the feature code"),
-    ("validateSources", "every source is checked as it is read; audit.run checks it further"),
     ("keepMvar", "a compiled font is opened as a document and compiled again, so no MVAR is carried over"),
     ("designspace", "a compiled variable font is opened as a document with its axes; no separate designspace is read"),
 ];
@@ -66,6 +71,8 @@ type TableBytes = Vec<(Tag, Vec<u8>)>;
 const MAX_TAGS: usize = 64;
 /// The tables a font cannot be read without, which `excludeTables` refuses.
 const REQUIRED_TABLES: [&[u8; 4]; 8] = [b"head", b"maxp", b"hhea", b"hmtx", b"glyf", b"loca", b"CFF ", b"CFF2"];
+/// The tables a variable font cannot be read without.
+const VARIABLE_TABLES: [&[u8; 4]; 2] = [b"fvar", b"gvar"];
 /// Most components followed from one glyph when the glyph subset is closed.
 const MAX_CLOSURE_STEPS: usize = 1_000_000;
 /// The step `--bump-version` takes without a value, in thousandths.
@@ -113,6 +120,10 @@ pub(super) struct OutputRequest {
     no_compatibility_check: bool,
     /// `warnings: "none"`.
     quiet: bool,
+    /// `outlines.filters`: filter strings run before the outlines are built.
+    filters: Vec<String>,
+    /// `outlines.propagateAnchors`.
+    propagate_anchors: Option<bool>,
     /// What reading the options found that the build should report.
     notes: Vec<String>,
 }
@@ -126,7 +137,7 @@ impl OutputRequest {
             }
         }
         let mut out = OutputRequest::default();
-        read_outlines(p, options)?;
+        read_outlines(p, options, &mut out)?;
         read_cff(p, options)?;
         out.glyphs = p.opt_strings("glyphs")?.map(|names| names.into_iter().map(str::to_string).collect());
         if out.glyphs.as_ref().is_some_and(|g| g.len() > fontcraft_model::MAX_GLYPHS) {
@@ -184,16 +195,27 @@ impl OutputRequest {
         Ok(out)
     }
 
-    /// Refuses what does not go with the rest of the request: `variable` (variable or interpolatable
-    /// formats are asked for) and `collection`.
-    pub(super) fn check(&self, variable: bool, collection: bool) -> Result<()> {
+    /// The filter strings `outlines.filters` gives.
+    pub(super) fn filters(&self) -> &[String] {
+        &self.filters
+    }
+
+    /// Refuses what does not go with the rest of the request: variable formats, interpolatable
+    /// `masters` and a `collection`.
+    pub(super) fn check(&self, variable: bool, masters: bool, collection: bool) -> Result<()> {
         let rewrites = self.rewrites();
-        if variable && rewrites {
+        if masters && rewrites {
             return Err(EngineError::Unsupported(
-                "`postFormat`, `excludeTables` and `tables` with a variable or interpolatable format: they rewrite static fonts; build the other fonts in a separate command".into(),
+                "`postFormat`, `excludeTables` and `tables` with an interpolatable format: they rewrite finished fonts; build the other fonts in a separate command".into(),
             ));
         }
-        if variable && self.no_compatibility_check {
+        if variable && let Some(tag) = self.exclude.iter().find(|t| VARIABLE_TABLES.contains(t)) {
+            return Err(EngineError::Unsupported(format!(
+                "`excludeTables`: a variable font cannot be read without its {} table; build static fonts in a separate command",
+                tag_text(tag)
+            )));
+        }
+        if (variable || masters) && self.no_compatibility_check {
             return Err(EngineError::Unsupported(
                 "`checkCompatibility: false` with a variable or interpolatable format: such fonts cannot be built from incompatible glyphs".into(),
             ));
@@ -225,10 +247,24 @@ impl OutputRequest {
     /// applied; `None` when the request changes none of them.
     pub(super) fn font(&self, p: &Params, font: &Font, warnings: &mut Vec<String>) -> Result<Option<Font>> {
         warnings.extend(self.notes.iter().cloned());
-        if self.glyphs.is_none() && self.notdef == Notdef::Auto && self.production_names.is_none() && self.bump.is_none() {
+        let filters = !self.filters.is_empty() || self.propagate_anchors.is_some();
+        if self.glyphs.is_none() && self.notdef == Notdef::Auto && self.production_names.is_none() && self.bump.is_none() && !filters {
             return Ok(None);
         }
         let mut out = font.clone();
+        if let Some(on) = self.propagate_anchors {
+            let ufo = matches!(
+                font.source.format,
+                fontcraft_model::SourceFormat::Ufo | fontcraft_model::SourceFormat::Ufoz | fontcraft_model::SourceFormat::Designspace
+            );
+            if on && ufo {
+                warnings.push("`outlines.propagateAnchors`: a UFO propagates anchors where its filter list says so".into());
+            }
+            Arc::make_mut(&mut out.info).params.set(PROPAGATE_ANCHORS_PARAM, plist::Value::Bool(on));
+        }
+        for text in &self.filters {
+            Arc::make_mut(&mut out.info).params.0.push(fontcraft_model::Param::new("Filter", plist::Value::String(plist::Str::new(text.as_str()))));
+        }
         if let Some(names) = &self.glyphs {
             let keep = closure(p, font, names)?;
             for i in 0..out.glyphs.len() {
@@ -337,7 +373,7 @@ fn group_flag(p: &Params, group: &Map<String, Value>, name: &str, key: &str) -> 
 }
 
 /// The new keys of the `outlines` group.
-fn read_outlines(p: &Params, options: &mut Options) -> Result<()> {
+fn read_outlines(p: &Params, options: &mut Options, out: &mut OutputRequest) -> Result<()> {
     let Some(group) = p.opt_object("outlines")? else { return Ok(()) };
     if group_flag(p, group, "outlines", "preferSimpleGlyphs")? == Some(false) {
         return Err(EngineError::Unsupported(
@@ -345,15 +381,17 @@ fn read_outlines(p: &Params, options: &mut Options) -> Result<()> {
         ));
     }
     options.components.erase_open_corners = group_flag(p, group, "outlines", "eraseOpenCorners")?;
-    if group_flag(p, group, "outlines", "propagateAnchors")?.is_some() {
-        return Err(EngineError::Unsupported(
-            "`outlines.propagateAnchors`: anchors are propagated as the source asks (always for the reference's format, by the filter list for a UFO), and the compile has no switch that overrides it yet".into(),
-        ));
-    }
-    if group.get("filters").is_some_and(|v| !v.is_null()) {
-        return Err(EngineError::Unsupported(
-            "`outlines.filters`: filter commands do not run inside a compile yet; run them on the document first".into(),
-        ));
+    out.propagate_anchors = group_flag(p, group, "outlines", "propagateAnchors")?;
+    if let Some(list) = group.get("filters").filter(|v| !v.is_null()) {
+        const MESSAGE: &str = "`outlines.filters` is a list of filter strings (a filter and its values, joined by semicolons)";
+        let items = list.as_array().ok_or_else(|| p.bad(MESSAGE))?;
+        if items.len() > fontcraft_fontinfo::MAX_FILTER_STRINGS {
+            return Err(p.bad(format!("`outlines.filters` holds at most {} filters", fontcraft_fontinfo::MAX_FILTER_STRINGS)));
+        }
+        for item in items {
+            let text = item.as_str().filter(|t| !t.trim().is_empty()).ok_or_else(|| p.bad(MESSAGE))?;
+            out.filters.push(text.to_string());
+        }
     }
     if let Some(on) = group_flag(p, group, "outlines", "autoUseMyMetrics")? {
         options.use_my_metrics = on;

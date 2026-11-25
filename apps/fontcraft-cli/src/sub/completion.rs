@@ -15,7 +15,7 @@ use serde_json::{Value, json};
 use crate::args::{GLOBAL, Kind, OptSpec};
 use crate::io::{Outcome, out, usage};
 
-use super::Subcommand;
+use super::{Subcommand, compile_opts};
 
 pub const SUBCOMMAND: Subcommand =
     Subcommand { name: "completion", summary: "Print a shell completion script", usage: USAGE, options: OPTIONS, actions: &[], run };
@@ -93,6 +93,11 @@ pub(super) struct Opt {
 }
 
 impl Opt {
+    /// The long name, without dashes.
+    pub(super) fn long_name(&self) -> Option<String> {
+        self.long.clone()
+    }
+
     /// The option as `commands --cli --json` lists it.
     pub(super) fn to_json(&self) -> Value {
         json!({
@@ -150,6 +155,30 @@ pub(super) fn model(subs: &[Subcommand]) -> Vec<Entry> {
             }
             for spec in sub.options {
                 merge(&mut entry.opts, from_spec(spec));
+            }
+            // `compile` reads its arguments against a table of its own.
+            if sub.name == "compile" {
+                for (flag, opt) in compile_opts::listed() {
+                    let Some(long) = flag.strip_prefix("--") else { continue };
+                    let short = opt.flags.iter().find_map(|f| {
+                        let mut chars = f.strip_prefix('-')?.chars();
+                        match (chars.next(), chars.next()) {
+                            (Some(c), None) if c != '-' => Some(c),
+                            _ => None,
+                        }
+                    });
+                    merge(
+                        &mut entry.opts,
+                        Opt {
+                            long: Some(long.to_string()),
+                            short,
+                            takes_value: compile_opts::takes_value(opt),
+                            values: if compile_opts::takes_value(opt) { literals(opt.value) } else { Vec::new() },
+                            negatable: false,
+                            help: String::new(),
+                        },
+                    );
+                }
             }
             scrape_usage(sub.usage, &mut entry);
             entry

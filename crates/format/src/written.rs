@@ -31,6 +31,7 @@ thread_local! {
 
 /// Notes that `path` (a file, or a folder that lost files) was changed, while something collects ([`collect`]).
 pub fn record(path: &Path) {
+    crate::output::note_written(path);
     WRITTEN.with(|written| {
         if let Ok(mut written) = written.try_borrow_mut()
             && let Some(written) = written.as_mut()

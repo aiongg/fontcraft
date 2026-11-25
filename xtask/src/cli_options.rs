@@ -93,6 +93,8 @@ impl Accepted {
 #[derive(Debug, Default)]
 struct Listing {
     subcommands: BTreeMap<String, Vec<Accepted>>,
+    /// Each subcommand's shared behaviours, in the listing's order.
+    behaviours: Vec<(String, BTreeMap<String, bool>)>,
     common: Vec<Accepted>,
     help: Vec<Accepted>,
 }
@@ -102,11 +104,14 @@ impl Listing {
         let options = |v: &Value| -> Vec<Accepted> { v.as_array().map(|a| a.iter().map(Accepted::from_json).collect()).unwrap_or_default() };
         let subs = v["subcommands"].as_array().ok_or("the subcommand listing has no `subcommands` array")?;
         let mut subcommands = BTreeMap::new();
+        let mut behaviours = Vec::new();
         for sub in subs {
             let name = sub["name"].as_str().ok_or("a subcommand in the listing has no name")?;
             subcommands.insert(name.to_owned(), options(&sub["options"]));
+            let row = sub["behaviours"].as_object().into_iter().flatten();
+            behaviours.push((name.to_owned(), row.map(|(k, v)| (k.clone(), v.as_bool().unwrap_or(false))).collect()));
         }
-        Ok(Listing { subcommands, common: options(&v["common_options"]), help: options(&v["help_options"]) })
+        Ok(Listing { subcommands, behaviours, common: options(&v["common_options"]), help: options(&v["help_options"]) })
     }
 
     /// Whether `word` names a subcommand (or `help`).
@@ -388,11 +393,12 @@ struct Report<'a> {
     /// Per reference tool: the mapping rows, and apart the rows not carried over.
     tools: BTreeMap<String, (Counts, usize)>,
     missing: Vec<MissingRow<'a>>,
+    behaviours: &'a [(String, BTreeMap<String, bool>)],
 }
 
 impl<'a> Report<'a> {
-    fn build(rows: &'a [SpecRow], listing: &Listing) -> Self {
-        let mut report = Report { subcommands: Vec::new(), tools: BTreeMap::new(), missing: Vec::new() };
+    fn build(rows: &'a [SpecRow], listing: &'a Listing) -> Self {
+        let mut report = Report { subcommands: Vec::new(), tools: BTreeMap::new(), missing: Vec::new(), behaviours: &listing.behaviours };
         for row in rows {
             let tool = report.tools.entry(row.tool.clone()).or_default();
             if row.table == Table::NotCarried {
@@ -468,6 +474,18 @@ impl<'a> Report<'a> {
             writeln!(out, "| Reference tool | Rows | Present | Missing | Unchecked | Refused | Not carried over |\n|---|---|---|---|---|---|---|");
         for (tool, (c, apart)) in &self.tools {
             let _ = writeln!(out, "| {} | {} | {} | {} | {} | {} | {apart} |", cell(tool), c.mapped(), c.present, c.missing, c.unchecked, c.refused);
+        }
+
+        let columns: Vec<&String> = self.behaviours.first().map(|(_, row)| row.keys().collect()).unwrap_or_default();
+        if !columns.is_empty() {
+            let _ = writeln!(out, "\n## Shared behaviours\n");
+            let _ = writeln!(out, "Which of the behaviours every subcommand should share each one gives (`apps/fontcraft-cli/src/behaviours.rs`).\n");
+            let names: Vec<String> = columns.iter().map(|c| format!("`{c}`")).collect();
+            let _ = writeln!(out, "| Subcommand | {} |\n|---{}|", names.join(" | "), "|---".repeat(names.len()));
+            for (name, row) in self.behaviours {
+                let cells: Vec<&str> = columns.iter().map(|c| if row.get(*c).copied().unwrap_or(false) { "yes" } else { "" }).collect();
+                let _ = writeln!(out, "| `{name}` | {} |", cells.join(" | "));
+            }
         }
 
         let _ = writeln!(out, "\n## Missing options\n");

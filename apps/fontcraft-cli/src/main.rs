@@ -22,7 +22,9 @@
 #![forbid(unsafe_code)]
 
 mod args;
+mod behaviours;
 mod io;
+mod options_file;
 mod sub;
 
 use std::process::ExitCode;
@@ -56,7 +58,7 @@ USAGE:
   fontcraft-cli compile SOURCE... [--format ttf|otf]... [--container plain|woff|woff2]...
                         [-o FILE | --output-dir DIR] [--instances[=NAME,...]] [--masters-as-instances]
                         [--keep-overlaps] [--keep-direction] [--conversion-error EM] [--no-subroutinize]
-                        [--timestamp SECS|now] [--ttfautohint PATH] [--cbdt] [--plan]
+                        [--timestamp SECS|now] [--ttfautohint PATH] [--cbdt] [--plan] [--json]
       Compile each SOURCE to static fonts: every exportable instance (or the named ones; a font
       without instances builds its first master), plus each master with --masters-as-instances,
       once per format (default ttf) and container (default plain). Files are named by PostScript
@@ -68,7 +70,7 @@ USAGE:
       whose TTFAutohint binary path parameter names that same file is autohinted by it (default:
       none runs). --cbdt also writes CBDT and CBLC bitmap tables from the iColor layers.
       --plan prints what would be built, without building.
-      One JSON line per SOURCE.
+      One line per file written; with --json, and for --plan, one JSON line per SOURCE.
 
   fontcraft-cli info INPUT... [--section NAME,...] [--all-names] [--face N] [--json]
       Describe each INPUT (a compiled font or a source) without opening it: format, names,
@@ -104,11 +106,17 @@ fn main() -> ExitCode {
     let started = Instant::now();
     io::init();
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let result = dispatch(&args);
+    let result = dispatch(&args).and_then(|()| io::flush_stdout());
+    io::report_dry_run();
+    let result = match (io::write_trace(), result) {
+        (Err(e), Ok(())) => Err(e),
+        (_, result) => result,
+    };
     let code = match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(failure) => {
             // An empty message: the subcommand has already said everything (`check --quiet`).
+            io::report_failure(None, &failure);
             if !failure.message().is_empty() {
                 io::error(failure.message());
             }

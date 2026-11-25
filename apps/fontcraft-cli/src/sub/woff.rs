@@ -109,7 +109,8 @@ fn run(raw: &[String]) -> Outcome {
         }
     }
     let results = io::batch(files, jobs, |file| {
-        if !std::path::Path::new(file).is_file() {
+        let path = std::path::Path::new(file);
+        if !path.is_file() && fontcraft_engine::format::output::held(path).is_none() {
             return Err(Failure::Input(format!("cannot read {file}: not a file")));
         }
         let mut params = base.clone();

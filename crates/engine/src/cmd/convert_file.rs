@@ -21,6 +21,8 @@ use std::path::{Path, PathBuf};
 
 use std::collections::{BTreeSet, HashSet};
 
+#[cfg(not(target_arch = "wasm32"))]
+use fontcraft_format::output;
 use fontcraft_io_svg::svg_font::{SvgFontOptions, SvgGlyphNames, write_svg_font_with};
 use fontcraft_tables::convert::{
     CffWriteOptions, CharstringForm, CidCollection, ConvertOptions, ConvertTarget, Decid, FontDictFilter, GoadbUse, PostFormat, PrepareOptions,
@@ -982,6 +984,9 @@ impl StagedOutput {
     /// moved to is returned: [`Staging::commit`] removes it once every output is in place, or
     /// puts it back when a later output fails.
     fn move_in(&self) -> std::result::Result<Option<PathBuf>, String> {
+        if output::diverted(&self.target) {
+            return Ok(None);
+        }
         if !(self.folder && self.existed) {
             return std::fs::rename(&self.temp, &self.target).map(|()| None).map_err(|e| e.to_string());
         }
@@ -1046,6 +1051,13 @@ impl Staging {
             }
         };
         let existed = target.exists();
+        output::check_clobber(&target).inspect_err(|_| {
+            if output::diverted(&target) {
+                output::unplan(&target);
+            } else {
+                StagedOutput::remove(&temp, folder);
+            }
+        })?;
         self.staged.push(StagedOutput { temp, target, existed, folder });
         Ok(())
     }
@@ -1104,7 +1116,11 @@ impl Staging {
 impl Drop for Staging {
     fn drop(&mut self) {
         for s in &self.staged {
-            StagedOutput::remove(&s.temp, s.folder);
+            if output::diverted(&s.target) {
+                output::unplan(&s.target);
+            } else {
+                StagedOutput::remove(&s.temp, s.folder);
+            }
         }
         file_io::remove_created(&self.created);
     }
@@ -1147,6 +1163,10 @@ fn stage(out: &Path, bytes: &[u8], n: usize) -> Result<(PathBuf, PathBuf)> {
     }
     let name = target.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "font".into());
     let temp = target.with_file_name(format!(".{name}.{}-{n}.tmp", std::process::id()));
+    if output::diverted(&target) {
+        output::plan_write(&target, bytes)?;
+        return Ok((temp, target));
+    }
     let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(&temp).map_err(|e| io(&temp, e))?;
     if let Err(e) = file.write_all(bytes).and_then(|()| file.sync_all()) {
         let _ = std::fs::remove_file(&temp);
@@ -1170,6 +1190,10 @@ fn stage_folder(out: &Path, files: &fontcraft_io_ufo::Files, n: usize) -> Result
     let name = target.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "font.ufo".into());
     let temp = target.with_file_name(format!(".{name}.{}-{n}.tmp", std::process::id()));
     file_io::check_write(&temp)?;
+    if output::diverted(&target) {
+        output::plan_whole(&target, Some(files.values().map(Vec::len).sum()))?;
+        return Ok((temp, target));
+    }
     std::fs::create_dir(&temp).map_err(|e| io(&temp, e))?;
     for (relative, bytes) in files {
         let relative_path = Path::new(relative);

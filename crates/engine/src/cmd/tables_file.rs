@@ -348,7 +348,7 @@ fn write_extracted(p: &Params<'_>, loaded: &Loaded, items: &[(Tag, Option<PathBu
 
 #[cfg(not(target_arch = "wasm32"))]
 fn create_dir(dir: &Path) -> Result<()> {
-    std::fs::create_dir_all(dir).map_err(|e| EngineError::Io(format!("cannot create {}: {e}", dir.display())))
+    fontcraft_format::output::create_dir_all(dir).map_err(|e| EngineError::Io(format!("cannot create {}: {e}", dir.display())))
 }
 
 #[cfg(target_arch = "wasm32")]

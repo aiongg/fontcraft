@@ -186,9 +186,10 @@ fn inspect(_: &mut Session, p: &Value) -> Result<Value> {
     let all_names = p.bool_or("allNames", false)?;
     #[cfg(not(target_arch = "wasm32"))]
     {
-        let meta = std::fs::metadata(path).map_err(|e| EngineError::Io(format!("cannot open {path}: {e}")))?;
-        let bytes = if meta.is_dir() { Vec::new() } else { read_bytes(path)? };
-        if !meta.is_dir()
+        let held = fontcraft_format::output::held(std::path::Path::new(path)).is_some();
+        let folder = !held && std::fs::metadata(path).map_err(|e| EngineError::Io(format!("cannot open {path}: {e}")))?.is_dir();
+        let bytes = if folder { Vec::new() } else { read_bytes(path)? };
+        if !folder
             && let Some(kind) = fontcraft_decompile::sniff(&bytes)
             && !matches!(kind, "Type 1" | "bare CFF")
         {

@@ -30,7 +30,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Open…",
             ["File"],
             Some("Cmd+O"),
-            "{path: string, face?: number, keepGlyphNames?: bool} open a font as a new document, recognising it by content: a .fontcraft file, a .glyphs file (format versions 2 to 4), a .glyphspackage folder, a UFO folder (versions 2 and 3), a .designspace file with the UFOs it names (one document, a master per source), or a compiled font (TrueType, OpenType with CFF, a collection member chosen by face, WOFF, WOFF2). A compiled font opens view-only: save it with Save As to a source format. A collection of several fonts needs face (collection.list gives the members); each member opens as its own document, titled with its family and style. A UFOZ is saved back as a UFOZ. GlyphData*.xml files beside the source and in an Info folder beside it add to the glyph data for this document, unless the font's Ignore custom GlyphData file parameter is on. A UFO or designspace has its composites aligned automatically as it opens, so their metrics follow their bases (aligned counts the glyphs that changed); with the user setting user.disableAutomaticAlignmentForImportedFiles on, the font's Disable Automatic Alignment option is switched on instead. A UFO, designspace or compiled font has its glyphs renamed to the nice names the glyph data gives their names (`uni0041` becomes `A`), keeping their places and code points (renamed counts them); a glyph whose name feature code or other text uses keeps it, with a warning. keepGlyphNames (default: the user setting user.keepGlyphNamesFromImportedFiles) or the font's Use Custom Naming option keeps the file's names. warnings lists what reading the file left out (the tables of a compiled font that are not read, the parts of a source that could not be read) and the glyph data files that could not be used. A .fontcraftproject file opens as a project, as project.open does, with its reply → {title, path, format, version?, glyphs, masters, viewOnly, face?, aligned, renamed, warnings}",
+            "{path: string, face?: number, keepGlyphNames?: bool, layer?: string} open a font as a new document, recognising it by content: a .fontcraft file, a .glyphs file (format versions 2 to 4), a .glyphspackage folder, a UFO folder (versions 2 and 3), a .designspace file with the UFOs it names (one document, a master per source), or a compiled font (TrueType, OpenType with CFF, a collection member chosen by face, WOFF, WOFF2). A compiled font opens view-only: save it with Save As to a source format. A collection of several fonts needs face (collection.list gives the members); each member opens as its own document, titled with its family and style. A UFOZ is saved back as a UFOZ. GlyphData*.xml files beside the source and in an Info folder beside it add to the glyph data for this document, unless the font's Ignore custom GlyphData file parameter is on. A UFO or designspace has its composites aligned automatically as it opens, so their metrics follow their bases (aligned counts the glyphs that changed); with the user setting user.disableAutomaticAlignmentForImportedFiles on, the font's Disable Automatic Alignment option is switched on instead. A UFO, designspace or compiled font has its glyphs renamed to the nice names the glyph data gives their names (`uni0041` becomes `A`), keeping their places and code points (renamed counts them); a glyph whose name feature code or other text uses keeps it, with a warning. keepGlyphNames (default: the user setting user.keepGlyphNamesFromImportedFiles) or the font's Use Custom Naming option keeps the file's names. layer reads another glyph layer of a UFO, UFOZ or designspace in place of the default one, for each glyph that has it (its outlines, anchors and advance): the name of a UFO layer, default, or processed for the AFDKO layer com.adobe.type.processedglyphs, which may be missing. warnings lists what reading the file left out (the tables of a compiled font that are not read, the parts of a source that could not be read) and the glyph data files that could not be used. A .fontcraftproject file opens as a project, as project.open does, with its reply → {title, path, format, version?, glyphs, masters, viewOnly, face?, aligned, renamed, warnings}",
             always,
             open
         ).files(const { &[FileParam::read("path")] }),
@@ -105,6 +105,10 @@ fn open(s: &mut Session, p: &Value) -> Result<Value> {
     }
     let mut native = false;
     let (font, mut warnings) = crate::io::open_source(&path, face, &mut native)?;
+    let font = match p.opt_str("layer")? {
+        Some(name) => with_layer(&p, font, name)?,
+        None => font,
+    };
     let font = crate::linked::resolve(&font, Some(&path), &mut warnings)?.unwrap_or(font);
     // A native file holds its composites' positions and its glyphs' names, whatever format its
     // font was first read from.
@@ -175,6 +179,50 @@ fn remember(s: &mut Session, path: &std::path::Path) {
 #[cfg(target_arch = "wasm32")]
 fn open(_: &mut Session, _: &Value) -> Result<Value> {
     Err(EngineError::Unsupported("opening a file by path in the browser; the web app passes the file's bytes".into()))
+}
+
+/// The UFO layer the AFDKO tools write corrected outlines to.
+#[cfg(not(target_arch = "wasm32"))]
+const PROCESSED_LAYER: &str = "com.adobe.type.processedglyphs";
+
+/// `font`, read from a UFO, with the outlines, anchors and advances of its layer `name` on the
+/// master layers of the glyphs that have it.
+#[cfg(not(target_arch = "wasm32"))]
+fn with_layer(p: &Params, mut font: Font, name: &str) -> Result<Font> {
+    if !matches!(
+        font.source.format,
+        fontcraft_model::SourceFormat::Ufo | fontcraft_model::SourceFormat::Ufoz | fontcraft_model::SourceFormat::Designspace
+    ) {
+        return Err(p.bad("`layer` applies to a UFO, UFOZ or designspace"));
+    }
+    let wanted = match name {
+        "default" => return Ok(font),
+        "processed" => PROCESSED_LAYER,
+        other => other,
+    };
+    let mut found = false;
+    for i in 0..font.glyphs.len() {
+        let others: Vec<fontcraft_model::Layer> = font
+            .glyphs
+            .get(i)
+            .map(|g| g.layers.iter().filter(|l| !l.is_master_layer() && l.info.name.as_deref() == Some(wanted)).cloned().collect())
+            .unwrap_or_default();
+        if others.is_empty() {
+            continue;
+        }
+        let Some(mut glyph) = font.glyphs.get_mut_at(i) else { continue };
+        for other in others {
+            let Some(layer) = glyph.layers.iter_mut().find(|l| l.is_master_layer() && l.master == other.master) else { continue };
+            layer.shapes = other.shapes;
+            layer.anchors = other.anchors;
+            layer.width = other.width;
+            found = true;
+        }
+    }
+    if !found && name != "processed" {
+        return Err(p.bad(format!("no glyph has a layer named `{wanted}`")));
+    }
+    Ok(font)
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -440,7 +488,7 @@ fn export_ufo(s: &mut Session, p: &Value) -> Result<Value> {
         losses.extend(parked.clone());
         refuse_losses(&p, "UFO", &losses)?;
     }
-    std::fs::create_dir_all(&destination).map_err(|e| EngineError::Io(format!("cannot create {}: {e}", destination.display())))?;
+    fontcraft_format::output::create_dir_all(&destination).map_err(|e| EngineError::Io(format!("cannot create {}: {e}", destination.display())))?;
     let (named, name_losses) = if production { super::import_naming::production_copy(written, &data) } else { (written.clone(), Vec::new()) };
     let mut exported = crate::io::export_ufos(&named, &masters, &destination)?;
     exported.losses.extend(parked);

@@ -143,7 +143,7 @@ fn tables_writes_raw_table_files_and_bump_version_raises_the_revision() {
 fn options_without_a_counterpart_are_refused_with_a_reason() {
     let mut s = composites();
     for (params, word) in [
-        (json!({ "outlines": { "propagateAnchors": false } }), "propagated"),
+        (json!({ "debugLookups": true }), "lookup names"),
         (json!({ "masterFinder": "{stem}.ttf" }), "compiled master"),
         (json!({ "emitDebug": true }), "intermediate"),
         (json!({ "cff": { "optimize": 1 }, "subroutinize": true }), "subroutines"),
@@ -156,4 +156,64 @@ fn options_without_a_counterpart_are_refused_with_a_reason() {
     for erase in [json!(true), json!(false), json!(null)] {
         run(&mut s, "font.compile", json!({ "formats": ["ttf"], "outlines": { "eraseOpenCorners": erase } }));
     }
+}
+
+/// A trial variable font: its setting removes a glyph and moves the outlines, the request writes
+/// `post` 3 without `STAT`, a stub `DSIG` and a raw table, and the setting's fonts pack into one
+/// collection.
+#[test]
+fn variable_fonts_take_the_options_of_static_ones() {
+    let dir = temp("variable-options");
+    let setting = "instances = (\n{\ncustomParameters = (\n{\nname = \"Remove Glyphs\";\nvalue = (\nsecond\n);\n},\n{\nname = Filter;\nvalue = \"Transformations;OffsetX:40\";\n}\n);\nname = Trial;\ntype = variable;\n},";
+    let text = crate::export::TWO_MASTERS.replacen("instances = (", setting, 1);
+    let path = dir.join("TestSans.glyphs");
+    std::fs::write(&path, text).unwrap();
+    let mut s = Session::new();
+    run(&mut s, "file.open", json!({ "path": path }));
+    s.edit("Add", |font| font.add_glyph("second", vec![0xE000], 500.0).map(|_| ())).unwrap();
+    let options = json!({
+        "formats": ["variable", "variable-cff2"], "destination": dir.join("out"), "timestamp": 0, "postFormat": 3,
+        "excludeTables": ["STAT"], "tables": ["fvar"], "stubDsig": true, "containers": ["plain", "woff2"],
+    });
+    let r = run(&mut s, "font.compile", options);
+    assert_eq!(r["fonts"].as_array().unwrap().len(), 2, "{r}");
+    assert_eq!(r["tables"].as_array().unwrap().len(), 2, "a raw fvar per font: {r}");
+    let bytes = std::fs::read(r["fonts"][0]["files"][0]["path"].as_str().unwrap()).unwrap();
+    let font = skrifa::FontRef::new(&bytes).unwrap();
+    assert_eq!(font.post().unwrap().version(), skrifa::raw::types::Version16Dot16::VERSION_3_0);
+    assert!(font.table_data(Tag::new(b"DSIG")).is_some() && font.table_data(Tag::new(b"STAT")).is_none());
+    assert!(font.table_data(Tag::new(b"fvar")).is_some());
+    assert!(skrifa::MetadataProvider::charmap(&font).map(0xE000u32).is_none(), "the setting removes the glyph");
+    let a = skrifa::MetadataProvider::charmap(&font).map('A').unwrap();
+    let bounds = skrifa::MetadataProvider::glyph_metrics(&font, skrifa::instance::Size::unscaled(), skrifa::instance::LocationRef::default())
+        .bounds(a)
+        .unwrap();
+    assert_eq!(bounds.x_min, 140.0, "the setting's filter moves A by 40");
+
+    let ttc = dir.join("Trial.ttc");
+    let r = run(&mut s, "font.compile", json!({ "formats": ["variable"], "destination": ttc, "timestamp": 0 }));
+    assert_eq!(r["collections"][0]["fonts"], 1, "{r}");
+    assert_eq!(&std::fs::read(&ttc).unwrap()[..4], b"ttcf");
+    let e = s.execute("font.compile", &json!({ "formats": ["variable"], "excludeTables": ["fvar"] })).unwrap_err().to_string();
+    assert!(e.contains("fvar"), "{e}");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// `outlines.filters` runs a filter on static fonts, and `propagateAnchors` is taken either way.
+#[test]
+fn filters_run_inside_a_compile() {
+    let dir = temp("filters");
+    let mut s = composites();
+    let nodes = json!([{"x": 60, "y": 0}, {"x": 560, "y": 0}, {"x": 560, "y": 700}, {"x": 60, "y": 700}]);
+    run(&mut s, "path.addPath", json!({"glyph": "B", "nodes": nodes}));
+    let x_max = |bytes: &[u8]| {
+        let font = skrifa::FontRef::new(bytes).unwrap();
+        font.head().unwrap().x_max()
+    };
+    let plain = build(&mut s, &dir.join("plain.ttf"), json!({}));
+    let moved =
+        build(&mut s, &dir.join("moved.ttf"), json!({ "outlines": { "filters": ["Transformations;OffsetX:2000"], "propagateAnchors": false } }));
+    assert_eq!(x_max(&moved), x_max(&plain) + 2000);
+    assert!(s.execute("font.compile", &json!({ "outlines": { "filters": [3] } })).is_err());
+    std::fs::remove_dir_all(&dir).unwrap();
 }

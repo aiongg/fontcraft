@@ -1,7 +1,8 @@
 //! `fontcraft-cli compile`.
 
 use super::{Subcommand, compile_opts};
-use crate::io::{Failure, Outcome, batch_outcome, error, execute, open, out, stage, usage, with_input};
+use crate::io::{self, Failure, Outcome, batch, batch_outcome, error, execute, open, out, out_json_line, stage, usage, warn, with_input};
+use crate::options_file;
 use fontcraft_engine::Session;
 use serde_json::{Value, json};
 
@@ -20,7 +21,7 @@ const USAGE: &str = "\
                         [--no-subroutinize] [--ttf-curves cu2qu|keep-quad]
                         [--drop-implied-oncurves | --keep-implied-oncurves]
                         [--subset | --no-subset] [--dsig] [--pass-through-tables] [--collection]
-                        [--timestamp SECS|now] [--ttfautohint PATH] [--cbdt] [--plan]
+                        [--timestamp SECS|now] [--ttfautohint PATH] [--cbdt] [--plan] [--json]
                         [--project-file FILE] [--project-defaults] [--menu-names FILE] [--goadb FILE]
                         [--fontinfo FILE] [--feature-file FILE] [--license-code CODE]
                         [--fs-selection-on N]... [--fs-selection-off N]... [--os2-version N] [project options]
@@ -77,9 +78,9 @@ const USAGE: &str = "\
       tables a compiled SOURCE kept when it was opened, while its glyph order is unchanged.
       --collection packs the fonts of each format into one collection that stores identical
       tables once (SOURCE.ttc, or .otc for CFF); -o FILE.ttc or FILE.otc does the same.
-      With only variable formats the static options (--instances, --masters-as-instances, --cbdt,
-      --subset, --dsig, --pass-through-tables) are refused; a variable format does not go with
-      --collection, --interpolate-binary-layout or a project compile.
+      With only variable formats the static options (--instances, --masters-as-instances, --cbdt)
+      are refused, and --collection packs the variable fonts; a variable format does not go with
+      --interpolate-binary-layout or a project compile.
       --plan prints what would be built, without building, with the feature code of each static
       font.
       --skip-features leaves out GSUB, GPOS and GDEF. --features FILE replaces the source's
@@ -100,15 +101,18 @@ const USAGE: &str = "\
       only these glyphs, with .notdef and the glyphs their components use; the feature code is
       compiled against them. --notdef replace draws a new .notdef. --glyph-data FILE adds a
       glyph data file. --no-production-names keeps the source names. --bump-version raises the
-      version by 0.005, by N thousandths, or sets it to X.YYY. For static fonts: --post-format 3
+      version by 0.005, by N thousandths, or sets it to X.YYY. --post-format 3
       writes post without glyph names; --exclude-table TAG leaves a table out; --tables TAG,...
       also writes each font's tables as raw files named <stem>.<TAG> into the output folder.
       --autohint and --no-autohint set the export's Autohint option. --optimize-gvar /
       --no-optimize-gvar keep or drop the deltas interpolation gives. --warnings none prints no
-      warnings. --erase-open-corners, --propagate-anchors, --no-prefer-simple-glyphs, --filter,
-      --cid-keyed, --warn-unhinted, --check-compatibility=fix and the options with no counterpart
-      (--master-finder, --sparse-glyphs, --emit-designspace, --ufo-structure, --build-dir,
-      --emit-debug, --validate-sources, --keep-mvar, --designspace) are refused with the reason.
+      warnings. --filter STRING (repeatable) runs a filter (a name and its values joined by
+      semicolons) on the outlines; --propagate-anchors and --no-propagate-anchors decide whether
+      composites get their components' anchors; --validate-sources changes nothing, since every
+      source is checked. --no-prefer-simple-glyphs, --cid-keyed, --warn-unhinted,
+      --check-compatibility=fix and the options with no counterpart (--master-finder,
+      --sparse-glyphs, --emit-designspace, --ufo-structure, --build-dir, --emit-debug,
+      --round-instances, --debug-lookups, --keep-mvar, --designspace) are refused with the reason.
       --interpolate-binary-layout [DIR] gives each instance the GPOS interpolated from the
       compiled masters in DIR (default master_ttf, or master_otf for otf, beside the source),
       named as the source's master UFOs are, and the GDEF and GSUB of the default master; masters
@@ -141,7 +145,9 @@ const USAGE: &str = "\
       --mac-language N (-cl; default 0). --uvs FILE (-ci) adds the Unicode Variation Sequences
       the file lists, for any SOURCE, as a cmap format 14 subtable.
       Long options also take their value as --opt=VALUE and may be shortened to a prefix of one
-      option only. One JSON line per SOURCE.
+      option only. One line per file written, the warnings on stderr; with --json, and for --plan,
+      one JSON line per SOURCE. -o - writes the one font to standard output. Several SOURCEs are
+      built with -j threads.
 ";
 
 /// `compile`: each source is opened as a document and built by `font.compile` (or described by
@@ -155,6 +161,11 @@ fn compile(args: &[String]) -> Outcome {
     let text = |key: &str| cli.get(key).and_then(Value::as_str).map(str::to_string);
     let (output, output_dir, autohinter) = (text("output"), text("outputDir"), text("ttfautohint"));
     let plan = cli.get("plan") == Some(&Value::Bool(true));
+    let as_json = plan || cli.get("json") == Some(&Value::Bool(true));
+    io::set_json(as_json);
+    if let Some(file) = io::take_save_options() {
+        options_file::save(&file, &compile_opts::options_table(args))?;
+    }
     let (input, project_output) = match params.get("projectFile").and_then(Value::as_str) {
         Some(file) => project_paths(file)?,
         None => (None, None),
@@ -182,6 +193,7 @@ fn compile(args: &[String]) -> Outcome {
     let destination = match (output, output_dir) {
         (Some(_), Some(_)) => return Err(usage("use either -o or --output-dir")),
         (Some(_), None) if sources.len() > 1 => return Err(usage("-o names one file; with several sources use --output-dir")),
+        (Some(file), None) if file == "-" => Some(io::stdout_place(&extension(&params))),
         (Some(file), None) => Some(file),
         (None, Some(dir)) => Some(dir),
         // The compile writes where the project file's OutputFontPath says.
@@ -214,19 +226,70 @@ fn compile(args: &[String]) -> Outcome {
     };
     if let [source] = sources.as_slice() {
         let result = build(source)?;
-        return out(&json!({"source": source, "result": result}).to_string());
+        return report(source, &result, as_json);
     }
     // Several sources: one failing does not stop the others.
-    let mut results = Vec::with_capacity(sources.len());
-    for source in &sources {
-        let result = with_input(source, || build(source));
-        match &result {
-            Ok(result) => out(&json!({"source": source, "result": result}).to_string())?,
+    let results = batch(&sources, io::common_jobs()?, build)?;
+    for (source, result) in sources.iter().zip(&results) {
+        match result {
+            Ok(result) => report(source, result, as_json)?,
             Err(e) => with_input(source, || error(e.message())),
         }
-        results.push(result);
     }
     batch_outcome(&results)
+}
+
+/// The paths of the files a compile result lists.
+fn built_files(result: &Value) -> Vec<String> {
+    let mut files = Vec::new();
+    for font in ["fonts", "collections", "tables"].iter().filter_map(|k| result.get(*k).and_then(Value::as_array)).flatten() {
+        let own = font.get("path").and_then(Value::as_str);
+        let inner = font.get("files").and_then(Value::as_array).into_iter().flatten().filter_map(|f| f.get("path").and_then(Value::as_str));
+        files.extend(own.into_iter().chain(inner).map(str::to_string));
+    }
+    files
+}
+
+/// Prints what was built from `source`: one JSON line, or one line per file with the warnings
+/// and the skipped instances on stderr.
+fn report(source: &str, result: &Value, as_json: bool) -> Outcome {
+    let texts = |key: &str| -> Vec<String> {
+        result.get(key).and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str).map(str::to_string).collect()
+    };
+    let warnings = texts("warnings");
+    if as_json {
+        return out_json_line(&json!({"source": source, "outputs": built_files(result), "warnings": warnings, "result": result}));
+    }
+    with_input(source, || {
+        for w in &warnings {
+            warn(w);
+        }
+        for font in result.get("fonts").and_then(Value::as_array).into_iter().flatten() {
+            for w in font.get("warnings").and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str) {
+                warn(w);
+            }
+        }
+        for skip in result.get("skipped").and_then(Value::as_array).into_iter().flatten() {
+            let name = skip.get("instance").and_then(Value::as_str).unwrap_or("?");
+            warn(&format!("`{name}` was not built: {}", skip.get("reason").and_then(Value::as_str).unwrap_or("no reason given")));
+        }
+    });
+    for file in built_files(result) {
+        out(&file)?;
+    }
+    Ok(())
+}
+
+/// The file extension of the one font `-o -` builds.
+fn extension(params: &serde_json::Map<String, Value>) -> String {
+    let first = |key: &str| params.get(key).and_then(Value::as_array).and_then(|f| f.first()).and_then(Value::as_str);
+    match (first("containers"), first("formats")) {
+        (Some("woff"), _) => "woff",
+        (Some("woff2"), _) => "woff2",
+        (_, Some(f)) if f.starts_with("otf") || f == "variable-cff2" => "otf",
+        _ => "ttf",
+    }
+    .to_string()
 }
 
 /// The `InputFontPath` and `OutputFontPath` a project file names, relative to its folder: one

@@ -104,10 +104,15 @@ fn commands(args: &[String]) -> Outcome {
         _ => return Err(usage("commands takes at most one PATTERN")),
     };
     if parsed.switch("cli") {
-        return if parsed.switch("json") { out_json(&cli_list(pattern)) } else { print_cli(pattern) };
+        return if parsed.switch("json") { print_json(&cli_list(pattern)) } else { print_cli(pattern) };
     }
     let list = execute(&mut Session::new(), "commands.list", &json!({"pattern": pattern}))?;
-    out_json(&list)
+    print_json(&list)
+}
+
+/// A listing, without the keys a result has.
+fn print_json(list: &Value) -> Outcome {
+    out(&serde_json::to_string_pretty(list).map_err(|e| Failure::Failed(e.to_string()))?)
 }
 
 /// Whether the subcommand matches `pattern`: its name or summary contains it, ignoring case.
@@ -132,6 +137,7 @@ fn cli_list(pattern: Option<&str>) -> Value {
                 "summary": sub.summary,
                 "command": engine_command(sub.name),
                 "actions": actions,
+                "behaviours": crate::behaviours::row(sub.name, &entry.opts.iter().filter_map(completion::Opt::long_name).collect::<Vec<_>>()),
                 "options": entry.opts.iter().map(completion::Opt::to_json).collect::<Vec<_>>(),
             })
         })

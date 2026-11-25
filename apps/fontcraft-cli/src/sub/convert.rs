@@ -232,6 +232,9 @@ fn refuse_zopfli(parsed: &args::Parsed, container: &str) -> Result<(), Failure> 
 fn is_compiled(path: &str) -> bool {
     use std::io::Read as _;
     let mut head = [0u8; 4];
+    if let Some(bytes) = fontcraft_engine::format::output::held(std::path::Path::new(path)) {
+        return matches!(bytes.get(..4), Some([0, 1, 0, 0] | b"OTTO" | b"true" | b"ttcf" | b"wOFF" | b"wOF2"));
+    }
     let read = std::fs::File::open(path).and_then(|mut f| f.read_exact(&mut head));
     read.is_ok() && matches!(&head, [0, 1, 0, 0] | b"OTTO" | b"true" | b"ttcf" | b"wOFF" | b"wOF2")
 }

@@ -423,7 +423,9 @@ pub(super) fn fix_file(s: &mut Session, v: &Value) -> Result<Value> {
         return Err(p.bad(format!("`{key}` applies to a source; on a compiled font, select results with `checks` and the other filters")));
     }
     let safe_only = p.bool_or("safeOnly", true)?;
-    let dry = p.bool_or("dryRun", false)?;
+    // The fixes work on a copy on disk, so a dry run of the process plans them too.
+    let dry_process = fontcraft_format::output::dry_run();
+    let dry = p.bool_or("dryRun", false)? || dry_process;
     let req = OutputRequest::from_params(&p)?;
     let input = PathBuf::from(&target);
     let output = file_io::output_path(&input, &req, SUFFIX, None)?;
@@ -445,6 +447,9 @@ pub(super) fn fix_file(s: &mut Session, v: &Value) -> Result<Value> {
 
     let mut report = FileReport::default();
     let calls = plan(&results, safe_only, matches!(source.kind, file_io::InputKind::TrueType), &mut report);
+    if dry_process && !calls.is_empty() {
+        fontcraft_format::output::plan_whole(&output, None)?;
+    }
     if dry {
         let planned: Vec<Value> =
             calls.iter().map(|c| json!({"fix": c.fix, "command": c.command, "params": call_params(c, &input, false), "checks": c.checks})).collect();
@@ -553,7 +558,9 @@ fn fix_family(s: &mut Session, p: &Params) -> Result<Value> {
         return Err(p.bad("a family is written one output per file: give outputDir or inPlace, not output"));
     }
     let safe_only = p.bool_or("safeOnly", true)?;
-    let dry = p.bool_or("dryRun", false)?;
+    // The fixes work on a copy on disk, so a dry run of the process plans them too.
+    let dry_process = fontcraft_format::output::dry_run();
+    let dry = p.bool_or("dryRun", false)? || dry_process;
     let req = OutputRequest::from_params(p)?;
     let mut files: Vec<FamilyFile> = Vec::with_capacity(targets.len());
     for t in &targets {
@@ -686,6 +693,11 @@ fn fix_family(s: &mut Session, p: &Params) -> Result<Value> {
     }
 
     let outputs: Vec<&PathBuf> = files.iter().filter(|f| !f.calls.is_empty()).map(|f| &f.output).collect();
+    if dry_process {
+        for path in &outputs {
+            fontcraft_format::output::plan_whole(path, None)?;
+        }
+    }
     if dry {
         let planned: Vec<Value> = files
             .iter()

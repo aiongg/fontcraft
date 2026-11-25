@@ -7,6 +7,7 @@
 use std::path::{Path, PathBuf};
 
 use fontcraft_engine::Session;
+use fontcraft_engine::format::write_atomic;
 use serde_json::{Map, Value, json};
 
 use crate::args::{self, OptSpec};
@@ -42,7 +43,6 @@ const OPTIONS: &[OptSpec] = &[
     OptSpec::list("output", "BASEPATH", "", "the base path of each input's report files, one per input; - prints the report").short('o'),
     OptSpec::switch("no-clobber", false, "refuse to replace an existing report file"),
     OptSpec::value("face", "N", "", "the font of a collection to read"),
-    OptSpec::switch("dry-run", false, "measure and name the files that would be written, without writing"),
     OptSpec::switch("json", false, "print each report as one JSON line instead of writing files"),
     OptSpec::switch("quiet", false, "print nothing but errors").short('q'),
     OptSpec::switch("verbose", false, "print more detail on stderr").short('v'),
@@ -93,7 +93,7 @@ fn run(raw: &[String]) -> Outcome {
         shared.insert("includeCurved".into(), json!(parsed.switch("all-stems")));
     }
     let as_json = parsed.switch("json");
-    let write = !as_json && !parsed.switch("dry-run");
+    let write = !as_json;
 
     let inputs: Vec<String> = (0..parsed.positional.len()).map(|i| i.to_string()).collect();
     let results = batch(&inputs, jobs(&parsed)?, |key| {
@@ -170,19 +170,9 @@ fn write_reports(base: &str, result: &Value, zones: bool, no_clobber: bool) -> O
         return Err(Failure::Failed(format!("{} exists and --no-clobber is set", path.display())));
     }
     for (path, text) in &files {
-        write_atomic(path, text)?;
+        write_atomic(path, text.as_bytes()).map_err(|e| Failure::Failed(e.to_string()))?;
     }
     Ok(())
-}
-
-fn write_atomic(path: &Path, text: &str) -> Outcome {
-    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    let temp = path.with_file_name(format!(".{name}.{}.tmp", std::process::id()));
-    let result = std::fs::write(&temp, text).and_then(|()| std::fs::rename(&temp, path));
-    if result.is_err() {
-        let _ = std::fs::remove_file(&temp);
-    }
-    result.map_err(|e| Failure::Failed(format!("cannot write {}: {e}", path.display())))
 }
 
 /// The time in the report titles: `SOURCE_DATE_EPOCH` when set, so runs can be compared,

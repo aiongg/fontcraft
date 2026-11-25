@@ -258,7 +258,7 @@ fn install_module(s: &mut Session, p: &Params, bytes: &[u8], name: Option<&str>,
     registry.install(plugin, Some(file.clone())).map_err(|e| p.bad(e.to_string()))?;
     registry.set_file(&id, Some(file.clone()), hash).map_err(|e| p.bad(e.to_string()))?;
     crate::work::seal()?;
-    std::fs::create_dir_all(&dir).map_err(|e| EngineError::Io(format!("{}: {e}", dir.display())))?;
+    fontcraft_format::output::create_dir_all(&dir).map_err(|e| EngineError::Io(format!("{}: {e}", dir.display())))?;
     let target = dir.join(&file);
     extensions::write_file(&target, bytes).map_err(EngineError::Io)?;
     let ext = s.extensions_mut();
@@ -322,7 +322,7 @@ fn install_macro(s: &mut Session, p: &Params, bytes: &[u8], name: Option<&str>, 
         return Err(p.bad(format!("{} exists: pass replace: true to overwrite it", target.display())));
     }
     crate::work::seal()?;
-    std::fs::create_dir_all(&dir).map_err(|e| EngineError::Io(format!("{}: {e}", dir.display())))?;
+    fontcraft_format::output::create_dir_all(&dir).map_err(|e| EngineError::Io(format!("{}: {e}", dir.display())))?;
     extensions::write_file(&target, bytes).map_err(EngineError::Io)?;
     let title = m.title.clone();
     s.extensions_mut().put_macro(file.clone(), m);

@@ -17,6 +17,7 @@
 mod atomic;
 mod gzip;
 mod layout;
+pub mod output;
 pub mod project;
 mod v1;
 pub mod written;

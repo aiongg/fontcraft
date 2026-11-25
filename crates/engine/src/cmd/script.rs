@@ -333,7 +333,7 @@ fn write_macro(p: &Params, target: &Path, m: &Macro, replace: bool) -> Result<()
         return Err(p.bad(format!("{} exists: pass replace: true to overwrite it", target.display())));
     }
     if let Some(parent) = target.parent().filter(|d| !d.as_os_str().is_empty()) {
-        std::fs::create_dir_all(parent).map_err(|e| EngineError::Io(format!("{}: {e}", parent.display())))?;
+        fontcraft_format::output::create_dir_all(parent).map_err(|e| EngineError::Io(format!("{}: {e}", parent.display())))?;
     }
     let text = serde_json::to_string_pretty(&m.to_json()).map_err(|e| EngineError::Io(e.to_string()))?;
     #[cfg(not(target_arch = "wasm32"))]
@@ -439,7 +439,7 @@ fn record_macro(s: &mut Session, value: &Value) -> Result<Value> {
 fn open_folder(s: &mut Session, value: &Value) -> Result<Value> {
     let p = Params::new("script.openScriptsFolder", value)?;
     let dir = macros_dir(s, &p)?;
-    std::fs::create_dir_all(&dir).map_err(|e| EngineError::Io(format!("{}: {e}", dir.display())))?;
+    fontcraft_format::output::create_dir_all(&dir).map_err(|e| EngineError::Io(format!("{}: {e}", dir.display())))?;
     Ok(json!({ "path": dir.display().to_string() }))
 }
 

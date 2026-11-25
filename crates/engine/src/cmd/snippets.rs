@@ -281,7 +281,7 @@ fn show_folder(s: &mut Session, raw: &Value) -> Result<Value> {
     };
     let existed = dir.is_dir();
     if !existed {
-        std::fs::create_dir_all(&dir).map_err(|e| EngineError::Io(format!("{}: {e}", dir.display())))?;
+        fontcraft_format::output::create_dir_all(&dir).map_err(|e| EngineError::Io(format!("{}: {e}", dir.display())))?;
     }
     Ok(json!({ "path": dir.to_string_lossy(), "created": !existed }))
 }
