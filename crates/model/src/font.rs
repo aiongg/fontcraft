@@ -168,7 +168,7 @@ pub struct Guide {
     /// A UFO guideline's identifier.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub identifier: Option<String>,
-    #[serde(default, skip_serializing_if = "Extra::is_empty")]
+    #[serde(default, skip_serializing_if = "crate::guide_follow::no_unknown_data", serialize_with = "crate::guide_follow::serialize_unknown_data")]
     pub extra: Extra,
 }
 

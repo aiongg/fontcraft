@@ -326,6 +326,8 @@ fn a_right_referenced_guide_counts_from_the_right_sidebearing() {
     run(&mut s, "guide.setProperties", json!({"glyph": "A", "guide": local, "x": 400}));
     run(&mut s, "selection.move", json!({"glyph": "A", "guides": [global], "dx": 5, "dy": 0}));
     assert_eq!((xs(&mut s, "A"), stored(&s)), (vec![400.0, 430.0], (-59.0, -29.0)));
+    // In reach as a place, beyond the limit as an offset.
+    refused(&mut s, "guide.setProperties", json!({"glyph": "A", "guide": local, "x": -999_900}));
     run(&mut s, "transform.alignLeft", json!({"glyph": "A", "guides": [local, global]}));
     assert_eq!((xs(&mut s, "A"), xs(&mut s, "B")), (vec![400.0, 400.0], vec![241.0]), "lined up in A, 59 from the edge in B");
     run(&mut s, "guide.setProperties", json!({"glyph": "A", "guide": local, "relativeTo": "left"}));

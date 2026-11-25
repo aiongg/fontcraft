@@ -1,5 +1,5 @@
 use super::*;
-use fontcraft_model::{ColorLabel, Layer};
+use fontcraft_model::{ColorLabel, Guide, Layer};
 use fontcraft_plist::openstep;
 
 fn value(text: &str) -> Value {
@@ -433,4 +433,37 @@ fn guides_keep_their_reference_and_offset() {
     assert_eq!(again, v2);
     assert_eq!(back.info.guides, l.info.guides);
     assert!(write(&back, 3).contains(guides));
+}
+
+/// A reference under the other versions' key, in the files and documents FontCraft wrote with one: version 2 takes
+/// version 3's, with its offset, and nothing else of it is written, so a guide dragged since is not read as an offset.
+#[test]
+fn a_guide_reference_under_another_versions_key_is_not_written_again() {
+    use fontcraft_model::Family;
+    use fontcraft_model::guide_follow::{Reference, placed_x, reference, set_reference};
+    let layer = |key: &str, guide: &str| format!("{{\n{key} = (\n{{\n{guide}\n}}\n);\nlayerId = m01;\nwidth = 459;\n}}");
+
+    let l = read(&layer("guideLines", "angle = 90;\norientation = right;\nposition = \"{-74, 271}\";"), 2);
+    assert_eq!((reference(&l.info.guides[0]), placed_x(&l.info.guides[0], l.width)), (Reference::Right, 385.0));
+    assert_eq!(write(&l, 2), layer("guideLines", "alignment = right;\nangle = 90;\nposition = \"{-74, 271}\";"));
+    let both = read(&layer("guideLines", "alignment = center;\norientation = right;"), 2);
+    assert_eq!(write(&both, 2), layer("guideLines", "alignment = center;"));
+
+    let l = read(&layer("guides", "alignment = right;\nangle = 90;\npos = (385,0);"), 3);
+    assert_eq!((reference(&l.info.guides[0]), l.info.guides[0].x), (Reference::Left, 385.0));
+    assert_eq!(write(&l, 3), layer("guides", "angle = 90;\npos = (385,0);"));
+
+    let mut l = Layer::new("m01", 459.0);
+    let mut g = Guide { x: -74.0, ..Guide::default() };
+    g.extra.push(Family::Glyphs, "alignment", string("right"));
+    g.extra.push(Family::Glyphs, "orientation", string("right"));
+    let mut dragged = g.clone();
+    dragged.x = 385.0;
+    set_reference(&mut g, Reference::Left, l.width);
+    assert!(g.extra.is_empty());
+    l.info.guides = vec![g, dragged];
+    for version in [2, 3, 4] {
+        let out = write(&l, version);
+        assert!(!out.contains("alignment") && !out.contains("orientation"), "{out}");
+    }
 }

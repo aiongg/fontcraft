@@ -47,7 +47,7 @@ use std::sync::Arc;
 use fontcraft_model::{
     AlignmentZone, Anchor, Axis, Component, Extra, Family, Font, FontInfo, Glyph, GlyphTable, Guide, Instance, Layer, MAX_NAME_LEN, Master,
     MetricDef, MetricValue, NameParts, Node, NodeInfo, NodeKind, Param, Params, Path, PathInfo, Properties, RawShape, Settings, Shape, Source,
-    SourceFormat, StemDef, Transform, metric,
+    SourceFormat, StemDef, Transform, guide_follow, metric,
 };
 use fontcraft_plist::openstep::Dialect;
 use fontcraft_plist::openstep::canonical_number;
@@ -468,7 +468,8 @@ fn read_master(v: Value, at: &str, axes: usize, stems: bool) -> Result<(Master, 
         stem_values = design::take_values(&mut d, "horizontalStems");
         stem_values.extend(design::take_values(&mut d, "verticalStems"));
     }
-    let guides = design::take_checked(&mut d, "guideLines", read_guide, write_guide);
+    let guides =
+        design::with_own_reference(&mut d, "guideLines", GUIDE_ALIGNMENT, |d| design::take_checked(d, "guideLines", read_guide, write_guide));
     let params = crate::info::take_params(&mut d);
     let user_data = crate::info::take_user_data(&mut d);
     let italic = values.get(5).is_some_and(|v| v.pos != 0.0);
@@ -1117,7 +1118,7 @@ fn usable_name(s: &str) -> bool {
 }
 
 /// Version 2's key of a guide's sidebearing reference.
-const GUIDE_ALIGNMENT: &str = "alignment";
+pub(crate) const GUIDE_ALIGNMENT: &str = "alignment";
 
 pub(crate) fn read_guide(v: &Value) -> Option<Guide> {
     let mut d = v.as_dict()?.clone();
@@ -1140,7 +1141,7 @@ pub(crate) fn write_guide(g: &Guide) -> Option<Value> {
         e.push(("position".into(), Value::String(Str::new(braced(&[g.x, g.y])))));
     }
     design::push_guide_rest(&mut e, g, GUIDE_ALIGNMENT)?;
-    Some(Value::Dict(finish(e, &g.extra)))
+    Some(Value::Dict(finish(e, &guide_follow::unknown_data(&g.extra))))
 }
 
 /// Whether a kept `active` or `exports` key says 0.

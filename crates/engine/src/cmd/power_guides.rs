@@ -20,7 +20,7 @@ use std::sync::Arc;
 
 use fontcraft_geom::{BezPath, Line, Point, Vec2, round_to_grid};
 use fontcraft_model::guide_data::{self, Link, MAX_GUIDE_MARKERS, MAX_MAGNETISM};
-use fontcraft_model::guide_follow::{place_x, placed};
+use fontcraft_model::guide_follow::{can_place, place_x, placed};
 use fontcraft_model::{Font, Guide, LayerSide, MAX_COORDINATE, MAX_LAYER_GUIDES, Path, Shape};
 use fontcraft_pathops::stems::{StemDirection, StemOptions, detect_stems};
 use serde_json::{Value, json};
@@ -688,7 +688,7 @@ fn move_power_guide(s: &mut Session, v: &Value) -> Result<Value> {
     }
     let step = grid(font);
     let (nx, ny) = (round_to_grid(x.unwrap_or(old.x), step), round_to_grid(y.unwrap_or(old.y), step));
-    if !(in_range(nx) && in_range(ny)) {
+    if !(in_range(nx) && in_range(ny) && can_place(&stored, nx, width)) {
         return Err(p.bad(format!("`x` and `y` must be within the coordinate limit of {MAX_COORDINATE}")));
     }
     let delta = (Point::new(nx, ny) - knob(&old)).dot(normal(&old));

@@ -532,8 +532,15 @@ fn set_properties(s: &mut Session, p: &Value) -> Result<Value> {
             {
                 return Err(p.bad("the guide's angle is locked: set `angleLocked: false` in the same call to change it"));
             }
-            if let Some(v) = x {
-                guide_follow::place_x(g, round_to_grid(v, step), width);
+            let place = x.map_or_else(|| guide_follow::placed_x(g, width), |v| round_to_grid(v, step));
+            if let Some(to) = relative {
+                set_relative_to(g, to, width);
+            }
+            if x.is_some() || relative.is_some() {
+                if !guide_follow::can_place(g, place, width) {
+                    return Err(p.bad(format!("`x` must be within {MAX_COORDINATE} of the sidebearing the guide is referenced to")));
+                }
+                guide_follow::place_x(g, place, width);
             }
             if let Some(v) = y {
                 g.y = round_to_grid(v, step);
@@ -543,9 +550,6 @@ fn set_properties(s: &mut Session, p: &Value) -> Result<Value> {
             }
             if let Some(v) = angle_locked {
                 g.angle_locked = v;
-            }
-            if let Some(to) = relative {
-                set_relative_to(g, to, width);
             }
             if let Some(v) = measurement {
                 g.show_measurement = v;

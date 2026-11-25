@@ -8,6 +8,11 @@
 //! its place (what a both-referenced one counts from is not documented, so its number is taken as
 //! it stands).
 //!
+//! The reference is the only source of the key in the files written. A key of either version's
+//! spelling ([`REFERENCE_KEYS`]) that a guide holds as unknown data (documents FontCraft wrote while
+//! it kept the reference there have one) is never written, so that a guide placed in a layer is not
+//! read again as an offset: the writers take a guide's unknown data from [`unknown_data`].
+//!
 //! Whoever needs a guide's place in glyph space asks [`placed_x`] or [`placed`] with the width of
 //! the layer it is shown in, and stores a place through [`place_x`] or [`edit_placed`]. Commands
 //! take and return places; the files, the native format and the clipboard hold the stored x.
@@ -18,7 +23,14 @@
 //! already count from something that moves. Every command that writes a layer's advance width calls
 //! [`follow_width`] in the same edit, so the guides move in the same undo step.
 
-use crate::{Font, Guide, Layer, MAX_COORDINATE};
+use std::borrow::Cow;
+
+use serde::Serializer;
+
+use crate::{Extra, ExtraEntry, Family, Font, Guide, Layer, MAX_COORDINATE};
+
+/// The `.glyphs` keys of a guide's reference: version 2's, then the later versions'.
+pub const REFERENCE_KEYS: [&str; 2] = ["alignment", "orientation"];
 
 /// The spellings of the references a file writes; an absent one is the left.
 const RIGHT: &str = "right";
@@ -52,9 +64,33 @@ pub fn reference(g: &Guide) -> Reference {
     }
 }
 
+fn is_reference_key(e: &ExtraEntry) -> bool {
+    e.family == Family::Glyphs && REFERENCE_KEYS.contains(&e.key.as_str())
+}
+
+/// A guide's unknown data as the writers may put it into a file: without a reference.
+pub fn unknown_data(extra: &Extra) -> Cow<'_, Extra> {
+    if !extra.iter().any(is_reference_key) {
+        return Cow::Borrowed(extra);
+    }
+    let mut out = extra.clone();
+    out.retain(|e| !is_reference_key(e));
+    Cow::Owned(out)
+}
+
+/// Whether the native file has no entry for this unknown data of a guide.
+pub(crate) fn no_unknown_data(extra: &Extra) -> bool {
+    extra.iter().all(is_reference_key)
+}
+
+pub(crate) fn serialize_unknown_data<S: Serializer>(extra: &Extra, s: S) -> Result<S::Ok, S::Error> {
+    serde::Serialize::serialize(&*unknown_data(extra), s)
+}
+
 /// Sets a guide's sidebearing reference, keeping its place in a layer `width` wide.
 pub fn set_reference(g: &mut Guide, to: Reference, width: f64) {
     let x = placed_x(g, width);
+    g.extra.retain(|e| !is_reference_key(e));
     g.orientation = match to {
         Reference::Right => Some(RIGHT.into()),
         Reference::Both => Some(BOTH.into()),
@@ -85,8 +121,14 @@ pub fn placed_x(g: &Guide, width: f64) -> f64 {
     }
 }
 
+/// Whether [`place_x`] stores `x` as it is, within the model's coordinate range.
+pub fn can_place(g: &Guide, x: f64, width: f64) -> bool {
+    let stored = if reference(g) == Reference::Right { x - right_edge(width) } else { x };
+    crate::in_range(stored)
+}
+
 /// Stores `x`, a place in the glyph space of a layer `width` wide, by the guide's reference,
-/// within the model's coordinate range.
+/// within the model's coordinate range. A command that can refuse an x asks [`can_place`] first.
 pub fn place_x(g: &mut Guide, x: f64, width: f64) {
     g.x = match reference(g) {
         // Unchanged, so that a guide put back where it is keeps its stored digits.
@@ -190,6 +232,21 @@ mod tests {
         assert_eq!(layer.info.guides.iter().map(reference).collect::<Vec<_>>(), vec![Reference::Left, Reference::Right, Reference::Both]);
         assert_eq!(both_x(10.0, 0.0, 100.0), Some(60.0));
         assert_eq!(placed_x(&layer.info.guides[1], f64::NAN), -50.0);
+    }
+
+    #[test]
+    fn a_reference_held_as_unknown_data_is_not_stored() {
+        let mut g = Guide { x: 385.0, ..Guide::default() };
+        for key in REFERENCE_KEYS {
+            g.extra.push(Family::Glyphs, key, crate::plist::Value::String("right".into()));
+        }
+        assert!(!serde_json::to_string(&g).unwrap().contains("extra"));
+        g.extra.push(Family::Glyphs, "userData", crate::plist::Value::String("kept".into()));
+        let back: Guide = serde_json::from_str(&serde_json::to_string(&g).unwrap()).unwrap();
+        assert_eq!((back.x, back.orientation.as_deref(), back.extra.len()), (385.0, None, 1));
+        assert!(back.extra.get(Family::Glyphs, "userData").is_some());
+        set_reference(&mut g, Reference::Left, 459.0);
+        assert_eq!(g, back);
     }
 
     #[test]

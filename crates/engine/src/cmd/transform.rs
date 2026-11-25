@@ -16,7 +16,7 @@ use std::sync::Arc;
 
 use fontcraft_geom::{Affine, Point, Rect, Shape as _, Vec2, round_point};
 use fontcraft_model::glyphdata::GlyphData;
-use fontcraft_model::guide_follow::{edit_placed, placed_x};
+use fontcraft_model::guide_follow::{can_place, edit_placed, placed, placed_x};
 use fontcraft_model::{
     Font, Guide, Layer, LayerParts, LayerSide, MAX_COORDINATE, MAX_GLYPHS, Master, Metrics, Node, NodeKind, Shape, Transform, metric,
 };
@@ -648,7 +648,15 @@ fn compose(p: &Params, t: &Transform, m: Affine) -> Result<Transform> {
 
 /// A guide through the mapped point, along the mapped direction, in a layer `width` wide.
 fn map_guide(p: &Params, g: &mut Guide, m: Affine, width: f64) -> Result<()> {
-    edit_placed(g, width, |g| map_placed(p, g, m))
+    let mut to = placed(g, width);
+    map_placed(p, &mut to, m)?;
+    if !can_place(g, to.x, width) {
+        return Err(p.bad(format!("the result puts a guide further than {MAX_COORDINATE} from the right sidebearing, which it is referenced to")));
+    }
+    edit_placed(g, width, |g| {
+        *g = to;
+        Ok(())
+    })
 }
 
 fn map_placed(p: &Params, g: &mut Guide, m: Affine) -> Result<()> {
