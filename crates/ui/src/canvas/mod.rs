@@ -17,6 +17,7 @@ pub mod hinting;
 pub mod hoi;
 pub mod images;
 pub mod layers;
+pub mod mark_cloud;
 pub mod overlays;
 pub mod paint;
 pub mod reference_font;

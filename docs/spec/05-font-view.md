@@ -700,7 +700,7 @@ FontCraft differs. Every guess left that the reference could settle has a step i
    **Answered for M6 (the owner's answer to `docs/plans/M6.md` § 7, question 3 (a)):** Create
    Composite takes Unicode canonical decomposition mapped to glyph names plus our own tables, and
    Set Anchors our own default-anchor table; a custom `GlyphData.xml` overrides both
-   (`glyph.createComposite`, `glyph.setAnchors` guesses). The mark cloud stays M14.
+   (`glyph.createComposite`, `glyph.setAnchors` guesses). The mark cloud is M6.33.
 2. **Default sort order.** ▶ **Answered for M4 (source and ours):** the tutorials say glyphs sort
    alphabetically within their category, adjustable by sort names. The key's details are ours
    (`glyphOrder.default`). An opened file keeps its order.

@@ -63,6 +63,8 @@ pub struct ToolView {
     pub images: crate::canvas::images::ImagePaint,
     /// The selection's box, the transformation origin and the smart handles (`canvas::bounding_box::refresh` keeps them).
     pub marks: crate::canvas::bounding_box::Marks,
+    /// The marks that attach at the selected anchors (`canvas::mark_cloud::refresh` keeps it).
+    pub cloud: crate::canvas::mark_cloud::Cloud,
     /// The active tool is one under which Fill Preview fills the edited glyph: Text, Hand or Zoom.
     pub fills: bool,
 }
@@ -85,6 +87,8 @@ pub struct Tools {
     pub image: bool,
     /// The selected smart components' handles and sizes.
     pub smart: crate::canvas::smart::SmartCache,
+    /// What [`ToolView::cloud`] was worked out from.
+    pub cloud: crate::canvas::mark_cloud::CloudCache,
     /// What [`ToolView::marks`] was worked out from.
     pub marks_key: Option<crate::canvas::bounding_box::MarksKey>,
     /// What the tool layers paint; [`Tools::refresh`] copies it from the state above.
@@ -105,6 +109,7 @@ impl Default for Tools {
             mods: Modifiers::NONE,
             image: false,
             smart: crate::canvas::smart::SmartCache::default(),
+            cloud: crate::canvas::mark_cloud::CloudCache::default(),
             marks_key: None,
             view: ToolView::default(),
         }
@@ -184,6 +189,7 @@ impl Tools {
             overlays: self.toolbox.overlays(),
             images: self.view.images.clone(),
             marks: self.view.marks.clone(),
+            cloud: self.view.cloud.clone(),
             fills: matches!(self.toolbox.active_id(), "text" | "hand" | "zoom"),
         };
         if view != self.view {

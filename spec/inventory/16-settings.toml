@@ -329,6 +329,10 @@ milestone = "M14"
 summary = "When on, selecting an anchor overlays all combining marks that attach to that anchor on every glyph shown. Which marks belong to a glyph and anchor comes from the glyph info database. Off hides mark clouds entirely."
 ref = "Settings › Appearance"
 status = "handbook"
+notes = "On by default. The switch in Settings › Appearance and the cloud (`crates/ui/src/canvas/mark_cloud.rs`) are M6.33."
+guesses = [
+  "The setting starts on, as its text tells how to disable it; a fresh install of the reference app settles it.",
+]
 
 [[setting]]
 id = "appearance.color.cornerNodes.light"
@@ -601,9 +605,18 @@ notes = "FontCraft (M14.2, app/appearance.rs): the window follows the system's l
 id = "appearance.markCloudOnAnchorSelection"
 area = "components"
 milestone = "M14"
-summary = "The mark cloud is shown for all glyphs in view as soon as an anchor is selected; presumably it goes away again when the anchor is deselected."
+summary = "The mark cloud is shown for all glyphs in view as soon as an anchor is selected; it goes away when the anchor is deselected."
 ref = "Settings › Appearance"
 status = "handbook"
+notes = "M6.33: which marks attach is `crates/components/src/marks.rs`: the `marks` (version 2: `accents`) list of the glyph's database record, also the base name's for a suffixed glyph, else every exporting mark with the partner anchor, at most 200. Anchors are the effective ones, so composites show the cloud too. Not shown while the background is edited, in text mode, or with Show Anchors off."
+guesses = [
+  "Without a list in the glyph database, every exporting mark of the font with the anchor's underscore partner belongs to the cloud; selecting `top` on `a` in a font with many marks in the reference app settles it.",
+  "Selecting an underscore anchor (`_top`) shows no cloud, and a numbered or suffixed anchor (`top_2`, `top_viet`) takes the marks of its plain name when none has a partner of the whole name; the reference app settles it.",
+  "The cloud is a faint fill of all the marks together, with their outlines on the edited glyph; a screenshot of the reference app settles it.",
+]
+observe = [
+  "Select `top` on `a`, on `acutecomb` and on a composite, then `_top` on `acutecomb`: note which marks show, on which glyphs of the text, and how they are drawn.",
+]
 
 # --- User Settings ---
 

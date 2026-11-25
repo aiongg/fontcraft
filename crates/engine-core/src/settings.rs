@@ -129,6 +129,7 @@ pub const SETTINGS: &[SettingDef] = &[
     SettingDef { id: "appearance.color.otherLayersStroke.light", kind: Kind::Color, default: DefaultValue::Text("#2d8cebb0") },
     SettingDef { id: "appearance.color.smoothNodes.dark", kind: Kind::Color, default: DefaultValue::Text("#2fa84f") },
     SettingDef { id: "appearance.color.smoothNodes.light", kind: Kind::Color, default: DefaultValue::Text("#2fa84f") },
+    SettingDef { id: "appearance.displayMarkCloud", kind: Kind::Bool, default: DefaultValue::Bool(true) },
     SettingDef { id: "appearance.displayUnicodeValue", kind: Kind::Bool, default: DefaultValue::Bool(false) },
     SettingDef { id: "appearance.guideOpacity", kind: Kind::Number { min: 0.0, max: 100.0 }, default: DefaultValue::Number(100.0) },
     SettingDef { id: "appearance.handleSize", kind: Kind::Choice(&["small", "regular", "large"]), default: DefaultValue::Text("regular") },

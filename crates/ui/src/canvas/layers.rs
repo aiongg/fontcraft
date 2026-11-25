@@ -68,6 +68,7 @@ pub const LAYERS: &[PaintLayer] = &[
     PaintLayer { id: "otherLayers", paint: paint::background::paint },
     PaintLayer { id: "textColor", paint: color::paint::text },
     PaintLayer { id: "textGlyphs", paint: super::text::paint::glyphs },
+    PaintLayer { id: "markCloud", paint: super::mark_cloud::paint },
     PaintLayer { id: "color", paint: color::paint::paint },
     PaintLayer { id: "ttPreviewOutlines", paint: hinting::pixels::outlines },
     PaintLayer { id: "outline", paint: paint::outline::paint },
