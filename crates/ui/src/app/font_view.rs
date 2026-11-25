@@ -15,6 +15,7 @@ use serde_json::{Map, Value, json};
 
 use super::FontCraftApp;
 use super::models::ProjectCx;
+use super::notices;
 
 /// Smallest and largest grid cell, in points (`fontView.setCellSize`).
 pub const MIN_CELL_SIZE: f64 = 16.0;
@@ -447,14 +448,23 @@ impl FontCraftApp {
     /// What follows engine command `command` that returned `reply`: a new glyph becomes the Font View selection;
     /// returns the status notice the reply calls for.
     pub(super) fn after_command(&mut self, command: &CommandRef, reply: &Value) -> Option<String> {
-        if self.view.font_view.draft.take().is_some() {
+        // A refused value waits for a new one, Escape or another selection.
+        if self.view.font_view.draft.take_if(|d| d.error.is_none()).is_some() {
             self.view_revision += 1;
         }
         let made = results(&command.id, reply);
         if !made.is_empty() {
             self.select_and_reveal(made);
         }
-        incompatible_notice(&command.id, reply).or_else(|| added_notice(&command.id, reply))
+        let added = || {
+            let added = added_notice(&command.id, reply)?;
+            // What a save in the document's format would lose is said too.
+            Some(match notices::notice(&command.id, reply) {
+                Some(warning) => format!("{added} · {warning}"),
+                None => added,
+            })
+        };
+        incompatible_notice(&command.id, reply).or_else(added)
     }
 
     /// What follows an engine command that failed: the List View value it was to set stays in its cell with `error`.
@@ -513,6 +523,7 @@ impl FontCraftApp {
         let fv = &mut self.view.font_view;
         fv.anchor = selected.last().cloned();
         fv.selected = selected;
+        fv.draft = None;
         self.view_revision += 1;
         Ok(())
     }

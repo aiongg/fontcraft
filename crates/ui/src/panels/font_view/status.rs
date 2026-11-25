@@ -1,6 +1,7 @@
 //! The row under the glyphs (`fontView.statusBar`): the New Glyph and Remove Glyph buttons at the start (Remove Glyph
 //! opens its dialog on the selection and is greyed without one), the selected, shown and total counts, how many selected
-//! glyphs the search or the sidebar hides with a button that shows every glyph, and the cell size slider (`fontView.setCellSize`) in Grid View.
+//! glyphs the search or the sidebar hides with a button that shows every glyph, and the cell size slider
+//! (`fontView.setCellSize`) in Grid View.
 
 use craft::behavior::IconId;
 use craft::ui::buttons::{Button, IconButton};

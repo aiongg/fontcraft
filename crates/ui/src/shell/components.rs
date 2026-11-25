@@ -258,6 +258,7 @@ fn show_users(app: &mut FontCraftApp, p: &Value) -> Result<(), String> {
     }
     app.view.font_view.anchor = glyphs.first().cloned();
     app.view.font_view.selected = glyphs;
+    app.view.font_view.draft = None;
     Ok(())
 }
 

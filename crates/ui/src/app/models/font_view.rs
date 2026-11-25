@@ -432,7 +432,8 @@ fn sort_rows(visible: &mut Vec<usize>, sort: Sort, key: impl Fn(usize) -> Option
     *visible = keyed.into_iter().map(|(_, i)| i).collect();
 }
 
-/// The glyph properties the List View columns and the custom info badge read: the session's cache, else computed from the glyph data.
+/// The glyph properties the List View columns and the custom info badge read: the session's cache, else computed from
+/// the glyph data.
 struct Props {
     cache: Option<Arc<fontcraft_engine::model::PropsCache>>,
     data: Option<Arc<GlyphData>>,

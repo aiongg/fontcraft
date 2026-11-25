@@ -256,10 +256,14 @@ pub fn show(ui: &mut Ui, model: &FontViewModel, sent: &mut Vec<Msg>) {
     if let (Some((column, value)), Some(row)) = (chosen.take(), lead) {
         sent.extend(list_edit::command(model, row, column, &value));
     }
-    if model.edit_cell.is_some() {
+    let edits = edits.take();
+    // The table may lay out a row it reveals on the next pass only: the request waits for the row's field.
+    if let Some(wanted) = model.edit_cell
+        && (model.reveal.is_none() || edits.iter().any(|(edit, _)| edit.column == wanted))
+    {
         sent.push(Msg::View(ViewMsg::FontViewEditCell(None)));
     }
-    for (edit, id) in edits.take() {
+    for (edit, id) in edits {
         if model.edit_cell == Some(edit.column) {
             let _ = focus::request(ui.ctx(), FocusTarget::Id(id));
         }

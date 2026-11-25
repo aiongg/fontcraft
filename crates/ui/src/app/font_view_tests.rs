@@ -366,6 +366,15 @@ fn added_glyphs_become_the_selection() {
     assert!(selected(&app).is_empty(), "undo takes the copies out of the selection");
 }
 
+/// What adding glyphs did is said together with what a save in the document's format would lose.
+#[test]
+fn added_glyphs_and_save_losses_share_the_notice() {
+    let mut app = app();
+    let reply = json!({"glyphs": ["A"], "warnings": ["smart settings are not saved"]});
+    let notice = app.after_command(&CommandRef::new("glyph.duplicateGlyph"), &reply).expect("a notice");
+    assert!(notice.contains("1 ") && notice.ends_with("smart settings are not saved"), "{notice}");
+}
+
 /// A value a List View cell was given stays in it with the reason while the command refuses it; a taken one goes on to
 /// the row below, and another selection drops the refused one.
 #[test]
@@ -391,6 +400,10 @@ fn a_refused_list_value_stays_in_its_cell() {
     assert_eq!((app.models.font_view.draft.clone(), selected(&app)), (None, vec!["B".to_string()]));
     shell(&mut app, "fontView.setSelection", json!({"glyphs": ["A"]}));
     edit(&mut app, "nothex");
+    app.sent.push(Msg::run("fontView.queryGlyphs", json!({"entries": []})));
+    app.sent.push(Msg::run("glyph.setNote", json!({"glyphs": ["D"], "note": "other"})));
+    app.drain();
+    assert!(app.models.font_view.draft.is_some(), "another command leaves the refused value");
     shell(&mut app, "fontView.setSelection", json!({"glyphs": ["C"]}));
     assert_eq!(app.models.font_view.draft, None);
 }
