@@ -352,14 +352,14 @@ fn read_base(session: &mut Session, key: &BaseKey, data: &mut OverlayData, audit
 /// The shapes of the target's layer that differ from how they were in `before`, as one outline.
 fn ghost(now: &Font, before: &Font, target: &Target) -> Option<BezPath> {
     let shapes = |font: &Font| -> Option<Vec<Shape>> {
-        let layer = font.glyph(&target.glyph)?.layer(&target.layer)?;
+        let layer = target.layer_in(font)?;
         Some(match target.side {
             LayerSide::Foreground => layer.shapes.clone(),
             LayerSide::Background => layer.info.background.as_ref().map(|b| b.shapes.clone()).unwrap_or_default(),
         })
     };
     let (was, is) = (shapes(before)?, shapes(now)?);
-    let master = before.glyph(&target.glyph)?.layer(&target.layer)?.master.clone();
+    let master = target.layer_in(before)?.master.clone();
     let mut out = BezPath::new();
     for (i, shape) in was.iter().enumerate() {
         if is.get(i) == Some(shape) {

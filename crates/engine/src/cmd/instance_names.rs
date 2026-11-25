@@ -135,7 +135,7 @@ fn entry(compiler: &ExportedNames, title: &str, index: usize, instance: &Instanc
 
 fn static_entry(compiler: &ExportedNames, title: &str, out: &mut Entry, options: &Options) -> std::result::Result<(), CompileError> {
     let made = compiler.static_instance(out.index, options)?;
-    out.file_name = super::compile::stem(&made.source, &made.resolved, options, title, false);
+    out.file_name = super::compile::stem(&made.source, &fontcraft_model::Target::Instance(out.index), &made.resolved, options, title, false);
     match crate::export_steps::export_folder(&made.resolved, options) {
         Ok(folder) => out.folder = folder.map(|f| f.to_string_lossy().into_owned()),
         Err(e) => out.warnings.push(e.to_string()),

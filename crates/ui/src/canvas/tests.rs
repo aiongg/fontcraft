@@ -184,7 +184,7 @@ fn a_click_on_a_placeholder_selects_its_component() {
     crate::control::dispatch(&mut app, "ui.pointer", &json!({ "events": events })).unwrap();
     app.drain();
     assert!(app.tools.selection.shapes.contains(&3), "{:?}", app.tools.selection);
-    assert_eq!(app.models.palette.info_box.component.as_ref().map(|c| c.base.as_str()), Some("empty"));
+    assert_eq!(app.models.palette.info_box.component.as_ref().and_then(|c| c.base.as_deref()), Some("empty"));
     let selection = super::tools::tokens::ToolTokens::standard().selection;
     assert_eq!(count(&painted(&app, paint::components::shapes), selection), 3, "its box and cross are in the selection colour");
 }
@@ -594,4 +594,59 @@ fn info_for_selection_opens_the_smart_settings() {
     shell(&mut app, "edit.infoForSelection", json!({}));
     assert!(app.view.components.smart_component.is_none() && app.view.components.smart_glyph.is_none());
     assert!(panel(&app));
+}
+
+/// A selected anchor shows the marks that attach there around it, on the edited glyph and the text's other glyphs with
+/// that anchor; a drag moves them, and the setting takes them away (`appearance.markCloudOnAnchorSelection`).
+#[test]
+fn a_selected_anchor_shows_its_mark_cloud() {
+    let mut app = app();
+    for (name, anchor, y) in [("gravecomb", "_top", 500), ("acutecomb", "_top", 520), ("tildecomb", "_top", 540), ("dotbelowcomb", "_bottom", 0)] {
+        run(&mut app, "glyph.newGlyph", json!({"name": name}));
+        run(&mut app, "path.addRectangle", json!({"glyph": name, "x": 0, "y": y, "width": 40, "height": 20}));
+        run(&mut app, "anchor.add", json!({"glyph": name, "name": anchor, "x": 10, "y": y}));
+    }
+    run(&mut app, "anchor.add", json!({"glyph": "A", "name": "top", "x": 150, "y": 700}));
+    run(&mut app, "anchor.add", json!({"glyph": "A", "name": "bottom", "x": 150, "y": 0}));
+    app.sent.push(Msg::View(ViewMsg::SelectGlyph("A".into())));
+    app.drain();
+    shell(&mut app, "selection.set", json!({"anchors": ["top"]}));
+    app.project();
+    let parts = app.tools.view.cloud.parts.clone();
+    assert_eq!(parts.iter().map(|p| (p.item, p.at)).collect::<Vec<_>>(), [(None, [150.0, 700.0])]);
+    let outline = &parts[0].shape.outline;
+    assert_eq!(outline.elements().iter().filter(|e| matches!(e, fontcraft_geom::PathEl::MoveTo(_))).count(), 3, "three marks have _top");
+    let starts: Vec<f64> = outline
+        .elements()
+        .iter()
+        .filter_map(|e| match e {
+            fontcraft_geom::PathEl::MoveTo(p) => Some(p.x),
+            _ => None,
+        })
+        .collect();
+    assert!(starts.iter().all(|x| (x + 10.0).abs() < 1e-9 || (x - 30.0).abs() < 1e-9), "around the anchor: {starts:?}");
+    app.view.canvas = CanvasView::new(RECT, Point::new(400.0, 400.0), 1.0);
+    assert_eq!(painted(&app, super::mark_cloud::shapes).len(), 4, "one fill and three outlines");
+
+    run(&mut app, "selection.move", json!({"glyph": "A", "anchors": ["top"], "dx": 20, "dy": 0}));
+    app.project();
+    assert_eq!(app.tools.view.cloud.parts[0].at, [170.0, 700.0]);
+
+    run(&mut app, "settings.set", json!({"id": "appearance.displayMarkCloud", "value": false}));
+    app.project();
+    assert!(app.tools.view.cloud.parts.is_empty(), "off shows none");
+}
+
+/// Show all glyphs that use this glyph as a component opens them in a new tab, in font order.
+#[test]
+fn the_users_of_a_glyph_open_in_a_tab() {
+    let mut app = components_app();
+    let tabs = app.view.tabs.tabs.len();
+    shell(&mut app, "glyph.showGlyphsUsingAsComponent", json!({"glyph": "base"}));
+    assert_eq!(app.view.tabs.tabs.len(), tabs + 1);
+    let shown: Vec<&str> = (0..app.view.text.text.len()).filter_map(|i| app.view.text.item_glyph(i)).collect();
+    assert_eq!(shown, ["A", "comp"]);
+    app.sent.push(Msg::Shell(CommandRef::with_params("glyph.showGlyphsUsingAsComponent", json!({"glyph": "comp"}))));
+    app.drain();
+    assert!(app.status.contains("no glyph uses"), "{}", app.status);
 }

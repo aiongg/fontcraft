@@ -77,6 +77,8 @@ pub struct Scene<'a> {
     pub ps_hints: crate::hint_drag::HintMarks,
     /// The corner components the Edit View selects, fitted ([`crate::attachment`]); foreground only.
     pub attachments: Vec<crate::attachment::AttachmentMark>,
+    /// The extra nodes the Select tool finds and selects, while View › Show Nodes › Extra Nodes shows them.
+    pub extra_nodes: Vec<crate::extra_nodes::ExtraNode>,
     /// The snapping suggestions that are on and what they read from the document, resolved by
     /// the caller.
     pub suggest: crate::suggestions::Suggest,
@@ -170,6 +172,7 @@ impl<'a> Scene<'a> {
             smart_sizes: Vec::new(),
             ps_hints: crate::hint_drag::HintMarks::default(),
             attachments: Vec::new(),
+            extra_nodes: Vec::new(),
             suggest: crate::suggestions::Suggest::default(),
             hoi: None,
             component_points: 0,

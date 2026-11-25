@@ -377,7 +377,7 @@ pub fn step(scene: &Scene, current: &Selection, forward: bool) -> Option<Selecti
 }
 
 /// `selection.selectInRegion`: the points and anchors inside `polygon` (a marquee's four corners
-/// or a lasso's outline). `nodes_only` leaves the handles out. `components` also takes each
+/// or a lasso's outline), with the scene's extra nodes. `nodes_only` leaves the handles out. `components` also takes each
 /// component that can be selected and has an on-curve point of its outline inside.
 pub fn in_region(scene: &Scene, polygon: &[Point], nodes_only: bool, components: bool) -> Selection {
     let mut s = Selection::new();
@@ -392,6 +392,11 @@ pub fn in_region(scene: &Scene, polygon: &[Point], nodes_only: bool, components:
             if point_in_polygon(node.point(), polygon) {
                 s.points.insert((i, n));
             }
+        }
+    }
+    for e in scene.extra_nodes.iter().filter(|e| scene.shape_editable(e.a.0) && scene.shape_editable(e.b.0)) {
+        if point_in_polygon(e.at, polygon) {
+            s.intersections.insert(e.key());
         }
     }
     for a in &scene.layer.anchors {

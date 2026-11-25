@@ -18,6 +18,7 @@ pub mod tokens;
 use fontcraft_engine::Session;
 use fontcraft_engine::model::glyphdata::GlyphData;
 use fontcraft_engine::model::{Font, Layer, LayerSide, Master};
+use fontcraft_tools::extra_nodes::{MAX_CROSSING_POINT_WORK, extra_nodes_within};
 use fontcraft_tools::toolbox::Keyboard;
 use fontcraft_tools::{KeyEvent, Modifiers, Overlay, PointerEvent, Scene, Selection, Toolbox};
 
@@ -43,6 +44,14 @@ pub struct Target {
     pub side: LayerSide,
 }
 
+impl Target {
+    /// The target's layer: a master, special or backup layer. [`Glyph::layer`](fontcraft_engine::model::Glyph::layer)
+    /// finds master layers only.
+    pub fn layer_in<'f>(&self, font: &'f Font) -> Option<&'f Layer> {
+        font.glyph(&self.glyph)?.layers.iter().find(|l| l.id == self.layer)
+    }
+}
+
 /// What the canvas's tool layers paint.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ToolView {
@@ -55,6 +64,8 @@ pub struct ToolView {
     pub images: crate::canvas::images::ImagePaint,
     /// The selection's box, the transformation origin and the smart handles (`canvas::bounding_box::refresh` keeps them).
     pub marks: crate::canvas::bounding_box::Marks,
+    /// The marks that attach at the selected anchors (`canvas::mark_cloud::refresh` keeps it).
+    pub cloud: crate::canvas::mark_cloud::Cloud,
     /// The active tool is one under which Fill Preview fills the edited glyph: Text, Hand or Zoom.
     pub fills: bool,
 }
@@ -77,6 +88,8 @@ pub struct Tools {
     pub image: bool,
     /// The selected smart components' handles and sizes.
     pub smart: crate::canvas::smart::SmartCache,
+    /// What [`ToolView::cloud`] was worked out from.
+    pub cloud: crate::canvas::mark_cloud::CloudCache,
     /// What [`ToolView::marks`] was worked out from.
     pub marks_key: Option<crate::canvas::bounding_box::MarksKey>,
     /// What the tool layers paint; [`Tools::refresh`] copies it from the state above.
@@ -97,6 +110,7 @@ impl Default for Tools {
             mods: Modifiers::NONE,
             image: false,
             smart: crate::canvas::smart::SmartCache::default(),
+            cloud: crate::canvas::mark_cloud::CloudCache::default(),
             marks_key: None,
             view: ToolView::default(),
         }
@@ -176,6 +190,7 @@ impl Tools {
             overlays: self.toolbox.overlays(),
             images: self.view.images.clone(),
             marks: self.view.marks.clone(),
+            cloud: self.view.cloud.clone(),
             fills: matches!(self.toolbox.active_id(), "text" | "hand" | "zoom"),
         };
         if view != self.view {
@@ -234,6 +249,9 @@ pub fn scene<'a>(font: &'a Font, data: Option<&GlyphData>, view: &ViewState, foc
     scene.focus = focus.cloned();
     scene.background_shown = view.display.background;
     scene.guides_shown = view.display.guides;
+    if view.display.extra_nodes {
+        scene.extra_nodes = extra_nodes_within(&scene.layer, MAX_CROSSING_POINT_WORK);
+    }
     Some(scene)
 }
 

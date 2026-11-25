@@ -40,6 +40,8 @@ beta builds should work on copies of their files.
 
 Mark cloud: shown on every glyph as soon as an anchor is selected; which marks are shown per glyph
 and anchor is defined by the glyph info database.
+The published data defines none, so a glyph without a list in a custom database shows every
+exporting mark with the anchor's underscore partner (a guess).
 
 Colours: nine colours, each stored for the light and for the dark appearance
 (`appearance.color.<name>.light` / `.dark`, 18 settings):

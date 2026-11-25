@@ -88,6 +88,9 @@ pub struct Tokens {
     pub component_selected_width: f32,
     /// How opaque the fill of a component in its state's colour is, from 0 to 1.
     pub component_fill_opacity: f32,
+    /// How opaque the mark cloud is, from 0 to 1, and the outlines of its marks on the edited glyph.
+    pub mark_cloud_opacity: f32,
+    pub mark_cloud_outline_opacity: f32,
     /// Width and height of an anchor marker.
     pub anchor_size: f32,
     /// Width of the band along a corner or cap component.
@@ -229,6 +232,8 @@ impl Tokens {
             component_outline_width: 2.0,
             component_selected_width: 3.0,
             component_fill_opacity: 0.14,
+            mark_cloud_opacity: 0.16,
+            mark_cloud_outline_opacity: 0.4,
             anchor_size: 9.0,
             attachment_band_width: 10.0,
             label_size: 10.0,

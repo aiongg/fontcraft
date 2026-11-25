@@ -21,7 +21,7 @@ use std::collections::BTreeSet;
 
 use fontcraft_components::propagate::{AnchorSource, base_layer, effective_anchors_with};
 use fontcraft_geom::{Affine, Point};
-use fontcraft_hinting::Renumbered;
+use fontcraft_hinting::{RemapMode, Renumbered, remap_layer};
 use fontcraft_model::corner::{self, CornerTarget};
 use fontcraft_model::glyphdata::GlyphData;
 use fontcraft_model::{
@@ -83,7 +83,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Decompose Corner",
             [],
             None,
-            "{glyph: name, layer?: id, corners?: [indices]} fit the chosen corner components (positions in the layer's hint list; default: every corner component of the layer) into their paths and remove them; the other corners keep their nodes. A corner on an extra node, or one whose corner glyph does not exist, is an error → {glyph, layer, decomposed: number, selection: {glyph, layer}}",
+            "{glyph: name, layer?: id, corners?: [indices]} fit the chosen corner components (positions in the layer's hint list; default: every corner component of the layer) into their paths and remove them; the other corners keep their nodes. For a corner on an extra node the two paths are joined there, as it is drawn; the other hints of the layer move to the joined outline, and those on a part that went are removed. A corner whose paths no longer cross there, or whose corner glyph does not exist, is an error → {glyph, layer, decomposed: number, selection: {glyph, layer}}",
             has_doc,
             decompose_corners
         )
@@ -557,7 +557,9 @@ fn decompose_corners(s: &mut Session, value: &Value) -> Result<Value> {
     let p = Params::new(ID, value)?;
     let mut t = layer_target(&p, ID)?;
     let chosen = indices(&p, "corners")?;
-    let count = s.edit("Decompose Corner", |font| {
+    let (count, done) = s.edit("Decompose Corner", |font| {
+        let mut done = Renumbered::default();
+        let mut joins = false;
         let (layer, count) = {
             let r = t.resolve(font)?;
             crate::check_unlocked(r.glyph)?;
@@ -575,8 +577,12 @@ fn decompose_corners(s: &mut Session, value: &Value) -> Result<Value> {
                     .map_err(|m| p.bad(format!("`corners`: hint {i}: {m}")))?
                     .ok_or_else(|| p.bad(format!("`corners`: hint {i} is not a corner component")))?;
                 match c.target {
-                    CornerTarget::Intersection { .. } => {
-                        return Err(p.bad(format!("corner {i} sits on an extra node: remove the overlap first, then decompose it")));
+                    CornerTarget::Intersection { shape, other_shape, .. } => {
+                        let path = |s: usize| matches!(r.layer.shapes.get(s), Some(Shape::Path(_)));
+                        if !path(shape) || !path(other_shape) {
+                            return Err(p.bad(format!("corner {i} points at shapes {shape} and {other_shape}, which are not both paths")));
+                        }
+                        joins = true;
                     }
                     CornerTarget::Node { shape, .. } => {
                         if !matches!(r.layer.shapes.get(shape), Some(Shape::Path(_))) {
@@ -588,15 +594,24 @@ fn decompose_corners(s: &mut Session, value: &Value) -> Result<Value> {
                     return Err(p.bad(format!("corner {i}: there is no corner glyph `{}`", c.name)));
                 }
             }
-            let layer = corner::decompose_corners(font, r.layer, &which).map_err(|e| p.bad(e.to_string()))?;
+            let layer = if joins {
+                let new = corner::decompose_joined_corners(font, r.layer, &which).map_err(|e| p.bad(e.to_string()))?;
+                let mut before = r.layer.clone();
+                before.info.hints = new.info.hints.clone();
+                done.insert(&t.glyph, &new.id, LayerSide::Foreground);
+                remap_layer(&before, &new, &t.glyph, RemapMode::OverlapRemoval, &mut done.report).unwrap_or(new)
+            } else {
+                corner::decompose_corners(font, r.layer, &which).map_err(|e| p.bad(e.to_string()))?
+            };
             (layer, which.len())
         };
         t.edit_layer(font, |l| {
             *l = layer;
             Ok(())
         })?;
-        Ok(count)
+        Ok((count, done))
     })?;
+    s.hints_renumbered(done);
     t.layer = Some(t.layer_id(s.font()?)?);
     Ok(json!({"glyph": t.glyph, "layer": t.layer, "decomposed": count, "selection": t.to_json()}))
 }

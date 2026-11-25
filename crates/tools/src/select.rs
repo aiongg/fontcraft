@@ -368,8 +368,8 @@ impl SelectTool {
                     self.state = State::Guide(Box::new(guide));
                     return out;
                 }
-                // A corner component moves with its node, not by itself.
-                if press.hit.locked || cx.scene.locked || matches!(press.hit.hit, Hit::Attachment { .. }) {
+                // A corner component moves with its node and an extra node with its paths, not by itself.
+                if press.hit.locked || cx.scene.locked || matches!(press.hit.hit, Hit::Attachment { .. } | Hit::ExtraNode { .. }) {
                     return out;
                 }
                 let mods = press.mods;

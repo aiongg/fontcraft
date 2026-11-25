@@ -4,6 +4,7 @@
 //! |---|---|
 //! | `glyph.matchMasters`, `glyph.relocateStartPoints`, the two hinting Autohints, the edits that take `matchLayers`: `skipped` | the label, then each skipped glyph with its reason |
 //! | `font.info.pasteRows`: `skipped` | the label, then each skipped row with its reason |
+//! | `component.setTransform`, `component.setAnchor` on several components: `skipped` | the label, then the base glyph of each skipped component with its reason |
 //! | `color.generateDarkPalette`: `palette`, `name` | the new palette's number and name |
 //! | `font.features.compile`: `errors`, `warnings`, `targetErrors`, `targetWarnings` | how many errors and warnings the code has |
 //! | `font.features.update`: `added`, `updated`, `removed` | how many entries it added, changed and removed |
@@ -19,7 +20,7 @@ use super::font_view::MAX_NOTICE_NAMES;
 craft::ui::words! {
     /// The status notices the app layer writes from a command's reply.
     pub struct ReplyNoticeWords {
-        /// Before the glyphs Match Masters, Relocate Start Points or Autohint left alone.
+        /// Before the glyphs or components a command left alone.
         skipped: "fontcraftNotice.skipped" = "skipped";
         /// Before the new palette's number.
         dark_palette: "fontcraftNotice.darkPalette" = "Added dark palette";
@@ -38,8 +39,15 @@ craft::ui::words! {
     }
 }
 
-/// The commands whose reply lists, under `skipped`, the glyphs or layers they left alone.
-const REPORTS_SKIPPED: [&str; 4] = ["glyph.matchMasters", "glyph.relocateStartPoints", "hint.tt.autohintGlyph", "hint.ps.autohintGlyph"];
+/// The commands whose reply lists, under `skipped`, the glyphs, layers or components they left alone.
+const REPORTS_SKIPPED: [&str; 6] = [
+    "glyph.matchMasters",
+    "glyph.relocateStartPoints",
+    "hint.tt.autohintGlyph",
+    "hint.ps.autohintGlyph",
+    "component.setTransform",
+    "component.setAnchor",
+];
 
 /// The notice for `reply` of command `id`, or `None` when it has nothing to say.
 pub fn notice(id: &str, reply: &Value) -> Option<String> {
@@ -102,7 +110,7 @@ fn skipped(id: &str, reply: &Value) -> Option<String> {
         .iter()
         .take(MAX_NOTICE_NAMES)
         .filter_map(|e| {
-            let glyph = e.get("glyph")?.as_str()?;
+            let glyph = e.get("glyph").or_else(|| e.get("base"))?.as_str()?;
             Some(match e.get("reason").and_then(Value::as_str) {
                 Some(reason) => format!("{glyph} ({reason})"),
                 None => glyph.to_string(),
@@ -188,6 +196,8 @@ mod tests {
         let reply = json!({"glyphs": ["A"], "skipped": [{"glyph": "B", "layer": "m2", "reason": "paths differ"}]});
         assert_eq!(notice("glyph.matchMasters", &reply).as_deref(), Some("Match Masters: skipped B (paths differ)"));
         assert_eq!(notice("glyph.relocateStartPoints", &json!({"glyphs": ["A"], "skipped": []})), None);
+        let reply = json!({"components": [0], "skipped": [{"component": 1, "base": "acutecomb", "reason": "is locked"}]});
+        assert_eq!(notice("component.setTransform", &reply).as_deref(), Some("Set Component Transform: skipped acutecomb (is locked)"));
         assert_eq!(notice("color.generateDarkPalette", &json!({"palette": 1, "name": "Dark"})).as_deref(), Some("Added dark palette 1: Dark"));
         assert_eq!(
             notice("glyph.newGlyph", &json!({"name": "a", "warnings": ["UFO drops x", "UFO drops y"]})).as_deref(),

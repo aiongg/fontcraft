@@ -91,6 +91,60 @@ fn a_click_on_a_node_lists_the_node_commands_and_runs_them_like_the_command() {
     assert_ne!(layer(&app), layer(&edit_app()), "the corner was opened");
 }
 
+/// The component items act on the selected components, show by their state, and Change Component Glyph opens the picker
+/// on them; Reverse Contours is named by what it reverses.
+#[test]
+fn component_items_follow_the_state_of_the_selected_components() {
+    let mut app = edit_app();
+    let run = |app: &mut FontCraftApp, id: &str, params: Value| app.session.execute(id, &params).unwrap_or_else(|e| panic!("{id}: {e}"));
+    run(&mut app, "path.addRectangle", json!({"glyph": "B", "x": 0, "y": 500, "width": 100, "height": 100}));
+    for x in [0, 400] {
+        run(&mut app, "glyph.addComponent", json!({"glyph": "A", "component": "B"}));
+        let last = layer(&app).shapes.len() - 1;
+        run(&mut app, "component.setTransform", json!({"glyph": "A", "component": last, "x": x, "y": 0}));
+    }
+    run(&mut app, "glyph.addComponent", json!({"glyph": "A", "component": "B"}));
+    app.drain();
+    let items = |app: &mut FontCraftApp| {
+        app.sent.push(Msg::Shell(CommandRef::with_params("selection.set", json!({"shapes": [1, 2]}))));
+        app.drain();
+        let menu = call(app, "ui.contextMenu.list", json!({"x": 450, "y": 550}));
+        assert_eq!(menu["sections"][0]["context"], "canvas.component", "{menu}");
+        commands(&menu, 0)
+    };
+    let has = |list: &[String], id: &str| list.iter().any(|c| c == id);
+    let free = items(&mut app);
+    assert!(has(&free, "component.lock") && has(&free, "component.enableAutomaticAlignment"), "{free:?}");
+    assert!(!has(&free, "component.unlock") && !has(&free, "component.disableAutomaticAlignment"), "{free:?}");
+    call(&mut app, "ui.contextMenu.invoke", json!({"command": "component.lock"}));
+    let locked = |app: &FontCraftApp| -> Vec<bool> {
+        let of = |s: &fontcraft_engine::model::Shape| match s {
+            fontcraft_engine::model::Shape::Component(c) => Some(c.info.locked),
+            _ => None,
+        };
+        layer(app).shapes.iter().filter_map(of).collect()
+    };
+    assert_eq!(locked(&app), [true, true, false], "only the selected components");
+    let both = items(&mut app);
+    assert!(has(&both, "component.unlock") && !has(&both, "component.lock"), "{both:?}");
+
+    call(&mut app, "ui.contextMenu.invoke", json!({"command": "component.setBaseGlyph"}));
+    app.drain();
+    let picker = app.view.components.picker.clone().expect("the picker opens");
+    assert_eq!(picker.targets.get("components"), Some(&json!([1, 2])));
+    app.view.components.picker = None;
+
+    let reverse = |app: &mut FontCraftApp, shapes: Value| {
+        app.sent.push(Msg::Shell(CommandRef::with_params("selection.set", shapes)));
+        app.drain();
+        let menu = call(app, "ui.contextMenu.list", json!({"x": 700, "y": 700}));
+        let all: Vec<Value> = menu["sections"].as_array().unwrap().iter().flat_map(|s| s["items"].as_array().unwrap().clone()).collect();
+        all.iter().find(|i| i["command"] == "path.reverseContours").unwrap()["label"].clone()
+    };
+    assert_eq!(reverse(&mut app, json!({"shapes": [0]})), "Reverse Selected Contours");
+    assert_eq!(reverse(&mut app, json!({"shapes": [1]})), "Reverse All Contours", "a component is no path");
+}
+
 #[test]
 fn a_click_on_empty_canvas_keeps_the_selection_and_the_window_path_runs_items() {
     let mut app = edit_app();

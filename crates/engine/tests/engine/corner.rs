@@ -161,6 +161,22 @@ fn corner_component_add_attaches_a_corner_to_an_extra_node() {
     assert!(e.contains("no two segments"), "{e}");
 }
 
+/// Decomposing a corner on an extra node joins the two paths there and keeps the layer's other corners: one on another
+/// extra node of the paths lands on the node the join made.
+#[test]
+fn decomposing_a_corner_on_an_extra_node_joins_its_paths() {
+    let mut s = session();
+    run(&mut s, "cornerComponent.add", json!({"glyph": "T", "extraNodes": [[200, 400]], "corner": "_corner.one"}));
+    let paths = |s: &Session| s.font().unwrap().glyph("T").unwrap().layers[0].shapes.len();
+    let before = paths(&s);
+    run(&mut s, "cornerComponent.decompose", json!({"glyph": "T", "corners": [0]}));
+    assert!(corners(&s, "T").is_empty());
+    assert_eq!(paths(&s), before - 1, "the two paths are one");
+    run(&mut s, "edit.undo", json!({}));
+    assert_eq!(paths(&s), before);
+    assert_eq!(corners(&s, "T").len(), 1);
+}
+
 /// Replacing the glyph keeps the node, the scale and the alignment, and every other stored key.
 #[test]
 fn corner_component_set_glyph_keeps_node_scale_and_alignment() {

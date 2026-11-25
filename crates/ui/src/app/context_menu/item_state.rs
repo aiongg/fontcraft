@@ -3,19 +3,22 @@
 //! | Rule | Items |
 //! |---|---|
 //! | [`visible`] | Lock Path or Unlock Path, never both; a guide's Lock or Unlock, Make Global or Make Local; Guide Properties… for one editable guide; Open Corner for a selected corner node that is not an open end; Make Node First for nodes of closed paths; Decompose Corner on a node that holds a corner component; Add Cap Component for the two nodes of one straight segment; Add Segment Component for selected segments; Add Brush for selected segments or nodes that end one; Decompose Cap, Segment Component or Brush for one selected or on a selected node |
+//! | [`component_targets`] | the component section: Enable Automatic Alignment, Disable Automatic Alignment, Lock Component and Unlock Component act on the selected components whose state they change and hide when there are none |
+//! | [`label`] | Reverse Selected Contours while a path is selected, Reverse All Contours otherwise |
 //! | [`ready`] | Connect Nodes needs two open ends; Close Open Paths needs an open path |
 //! | [`checked`] | Locked (the glyph), Measurement Guide |
 
 use std::collections::BTreeSet;
 
 use fontcraft_engine::CommandSpec;
+use fontcraft_engine::components::align::aligned_components;
 use fontcraft_engine::model::corner::{CornerTarget, corner_hint, is_corner};
-use fontcraft_engine::model::{Layer, Path, Shape};
+use fontcraft_engine::model::{Font, Layer, LayerSide, Path, Shape};
 use fontcraft_engine::params::TargetKind;
 use fontcraft_tools::attachment::{self, AttachmentKind};
 use fontcraft_tools::{GuideScope, Scene, Selection, guide_drag};
 
-use crate::app::models::components::{caps_on_nodes, segments_on_nodes};
+use crate::app::models::components::{caps_on_nodes, segments_on_nodes, selected_components};
 use crate::canvas::tools::targets::{selected_segments, selection_targets};
 
 /// The context menu item that opens the Guide Properties dialog.
@@ -56,7 +59,8 @@ pub fn supplies(scene: &Scene, selection: &Selection, spec: &CommandSpec) -> Res
     let Some(what) = objects_wanted(spec) else { return Ok(()) };
     let m = selection_targets(scene, selection, spec);
     // Selected attachments reach Delete as `hints`, Copy and Cut under their kind's key, the mirrors as `corners`.
-    let corners = ["hints", "corners", "caps", "segmentComponents", "brushes"].iter().any(|k| m.contains_key(*k));
+    // Add Corner Component also takes extra nodes.
+    let corners = ["hints", "corners", "caps", "segmentComponents", "brushes", "extraNodes"].iter().any(|k| m.contains_key(*k));
     if !corners && !OBJECT_TARGETS.iter().any(|(kind, key, _)| spec.targets.contains(kind) && m.contains_key(*key)) {
         return Err(format!("select {what} first"));
     }
@@ -112,6 +116,39 @@ pub fn visible(scene: &Scene, selection: &Selection, id: &str) -> bool {
             None => true,
         },
     }
+}
+
+/// The selected components the component section's item `id` acts on, by shape index: for the alignment and lock items
+/// those whose state it changes, so that an item without any hides. `None` for an item of another section. Component
+/// commands act on the foreground, so there are none while the background is edited.
+pub fn component_targets(font: Option<&Font>, scene: &Scene, selection: &Selection, id: &str) -> Option<Vec<usize>> {
+    let state = id.strip_prefix("component.")?;
+    if !matches!(state, "setBaseGlyph" | "enableAutomaticAlignment" | "disableAutomaticAlignment" | "lock" | "unlock") {
+        return None;
+    }
+    if scene.side == LayerSide::Background {
+        return Some(Vec::new());
+    }
+    let aligned: BTreeSet<usize> = font.map(|f| aligned_components(f, &scene.layer).into_iter().map(|(i, _)| i).collect()).unwrap_or_default();
+    let locked = |i: usize| matches!(scene.layer.shapes.get(i), Some(Shape::Component(c)) if c.info.locked);
+    let wanted = |i: &usize| match state {
+        "enableAutomaticAlignment" => !aligned.contains(i),
+        "disableAutomaticAlignment" => aligned.contains(i),
+        "lock" => !locked(*i) && !aligned.contains(i),
+        "unlock" => locked(*i),
+        _ => true,
+    };
+    Some(selected_components(&scene.layer, selection).into_iter().filter(wanted).collect())
+}
+
+/// The label the item shows in place of its command's; `None` for the command's own.
+pub fn label(scene: &Scene, selection: &Selection, id: &str) -> Option<&'static str> {
+    if id != "path.reverseContours" {
+        return None;
+    }
+    let spec = fontcraft_engine::find_command(id)?;
+    let chosen = selection_targets(scene, selection, spec).contains_key("shapes");
+    Some(if chosen { "Reverse Selected Contours" } else { "Reverse All Contours" })
 }
 
 /// Whether the item can run on what is selected; the reason when it cannot.

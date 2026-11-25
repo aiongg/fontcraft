@@ -90,10 +90,13 @@ milestone = "M6"
 summary = "Second Info box that appears to the right of the main one while a component is selected and describes the glyph the component references. Position edits are ignored while the component is automatically aligned."
 ref = "Edit View › Measuring › Measuring with the Info box"
 status = "handbook"
-notes = "Documented, not yet observed. M6.11: `crates/ui/src/panels/info_box_component.rs`. The box sits to the right of the selection box while Show Info is on and a component is selected. The name opens the glyph picker for component.setBaseGlyph; the fields run component.setTransform; the arrow runs component.editBaseGlyph. X and Y are greyed out on an aligned component (only X when it is aligned horizontally) and every field on a locked one."
+notes = "Documented, not yet observed. M6.11: `crates/ui/src/panels/info_box_component.rs`. The box sits to the right of the selection box while Show Info is on and a component is selected. The name opens the glyph picker for component.setBaseGlyph; the fields run component.setTransform; the arrow runs component.editBaseGlyph. X and Y are greyed out on an aligned component (only X when it is aligned horizontally) and every field on a locked one. Several selected: the box shows their number after the name, a field holds the value they share and is empty where they differ (the name reads `Multi`), an edit sets all of them in one undo step, and the arrow opens the first one's glyph (M6.34). Members that cannot take the edit (locked, or a position on an aligned one) are left alone and named in the status line; the handbook states that the box appears with one or multiple components selected."
 guesses = [
-  "With several components selected the box describes the first in shape order and shows how many more are selected beside its name; the reference app with two components selected settles it.",
+  "An edit in the box with several components selected sets the value on every one that can take it, X and Y included (they move to the same place), and the anchor menu lists the anchors all of them share; the reference app with two components selected settles it.",
   "A component whose transform is a matrix with slant that cannot be shown as scale and rotation shows only X and Y, the other fields empty and greyed out; a component with such a matrix in the reference app settles it.",
+]
+observe = [
+  "Select two components of different scale with View › Show Info on: note what the component Info box shows, then type 50 into its horizontal scale and note which of them change.",
 ]
 
 [[panel]]
@@ -217,13 +220,13 @@ label = "Change Component Glyph"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, component?: index, base: name}"
+params = "{glyph?: name, layer?: id, component?: index, components?: [index], base: name}"
 area = "components"
 milestone = "M6"
 summary = "Repoints the selected component at another glyph, keeping its transform. Triggered from the glyph picker that opens when the base glyph name in the component Info box is clicked."
 ref = "Edit View › Measuring › Measuring with the Info box"
 status = "handbook"
-notes = "Documented, not yet observed. Keeps the slot in the shape order, the transform, the alignment setting and the attachment anchor (see components.swapBaseKeepsPlacement); a base that would make the glyph contain itself is refused."
+notes = "Documented, not yet observed. Keeps the slot in the shape order, the transform, the alignment setting and the attachment anchor (see components.swapBaseKeepsPlacement); a base that would make the glyph contain itself is refused. The canvas context menu's item opens the same picker on every selected component (M6.34)."
 
 [[command]]
 id = "component.setTransform"
@@ -231,13 +234,13 @@ label = "Set Component Transform"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, component?: index, x?: number, y?: number, scaleX?: percent, scaleY?: percent, slant?: degrees, rotation?: degrees}"
+params = "{glyph?: name, layer?: id, component?: index, components?: [index], x?: number, y?: number, scaleX?: percent, scaleY?: percent, slant?: degrees, rotation?: degrees}"
 area = "components"
 milestone = "M6"
 summary = "Sets any of the component values shown in the base-glyph Info box: offset, horizontal and vertical scale in percent, rightward slant and counterclockwise rotation. Offset changes have no effect while the component is automatically aligned."
 ref = "Edit View › Measuring › Measuring with the Info box"
 status = "handbook"
-notes = "Documented, not yet observed. Positions are rounded to the grid. A matrix transform from a file is shown as position, scale, slant and rotation with a horizontal slant only; a position edit keeps it a matrix."
+notes = "Documented, not yet observed. Positions are rounded to the grid. A matrix transform from a file is shown as position, scale, slant and rotation with a horizontal slant only; a position edit keeps it a matrix. `components` edits several in one undo step and lists the members it leaves alone in `skipped` (M6.34)."
 guesses = [
   "The command refuses a position edit on an aligned component (only `y` on one aligned horizontally) and any edit on a locked component, and accepts slants within ±89°, rotations within ±360° and scales from −10,000 % to 10,000 % except 0; typing such values into the Info box of the reference app settles it.",
 ]

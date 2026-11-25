@@ -33,6 +33,7 @@ pub mod default_anchors;
 pub mod error;
 pub mod expressions;
 pub mod index;
+pub mod marks;
 pub mod metrics;
 pub mod propagate;
 pub mod recipe;

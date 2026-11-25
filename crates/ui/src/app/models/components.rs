@@ -3,27 +3,34 @@
 //!
 //! | Model | Shows while |
 //! |---|---|
-//! | [`ComponentBox`] | a component of the edited layer is selected: the first in shape order |
-//! | [`CornerBox`] | a corner component is selected, or a selected node holds one: the first selected corner, else the first on a selected node in the layer's hint order |
-//! | [`CapBox`] | a cap component is selected, or a selected node is one of the two nodes of one |
-//! | [`SegmentBox`] | a segment component (or brush) is selected, or a selected node ends the segment it sits on |
+//! | [`ComponentBox`] | components of the edited layer are selected |
+//! | [`CornerBox`] | corner components are selected, else those on the selected nodes |
+//! | [`CapBox`] | cap components are selected, else those on the selected nodes: each sits on two |
+//! | [`SegmentBox`] | segment components (or brushes) are selected, else those whose segment ends at a selected node |
 //! | [`SmartModel`] | smart components are selected (`palette.smartComponent`, `dialog.smartComponentSettings`) |
+//!
+//! Each box describes every selected object of its kind: a field holds the value they share, or `None` where they
+//! differ.
+
+use std::collections::HashMap;
 
 use craft::ui::contract::PlainData;
 use fontcraft_engine::cmd::smart::is_toggle;
-use fontcraft_engine::components::align::{AlignMode, component_alignment};
+use fontcraft_engine::components::align::{AlignMode, aligned_components};
 use fontcraft_engine::components::propagate::{base_layer, effective_anchors_with};
 use fontcraft_engine::model::attach::{Attachment, CapHint, SegmentHint, attachment};
-use fontcraft_engine::model::corner::{CornerAlignment, CornerTarget, corner_hint, is_corner};
+use fontcraft_engine::model::corner::{CornerAlignment, CornerHint, CornerTarget, corner_hint, is_corner};
 use fontcraft_engine::model::glyphdata::GlyphData;
 use fontcraft_engine::model::smart::pole_layers;
-use fontcraft_engine::model::{Component, Font, Glyph, Layer, LayerSide, MAX_PART_PROPERTIES, PartProperty, Path, Shape, Transform};
+use fontcraft_engine::model::{Component, Font, Glyph, Hint, Layer, LayerSide, MAX_PART_PROPERTIES, PartProperty, Path, Shape, Transform};
 use fontcraft_geom::BezPath;
 use fontcraft_tools::Selection;
 use fontcraft_tools::attachment;
 
 /// Most components before the selected one whose anchors the anchor menu reads.
 const MAX_ANCHOR_SOURCES: usize = 64;
+/// Most selected components whose shared anchors the anchor menu works out; with more it is not shown.
+const MAX_ANCHOR_COMPONENTS: usize = 64;
 /// Below this a matrix entry counts as zero.
 const TINY: f64 = 1e-12;
 /// Most components the Smart Component controls edit at once.
@@ -49,26 +56,28 @@ pub struct ComponentValues {
 pub struct ComponentBox {
     pub glyph: String,
     pub layer: String,
-    /// The component's shape index on the layer.
-    pub component: usize,
-    pub base: String,
-    /// `None` for a matrix the box cannot split into its fields; X and Y still show.
-    pub values: Option<ComponentValues>,
-    pub x: f64,
-    pub y: f64,
-    /// X and Y can be edited: not while the component is aligned automatically (only Y while it is aligned
-    /// horizontally), and neither while it is locked.
+    /// The selected components' shape indices on the layer, ascending.
+    pub components: Vec<usize>,
+    pub base: Option<String>,
+    pub x: Option<f64>,
+    pub y: Option<f64>,
+    /// Scales in percent, slant and rotation in degrees: also `None` for a matrix the box cannot split into its fields.
+    pub scale_x: Option<f64>,
+    pub scale_y: Option<f64>,
+    pub slant: Option<f64>,
+    pub rotation: Option<f64>,
+    /// X and Y can be edited on at least one of them: not while a component is aligned automatically (only Y while it
+    /// is aligned horizontally), and neither while it is locked.
     pub x_free: bool,
     pub y_free: bool,
-    pub locked: bool,
-    /// The base glyph is a smart glyph: the Smart badge shows.
-    pub smart: bool,
-    /// The anchors the component can attach to; the menu shows when there are two or more.
+    /// Scale, slant and rotation can be edited on at least one of them.
+    pub editable: bool,
+    /// The components whose base glyph is a smart glyph: the Smart badge shows.
+    pub smart: Vec<usize>,
+    /// The anchors every one of them can attach to; the menu shows when there are two or more.
     pub anchors: Vec<String>,
-    /// The anchor it attaches to as the menu shows it: the stored choice, else the first plain name offered.
+    /// The anchor they attach to as the menu shows it: the stored choice, else the first plain name offered.
     pub anchor: Option<String>,
-    /// How many components are selected.
-    pub selected: usize,
 }
 
 /// The corner component part of the Info box.
@@ -76,15 +85,15 @@ pub struct ComponentBox {
 pub struct CornerBox {
     pub glyph: String,
     pub layer: String,
-    /// The corner's index in the layer's hint list.
-    pub corner: usize,
+    /// The corners' indices in the layer's hint list.
+    pub corners: Vec<usize>,
     /// The corner glyph.
-    pub name: String,
+    pub name: Option<String>,
     /// Horizontal and vertical scale in percent.
-    pub scale: [f64; 2],
-    /// The mode of [`MODES`] the corner has; `None` for the stored value that fits it unturned.
+    pub scale: [Option<f64>; 2],
+    /// The mode of [`MODES`] the corners have; `None` also for the stored value that fits a corner unturned.
     pub mode: Option<String>,
-    /// The corner glyph exists.
+    /// Every corner's glyph exists.
     pub exists: bool,
 }
 
@@ -93,15 +102,15 @@ pub struct CornerBox {
 pub struct CapBox {
     pub glyph: String,
     pub layer: String,
-    /// The cap's index in the layer's hint list.
-    pub cap: usize,
+    /// The caps' indices in the layer's hint list.
+    pub caps: Vec<usize>,
     /// The cap glyph.
-    pub name: String,
-    /// Horizontal and vertical scale in percent; with Fit on the horizontal one is computed and greyed out.
-    pub scale: [f64; 2],
+    pub name: Option<String>,
+    /// Horizontal and vertical scale in percent; with Fit on every cap the horizontal one is computed and greyed out.
+    pub scale: [Option<f64>; 2],
     pub mode: Option<String>,
     /// Sized to the stroke's width.
-    pub fit: bool,
+    pub fit: Option<bool>,
     pub exists: bool,
 }
 
@@ -110,12 +119,12 @@ pub struct CapBox {
 pub struct SegmentBox {
     pub glyph: String,
     pub layer: String,
-    /// The attachment's index in the layer's hint list.
-    pub hint: usize,
+    /// The attachments' indices in the layer's hint list.
+    pub hints: Vec<usize>,
     /// The segment or brush glyph.
-    pub name: String,
+    pub name: Option<String>,
     pub exists: bool,
-    /// A brush rather than a segment component.
+    /// Brushes rather than segment components.
     pub brush: bool,
 }
 
@@ -206,42 +215,85 @@ pub fn anchor_choices(font: &Font, data: Option<&GlyphData>, layer: &Layer, inde
     offered
 }
 
-/// The component part for the first selected component of `layer`; `None` when no component is selected.
+/// The value every item has; `None` where they differ, and for no item.
+fn shared<T: PartialEq>(mut values: impl Iterator<Item = T>) -> Option<T> {
+    let first = values.next()?;
+    values.all(|v| v == first).then_some(first)
+}
+
+/// The selected components of `layer`, by shape index.
+pub fn selected_components(layer: &Layer, selection: &Selection) -> Vec<usize> {
+    selection.shapes.iter().copied().filter(|&i| matches!(layer.shapes.get(i), Some(Shape::Component(_)))).collect()
+}
+
+/// The anchors every component of `picked` can attach to, and the one they share now.
+fn shared_anchors(font: &Font, data: Option<&GlyphData>, layer: &Layer, picked: &[(usize, &Component)]) -> (Vec<String>, Option<String>) {
+    if picked.len() > MAX_ANCHOR_COMPONENTS {
+        return (Vec::new(), None);
+    }
+    let mut common: Option<Vec<String>> = None;
+    let mut chosen: Vec<Option<String>> = Vec::new();
+    for &(i, c) in picked {
+        let offered = anchor_choices(font, data, layer, i);
+        chosen.push(c.info.anchor.clone().or_else(|| {
+            let plain: Vec<String> = font
+                .glyph(&c.glyph)
+                .and_then(|g| base_layer(g, layer, c))
+                .map(|l| l.anchors.iter().filter_map(|a| a.name.strip_prefix('_').map(str::to_string)).collect())
+                .unwrap_or_default();
+            offered.iter().find(|a| plain.contains(a)).cloned()
+        }));
+        common = Some(match common {
+            None => offered,
+            Some(list) => list.into_iter().filter(|a| offered.contains(a)).collect(),
+        });
+        if common.as_ref().is_some_and(Vec::is_empty) {
+            return (Vec::new(), shared(chosen.into_iter()).flatten().filter(|_| picked.len() == 1));
+        }
+    }
+    (common.unwrap_or_default(), shared(chosen.into_iter()).flatten())
+}
+
+/// The component part for the selected components of `layer`; `None` when no component is selected.
 pub fn component_box(font: &Font, data: Option<&GlyphData>, glyph: &str, layer: &Layer, selection: &Selection) -> Option<ComponentBox> {
-    let components: Vec<usize> = selection.shapes.iter().copied().filter(|&i| matches!(layer.shapes.get(i), Some(Shape::Component(_)))).collect();
-    let index = *components.first()?;
-    let Some(Shape::Component(c)) = layer.shapes.get(index) else { return None };
-    let locked = c.info.locked;
-    let (x_free, y_free) = match (locked, component_alignment(font, layer, index)) {
+    let components = selected_components(layer, selection);
+    let picked: Vec<(usize, &Component)> = components
+        .iter()
+        .filter_map(|&i| match layer.shapes.get(i) {
+            Some(Shape::Component(c)) => Some((i, c)),
+            _ => None,
+        })
+        .collect();
+    if picked.is_empty() {
+        return None;
+    }
+    let aligned: HashMap<usize, AlignMode> = aligned_components(font, layer).into_iter().collect();
+    let free = |i: usize, c: &Component| match (c.info.locked, aligned.get(&i)) {
         (true, _) | (false, Some(AlignMode::Full)) => (false, false),
         (false, Some(AlignMode::Horizontal)) => (false, true),
         (false, None) => (true, true),
     };
-    let anchors = anchor_choices(font, data, layer, index);
-    let anchor = c.info.anchor.clone().or_else(|| {
-        let plain: Vec<String> = font
-            .glyph(&c.glyph)
-            .and_then(|g| base_layer(g, layer, c))
-            .map(|l| l.anchors.iter().filter_map(|a| a.name.strip_prefix('_').map(str::to_string)).collect())
-            .unwrap_or_default();
-        anchors.iter().find(|a| plain.contains(a)).cloned()
-    });
-    let [_, _, _, _, x, y] = c.transform.affine().as_coeffs();
+    let fields: Vec<Option<ComponentValues>> = picked.iter().map(|(_, c)| values(&c.transform)).collect();
+    let field = |of: fn(&ComponentValues) -> f64| shared(fields.iter().map(|v| v.as_ref().map(of))).flatten();
+    let place = |at: usize| shared(picked.iter().filter_map(|(_, c)| c.transform.affine().as_coeffs().get(at).copied()));
+    let (anchors, anchor) = shared_anchors(font, data, layer, &picked);
     Some(ComponentBox {
         glyph: glyph.to_string(),
         layer: layer.id.clone(),
-        component: index,
-        base: c.glyph.clone(),
-        values: values(&c.transform),
-        x,
-        y,
-        x_free,
-        y_free,
-        locked,
-        smart: font.glyph(&c.glyph).is_some_and(|g| !g.info.parts.is_empty()),
+        base: shared(picked.iter().map(|(_, c)| c.glyph.clone())),
+        x: place(4),
+        y: place(5),
+        scale_x: field(|v| v.scale_x),
+        scale_y: field(|v| v.scale_y),
+        slant: field(|v| v.slant),
+        rotation: field(|v| v.rotation),
+        x_free: picked.iter().any(|&(i, c)| free(i, c).0),
+        y_free: picked.iter().any(|&(i, c)| free(i, c).1),
+        editable: picked.iter().zip(&fields).any(|((_, c), v)| !c.info.locked && v.is_some()),
+        smart: picked.iter().filter(|(_, c)| font.glyph(&c.glyph).is_some_and(|g| !g.info.parts.is_empty())).map(|&(i, _)| i).collect(),
         anchors,
         anchor,
-        selected: components.len(),
+        components,
     })
 }
 
@@ -304,45 +356,54 @@ fn selected_points(selection: &Selection) -> Vec<(usize, usize)> {
     selection.points.iter().copied().collect()
 }
 
-/// The corner part for the first selected corner of `layer`, else the corner on the first selected node that holds
-/// one.
+/// The selected hints of `layer` that `read` accepts, with what it read, in hint order.
+fn selected_hints<T>(layer: &Layer, selection: &Selection, read: impl Fn(&Hint) -> Option<T>) -> Vec<(usize, T)> {
+    selection.hints.iter().copied().filter_map(|i| layer.info.hints.get(i).and_then(&read).map(|v| (i, v))).collect()
+}
+
+/// The corner part for the selected corners of `layer`, else for the corners on the selected nodes.
 pub fn corner_box(font: &Font, glyph: &str, layer: &Layer, selection: &Selection) -> Option<CornerBox> {
-    let picked = selection.hints.iter().copied().find(|&i| layer.info.hints.get(i).is_some_and(is_corner));
-    let corner = match picked {
-        Some(i) => i,
-        None => *corners_on_nodes(layer, &selected_points(selection)).first()?,
-    };
-    let hint = corner_hint(layer.info.hints.get(corner)?).ok().flatten()?;
+    let read = |h: &Hint| corner_hint(h).ok().flatten();
+    let mut picked: Vec<(usize, CornerHint)> = selected_hints(layer, selection, read);
+    if picked.is_empty() {
+        let on = corners_on_nodes(layer, &selected_points(selection));
+        picked = on.into_iter().filter_map(|i| layer.info.hints.get(i).and_then(read).map(|c| (i, c))).collect();
+    }
+    if picked.is_empty() {
+        return None;
+    }
     Some(CornerBox {
         glyph: glyph.to_string(),
         layer: layer.id.clone(),
-        corner,
-        exists: font.glyph(&hint.name).is_some(),
-        name: hint.name,
-        scale: [hint.scale.x * 100.0, hint.scale.y * 100.0],
-        mode: mode_of(hint.alignment),
+        exists: picked.iter().all(|(_, c)| font.glyph(&c.name).is_some()),
+        scale: [shared(picked.iter().map(|(_, c)| c.scale.x * 100.0)), shared(picked.iter().map(|(_, c)| c.scale.y * 100.0))],
+        mode: shared(picked.iter().map(|(_, c)| mode_of(c.alignment))).flatten(),
+        name: shared(picked.iter().map(|(_, c)| c.name.clone())),
+        corners: picked.into_iter().map(|(i, _)| i).collect(),
     })
 }
 
-/// The cap part for the first selected cap of `layer`, else the first cap that sits on a selected node.
+/// The cap part for the selected caps of `layer`, else for the caps on the selected nodes.
 pub fn cap_box(font: &Font, glyph: &str, layer: &Layer, selection: &Selection) -> Option<CapBox> {
-    let picked = selection.hints.iter().copied().find_map(|i| match layer.info.hints.get(i).map(attachment) {
-        Some(Ok(Some(Attachment::Cap(cap)))) => Some((i, cap)),
+    let mut picked: Vec<(usize, CapHint)> = selected_hints(layer, selection, |h| match attachment(h) {
+        Ok(Some(Attachment::Cap(cap))) => Some(cap),
         _ => None,
     });
-    let (cap, hint) = match picked {
-        Some(found) => found,
-        None => caps_on_nodes(layer, &selected_points(selection)).into_iter().next()?,
-    };
+    if picked.is_empty() {
+        picked = caps_on_nodes(layer, &selected_points(selection));
+    }
+    if picked.is_empty() {
+        return None;
+    }
     Some(CapBox {
         glyph: glyph.to_string(),
         layer: layer.id.clone(),
-        cap,
-        exists: font.glyph(&hint.name).is_some(),
-        scale: [hint.scale.x * 100.0, hint.scale.y * 100.0],
-        mode: mode_of(hint.alignment),
-        fit: hint.fit,
-        name: hint.name,
+        exists: picked.iter().all(|(_, c)| font.glyph(&c.name).is_some()),
+        scale: [shared(picked.iter().map(|(_, c)| c.scale.x * 100.0)), shared(picked.iter().map(|(_, c)| c.scale.y * 100.0))],
+        mode: shared(picked.iter().map(|(_, c)| mode_of(c.alignment))).flatten(),
+        fit: shared(picked.iter().map(|(_, c)| c.fit)),
+        name: shared(picked.iter().map(|(_, c)| c.name.clone())),
+        caps: picked.into_iter().map(|(i, _)| i).collect(),
     })
 }
 
@@ -365,18 +426,27 @@ pub fn segments_on_nodes(layer: &Layer, points: &[(usize, usize)], brush: bool) 
         .collect()
 }
 
-/// The segment component part (`brush` false) or the brush part for the first selected one of `layer`, else the
-/// first whose host segment ends at a selected node.
+/// The segment component part (`brush` false) or the brush part for the selected ones of `layer`, else for those
+/// whose host segment ends at a selected node.
 pub fn segment_box(font: &Font, glyph: &str, layer: &Layer, selection: &Selection, brush: bool) -> Option<SegmentBox> {
-    let picked = selection.hints.iter().copied().find_map(|i| match (layer.info.hints.get(i).map(attachment), brush) {
-        (Some(Ok(Some(Attachment::Segment(s)))), false) | (Some(Ok(Some(Attachment::Brush(s)))), true) => Some((i, s)),
+    let mut picked: Vec<(usize, SegmentHint)> = selected_hints(layer, selection, |h| match (attachment(h), brush) {
+        (Ok(Some(Attachment::Segment(s))), false) | (Ok(Some(Attachment::Brush(s))), true) => Some(s),
         _ => None,
     });
-    let (hint, s) = match picked {
-        Some(found) => found,
-        None => segments_on_nodes(layer, &selected_points(selection), brush).into_iter().next()?,
-    };
-    Some(SegmentBox { glyph: glyph.to_string(), layer: layer.id.clone(), hint, exists: font.glyph(&s.name).is_some(), name: s.name, brush })
+    if picked.is_empty() {
+        picked = segments_on_nodes(layer, &selected_points(selection), brush);
+    }
+    if picked.is_empty() {
+        return None;
+    }
+    Some(SegmentBox {
+        glyph: glyph.to_string(),
+        layer: layer.id.clone(),
+        exists: picked.iter().all(|(_, s)| font.glyph(&s.name).is_some()),
+        name: shared(picked.iter().map(|(_, s)| s.name.clone())),
+        hints: picked.into_iter().map(|(i, _)| i).collect(),
+        brush,
+    })
 }
 
 /// The component at shape `index` of `shapes` and its glyph, when that glyph has properties.

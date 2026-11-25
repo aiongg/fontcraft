@@ -79,6 +79,10 @@ pub fn selection_targets(scene: &Scene, selection: &Selection, spec: &CommandSpe
                 if !takes_points {
                     shapes.extend(selected_paths(scene, selection));
                 }
+                // Reversing acts on paths: with only components selected it takes every path, as with nothing selected.
+                if spec.id.starts_with("path.reverseContours") {
+                    shapes.retain(|&s| scene.path(s).is_some());
+                }
                 if !shapes.is_empty() {
                     m.insert("shapes".into(), Value::Array(shapes.iter().map(|&s| json!(s)).collect()));
                 }
@@ -92,8 +96,20 @@ pub fn selection_targets(scene: &Scene, selection: &Selection, spec: &CommandSpe
     if spec.targets.contains(&TargetKind::Glyphs) && !m.contains_key("glyph") {
         m.insert("glyphs".into(), json!([scene.glyph]));
     }
+    if spec.id == "cornerComponent.add" {
+        let extra = selected_extra_nodes(scene, selection);
+        if !extra.is_empty() {
+            m.insert("extraNodes".into(), json!(extra));
+        }
+    }
     corner_targets(scene, selection, spec.id, &mut m);
     m
+}
+
+/// Where the selected extra nodes are, as `cornerComponent.add` takes them.
+pub fn selected_extra_nodes(scene: &Scene, selection: &Selection) -> Vec<[f64; 2]> {
+    let at = |&[s1, n1, s2, n2]: &[usize; 4]| fontcraft_tools::extra_nodes::extra_node_at(&scene.layer, (s1, n1), (s2, n2));
+    selection.intersections.iter().filter_map(at).map(|e| [e.at.x, e.at.y]).collect()
 }
 
 /// The selected attachments as the commands that act on them take them: `edit.delete` as `hints`, beside the other

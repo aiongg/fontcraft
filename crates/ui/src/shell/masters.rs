@@ -13,11 +13,12 @@ use std::collections::BTreeMap;
 
 use craft::ui::runtime::commands::CommandRef;
 use fontcraft_engine::model::{Font, Glyph, Layer, Master};
-use serde_json::Value;
+use serde_json::{Map, Value, json};
 
 use super::commands::{Module, UiCommand};
 use crate::app::models::layers::{self as model, Part};
 use crate::app::{FontCraftApp, ViewState};
+use crate::dialogs::interp::corner_size;
 
 pub const MODULE: Module = Module { commands: COMMANDS, run };
 
@@ -58,7 +59,7 @@ const COMMANDS: &[UiCommand] = &[
         label: "Edit Special Layer Settings",
         menu: &[],
         shortcut: None,
-        params: "{glyph?: name (default: the shown glyph), layer?: id (default: the active layer), part: \"intermediate\" | \"alternate\"} open the coordinate editor or the range editor of a layer, filled with its present values, as double-clicking a special layer's row in the Layers panel does",
+        params: "{glyph?: name (default: the shown glyph), layer?: id (default: the active layer), part: \"intermediate\" | \"alternate\"} open the coordinate editor (for a corner glyph, the size editor) or the range editor of a layer, filled with its present values, as double-clicking a special layer's row in the Layers panel does",
     },
 ];
 
@@ -300,6 +301,14 @@ fn edit_special(app: &mut FontCraftApp, params: &Value) -> Result<(), String> {
         Some(id) => glyph.layers.iter().find(|l| l.id == id).ok_or_else(|| format!("glyph `{}` has no layer `{id}`", glyph.name))?,
         None => shown_layer(font, &app.view.layers, glyph).ok_or_else(|| format!("glyph `{}` has no layer to edit: give `layer`", glyph.name))?,
     };
+    // A corner glyph's intermediate layers are of a size, not at axis coordinates.
+    if part == Part::Intermediate && glyph.name.starts_with(corner_size::CORNER_PREFIX) {
+        let mut given = Map::new();
+        given.insert("glyph".into(), json!(glyph.name));
+        given.insert("layer".into(), json!(layer.id));
+        crate::dialogs::form::open(app, &corner_size::CORNER_LAYER_SIZE, &given)?;
+        return Ok(());
+    }
     if font.axes.is_empty() {
         return Err("the font has no axes; add one in Font Info › Axes first".into());
     }

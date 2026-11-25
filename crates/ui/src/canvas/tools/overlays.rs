@@ -15,6 +15,7 @@
 use egui::{Pos2, Shape, Stroke};
 use fontcraft_engine::model::Shape as ModelShape;
 use fontcraft_geom::{Point, segments as path_segments};
+use fontcraft_tools::extra_nodes::extra_node_at;
 use fontcraft_tools::{Overlay, OverlayKind};
 
 use super::tokens::ToolTokens;
@@ -22,6 +23,8 @@ use crate::canvas::layers::PaintCx;
 
 /// Points sampled along each piece of a selected segment.
 const SEGMENT_SAMPLES: usize = 24;
+/// Most selected extra nodes that get a ring.
+const MAX_EXTRA_RINGS: usize = 256;
 
 fn usable(p: Pos2) -> bool {
     p.x.is_finite() && p.y.is_finite()
@@ -79,7 +82,15 @@ pub fn selection_shapes(cx: &PaintCx<'_>) -> Vec<Shape> {
     }
     let t = ToolTokens::standard();
     let stroke = Stroke::new(t.selection_width, t.selection);
-    cx.tools
+    let ring = |at: Pos2| Shape::circle_stroke(at, t.selection_ring_radius, stroke);
+    // A selected extra node keeps its address when its paths move apart: it has no ring while they do not cross.
+    let extra = cx.tools.selection.intersections.iter().take(MAX_EXTRA_RINGS).filter(|_| cx.display.extra_nodes);
+    let extra = extra
+        .filter(|[s1, _, s2, _]| shown(cx, *s1) && shown(cx, *s2))
+        .filter_map(|&[s1, n1, s2, n2]| extra_node_at(&glyph.layer, (s1, n1), (s2, n2)))
+        .map(|e| cx.camera.to_screen(e.at));
+    let nodes = cx
+        .tools
         .selection
         .points
         .iter()
@@ -88,10 +99,8 @@ pub fn selection_shapes(cx: &PaintCx<'_>) -> Vec<Shape> {
             ModelShape::Path(p) => p.nodes.get(n),
             _ => None,
         })
-        .map(|node| cx.camera.to_screen(node.point()))
-        .filter(|p| usable(*p))
-        .map(|at| Shape::circle_stroke(at, t.selection_ring_radius, stroke))
-        .collect()
+        .map(|node| cx.camera.to_screen(node.point()));
+    nodes.chain(extra).filter(|p| usable(*p)).map(ring).collect()
 }
 
 /// The active tool's overlays, over everything else.

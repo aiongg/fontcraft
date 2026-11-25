@@ -319,7 +319,7 @@ label = "Choose Attachment Anchor"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, component: index, anchor: name}"
+params = "{glyph?: name, layer?: id, component: index | components: [index], anchor: name}"
 area = "components"
 milestone = "M6"
 summary = "Chooses which of several same-type anchors (top, top_alt, top_viet ...) an attached component snaps to. In the UI it is the anchor menu in the component Info box, which only appears when more than one candidate anchor exists."
@@ -378,7 +378,7 @@ milestone = "M6"
 summary = "Context-menu item on an auto-aligned component that turns alignment off for it, so the component can be positioned by hand."
 ref = "Reusing Shapes › Components › Automatic Alignment"
 status = "observed"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 17:30–17:36: the context menu of a component lists Disable Automatic Alignment, and after choosing it the component is dragged freely. Stores alignment -1 on the component (file-format specification v3)."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 17:30–17:36: the context menu of a component lists Disable Automatic Alignment, and after choosing it the component is dragged freely. Stores alignment -1 on the component (file-format specification v3). The context menu shows it for selected components that are aligned and acts on those (M6.34)."
 
 [[command]]
 id = "component.enableAutomaticAlignment"
@@ -392,9 +392,10 @@ milestone = "M6"
 summary = "Context-menu item on a manually placed component that turns automatic alignment back on for it."
 ref = "Reusing Shapes › Components › Automatic Alignment"
 status = "handbook"
-notes = "Documented, not yet observed. The layer is laid out at once, also when the component was aligned already but stood elsewhere, so audit.fix can put a misaligned component right."
+notes = "Documented, not yet observed. The layer is laid out at once, also when the component was aligned already but stood elsewhere, so audit.fix can put a misaligned component right. The context menu shows it for selected components that are not aligned and acts on those; with a mixed selection Enable and Disable both show (M6.34)."
 guesses = [
   "Enable stores 0 (decided by the layer) on a layer of components only and 1 (forced) on a layer that has paths, so the item always aligns the component; enabling alignment on a component next to a path in the reference app settles it.",
+  "With aligned and unaligned components selected both Enable and Disable Automatic Alignment show, each for the components whose state it changes; the context menu of such a selection in the reference app settles it.",
 ]
 
 [[command]]
@@ -409,7 +410,7 @@ milestone = "M6"
 summary = "Context-menu item that pins a component in place so it cannot be moved. It applies to components that are not auto-aligned."
 ref = "Reusing Shapes › Components › Locking Components"
 status = "handbook"
-notes = "Documented, not yet observed. Sets the component's `locked` flag, the same flag `path.lockPath` sets on components since M3; the two commands share one implementation."
+notes = "Documented, not yet observed. Sets the component's `locked` flag, the same flag `path.lockPath` sets on components since M3; the two commands share one implementation. The context menu acts on the selected components that are neither locked nor aligned and hides the item when there are none (M6.34)."
 guesses = [
   "Lock Component is offered only for components that are not aligned automatically, and the command refuses an aligned component with a message; the context menu of an aligned component in the reference app settles it.",
 ]
@@ -426,7 +427,7 @@ milestone = "M6"
 summary = "Context-menu item that releases a locked component so it can be moved again."
 ref = "Reusing Shapes › Components › Locking Components"
 status = "handbook"
-notes = "Documented, not yet observed. Clears the `locked` flag that component.lock and path.lockPath set."
+notes = "Documented, not yet observed. Clears the `locked` flag that component.lock and path.lockPath set. The context menu acts on the selected components that are locked and hides the item when there are none (M6.34)."
 
 [[command]]
 id = "glyph.decomposeGlyph"
@@ -1386,7 +1387,7 @@ milestone = "M6"
 summary = "Attaches a corner component to each selected node, or to an extra node at a path intersection. In the UI it is a context-menu item that opens a glyph picker listing corner glyphs; Return inserts the highlighted one."
 ref = "Reusing Shapes › Corner Components › Using Corner Components"
 status = "handbook"
-notes = "Documented, not yet observed. M6.9: `cmd/corner.rs`. The corner is stored as a `Corner` hint on the foreground, unscaled and aligned left (the defaults fontc reads); nodes are given in the model's order and stored in the file's order (a closed path's start node last). An extra node is given by its position: the two segments within 1 unit of it, and more than 1 unit from their end nodes, are stored as the hint's four-number origin. The corner glyph picker is M6.11's."
+notes = "Documented, not yet observed. M6.9: `cmd/corner.rs`. The corner is stored as a `Corner` hint on the foreground, unscaled and aligned left (the defaults fontc reads); nodes are given in the model's order and stored in the file's order (a closed path's start node last). An extra node is given by its position: the two segments within 1 unit of it, and more than 1 unit from their end nodes, are stored as the hint's four-number origin. The corner glyph picker is M6.11's. M6.35: the canvas context menu passes the selected extra nodes."
 guesses = [
   "A node that already holds a corner gets the new corner in its place, unscaled and aligned left, rather than a second corner; adding a corner to a node with a corner in the reference app settles it.",
   "An off-curve node and the first or last node of an open path are refused, because the fitting needs a segment on each side; the context menu on an open path's end node in the reference app settles it.",
@@ -1410,9 +1411,12 @@ milestone = "M6"
 summary = "Context-menu item that bakes a corner component into the host path: the fitted corner outline replaces the node and the component is removed."
 ref = "Reusing Shapes › Corner Components › Using Corner Components"
 status = "handbook"
-notes = "Documented, not yet observed. `corners` are positions in the layer's hint list. Shares the corner fitting of outline resolution (`model/corner.rs`). X.fix107: the other corner, cap, segment and brush hints on the path keep their nodes."
+notes = "Documented, not yet observed. `corners` are positions in the layer's hint list. Shares the corner fitting of outline resolution (`model/corner.rs`). X.fix107: the other corner, cap, segment and brush hints on the path keep their nodes. M6.35: a corner on an extra node is fitted on the joined outline of its two paths, which then is the layer's outline there; the other hints move to it as under Remove Overlap, and those on a part that went are removed and reported."
 guesses = [
-  "A corner on an extra node, or one whose corner glyph does not exist, is refused instead of being removed without a trace; the reference app settles it.",
+  "Decomposing a corner on an extra node joins its two paths, and only those; a corner whose paths no longer cross there, or whose corner glyph does not exist, is refused instead of being removed without a trace; the reference app settles it.",
+]
+observe = [
+  "Decompose a corner on an extra node of two overlapping bars: note the paths afterwards.",
 ]
 
 [[command]]
@@ -1478,6 +1482,21 @@ guesses = [
 ]
 
 [[panel]]
+id = "popover.cornerLayerSize"
+label = "Corner Layer Size"
+location = "dialog"
+controls = ["Width % field", "Height % field", "OK", "Cancel"]
+area = "components"
+milestone = "M6"
+summary = "Editor of an Intermediate layer of a corner glyph: the width and height, in percent, the layer is drawn at."
+ref = "Reusing Shapes › Corner Components › Adjusting the Width and Height"
+status = "handbook"
+notes = "Documented, not yet observed. FontCraft: `crates/ui/src/dialogs/interp/corner_size.rs`, opened by Intermediate on a non-master layer of a glyph named `_corner.…`; it runs `layers.rename` with the name the corner fitting reads (`Width 150 Height 100`)."
+guesses = [
+  "The editor of a corner glyph's Intermediate layer asks Width and Height only, not the font's axes, and the percentages are kept in the layer's name; a corner glyph saved by the reference app settles both.",
+]
+
+[[panel]]
 id = "infoBox.cornerComponent"
 label = "Corner component Info box"
 location = "inspector"
@@ -1493,9 +1512,12 @@ milestone = "M6"
 summary = "Shown for a selected corner component when View › Show Info is on."
 ref = "Reusing Shapes › Corner Components › Using Corner Components"
 status = "handbook"
-notes = "Documented, not yet observed. M6.11: `crates/ui/src/panels/info_box_component.rs`, beside the selection box. The name opens the corner glyph picker for cornerComponent.setGlyph, the arrow runs cornerComponent.editGlyph, the fields cornerComponent.setScale and the four buttons cornerComponent.setAlignment."
+notes = "Documented, not yet observed. M6.11: `crates/ui/src/panels/info_box_component.rs`, beside the selection box. The name opens the corner glyph picker for cornerComponent.setGlyph, the arrow runs cornerComponent.editGlyph, the fields cornerComponent.setScale and the four buttons cornerComponent.setAlignment. Several selected: the box shows their number after the name, a field holds the value they share and is empty where they differ (the name reads `Multi`), an edit sets all of them in one undo step, and the arrow opens the first one's glyph (M6.34)."
 guesses = [
-  "Corner components cannot be selected yet, so the box describes the corner on the first selected node that holds one; selecting the corner itself, as the reference app does, settles it.",
+  "The box describes the selected corner components, else those on the selected nodes; the reference app with a node selected that holds a corner settles it.",
+]
+observe = [
+  "Select two corner components of different scale: note what each field of the Info box shows, and what typing a scale changes.",
 ]
 
 [[panel]]
@@ -1614,9 +1636,12 @@ milestone = "M6"
 summary = "If the corner glyph has Intermediate layers tagged with a Width and Height in percent (for instance 150 % by 100 %), scaling interpolates between the main layer and those layers. An axis with no layer away from 100 % still stretches: with only a 150 % width layer, a 125 % width is interpolated while any height change stretches."
 ref = "Reusing Shapes › Corner Components › Adjusting the Width and Height"
 status = "handbook"
-notes = "Documented, not yet observed. Neither oracle handles these layers; the file format does not say how the Width and Height percentages are stored."
+notes = "Documented, not yet observed. Neither oracle handles these layers; the file format does not say how the Width and Height percentages are stored. M6.35: Intermediate on a layer of a corner glyph opens `popover.cornerLayerSize`, which writes the name."
 guesses = [
   "The percentages are read from the intermediate layer's name (for example `Width 150 Height 100`, a missing one is 100); on each axis the layers that vary it with the other axis at 100 % are interpolated piecewise linearly with the master layer at 100 %, scales beyond them are extrapolated, negative scales mirror after interpolation, and layers that vary both axes are not used. A corner glyph saved by the reference app with such a layer settles it.",
+]
+observe = [
+  "In a corner glyph, make an Intermediate layer with a Width of 150 % and a Height of 100 %: note the fields of its editor (are the font's axes among them?) and the keys of the layer in the saved file.",
 ]
 
 [[behavior]]
@@ -1635,7 +1660,7 @@ milestone = "M6"
 summary = "Extra nodes, the points where overlapping paths intersect (displayed with View › Show Nodes › Extra Nodes), can take corner components through the same context-menu item. This gives smooth joins or ink traps at stem and crossbar crossings."
 ref = "Reusing Shapes › Corner Components › Extra Nodes"
 status = "handbook"
-notes = "Documented, not yet observed. The file format stores such a corner with a four-number origin: a path and the node ending one segment, and a path and the node ending the other (GlyphsSDK file-format specification v3, `indexPath`); fontc reads only the first two numbers. FontCraft reads all four: the two closed paths are cut where they cross or touch, the parts inside the outline go, and the corner is fitted on the node the crossing becomes (crates/model/src/corner_join.rs, M6.23), in Edit View, previews and exports. `cornerComponent.add` takes an extra node as `extraNodes: [[x, y]]` (M6.9). Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): the scripting API (W2) gives such a corner's origin node as a handle object when it sits on an intersection; the corner tutorial (W8) selects several extra nodes by Shift-click, adds corners from the context menu, and states that the ink traps follow when the crossbar is moved. None of them says which of the two segments is stored first."
+notes = "Documented, not yet observed. The file format stores such a corner with a four-number origin: a path and the node ending one segment, and a path and the node ending the other (GlyphsSDK file-format specification v3, `indexPath`); fontc reads only the first two numbers. FontCraft reads all four: the two closed paths are cut where they cross or touch, the parts inside the outline go, and the corner is fitted on the node the crossing becomes (crates/model/src/corner_join.rs, M6.23), in Edit View, previews and exports. `cornerComponent.add` takes an extra node as `extraNodes: [[x, y]]` (M6.9). Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): the scripting API (W2) gives such a corner's origin node as a handle object when it sits on an intersection; the corner tutorial (W8) selects several extra nodes by Shift-click, adds corners from the context menu, and states that the ink traps follow when the crossbar is moved. None of them says which of the two segments is stored first. M6.35: with View › Show Nodes › Extra Nodes on, the Select tool finds and selects extra nodes (click, Shift-click, marquee); the context menu's Add Corner Component passes them as `extraNodes`, and the corner's mark on the joined outline can be selected, scaled, copied, deleted and decomposed."
 guesses = [
   "The two crossing segments are stored with the earlier path first (then the earlier node); a source saved by the reference app with a corner on an extra node settles which segment comes first.",
   "A corner on an extra node is fitted after the overlap of its two paths only is removed; a path that overlaps them without a corner on the crossing keeps its overlap. Other corners on the two paths go with their nodes, and one on a node inside the outline is not drawn; an export of such a glyph from the reference app without overlap removal settles it.",
@@ -1852,7 +1877,7 @@ milestone = "M13"
 summary = "Shown for a selected cap component when View › Show Info is on: the cap glyph's name and arrow button, a horizontal and a vertical scale field, four alignment buttons and a fit checkbox."
 ref = "Reusing Shapes › Cap Components › Using Cap Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): the controls are those in the 3.0.3 release-notes screenshot (W5), a still image, not a video, so the row stays `handbook`; with several caps selected, a field whose values differ shows `Multi`. The greyed horizontal value under Fit is from forum 22406."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): the controls are those in the 3.0.3 release-notes screenshot (W5), a still image, not a video, so the row stays `handbook`; with several caps selected, a field whose values differ shows `Multi`. The greyed horizontal value under Fit is from forum 22406. Several selected: as the source says, except that ours leaves a number field whose values differ empty instead of writing `Multi` into it (the name does read `Multi`); Fit then shows the mixed state (M6.34)."
 guesses = [
   "The cap part shows for a selected cap as well as for a cap on a selected node.",
 ]
@@ -2044,7 +2069,7 @@ milestone = "M13"
 summary = "Shown for a selected segment component when View › Show Info is on."
 ref = "Reusing Shapes › Segment Components › Using Segment Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): a 2021 feature request (forum 21014) asks for a way to mirror segment components after they are applied, which agrees with an Info box without scale fields."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): a 2021 feature request (forum 21014) asks for a way to mirror segment components after they are applied, which agrees with an Info box without scale fields. Several selected: the box shows their number after the name, a field holds the value they share and is empty where they differ (the name reads `Multi`), an edit sets all of them in one undo step, and the arrow opens the first one's glyph (M6.34)."
 guesses = [
   "The segment Info box has only the name and the arrow button, with no scale, alignment or fit controls, as the handbook lists; a screenshot of the Info box in the reference app settles it.",
 ]
@@ -2234,7 +2259,7 @@ milestone = "M13"
 summary = "Shown for a selected brush when View › Show Info is on."
 ref = "Reusing Shapes › Brushes › Using Brushes"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Several selected: the box shows their number after the name, a field holds the value they share and is empty where they differ (the name reads `Multi`), an edit sets all of them in one undo step, and the arrow opens the first one's glyph (M6.34)."
 guesses = [
   "The brush Info box has only the name and the arrow button, with no scale, alignment or fit controls, as the handbook lists; a screenshot of the Info box in the reference app settles it.",
 ]

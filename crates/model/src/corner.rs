@@ -284,6 +284,35 @@ pub fn decompose_corners(font: &Font, layer: &Layer, indices: &[usize]) -> Resul
     Ok(out)
 }
 
+/// `layer` with the corner hints at `indices` fitted and removed, when some sit on extra nodes: the paths that cross
+/// there are joined first, as [`insert_corners`] joins them, and the paths left without an outline are removed. The
+/// other hints are left as they were, so the caller has to keep them on their nodes. A corner whose extra node is no
+/// longer a crossing, or whose paths cannot be joined, is refused.
+pub fn decompose_joined_corners(font: &Font, layer: &Layer, indices: &[usize]) -> Result<Layer, CornerError> {
+    let bad = |corner: &str, message: String| CornerError { corner: corner.to_string(), message };
+    let mut chosen: Vec<CornerHint> = Vec::new();
+    let mut removed: Vec<usize> = Vec::new();
+    for &i in indices {
+        if removed.contains(&i) {
+            continue;
+        }
+        let hint = layer.info.hints.get(i).ok_or_else(|| bad("", format!("the layer has no hint {i}")))?;
+        chosen.push(corner_hint(hint).map_err(|m| bad("", m))?.ok_or_else(|| bad("", format!("hint {i} is not a corner component")))?);
+        removed.push(i);
+    }
+    let fitted = fit_extra_corners(font, &layer.master, &layer.shapes, &chosen);
+    for (c, fitted) in chosen.iter().zip(&fitted) {
+        if fitted.is_none() && matches!(c.target, CornerTarget::Intersection { .. }) {
+            return Err(bad(&c.name, "its two paths do not cross at its extra node, or cannot be joined there".into()));
+        }
+    }
+    let mut out = layer.clone();
+    apply(font, &layer.master, &mut out.shapes, &chosen)?;
+    let kept = layer.info.hints.iter().enumerate().filter(|(i, _)| !removed.contains(i)).map(|(_, h)| h.clone());
+    out.info.hints = kept.collect();
+    Ok(out)
+}
+
 /// `hint` with the nodes of its origin, each `(old, new)`, on the same paths.
 fn with_nodes(hint: &Hint, nodes: &[(usize, usize)]) -> Hint {
     let mut out = hint.clone();
@@ -854,8 +883,8 @@ fn py_is_close(a: f64, b: f64) -> bool {
 }
 
 /// The width and height in percent an intermediate corner layer's name gives
-/// (`Width 150 Height 100`); a missing one is 100.
-fn size_percent(name: &str) -> Option<(f64, f64)> {
+/// (`Width 150 Height 100`); a missing one is 100, and `None` when it gives neither.
+pub fn layer_size(name: &str) -> Option<(f64, f64)> {
     let lower = name.to_ascii_lowercase();
     let words: Vec<&str> = lower.split(|c: char| c.is_whitespace() || matches!(c, ':' | ',' | '%' | '=')).filter(|w| !w.is_empty()).collect();
     let (mut w, mut h) = (None, None);
@@ -891,7 +920,7 @@ fn intermediate_paths(glyph: &Glyph, layer: &Layer, scale: Vec2) -> (Vec<Path>, 
         .iter()
         .filter(|l| l.master == layer.master && !l.is_master_layer())
         .filter_map(|l| {
-            let (w, h) = size_percent(l.info.name.as_deref()?)?;
+            let (w, h) = layer_size(l.info.name.as_deref()?)?;
             let paths = layer_paths(l);
             compatible(&paths).then_some((w, h, paths))
         })

@@ -5,6 +5,7 @@
 //! | Display Unicode Value | `settings.set appearance.displayUnicodeValue` |
 //! | Always use Light Mode: Font View, Edit View | `settings.set appearance.alwaysLightMode{FontView,EditView}` |
 //! | Handle size | `settings.set appearance.handleSize` (`small`, `regular`, `large`) |
+//! | Display Mark Cloud | `settings.set appearance.displayMarkCloud` |
 //! | Text View Width | `settings.set appearance.textViewWidth`, in thousandths of an em |
 //! | a colour well, light or dark | `settings.set appearance.color.<item>.{light,dark}` as `#RRGGBBAA` |
 //! | Standard | `settings.resetColors {}`: both colour sets back to their defaults |
@@ -41,6 +42,8 @@ craft::ui::words! {
         light_edit_view: "fontcraftAppearance.lightEditView" = "Always use Light Mode: Edit View";
         light_note: "fontcraftAppearance.lightNote" = "Keeps the view's content light while the system is in dark mode. The rest of the window follows the system.";
         handle_size: "fontcraftAppearance.handleSize" = "Handle size";
+        mark_cloud: "fontcraftAppearance.markCloud" = "Display Mark Cloud";
+        mark_cloud_note: "fontcraftAppearance.markCloudNote" = "While an anchor is selected, the marks that attach there show on every glyph of the text.";
         small: "fontcraftAppearance.small" = "Small";
         regular: "fontcraftAppearance.regular" = "Regular";
         large: "fontcraftAppearance.large" = "Large";
@@ -67,6 +70,7 @@ craft::ui::words! {
 
 const DISPLAY_UNICODE: &str = "appearance.displayUnicodeValue";
 const HANDLE_SIZE: &str = "appearance.handleSize";
+const MARK_CLOUD: &str = "appearance.displayMarkCloud";
 
 type ItemWords = fn(&AppearanceWords) -> &Label;
 
@@ -107,6 +111,7 @@ pub struct AppearanceModel {
     pub edit_view_light: bool,
     /// `small`, `regular` or `large`.
     pub handle_size: String,
+    pub mark_cloud: bool,
     /// Where Edit View text wraps, in thousandths of an em.
     pub text_view_width: f64,
     pub colors: Vec<ColorRow>,
@@ -124,6 +129,7 @@ impl AppearanceModel {
             font_view_light: on(FONT_VIEW_LIGHT),
             edit_view_light: on(EDIT_VIEW_LIGHT),
             handle_size: settings.get(HANDLE_SIZE).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_else(|| "regular".into()),
+            mark_cloud: on(MARK_CLOUD),
             text_view_width: settings.get(TEXT_VIEW_WIDTH).ok().and_then(|v| v.as_f64()).filter(|w| w.is_finite()).unwrap_or(DEFAULT_TEXT_VIEW_WIDTH),
             colors: ITEMS.iter().map(|(item, _)| ColorRow { item, light: color(color_id(item, false)), dark: color(color_id(item, true)) }).collect(),
             canvas_dark: app.models.appearance.edit_view_dark(),
@@ -166,6 +172,11 @@ pub fn section(ui: &mut Ui, model: &AppearanceModel, sent: &mut Vec<Msg>) {
     if size != model.handle_size {
         sent.push(set(HANDLE_SIZE, json!(size)));
     }
+
+    if let Some(on) = Checkbox::new(Bind::given(model.mark_cloud)).label(words.mark_cloud.clone()).show(ui).events.committed() {
+        sent.push(set(MARK_CLOUD, json!(on)));
+    }
+    note(ui, &words.mark_cloud_note);
 
     let mut width = None;
     Field::new(words.text_view_width.clone()).show(ui, |ui, _| {
@@ -248,6 +259,7 @@ mod tests {
         assert!(!model.canvas_dark);
 
         let (mut fixture, posted) = shown(model);
+        fixture.room(egui::vec2(700.0, 1400.0)).settle();
         assert!(fixture.texts().iter().any(|t| t.text == "The canvas is drawn with the Light colours."));
         let switch = fixture.by_label("Always use Light Mode: Edit View").expect("the Edit View switch");
         fixture.click(&switch).settle();
