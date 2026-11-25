@@ -1642,7 +1642,7 @@ label = "Auto Kern"
 menu = ["Font", "Kerning"]
 shortcut = ""
 kind = "engine"
-params = "{pairs?: [[left, right]], glyphsLeft?: [names], glyphsRight?: [names], masters?: [id], direction?: 'ltr' | 'rtl', separation?: number, minKern?: number, onlyCloser?: bool, touching?: bool, keepExisting?: bool, round?: number, step?: number, depth?: number, apply?: bool}"
+params = "{pairs?: [[left, right]], glyphsLeft?: [names], glyphsRight?: [names], masters?: [id], direction?: 'ltr' | 'rtl', separation?: number, minKern?: number, onlyCloser?: bool, touching?: bool, keepExisting?: bool, round?: number, step?: number, depth?: number, depthShare?: number, apply?: bool}"
 area = "spacing-kerning"
 milestone = "M13"
 summary = "Proposes kerning values for the given pairs from the optical gap between the two glyph profiles, aiming at a target separation. Options drop values too small to matter, restrict results to tightening, or let glyphs touch; existing pairs are kept unless told otherwise (FontLab key in kerning mode: semicolon)."
@@ -1651,7 +1651,7 @@ status = "docs"
 origin = "fontlab"
 notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2). Built in M13.21 on the side profiles of `fontcraft_spacing::profile`, with the bands and clipping of `spacing.autoSpace`. Documented, not yet observed. The corpus measure (docs/plans/M13.md § 5) compares the proposals with Inter's and Oswald's stored kerning."
 guesses = [
-  "The proposed value is the target separation minus the pair's optical gap, rounded to the nearest 5 units by default; the target separation defaults to the optical gap of a reference pair (n n for lowercase, H H for capitals) without kerning. The optical gap is taken between the left glyph's right profile and the right glyph's left profile over auto-spacing's bands, each clipped to `depth` (default 30% of the x-height) inward from its extreme, as the power mean of order −2 of the row distances (each at least 1 unit), so the rows where the glyphs come closest count most. On the corpus measure (docs/plans/M13.md § 5) the depth of 15% that auto-spacing first used agreed in sign with Inter's kerning in 74% of pairs, 25% to 30% in about 85%, and the power mean added one to two points and raised the correlation. FontLab documents neither K1 nor K2 (open decision D11).",
+  "The proposed value is the target separation minus the pair's optical gap, rounded to the nearest 5 units by default; the target separation defaults to the optical gap of a reference pair (n n for lowercase, H H for capitals) without kerning. The optical gap is taken between the left glyph's right profile and the right glyph's left profile over auto-spacing's bands, each clipped to `depth`, or to `depthShare` of the x-height (default 0.2), inward from its extreme, as the power mean of order −2 of the row distances (each at least 1 unit), so the rows where the glyphs come closest count most. On the corpus measure (docs/plans/M13.md § \"M13.21c\") 20% is the smallest share (of 10%, 15%, 18%, 20%, 22%, 25%, 30%) that agrees in sign with the sources in at least 80% of the pairs of every master; smaller shares come closer in size and lose the sign, and the power mean of the rows adds one to two points over a plain mean. FontLab documents neither K1 nor K2 (open decision D11).",
   "A pair mixing a capital or figure with any other glyph is measured over the x-height band, and its target is the mean of the two glyphs' reference gaps (n n and H H); comparing proposals for To, Av and the like with a font kerned in the reference app would settle it.",
   "A group side is measured on one member: the glyph named like the group, else the group's first member in glyph order; FontLab's page does not say how class pairs are measured.",
   "With `touching`, the gap and the reference gap are both measured at the outlines' closest approach, as Kern to Distance measures them; FontForge's Lookups page names the Touching option without describing its measure in detail.",
@@ -3887,7 +3887,7 @@ label = "Build Kerning Groups…"
 menu = ["Font", "Kerning"]
 shortcut = ""
 kind = "engine"
-params = "{glyphs?, masters?: [id], side?: 'left' | 'right' | 'both', maxDifference: number, replaceExisting?: bool, step?: number, depth?: number, apply?: bool}"
+params = "{glyphs?, masters?: [id], side?: 'left' | 'right' | 'both', maxDifference: number, replaceExisting?: bool, step?: number, depth?: number, depthShare?: number, apply?: bool}"
 area = "spacing-kerning"
 milestone = "M13"
 summary = "Proposes kerning groups by comparing the side profiles of the given glyphs and putting glyphs in one group while their accumulated profile difference stays under the limit. Returns the proposal for review before it is applied."
@@ -3897,7 +3897,7 @@ origin = "fontforge"
 notes = "Moved from M5 to M13 by the M5 plan, which the owner accepted (docs/plans/M5.md § 7 question 5): it goes beyond the primary reference, like the secondary drawing aids the M3 pass moved (docs/plans/M5.md § 2). Built in M13.21 on the side profiles of `fontcraft_spacing::profile`. Documented, not yet observed."
 guesses = [
   "Two glyphs fall in one group while the root mean square of their side profiles' differences over the band stays under maxDifference; FontForge does not describe its grouping rule.",
-  "Each profile is compared as its depth inward from the side's extreme, clipped like auto-spacing's; rows inside the x-height (cap height) where only one glyph has ink count as the full clipping depth, rows in the overshoot zones where only one has ink are left out. Over several masters the largest difference counts.",
+  "Each profile is compared as its depth inward from the side's extreme, clipped to `depth`, or to `depthShare` of the x-height (default 0.2; on the corpus measure, docs/plans/M13.md § \"M13.21c\", shares from 10% to 50% agree with the sources' groups about equally well); rows inside the x-height (cap height) where only one glyph has ink count as the full clipping depth, rows in the overshoot zones where only one has ink are left out. Over several masters the largest difference counts.",
   "Glyphs are taken in glyph order; each joins the group whose members all lie within maxDifference (the closest such group), else starts one, and lowercase never shares a group with capitals and figures.",
   "A group of two or more glyphs is named after its first member (`.2`, `.3`… when another glyph keeps that name); a glyph left alone gets no group and keeps what it has.",
   "Without `replaceExisting`, glyphs that have a group on a side keep it and are left out of that side; `apply` defaults to false, so the call proposes until told to apply.",

@@ -18,8 +18,8 @@
 //!   control. Its white is that control's white plus its even white less the control's, so the
 //!   controls keep their spacing exactly.
 //! - Ink that reaches past the extreme (an ascender's arm, a descender's tail, ink above or below
-//!   the band) is kept off the advance edge: the white at the glyph's bounds is never less than
-//!   [`FLOOR_SHARE`] of `S`, nor less than the least of the controls has.
+//!   the band) is kept off the advance edge: the white at the glyph's bounds is at least
+//!   [`FLOOR_SHARE`] of `S`, or what the tightest control has there when that is less.
 //!
 //! The straight white `S` is the mean white of the two sides of the first control glyph: n or H
 //! when the font has it, else the next.
