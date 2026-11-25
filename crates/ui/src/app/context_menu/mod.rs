@@ -68,7 +68,7 @@ use serde_json::{Map, Value, json};
 use self::glyph_menu::GlyphMenu;
 use self::item_state::GUIDE_PROPERTIES;
 use crate::app::models::hint_canvas::{BadgeKind, Choice, TtMark};
-use crate::app::{FontCraftApp, Msg};
+use crate::app::{FontCraftApp, Msg, targets};
 use crate::canvas::hinting::SelectedInstructions;
 use crate::canvas::tools::{self, apply};
 
@@ -289,9 +289,16 @@ pub struct CanvasMenu {
     pub sections: Vec<Section>,
     /// Alt was held at the click: the swatches colour the layer, and alternate items replace the items before them.
     pub alt: bool,
+    /// In text mode with glyphs of the text selected: those glyphs, which the items act on. Empty otherwise.
+    pub glyphs: Vec<String>,
 }
 
 impl CanvasMenu {
+    /// The glyphs its glyph items act on.
+    pub fn glyphs(&self) -> Vec<String> {
+        if self.glyphs.is_empty() { vec![self.glyph.clone()] } else { self.glyphs.clone() }
+    }
+
     /// The menu as `ui.contextMenu.list` reports it.
     pub fn to_json(&self) -> Value {
         let sections: Vec<Value> = self
@@ -403,12 +410,16 @@ pub fn open_canvas(app: &mut FontCraftApp, at: Point, space: Space) -> Result<()
             (at, [s.x, s.y])
         }
     };
+    if crate::canvas::text::text_mode(&app.view) {
+        return open_on_text(app, screen, pos);
+    }
     if apply::pick_knob(app, pos) {
         app.tools.refresh();
         let glyph = scene_glyph(app).ok_or("no glyph is being edited")?;
         let sections = sections(app, &[HOI, CANVAS]);
         let target = tools::target(&app.session, &app.view);
-        app.context_menus.canvas = Some(CanvasMenu { glyph, screen, at: [pos.x, pos.y], hit: None, sections, alt: false, target });
+        app.context_menus.canvas =
+            Some(CanvasMenu { glyph, screen, at: [pos.x, pos.y], hit: None, sections, alt: false, target, glyphs: Vec::new() });
         return Ok(());
     }
     if let Some(index) = crate::canvas::hinting::badges::badge_at(app, egui::pos2(screen[0], screen[1])) {
@@ -446,8 +457,26 @@ pub fn open_canvas(app: &mut FontCraftApp, at: Point, space: Space) -> Result<()
     };
     let sections = sections(app, &with_instructor(app, kinds));
     let target = tools::target(&app.session, &app.view);
-    app.context_menus.canvas = Some(CanvasMenu { glyph, screen, at: [pos.x, pos.y], hit, sections, alt: false, target });
+    app.context_menus.canvas = Some(CanvasMenu { glyph, screen, at: [pos.x, pos.y], hit, sections, alt: false, target, glyphs: Vec::new() });
     Ok(())
+}
+
+/// Opens the canvas menu in text mode: its items act on the glyphs of the text selection, else on the edited glyph.
+fn open_on_text(app: &mut FontCraftApp, screen: [f32; 2], pos: Point) -> Result<(), String> {
+    let glyph = scene_glyph(app).ok_or("no glyph is being edited")?;
+    let font = app.session.font().map_err(|e| e.to_string())?;
+    let mut seen = std::collections::HashSet::new();
+    let selected = targets::text_selection(font, &app.view).into_iter().flat_map(|group| group.glyphs);
+    let glyphs: Vec<String> = selected.filter(|name| seen.insert(name.clone())).collect();
+    let sections = sections(app, &[CANVAS]);
+    let target = tools::target(&app.session, &app.view);
+    app.context_menus.canvas = Some(CanvasMenu { glyph, screen, at: [pos.x, pos.y], hit: None, sections, alt: false, target, glyphs });
+    Ok(())
+}
+
+/// Whether item `id` acts on whole glyphs: the items text mode shows.
+fn glyph_item(id: &str) -> bool {
+    id == SHOW_IN_FONT_VIEW || find_command(id).is_some_and(|spec| spec.targets.contains(&TargetKind::Glyphs))
 }
 
 /// Whether a click at `pos` (font units) lies on the edited side's shown image, locked or not. An unlocked image
@@ -483,7 +512,7 @@ fn open_on_instruction(app: &mut FontCraftApp, index: usize, screen: [f32; 2], p
     }
     let sections = sections(app, &with_instructor(app, vec![TT_INSTRUCTION, CANVAS]));
     let target = tools::target(&app.session, &app.view);
-    app.context_menus.canvas = Some(CanvasMenu { glyph, screen, at: [pos.x, pos.y], hit: None, sections, alt: false, target });
+    app.context_menus.canvas = Some(CanvasMenu { glyph, screen, at: [pos.x, pos.y], hit: None, sections, alt: false, target, glyphs: Vec::new() });
     Ok(())
 }
 
@@ -651,7 +680,9 @@ pub fn sections(app: &FontCraftApp, kinds: &[&'static str]) -> Vec<Section> {
     let all = candidates(hints_shown, crate::canvas::hinting::badges::instructor_shows(app), app.view.tool);
     // On a guide the menu offers the guide's commands; adding a guide is for clicks off guides.
     let on_guide = kinds.contains(&GUIDE);
+    let text_mode = crate::canvas::text::text_mode(&app.view);
     let visible = |id: &str| match &scene {
+        _ if text_mode && !glyph_item(id) => false,
         _ if on_guide && matches!(id, "guide.add" | "guide.addGlobal") => false,
         _ if HIDDEN.contains(&id) => false,
         _ if IMAGE_ITEMS.contains(&id) => image_item_visible(app, id),
@@ -882,7 +913,7 @@ pub fn params_for(app: &mut FontCraftApp, menu: &CanvasMenu, id: &str) -> Value 
     if let Some(params) = scene_of(app).and_then(|(scene, selection)| hint_drag::menu_params(&scene, selection, id)) {
         return params;
     }
-    let base = tools::targets::with_targets(app, CommandRef::new(id)).params;
+    let base = app.with_targets(CommandRef::new(id)).params;
     let Some(spec) = find_command(id) else { return base };
     let mut m = match base {
         Value::Object(m) => m,
@@ -973,7 +1004,7 @@ pub fn params_for(app: &mut FontCraftApp, menu: &CanvasMenu, id: &str) -> Value 
         }
         "glyph.setExport" => {
             let exports = edited_exports(app, &menu.glyph).unwrap_or(true);
-            m.insert("glyphs".into(), json!([menu.glyph]));
+            m.insert("glyphs".into(), json!(menu.glyphs()));
             m.insert("export".into(), json!(!exports));
         }
         "path.setMask" => {
@@ -1012,7 +1043,14 @@ pub fn steps_for(app: &mut FontCraftApp, menu: &CanvasMenu, id: &str) -> Vec<Msg
         return vec![shell("dialog.open", params)];
     }
     if id == SHOW_IN_FONT_VIEW {
-        return vec![shell("fontView.setSelection", json!({"glyphs": [menu.glyph]})), shell("fontView.show", json!({}))];
+        return vec![shell("fontView.setSelection", json!({"glyphs": menu.glyphs()})), shell("fontView.show", json!({}))];
+    }
+    if !menu.glyphs.is_empty() {
+        // Selected glyphs shown in several layers: one run per layer, as one step.
+        let run = app.with_targets(CommandRef::new(id));
+        if run.id == targets::BATCH {
+            return vec![Msg::Run(run)];
+        }
     }
     if menu.sections.iter().any(|s| s.context == TT_INSTRUCTOR)
         && let Some(steps) = instructor_steps(app, id)
@@ -1153,8 +1191,26 @@ fn choice_steps(app: &mut FontCraftApp, menu: &CanvasMenu, id: &str, value: &str
     vec![FontCraftApp::route(CommandRef::with_params(id, params))]
 }
 
-/// The canvas menu's colour swatches: the edited glyph's colour label, or with Alt the active layer's.
+/// The canvas menu's colour swatches: the edited glyph's colour label, or with Alt the active layer's. With glyphs of the
+/// text selected, theirs, or with Alt that of the layer each shows.
 pub fn color_steps(app: &FontCraftApp, menu: &CanvasMenu, color: Option<u8>, layer: bool) -> Vec<Msg> {
+    if !menu.glyphs.is_empty() {
+        if !layer {
+            let glyph_menu = GlyphMenu { glyphs: menu.glyphs(), ..GlyphMenu::default() };
+            return glyph_menu::steps(&glyph_menu, &glyph_menu::GlyphAction::Color(color));
+        }
+        let Ok(font) = app.session.font() else { return Vec::new() };
+        let groups = targets::text_selection(font, &app.view);
+        let steps: Vec<Msg> = groups
+            .into_iter()
+            .flat_map(|group| {
+                let glyph_menu = GlyphMenu { glyphs: group.glyphs, layer: Some(group.layer), ..GlyphMenu::default() };
+                glyph_menu::steps(&glyph_menu, &glyph_menu::GlyphAction::LayerColor(color))
+            })
+            .collect();
+        let label = find_command("glyph.setLayerColorLabel").map_or("Layer Color", |spec| spec.label);
+        return one_transaction(steps, label).1;
+    }
     let target = tools::target(&app.session, &app.view).map(|t| t.layer);
     let glyph_menu = GlyphMenu { glyphs: vec![menu.glyph.clone()], layer: target, ..GlyphMenu::default() };
     let action = if layer { glyph_menu::GlyphAction::LayerColor(color) } else { glyph_menu::GlyphAction::Color(color) };

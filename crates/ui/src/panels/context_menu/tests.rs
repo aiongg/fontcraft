@@ -34,6 +34,7 @@ fn a_click_on_an_item_reports_it_and_a_disabled_item_reports_nothing() {
             Section { context: CANVAS, items: vec![ContextItem { checked: Some(true), ..item("glyph.toggleLocked", "Locked", true) }] },
         ],
         alt: false,
+        glyphs: Vec::new(),
     };
     let answers = Rc::new(RefCell::new(Vec::<Answer>::new()));
     let seen = Rc::clone(&answers);
@@ -102,6 +103,7 @@ fn a_destructive_item_runs_like_any_other() {
         hit: None,
         sections: vec![Section { context: GUIDE, items: vec![item("guide.lock", "Lock Guide", true), item("guide.remove", "Delete Guide", true)] }],
         alt: false,
+        glyphs: Vec::new(),
     };
     let answers = Rc::new(RefCell::new(Vec::<Answer>::new()));
     let seen = Rc::clone(&answers);

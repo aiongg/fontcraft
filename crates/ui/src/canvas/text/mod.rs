@@ -29,7 +29,6 @@ pub mod paint;
 pub mod tokens;
 pub mod tool;
 
-use craft::ui::runtime::commands::CommandRef;
 use fontcraft_engine::model::Font;
 use fontcraft_textlayout::{Direction, Item, KerningMode, Text};
 use serde_json::{Map, Value, json};
@@ -260,21 +259,6 @@ pub fn shown_glyphs(text: &Text, shown: Option<&str>) -> Vec<String> {
 /// Whether the edit view is in text mode: the Text tool is the current tool.
 pub fn text_mode(view: &ViewState) -> bool {
     view.tool == TEXT_TOOL
-}
-
-/// The glyphs a filter fired in text mode acts on: those the text selection shows (`filter.target.editViewTextSelection`).
-/// `None` outside text mode, without a selection, for a command that is no filter or one given parameters.
-pub fn filter_glyphs(view: &ViewState, command: &CommandRef) -> Option<Vec<String>> {
-    let empty = command.params.is_null() || command.params.as_object().is_some_and(Map::is_empty);
-    if !text_mode(view) || !empty || !command.id.starts_with("filter.") {
-        return None;
-    }
-    let spec = fontcraft_engine::find_command(&command.id)?;
-    if !spec.targets.contains(&fontcraft_engine::params::TargetKind::Glyphs) {
-        return None;
-    }
-    let glyphs = view.text.selected_glyphs(crate::app::font_view::MAX_BATCH_GLYPHS);
-    (!glyphs.is_empty()).then_some(glyphs)
 }
 
 /// Whether the canvas shows the text around the edited glyph: the text's current glyph is the shown glyph.

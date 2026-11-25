@@ -96,9 +96,9 @@ milestone = "M3"
 summary = "Run from Edit View while the Text tool is active, a filter processes the glyphs covered by the text selection."
 ref = "Filters › Applying Filters › Filter Menu"
 status = "handbook"
-notes = "M3.33: with the Text tool active and a text selection, a filter fired from a menu or a key, or its dialog, gets the selected glyphs as `glyphs`, each once, on the layer the canvas edits (crates/ui/src/app/mod.rs, with_targets; canvas/text/mod.rs, filter_glyphs). Test a_filter_in_text_mode_changes_the_selected_glyphs."
+notes = "M3.33: with the Text tool active and a text selection, a filter fired from a menu or a key, or its dialog, gets the selected glyphs as `glyphs`, each once, in the layer its item shows (`crates/ui/src/app/targets.rs`; text.selectionTargets). Test a_filter_in_text_mode_changes_the_selected_glyphs."
 guesses = [
-  "A glyph shown twice in the selection is filtered once; the layer is the one the canvas edits, for every selected glyph.",
+  "A glyph shown twice in the selection is filtered once per layer it shows; the layer is the one each glyph's item shows.",
 ]
 observe = [
   "In text mode select three glyphs of a word and run Round Corners: note which glyphs change and on which master.",

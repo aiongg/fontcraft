@@ -152,11 +152,12 @@ fn status_items(font: &Font, glyphs: &[String]) -> Vec<StatusItem> {
         .collect()
 }
 
-/// The layer the Alt swatches colour: for one glyph the layer it shows (the Layers panel's pick, else its layer of the
-/// current master), for several the current master's.
+/// The layer the Alt swatches colour: in the edit view for one glyph the layer it shows (the Layers panel's pick, else its
+/// layer of the current master); for several and in Font View the current master's.
 fn menu_layer(app: &FontCraftApp, font: &Font, glyphs: &[String]) -> Option<String> {
     let layers = &app.view.layers;
-    if let [one] = glyphs
+    if !app.font_view_shows()
+        && let [one] = glyphs
         && let Some(glyph) = font.glyph(one)
         && let Some(layer) = masters::shown_layer(font, layers, glyph)
     {

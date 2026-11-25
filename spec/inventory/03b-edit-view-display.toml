@@ -1896,12 +1896,32 @@ notes = "Documented, not yet observed. Built in M5.11b: drawn while the Text too
 id = "text.selectionTargets"
 area = "spacing-kerning"
 milestone = "M5"
-summary = "In text mode a glyph command run from a menu or a shortcut (Update Metrics, Locked, Transform Metrics…) acts on every glyph of the text selection, each once, in the layer of the tab's master; with nothing selected it acts on the current glyph."
+summary = "In text mode a glyph command run from a menu or a shortcut (Update Metrics, Locked, Transform Metrics…) acts on every glyph of the text selection, each once, in the layer its text item shows; with nothing selected it acts on the current glyph, in the layer the canvas shows."
 ref = "Font View › Batch-Processing › Batch Commands; Edit View › Entering Text"
 status = "inferred"
-notes = "Built in M5.11b (`tools_glue::selection_targets`): the shell fills `glyphs` from the selected items, placeholders as the current glyph, and `layer` with the tab's master when the command takes one. The Info box's group and metric fields take the same targets (M5.22)."
+notes = "M5.50 and M5.41 (`crates/ui/src/app/targets.rs`): every command whose targets include `glyphs`, fired from a menu, a key, a dialog or the canvas menu, gets the selected glyphs, placeholders as the current glyph; the layer parameter its params doc names (`layer?`, `layers?`, `master?`) is the layer each item shows, and glyphs in several layers run as one step per layer inside one undo step. Commands whose default is every master keep it. Commands that act on nodes, paths or one layer keep the current glyph. Locked glyphs are skipped by the commands and named in the status line. The Info box's group and metric fields take the same glyphs, in the edited glyph's master (M5.22)."
 guesses = [
-  "Glyph commands in text mode take the glyphs of the text selection in the tab's master, as Font View's batch commands take the selected glyphs; the handbook does not say, and the reference app with a selected text would settle it.",
+  "Every glyph command in text mode, not only filters, takes the glyphs of the text selection, as Font View's batch commands take the selected glyphs; the handbook says so for filters only, and the reference app with a selected text would settle it.",
+  "A selected glyph changes in the layer its own text item shows (Show All Masters), not in the tab's master; a glyph that appears in two layers of the selection changes in both.",
+]
+observe = [
+  "In text mode select three of five glyphs and run Tidy up Paths, Correct Path Direction, Update Metrics and a colour label: note which glyphs change, and how many undo steps it makes.",
+]
+
+[[behavior]]
+id = "text.commandsActOnSelection"
+area = "edit-text"
+milestone = "M5"
+summary = "In text mode a right-click opens the canvas menu with the glyph items only; its items, colour swatches and Copy Glyph Names act on the selected glyphs, and the Palette's Transformations change the whole layers of the selected glyphs, as one undo step."
+ref = "Filters › Applying Filters › Filter Menu; Font View › Batch-Processing › Palette"
+status = "inferred"
+notes = "M5.41: `context_menu::open_on_text`, `palette::transform`. Which glyphs and layers: text.selectionTargets."
+guesses = [
+  "The canvas menu in text mode lists no node, path or guide items; right-clicking a glyph of a text selection in the reference app settles it.",
+  "Align in the Palette is off while several glyphs are chosen, since it lines up the objects of one layer.",
+]
+observe = [
+  "In text mode with three glyphs selected, right-click and note the items; press Mirror in the Palette and note which glyphs change.",
 ]
 
 # ───────────────────────────── Annotating ─────────────────────────────
