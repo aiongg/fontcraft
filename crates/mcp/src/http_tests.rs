@@ -299,6 +299,11 @@ fn connections_sessions_and_messages_are_capped() {
     let refused: Vec<&Reply> = replies.iter().filter(|r| r.status == 429).collect();
     assert!(!refused.is_empty(), "twenty messages at once exceed five per second");
     assert!(refused.iter().all(|r| r.header("Retry-After") == Some("1")));
+    // Cancellations count too.
+    let addr = start(Limits { max_messages_per_second: 5, ..Limits::default() });
+    let cancel = json!({"jsonrpc": "2.0", "method": "notifications/cancelled", "params": {"requestId": "none"}}).to_string();
+    let replies: Vec<Reply> = (0..20).map(|_| post_raw(addr, "", cancel.as_bytes())).collect();
+    assert!(replies.iter().any(|r| r.status == 202) && replies.iter().any(|r| r.status == 429));
 }
 
 #[test]

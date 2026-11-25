@@ -54,7 +54,7 @@ pub const IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 /// How long one connection is kept: after the request that crosses it, the connection is closed,
 /// so a peer that sends a request now and then cannot hold a slot for good.
 pub const MAX_CONNECTION_TIME: Duration = Duration::from_secs(600);
-/// Most messages answered per second over all connections; more get 429.
+/// Most messages answered per second over all connections, cancellations among them; more get 429.
 pub const MAX_MESSAGES_PER_SECOND: usize = 200;
 /// After an error reply the connection is closed; this much unread input is drained first so the
 /// peer sees the reply instead of a reset.
@@ -103,7 +103,14 @@ impl Default for Limits {
 /// thread. Returns early only when the accepting thread cannot be started.
 pub fn serve(server: Server, listener: TcpListener, limits: Limits) -> io::Result<()> {
     let local = listener.local_addr()?;
-    let shared = Arc::new(Shared { limits, loopback: local.ip().is_loopback(), active: AtomicUsize::new(0), running: Mutex::default() });
+    let shared = Arc::new(Shared {
+        limits,
+        loopback: local.ip().is_loopback(),
+        active: AtomicUsize::new(0),
+        running: Mutex::default(),
+        rate: Mutex::new(Rate { start: Instant::now(), count: 0 }),
+        parsing: Mutex::default(),
+    });
     let (jobs, inbox) = mpsc::channel::<Job>();
     std::thread::Builder::new().name("mcp-http-accept".into()).spawn(move || accept_loop(&listener, &shared, &jobs))?;
     let mut dispatcher = Dispatcher::new(server, limits);
@@ -124,6 +131,15 @@ struct Shared {
     active: AtomicUsize,
     /// What cancels the requests that run or wait, by session and request id: at most one for each connection.
     running: Mutex<HashMap<RequestKey, Arc<Token>>>,
+    rate: Mutex<Rate>,
+    /// Held while a connection's thread reads what a body asks for: one body at a time is in memory as values there.
+    parsing: Mutex<()>,
+}
+
+/// The messages that came in the second from `start`.
+struct Rate {
+    start: Instant,
+    count: usize,
 }
 
 /// A session id and a request's id in it.
@@ -145,6 +161,29 @@ impl Shared {
             self.running.lock().unwrap_or_else(PoisonError::into_inner).remove(&key);
         }
         result
+    }
+
+    /// Counts a message; the refusal when more came this second than are answered.
+    fn admit(&self) -> Result<(), Response> {
+        let now = Instant::now();
+        let mut rate = self.rate.lock().unwrap_or_else(PoisonError::into_inner);
+        if now.saturating_duration_since(rate.start) >= Duration::from_secs(1) {
+            *rate = Rate { start: now, count: 0 };
+        }
+        rate.count = rate.count.saturating_add(1);
+        if rate.count <= self.limits.max_messages_per_second {
+            return Ok(());
+        }
+        let mut response = Response::refuse(429, format!("at most {} messages per second are answered", self.limits.max_messages_per_second));
+        response.headers.push(("Retry-After", "1".into()));
+        Err(response)
+    }
+
+    /// What `request` is to the connection's thread: the id of the request it cancels, or the id it can be cancelled by.
+    fn asks(&self, request: &Request) -> (Option<String>, Option<String>) {
+        let _one = self.parsing.lock().unwrap_or_else(PoisonError::into_inner);
+        let message = message_of(request);
+        (message.as_ref().and_then(cancelled_request), message.as_ref().and_then(request_key))
     }
 
     fn cancel(&self, key: &RequestKey) {
@@ -232,17 +271,16 @@ fn serve_connection(stream: TcpStream, shared: &Shared, jobs: &mpsc::Sender<Job>
         };
         let (close, chunked) = (request.close, request.chunked);
         let mut stream = EventStream { to: reader.get_ref(), chunked, state: Streaming::Not };
-        let response = match check(&request, shared) {
+        let response = match check(&request, shared).and_then(|()| shared.admit()) {
             Err(refusal) => refusal,
             Ok(()) => {
                 let session = request.header("mcp-session-id").unwrap_or_default().to_string();
-                let message = message_of(&request);
-                if let Some(id) = message.as_ref().and_then(cancelled_request) {
+                let (cancels, key) = shared.asks(&request);
+                if let Some(id) = cancels {
                     shared.cancel(&(session, id));
                     Response::empty(202)
                 } else {
-                    let key = message.as_ref().and_then(request_key).map(|id| (session, id));
-                    drop(message);
+                    let key = key.map(|id| (session, id));
                     let token = Token::new();
                     shared.cancellable(key, &token, || {
                         let (reply, answer) = mpsc::channel();
@@ -611,28 +649,15 @@ struct Dispatcher {
     limits: Limits,
     sessions: HashMap<String, Session>,
     tick: u64,
-    window_start: Instant,
-    window_count: usize,
 }
 
 impl Dispatcher {
     fn new(server: Server, limits: Limits) -> Self {
-        Self { server, limits, sessions: HashMap::new(), tick: 0, window_start: Instant::now(), window_count: 0 }
+        Self { server, limits, sessions: HashMap::new(), tick: 0 }
     }
 
     fn answer(&mut self, job: &Job) -> Response {
         let request = &job.request;
-        let now = Instant::now();
-        if now.duration_since(self.window_start) >= Duration::from_secs(1) {
-            self.window_start = now;
-            self.window_count = 0;
-        }
-        self.window_count = self.window_count.saturating_add(1);
-        if self.window_count > self.limits.max_messages_per_second {
-            let mut response = Response::refuse(429, format!("at most {} messages per second are answered", self.limits.max_messages_per_second));
-            response.headers.push(("Retry-After", "1".into()));
-            return response;
-        }
         self.tick = self.tick.saturating_add(1);
         if request.method == "DELETE" {
             return self.end_session(request);

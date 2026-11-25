@@ -310,8 +310,8 @@ commands report:
 - A line that is not UTF-8 gets a parse error and the session continues.
 - Requests are answered one at a time, in arrival order. On stdio the server goes on reading
   while a request runs, so it sees a cancellation; at most 256 messages or 16 MiB wait for an
-  answer, and beyond that it reads no further until there is room. The server sends no requests
-  to the client.
+  answer, and beyond that it reads no further until there is room, so a cancellation sent after
+  them is seen once there is. The server sends no requests to the client.
 
 ## HTTP transport
 
