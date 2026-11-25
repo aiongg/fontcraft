@@ -466,9 +466,14 @@ mod tests {
     #[test]
     fn reversing_keeps_the_start_and_moves_the_segment_kinds() {
         use NodeKind::*;
-        // A(line) c1 c2 B(curve) C(line), closed: glyphsLib gives B(line) c2 c1 A(curve) C(line).
+        // A(line) c1 c2 B(curve) C(line), closed: A(curve) C(line) B(line) c2 c1 (glyphsLib's nodes, which end with
+        // the start: C(line) B(line) c2 c1 A(curve)).
         let n = |x: f64, k| Node::new(x, 0.0, k);
         let mut p = Path::new(true, vec![n(1.0, Line), n(2.0, OffCurve), n(3.0, OffCurve), n(4.0, Curve), n(5.0, Line)]);
+        p.reverse();
+        assert_eq!(kinds(&p), [(1.0, Curve), (5.0, Line), (4.0, Line), (3.0, OffCurve), (2.0, OffCurve)]);
+        // Its handles may stand first in the list: c1 c2 B(curve) C(line) A(line).
+        let mut p = Path::new(true, vec![n(2.0, OffCurve), n(3.0, OffCurve), n(4.0, Curve), n(5.0, Line), n(1.0, Line)]);
         p.reverse();
         assert_eq!(kinds(&p), [(4.0, Line), (3.0, OffCurve), (2.0, OffCurve), (1.0, Curve), (5.0, Line)]);
         // Open: P0 c1 c2 P1(curve) P2(line) gives P2 P1(line) c2 c1 P0(curve).
