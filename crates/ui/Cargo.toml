@@ -23,9 +23,10 @@ fontcraft-textlayout.workspace = true
 fontcraft-craft-ext.workspace = true
 fontcraft-io-pdf.workspace = true
 base64.workspace = true
-craft = { workspace = true, features = ["ui-app", "keymap", "menu", "tracked", "settings", "platform", "quit", "automation", "color-ui"] }
+craft = { workspace = true, features = ["ui-app", "keymap", "menu", "tracked", "settings", "platform", "quit", "automation", "color-ui", "window"] }
 egui.workspace = true
 eframe.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 log.workspace = true
 

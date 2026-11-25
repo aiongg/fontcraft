@@ -42,6 +42,15 @@ craft-libs is not taking outside changes at this stage, and FontCraft cannot wai
 - Pieces that need changes deep inside craft (for example, the shell delivering a paste event) may need
   a narrower stand-in here; the module doc records what the full version in craft would do.
 
+## The app runner
+
+`craft_ext::ui::shell::app::run` stands in for craft's `app::run`. craft opens the root window at its saved
+place before any monitor is known, its `SystemWindows` lists no monitors, and its runner keeps eframe's window to itself;
+so a window saved on an unplugged monitor opened out of reach. The staged runner is built on craft's public `embed`
+hooks. It lists the monitors of eframe's window for the window host (which places floating dock windows by them too) and
+moves the root window back onto one. In craft, `SystemWindows` would list them and `app::run` would place the window
+again.
+
 ## Craft bugs FontCraft cannot work around
 
 Some defects sit inside craft components with no public hook before them, so a staged piece cannot

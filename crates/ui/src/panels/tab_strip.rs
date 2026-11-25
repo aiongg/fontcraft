@@ -132,4 +132,24 @@ mod tests {
             vec![shell("view.showTab", json!({"index": 1})), shell("view.showTab", json!({"index": 3})), shell("view.closeTab", json!({"index": 2}))]
         );
     }
+
+    /// Tabs that do not fit the window are in the strip's overflow menu, and a pick there shows the tab.
+    #[test]
+    fn a_tab_that_does_not_fit_is_shown_from_the_overflow_menu() {
+        let tabs = (1..=8).map(|n| TabEntry { id: n, glyphs: vec![format!("tabnumber{n}")], more: false }).collect();
+        let model = Tracked::new(TabsModel { tabs, active: None });
+        let posted = Rc::new(RefCell::new(Vec::new()));
+        let seen = Rc::clone(&posted);
+        let mut fixture = Fixture::new(move |ui| {
+            let mut sent = Vec::new();
+            show(ui, Props { model: &model, sent: &mut sent });
+            seen.borrow_mut().extend(sent);
+        });
+        fixture.room(egui::vec2(260.0, 600.0)).settle();
+        assert!(fixture.by_label("tabnumber8").is_none(), "the last tab does not fit");
+        fixture.key(egui::Key::Tab, egui::Modifiers::NONE).key(egui::Key::ArrowDown, egui::Modifiers::ALT).settle();
+        let row = fixture.by_label("tabnumber8").expect("the last tab's row in the overflow menu");
+        fixture.click(&row).settle();
+        assert_eq!(*posted.borrow(), vec![shell("view.showTab", json!({"index": 9}))]);
+    }
 }

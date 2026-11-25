@@ -29,6 +29,7 @@ pub mod font_view;
 pub mod getters;
 pub mod glyph_info;
 pub mod images;
+pub mod kept_layout;
 pub mod kerning_review;
 pub mod kerning_tools;
 pub mod kerning_window;
@@ -135,3 +136,7 @@ fn body(ui: &mut Ui, cx: &mut BodyCx<'_>, app: &mut FontCraftApp) {
         dialogs.with(|host| crate::dialogs::run(host, app));
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod access_tests;

@@ -6,4 +6,5 @@ pub mod list;
 pub mod menu;
 pub mod primitives;
 pub mod runtime;
+pub mod shell;
 pub mod text;

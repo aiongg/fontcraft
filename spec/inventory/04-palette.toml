@@ -637,6 +637,22 @@ milestone = "M3"
 summary = "The height of the Layers section is changed by dragging the handle at its lower edge."
 ref = "Palette › Layers"
 status = "handbook"
+notes = "FontCraft (M14.10): the Layers section is a dock group, and the divider at its lower edge is the dock's own, which the arrow keys move too. The height is kept between runs (`window.sidebarWidthsKept`). The last section of the Palette takes the room the others leave, so it has no divider under it."
+
+[[behavior]]
+id = "window.sidebarWidthsKept"
+area = "ui-chrome"
+milestone = "M14"
+summary = "Dragging the inner edge of the sidebar or of the Palette changes its width. The widths and the heights of the Palette's sections are kept between runs."
+ref = "Palette"
+status = "inferred"
+notes = "FontCraft (M14.10): the dock's own column edges and section dividers resize them, and the dock's layout is kept in ui.json of the settings folder (`window.frameKept`). On a smaller window the dock narrows the columns to fit, down to each panel's least width, and the kept widths stay. Window › Reset Layout returns to the default widths."
+guesses = [
+  "The widths are the application's, not each document's; settle by resizing the sidebar of one document in the reference app and opening another.",
+]
+observe = [
+  "Drag the inner edge of the Palette and of Font View's sidebar, quit and reopen: note whether they resize and whether the widths come back.",
+]
 
 # ───────────────────────────── Transformations ─────────────────────────────
 

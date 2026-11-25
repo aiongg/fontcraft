@@ -13,7 +13,10 @@ workspace = true
 [dependencies]
 fontcraft-ui.workspace = true
 fontcraft-engine.workspace = true
+craft = { workspace = true, features = ["settings"] }
+serde.workspace = true
 serde_json.workspace = true
+toml.workspace = true
 ureq.workspace = true
 eframe = { workspace = true, features = ["wayland"] }
 

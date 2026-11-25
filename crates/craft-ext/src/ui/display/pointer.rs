@@ -36,7 +36,8 @@ pub trait PointerOnPicture {
 
 impl PointerOnPicture for Response {
     fn pointer(&self, ui: &Ui) -> PicturePointer {
-        let sensed = ui.interact(self.rect, self.id.with("craft_ext.picture.pointer"), Sense::click_and_drag());
+        // Not focusable: a focusable rect would be a stop of the Tab key and a node without a name.
+        let sensed = ui.interact(self.rect, self.id.with("craft_ext.picture.pointer"), Sense::CLICK | Sense::DRAG);
         let latest = || ui.ctx().input(|input| input.pointer.latest_pos());
         let at = sensed.interact_pointer_pos().or_else(latest);
         let origin = ui.ctx().input(|input| input.pointer.press_origin()).or(at);

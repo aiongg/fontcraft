@@ -210,6 +210,20 @@ impl PanelId {
     }
 }
 
+/// Saved layouts name a panel by [`PanelId::id`].
+impl serde::Serialize for PanelId {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.id())
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for PanelId {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let id = <String as serde::Deserialize>::deserialize(deserializer)?;
+        PanelId::from_id(&id).ok_or_else(|| serde::de::Error::custom(format!("no panel `{id}`")))
+    }
+}
+
 craft::ui::words! {
     /// The panels' titles.
     pub struct PanelWords {
