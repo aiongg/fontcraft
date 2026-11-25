@@ -1078,6 +1078,15 @@ summary = "Export string: Transformations; LSB: shift; RSB: shift; Width: shift;
 ref = "Appendix › Custom Parameters › Filter"
 status = "handbook"
 notes = "Documented, not yet observed. Run at export by the engine's export stage (M7.10)."
+guesses = [
+  "An LSB, RSB or Width value with a sign is added to the metric; a value without one replaces it.",
+  "The metrics change after the scale, the slant and the offset.",
+  "Width does not go with LSB or RSB: a string with both is refused.",
+]
+observe = [
+  "Export a font with the Filter parameters Transformations; LSB:20 and Transformations; LSB:+20 in turn, and compare the sidebearings of H.",
+  "Do the same with Transformations; LSB:+20; ScaleX:50 to see whether the 20 units are scaled.",
+]
 
 [[behavior]]
 id = "filter.customParameter.extrudeUndocumented"

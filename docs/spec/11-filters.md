@@ -288,8 +288,11 @@ How FontCraft runs it (our design, unconfirmed):
   export run the same code. A missing `ScaleX` or `ScaleY` means 100; the writer writes each axis
   that is not 100 and always writes `Origin`. `SlantCorrection:1` is Cursivy. `include` and
   `exclude` limit the glyphs; with neither `glyph` nor `glyphs`, every glyph is changed.
-- `LSB`, `RSB` and `Width` belong to Transform Metrics (M5); a string holding them is refused
-  until then.
+- `LSB`, `RSB` and `Width` in a string change the metrics of each layer, as Transform Metrics
+  does, once every layer is transformed. A value with a sign (`+20`, `-5`) is added to the metric;
+  one without a sign replaces it, so no string sets a negative sidebearing. `Width` does not go
+  with `LSB` or `RSB`. A layer without an outline keeps its width when sidebearings change. They
+  change whole layers: with target lists, or on the background, they are refused.
 - Cursivy (`path.transformations.slantVsCursivy`) is refused with a clear error when the layer's
   master has no horizontal and vertical stem above zero; its construction is below.
 - The dialog (`dialog.transformations`) has Translate X and Y, the Origin pop-up, Scale

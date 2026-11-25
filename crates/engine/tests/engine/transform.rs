@@ -421,6 +421,36 @@ fn the_string_form_and_the_parameter_form_give_the_same_font() {
 }
 
 #[test]
+fn the_export_string_changes_metrics_after_the_transformation() {
+    let width = |s: &Session, g: &str| s.font().unwrap().glyph(g).unwrap().layers[0].width;
+    let setup = || {
+        let mut s = Session::with_document();
+        for g in ["A", "B"] {
+            run(&mut s, "path.addPath", json!({"glyph": g, "nodes": rect(100.0, 0.0, 300.0, 700.0)}));
+            run(&mut s, "glyph.transformMetrics", json!({"glyph": g, "width": 500}));
+        }
+        s
+    };
+    let mut s = setup();
+    run(&mut s, "path.transformations", json!({"glyphs": ["A"], "string": "Transformations;LSB:+120;RSB:35;ScaleX:50;Origin:4;"}));
+    let n = nodes(&mut s, "A");
+    assert_eq!(n[0][1].0 - n[0][0].0, 100.0, "half as wide");
+    assert_eq!(width(&s, "A") - n[0][1].0, 35.0, "the right sidebearing is set");
+    let mut plain = setup();
+    run(&mut plain, "path.transformations", json!({"glyphs": ["A"], "scale": {"x": 50, "y": 100}}));
+    assert_eq!(n[0][0].0 - nodes(&mut plain, "A")[0][0].0, 120.0, "the left one grows");
+    // One undo step brings everything back.
+    run(&mut s, "edit.undo", json!({}));
+    assert_eq!((nodes(&mut s, "A"), width(&s, "A")), (nodes(&mut setup(), "A"), 500.0));
+
+    let mut s = setup();
+    run(&mut s, "path.transformations", json!({"string": "Transformations;Width:-40;Origin:4;include:B"}));
+    assert_eq!((width(&s, "A"), width(&s, "B")), (500.0, 460.0));
+    run(&mut s, "path.transformations", json!({"string": "Transformations;Width:610;Origin:4;include:B"}));
+    assert_eq!(width(&s, "B"), 610.0);
+}
+
+#[test]
 fn cursivy_keeps_round_strokes_and_straight_stems() {
     let mut s = Session::with_document();
     run(&mut s, "font.stems.add", json!({"orientation": "vertical", "values": {"m01": 80}}));
@@ -486,7 +516,8 @@ fn transformations_follow_their_targets_and_refuse_what_they_cannot_do() {
     let before = font(&s);
     for bad in [
         json!({"glyphs": ["A"], "slant": 10, "cursivy": true}),
-        json!({"glyphs": ["A"], "string": "Transformations;LSB:10;Origin:4;"}),
+        json!({"glyphs": ["A"], "string": "Transformations;LSB:10;Width:500;Origin:4;"}),
+        json!({"glyph": "A", "points": [[0, 2]], "string": "Transformations;LSB:10;Origin:4;"}),
         json!({"glyphs": ["A"], "string": "Transformations;Origin:4;", "slant": 5}),
         json!({"glyphs": ["A"], "slant": 95}),
         json!({"glyphs": ["A"], "layers": ["nope"], "slant": 5}),
