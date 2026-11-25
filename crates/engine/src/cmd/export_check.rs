@@ -56,6 +56,8 @@ pub(super) struct Problems {
     list: Vec<Map<String, Value>>,
     /// Problems past [`MAX_PROBLEMS`].
     more: usize,
+    /// Where the problems of the document being checked start.
+    from: usize,
 }
 
 impl Problems {
@@ -76,8 +78,8 @@ impl Problems {
             problem.extend(details.into_iter().filter(|(_, v)| !v.is_null()));
         }
         let same = |p: &Map<String, Value>| problem.iter().all(|(k, v)| p.get(k) == Some(v));
-        let at = match self.list.iter().position(same) {
-            Some(at) => at,
+        let at = match self.list.iter().skip(self.from).position(same) {
+            Some(at) => at.saturating_add(self.from),
             None if self.list.len() >= MAX_PROBLEMS => {
                 self.more = self.more.saturating_add(1);
                 return;
@@ -97,10 +99,12 @@ impl Problems {
         }
     }
 
-    fn in_document(&mut self, from: usize, title: &str) {
-        for problem in self.list.iter_mut().skip(from) {
+    /// Says that the problems added since the last call are those of the document `title`.
+    fn in_document(&mut self, title: &str) {
+        for problem in self.list.iter_mut().skip(self.from) {
             problem.insert("document".into(), json!(title));
         }
+        self.from = self.list.len();
     }
 
     fn json(&self) -> Map<String, Value> {
@@ -391,14 +395,13 @@ pub(super) fn refusal(subjects: &[Subject<'_>], cause: Option<EngineError>) -> E
     };
     let mut found = Problems::default();
     for subject in subjects {
-        let from = found.list.len();
         match subject.check(&mut found) {
             Ok(_) => {}
             Err(EngineError::Cancelled) => return EngineError::Cancelled,
             Err(e) => found.add("font", e.to_string(), None, Value::Null),
         }
         if subjects.len() > 1 {
-            found.in_document(from, subject.title);
+            found.in_document(subject.title);
         }
     }
     if let Some((e, subject)) = cause.as_ref().zip(subjects.first()) {
