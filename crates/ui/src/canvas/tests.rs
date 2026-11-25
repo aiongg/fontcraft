@@ -630,3 +630,17 @@ fn a_selected_anchor_shows_its_mark_cloud() {
     app.project();
     assert!(app.tools.view.cloud.parts.is_empty(), "off shows none");
 }
+
+/// Show all glyphs that use this glyph as a component opens them in a new tab, in font order.
+#[test]
+fn the_users_of_a_glyph_open_in_a_tab() {
+    let mut app = components_app();
+    let tabs = app.view.tabs.tabs.len();
+    shell(&mut app, "glyph.showGlyphsUsingAsComponent", json!({"glyph": "base"}));
+    assert_eq!(app.view.tabs.tabs.len(), tabs + 1);
+    let shown: Vec<&str> = (0..app.view.text.text.len()).filter_map(|i| app.view.text.item_glyph(i)).collect();
+    assert_eq!(shown, ["A", "comp"]);
+    app.sent.push(Msg::Shell(CommandRef::with_params("glyph.showGlyphsUsingAsComponent", json!({"glyph": "comp"}))));
+    app.drain();
+    assert!(app.status.contains("no glyph uses"), "{}", app.status);
+}

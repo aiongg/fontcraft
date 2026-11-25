@@ -7,7 +7,7 @@
 //! | `cornerComponent.editGlyph` | the arrow button of the corner and cap Info boxes | edits the corner or cap glyph |
 //! | `segmentComponent.editGlyph` | the arrow button of the segment component Info box | edits the segment glyph |
 //! | `brush.editGlyph` | the arrow button of the brush Info box | edits the brush glyph |
-//! | `glyph.showGlyphsUsingAsComponent` | the canvas context menu | selects in Font View every glyph with a component of the glyph |
+//! | `glyph.showGlyphsUsingAsComponent` | the canvas context menu | opens a tab with every glyph that has a component of the glyph |
 //! | `smartGlyph.showSettings` | Glyph menu, the smart glyph's context menu | opens Smart Glyph Settings (`dialogs::smart_settings`) |
 //! | `smartComponent.showSettings` | the Smart badge of the component Info box | opens Smart Component Settings |
 //!
@@ -26,7 +26,7 @@ use crate::app::FontCraftApp;
 use crate::app::models::components::{MAX_SMART_COMPONENTS, smart_model};
 use crate::canvas::tools::{edited_glyph, scene};
 
-/// Most composites `glyph.showGlyphsUsingAsComponent` selects.
+/// Most composites `glyph.showGlyphsUsingAsComponent` opens.
 const MAX_SHOWN: usize = 10_000;
 
 pub const MODULE: Module = Module { commands: COMMANDS, run };
@@ -65,7 +65,7 @@ const COMMANDS: &[UiCommand] = &[
         label: "Show all glyphs that use this glyph as a component",
         menu: &[],
         shortcut: None,
-        params: "{glyph?: name (default the edited glyph)} select in Font View every glyph that has a component of the glyph, in font order (glyph.listComposites); a glyph that no other glyph uses is an error",
+        params: "{glyph?: name (default the edited glyph)} open a new Edit View tab with every glyph that has a component of the glyph, in font order (glyph.listComposites); a glyph that no other glyph uses is an error",
     },
     UiCommand {
         id: "smartGlyph.showSettings",
@@ -256,9 +256,7 @@ fn show_users(app: &mut FontCraftApp, p: &Value) -> Result<(), String> {
     if glyphs.is_empty() {
         return Err(format!("no glyph uses `{}` as a component", quoted(&glyph)));
     }
-    app.view.font_view.anchor = glyphs.first().cloned();
-    app.view.font_view.selected = glyphs;
-    Ok(())
+    crate::shell::commands::run(app, &CommandRef::with_params("view.newTab", serde_json::json!({ "glyphs": glyphs })))
 }
 
 fn show_smart_glyph(app: &mut FontCraftApp, p: &Value) -> Result<(), String> {
