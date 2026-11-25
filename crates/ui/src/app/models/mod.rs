@@ -36,6 +36,7 @@ pub mod layers;
 pub mod palette;
 pub mod palette_modules;
 pub mod preview;
+pub mod preview_shaping;
 pub mod project;
 pub mod shape_order;
 pub mod sidebar;
@@ -94,7 +95,7 @@ pub struct Models {
     /// What the hint layers draw (`canvas::hinting`).
     pub hint_canvas: Tracked<hint_canvas::HintCanvas>,
     hint_cache: hint_canvas::HintCache,
-    /// The files colour glyphs draw from (`canvas::color::files`), shared by the canvas, its text, Font View and the
+    /// The files colour glyphs draw from (`fontcraft_engine::color_drawing`), shared by the canvas, its text, Font View and the
     /// Space Center.
     color_files: crate::canvas::color::ColorFiles,
     /// The hint layers' colours and sizes.
@@ -150,6 +151,7 @@ pub struct Models {
     /// The Preview Area's and the Preview Panel's lines (`panels::preview`).
     pub preview_area: Tracked<preview::PreviewModel>,
     pub preview_panel: Tracked<preview::PreviewModel>,
+    pub preview_cache: preview_shaping::PreviewCache,
     /// The step of the axis sweep the previews were last projected at.
     swept: Option<u32>,
     /// The Shape Order panel (`panels::shape_order`).
@@ -237,7 +239,7 @@ impl Models {
         font_audit::project(&mut self.font_audit, cx);
         compatibility::project(&mut self.compatibility, cx);
         text::project_features(&mut self.features, &self.text, cx);
-        preview::project_both(&mut self.preview_area, &mut self.preview_panel, cx);
+        self.project_previews(cx);
         glyph_sources::project(&mut self.glyph_sources, cx);
         self.swept = cx.view.preview.sweep.as_ref().map(AxisSweep::step);
         shape_order::project(&mut self.shape_order, cx);
@@ -251,6 +253,19 @@ impl Models {
         self.swept.map(|step| f64::from(step) / f64::from(STEPS))
     }
 
+    fn project_previews(&mut self, cx: &mut ProjectCx<'_>) {
+        let mut with = preview::LineCx { cache: &mut self.preview_cache, files: &mut self.color_files, shaper: &self.text.shaper };
+        preview::project_both(&mut self.preview_area, &mut self.preview_panel, &mut with, cx);
+    }
+
+    /// Runs the previews' jobs, and projects the previews again when one finished: their fonts are built and long texts
+    /// shaped between frames.
+    pub fn step_previews(&mut self, cx: &mut ProjectCx<'_>, host: &craft::host::Host) {
+        if self.preview_cache.shaping.step(cx.session, host) {
+            self.project_previews(cx);
+        }
+    }
+
     /// Projects what follows the axis sweep when its step moved: a step changes neither the engine nor the rest of
     /// the view state, so the other models stay.
     pub fn project_sweep(&mut self, cx: &mut ProjectCx<'_>) {
@@ -259,7 +274,7 @@ impl Models {
             return;
         }
         self.swept = step;
-        preview::project_both(&mut self.preview_area, &mut self.preview_panel, cx);
+        self.project_previews(cx);
         glyph_sources::project(&mut self.glyph_sources, cx);
     }
 }

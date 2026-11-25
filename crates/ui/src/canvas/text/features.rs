@@ -15,6 +15,7 @@ use fontcraft_engine::fea::LayoutTable;
 use fontcraft_engine::feature_state::FeatureState;
 use fontcraft_engine::prelude::*;
 use fontcraft_textlayout::shaping::Tag;
+pub use fontcraft_textlayout::tag;
 use serde_json::{Map, Value, json};
 
 use crate::app::FontCraftApp;
@@ -58,19 +59,6 @@ impl Features {
             (script, language)
         })
     }
-}
-
-/// A tag from text: one to four printable ASCII characters, not starting with a space, padded with spaces.
-pub fn tag(text: &str) -> Option<Tag> {
-    let bytes = text.as_bytes();
-    if bytes.is_empty() || bytes.len() > 4 || !bytes.iter().all(|b| (0x20..=0x7e).contains(b)) || bytes.first() == Some(&b' ') {
-        return None;
-    }
-    let mut out = [b' '; 4];
-    for (slot, b) in out.iter_mut().zip(bytes) {
-        *slot = *b;
-    }
-    Some(Tag::new(&out))
 }
 
 /// A tag as text, without its padding.

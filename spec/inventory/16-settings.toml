@@ -1035,7 +1035,7 @@ milestone = "M13"
 summary = "The viewer shows the Edit View that is currently active, and every edit appears there immediately."
 ref = "Settings › Sharing"
 status = "handbook"
-notes = "FontCraft: the page shows the active tab's glyphs filled, on one line, in the tab's master, drawn by `preview.render` as SVG at most 4 times a second, and reloads itself every second with a meta refresh, with no script. It follows tab switches. With Font View showing, the page says so. Documented, not yet observed."
+notes = "FontCraft: the page shows the active tab's glyphs filled, on one line, in the tab's master, shaped with the tab's features and in colour while Edit View draws in colour, drawn by `preview.render` as SVG at most 4 times a second, and reloads itself every second with a meta refresh, with no script. It follows tab switches. With Font View showing, the page says so. Documented, not yet observed."
 guesses = [
   "The page reloads every second.",
   "The tab is drawn filled on one line, as the preview line draws it, not with nodes, metrics or line breaks.",

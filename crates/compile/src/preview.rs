@@ -90,8 +90,18 @@ pub fn layout_font(font: &Font, master: &str, kind: PreviewKind) -> Result<Previ
 /// the generated kerning and marks for [`PreviewKind::Full`] and their `GDEF` classes for both
 /// kinds (the classes decide which glyphs a lookup skips).
 pub fn layout_font_with(font: &Font, master: &str, kind: PreviewKind, options: &Options) -> Result<PreviewFont, CompileError> {
-    let stages = Stages::run(font, master, options, kind == PreviewKind::Full)?;
+    font.master(master)?;
+    let stages = Stages::run(font, &Target::Master(master.to_string()), options, kind == PreviewKind::Full)?;
     stages.font(master, kind)
+}
+
+/// Builds the `GSUB`-only preview font of the static instance at `instance`, as the previews shape
+/// with: the features its parameters replace, rename or remove, and the glyphs it leaves out or
+/// swaps, are as in the exported instance. Options as for [`layout_font_with`];
+/// [`PreviewFont::master`] is empty.
+pub fn instance_layout_font(font: &Font, instance: usize, options: &Options) -> Result<PreviewFont, CompileError> {
+    let stages = Stages::run(font, &Target::Instance(instance), options, false)?;
+    stages.font("", PreviewKind::GsubOnly)
 }
 
 /// Both preview fonts of one master from one compile of its feature code, with what the code
@@ -113,7 +123,8 @@ pub struct PreviewBuild {
 /// Builds both preview fonts of `master` with one compile of the feature code, `GPOS` included,
 /// so its diagnostics cover the whole code. Options as for [`layout_font_with`].
 pub fn layout_fonts_with(font: &Font, master: &str, options: &Options) -> Result<PreviewBuild, CompileError> {
-    let stages = Stages::run(font, master, options, true)?;
+    font.master(master)?;
+    let stages = Stages::run(font, &Target::Master(master.to_string()), options, true)?;
     let full = stages.font(master, PreviewKind::Full)?;
     let gsub_only = stages.font(master, PreviewKind::GsubOnly)?;
     let declared = &stages.layout.declared;
@@ -121,7 +132,7 @@ pub fn layout_fonts_with(font: &Font, master: &str, options: &Options) -> Result
     Ok(PreviewBuild { diagnostics: full.diagnostics.clone(), code_features, full: Arc::new(full), gsub_only: Arc::new(gsub_only) })
 }
 
-/// The glyphs of one master after the export's glyph stages, and its compiled layout tables.
+/// The glyphs of one master or instance after the export's glyph stages, and its compiled layout tables.
 struct Stages {
     resolved: Resolved,
     glyphs: Vec<ResolvedGlyph>,
@@ -130,14 +141,12 @@ struct Stages {
 }
 
 impl Stages {
-    fn run(font: &Font, master: &str, options: &Options, gpos: bool) -> Result<Self, CompileError> {
+    fn run(font: &Font, target: &Target, options: &Options, gpos: bool) -> Result<Self, CompileError> {
         font.check()?;
-        font.master(master)?;
-        let target = Target::Master(master.to_string());
         let mut warnings = Vec::new();
-        let (source, prepared) = crate::sources_at(font, &target, &mut warnings)?;
-        let mut resolved = crate::drawing::resolve(&prepared, &target)?;
-        let options = crate::with_instance_feature_axes(options, font, &target);
+        let (source, prepared) = crate::sources_at(font, target, &mut warnings)?;
+        let mut resolved = crate::drawing::resolve(&prepared, target)?;
+        let options = crate::with_instance_feature_axes(options, font, target);
         crate::fill_glyph_data(&mut resolved, &options, &mut warnings);
         crate::info::expand_tokens(Some(&*source), &mut resolved, &mut warnings);
         let edits = crate::export_params::apply(Some(&*source), &mut resolved, &mut warnings)?;

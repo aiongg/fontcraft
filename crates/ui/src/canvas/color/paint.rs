@@ -12,8 +12,9 @@
 use craft::ui::primitives::TextureCache;
 use egui::epaint::Vertex;
 use egui::{Color32, ColorImage, Mesh, Painter, Pos2, Rect, Shape, TextureOptions, pos2};
-use fontcraft_geom::{Affine, BezPath, Point, Shape as _};
-use fontcraft_render::color::artwork::{self, Drawable, Item, Leaf};
+pub use fontcraft_engine::color_drawing::raster::{MAX_GLYPH_PAINT_WORK, MAX_PAINT_WORK, PAINT_WORK_PER_PIXEL, rasterise};
+use fontcraft_geom::{Affine, Point};
+use fontcraft_render::color::artwork::{self, Item};
 
 use super::{Bitmap, ColorArt, Content};
 use crate::canvas::layers::PaintCx;
@@ -22,14 +23,6 @@ use crate::canvas::layers::PaintCx;
 pub const MAX_TEXTURE_PIXELS: f64 = 4_194_304.0;
 /// Longest side of one colour texture, in pixels.
 pub const MAX_TEXTURE_SIDE: f64 = 4096.0;
-/// Pixel operations (a piece's pixel box times its passes, summed over the pieces) one glyph may take to draw: at
-/// least this, or [`PAINT_WORK_PER_PIXEL`] per pixel of the glyph's own box when that is more, up to
-/// [`MAX_GLYPH_PAINT_WORK`].
-pub const MAX_PAINT_WORK: u64 = 64 << 20;
-/// Pixel operations one pixel of a glyph's box allows, for glyphs drawn large.
-pub const PAINT_WORK_PER_PIXEL: u64 = 256;
-/// Most pixel operations one glyph may take to draw, however large it is drawn.
-pub const MAX_GLYPH_PAINT_WORK: u64 = 1 << 30;
 
 /// White is the identity tint: a texture's own colours show.
 const UNTINTED: Color32 = Color32::WHITE;
@@ -48,64 +41,6 @@ pub fn texture_scale(scale: f64, bounds: fontcraft_geom::Rect) -> Option<(f64, u
     }
     let (pw, ph) = ((w * s).ceil().max(1.0), (h * s).ceil().max(1.0));
     (pw.is_finite() && ph.is_finite()).then_some((s, pw as u32, ph as u32))
-}
-
-/// The pixel operations `items` take in a `width × height` image, roughly as the rasteriser counts them, and the
-/// budget they get.
-fn work(items: &[Item], to_pixels: Affine, width: u32, height: u32) -> (u64, u64) {
-    let image = fontcraft_geom::Rect::new(0.0, 0.0, f64::from(width), f64::from(height));
-    let area = |r: fontcraft_geom::Rect| {
-        let r = to_pixels.transform_rect_bbox(r).intersect(image);
-        let a = r.width().max(0.0) * r.height().max(0.0);
-        if a.is_finite() { a.ceil() as u64 } else { u64::MAX }
-    };
-    let count = |n: usize| u64::try_from(n).unwrap_or(u64::MAX);
-    let cost = items.iter().fold(0u64, |sum, item| {
-        let Some(rect) = item.bounds() else { return sum };
-        let passes = match item {
-            Item::Fill(d) => count(d.clips.len()).saturating_add(1),
-            Item::Shadow { outlines, .. } => count(outlines.len()).saturating_add(8),
-            Item::InnerShadow { .. } => 10,
-            Item::Pattern { .. } => 2,
-        };
-        sum.saturating_add(area(rect).saturating_mul(passes))
-    });
-    let whole = artwork::bounds(items).map_or(0, area);
-    (cost, MAX_PAINT_WORK.max(PAINT_WORK_PER_PIXEL.saturating_mul(whole).min(MAX_GLYPH_PAINT_WORK)))
-}
-
-/// The outer outlines of `items` joined as one path, each turned to one winding so that layers wound in opposite
-/// directions add up under the nonzero rule.
-fn silhouette(items: &[Item]) -> BezPath {
-    let mut all = BezPath::new();
-    let mut add = |p: &BezPath| {
-        let p = if p.area() < 0.0 { p.reverse_subpaths() } else { p.clone() };
-        all.extend(p.elements().iter().copied());
-    };
-    for item in items {
-        match item {
-            Item::Fill(d) => d.clips.first().into_iter().for_each(&mut add),
-            Item::Shadow { outlines, .. } => outlines.iter().for_each(&mut add),
-            Item::InnerShadow { outline, .. } | Item::Pattern { outline, .. } => add(outline),
-        }
-    }
-    all
-}
-
-/// `items` drawn into `width × height` premultiplied pixels; `to_pixels` maps font units to pixels. Past the work
-/// budget, or when the artwork is refused, the outlines are filled in `plain`. Answers the pixels and whether the
-/// artwork itself was drawn.
-pub fn rasterise(items: &[Item], to_pixels: Affine, width: u32, height: u32, plain: [f32; 4]) -> (Vec<u8>, bool) {
-    let blank = || vec![0u8; width as usize * height as usize * 4];
-    let (cost, budget) = work(items, to_pixels, width, height);
-    if cost <= budget
-        && let Ok(image) = artwork::rasterize(items, to_pixels, width, height)
-    {
-        return (image.pixels, true);
-    }
-    let fill = Item::Fill(Drawable { clips: vec![silhouette(items)], leaf: Leaf::Solid(plain) });
-    let pixels = artwork::rasterize(std::slice::from_ref(&fill), to_pixels, width, height).map_or_else(|_| blank(), |i| i.pixels);
-    (pixels, false)
 }
 
 /// Draws `art` with `painter`: `to_screen` maps its font units to screen points (y down); a half turn (the Space

@@ -97,6 +97,7 @@ mod palette_dark;
 mod path;
 mod pathops;
 pub mod preview;
+pub mod preview_line;
 mod project;
 mod scale_upm;
 mod session;

@@ -371,11 +371,11 @@ pub fn layout(font: &Font, master: &str, text: &Text, options: &Options<'_>) -> 
     // Shaping: an item shows the glyphs the preview font's substitutions give it.
     let mut shaping_error = None;
     if let Some(shaping) = options.shaping.as_ref() {
-        let (shaped, error) = shape_items(font, text, direction, shaping);
-        shaping_error = error;
-        for (at, (m, glyphs)) in items.iter_mut().zip(shaped).enumerate() {
+        let shaped = shape_items(font, text, direction, shaping);
+        shaping_error.clone_from(&shaped.1);
+        for (at, (m, glyphs)) in items.iter_mut().zip(&shaped.0).enumerate() {
             let Some(glyphs) = glyphs else { continue };
-            let mut found = glyphs.into_iter().filter_map(|name| font.glyph(&name).map(|g| metrics_of(name.clone(), g, at)));
+            let mut found = glyphs.iter().filter_map(|name| font.glyph(name).map(|g| metrics_of(name.clone(), g, at)));
             let Some(mut first) = found.next() else {
                 *m = Metrics { merged: true, ..blank(false, 0.0, false) };
                 continue;

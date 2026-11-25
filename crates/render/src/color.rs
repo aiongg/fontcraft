@@ -326,24 +326,118 @@ impl ColorRenderer {
 /// Lays `raster` over `target` (premultiplied, source over) with the glyph origin at pixel
 /// corner `(x, y)`.
 pub fn composite(target: &mut Image, raster: &GlyphRaster, x: i64, y: i64) {
+    composite_image(target, &raster.image, x.saturating_add(i64::from(raster.left)), y.saturating_add(i64::from(raster.top)));
+}
+
+/// Lays `image` over `target` (premultiplied, source over) with its top left corner at pixel
+/// corner `(x, y)`.
+pub fn composite_image(target: &mut Image, image: &Image, x: i64, y: i64) {
     let (tw, th) = (i64::from(target.width), i64::from(target.height));
-    let (sw, sh) = (i64::from(raster.image.width), i64::from(raster.image.height));
-    let (ox, oy) = (x.saturating_add(i64::from(raster.left)), y.saturating_add(i64::from(raster.top)));
-    let (x0, y0) = (ox.max(0), oy.max(0));
-    let (x1, y1) = (ox.saturating_add(sw).min(tw), oy.saturating_add(sh).min(th));
+    let (sw, sh) = (i64::from(image.width), i64::from(image.height));
+    let (x0, y0) = (x.max(0), y.max(0));
+    let (x1, y1) = (x.saturating_add(sw).min(tw), y.saturating_add(sh).min(th));
     for ty in y0..y1 {
         for tx in x0..x1 {
-            let from = (((ty - oy) * sw + (tx - ox)) * 4) as usize;
+            let from = (((ty - y) * sw + (tx - x)) * 4) as usize;
             let to = ((ty * tw + tx) * 4) as usize;
-            let Some(&[r, g, b, a]) = raster.image.pixels.get(from..from + 4).and_then(|s| <&[u8; 4]>::try_from(s).ok()) else { continue };
+            let Some(&[r, g, b, a]) = image.pixels.get(from..from + 4).and_then(|s| <&[u8; 4]>::try_from(s).ok()) else { continue };
             if a == 0 {
                 continue;
             }
             let Some(d) = target.pixels.get_mut(to..to + 4) else { continue };
-            let keep = 255 - u16::from(a);
-            for (d, s) in d.iter_mut().zip([r, g, b, a]) {
-                *d = (u16::from(s) + (u16::from(*d) * keep + 127) / 255).min(255) as u8;
+            over(d, [r, g, b, a]);
+        }
+    }
+}
+
+/// `s` (premultiplied) over the premultiplied pixel `d`.
+fn over(d: &mut [u8], s: [u8; 4]) {
+    let keep = 255 - u16::from(s[3]);
+    for (d, s) in d.iter_mut().zip(s) {
+        *d = (u16::from(s) + (u16::from(*d) * keep + 127) / 255).min(255) as u8;
+    }
+}
+
+/// Lays `bitmap` (straight RGBA, rows top to bottom) over `target`, smoothed: `place` maps the
+/// bitmap's pixels, y up from its bottom left, to the target's pixels. A bitmap drawn at less
+/// than half its size is averaged down first. Nothing is drawn for a transform without an
+/// inverse or a bitmap whose pixels do not fit its size.
+pub fn draw_bitmap(target: &mut Image, bitmap: &fontcraft_imagery::Rgba8, place: Affine) {
+    let det = place.determinant();
+    let (mut w, mut h) = (bitmap.width as usize, bitmap.height as usize);
+    if !(det.is_finite() && det.abs() > 1e-12) || w == 0 || h == 0 || bitmap.pixels.len() != w.saturating_mul(h).saturating_mul(4) {
+        return;
+    }
+    let mut pixels: Vec<[u8; 4]> = bitmap
+        .pixels
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|&[r, g, b, a]| {
+            let m = |c: u8| ((u16::from(c) * u16::from(a) + 127) / 255) as u8;
+            [m(r), m(g), m(b), a]
+        })
+        .collect();
+    let mut place = place;
+    let mut scale = det.abs().sqrt();
+    while scale < 0.5 && w > 1 && h > 1 {
+        let (nw, nh) = (w / 2, h / 2);
+        let mut halved = Vec::with_capacity(nw * nh);
+        for y in 0..nh {
+            for x in 0..nw {
+                let mut sum = [0u16; 4];
+                for (dx, dy) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+                    let p = pixels.get((2 * y + dy) * w + 2 * x + dx).copied().unwrap_or_default();
+                    for (s, c) in sum.iter_mut().zip(p) {
+                        *s += u16::from(c);
+                    }
+                }
+                halved.push(sum.map(|s| (s / 4) as u8));
             }
+        }
+        place *= Affine::scale_non_uniform(w as f64 / nw as f64, h as f64 / nh as f64);
+        (pixels, w, h) = (halved, nw, nh);
+        scale *= 2.0;
+    }
+    let (fw, fh) = (w as f64, h as f64);
+    let area = place.transform_rect_bbox(fontcraft_geom::Rect::new(0.0, 0.0, fw, fh));
+    if ![area.x0, area.y0, area.x1, area.y1].iter().all(|v| v.is_finite()) {
+        return;
+    }
+    let inverse = place.inverse();
+    let (tw, th) = (f64::from(target.width), f64::from(target.height));
+    let (x0, y0) = ((area.x0 - 1.0).max(0.0).floor() as usize, (area.y0 - 1.0).max(0.0).floor() as usize);
+    let (x1, y1) = ((area.x1 + 1.0).clamp(0.0, tw).ceil() as usize, (area.y1 + 1.0).clamp(0.0, th).ceil() as usize);
+    let at = |x: f64, y: f64| -> [f64; 4] {
+        if x < 0.0 || y < 0.0 || x >= fw || y >= fh {
+            return [0.0; 4];
+        }
+        pixels.get(y as usize * w + x as usize).copied().unwrap_or_default().map(f64::from)
+    };
+    for y in y0..y1 {
+        for x in x0..x1 {
+            let p = inverse * Point::new(x as f64 + 0.5, y as f64 + 0.5);
+            let (u, v) = (p.x - 0.5, fh - p.y - 0.5);
+            if !(u > -1.0 && v > -1.0 && u < fw && v < fh) {
+                continue;
+            }
+            let (left, top) = (u.floor(), v.floor());
+            let (fx, fy) = (u - left, v - top);
+            let corners = [
+                (at(left, top), (1.0 - fx) * (1.0 - fy)),
+                (at(left + 1.0, top), fx * (1.0 - fy)),
+                (at(left, top + 1.0), (1.0 - fx) * fy),
+                (at(left + 1.0, top + 1.0), fx * fy),
+            ];
+            let mut mixed = [0.0f64; 4];
+            for (c, k) in corners {
+                for (m, c) in mixed.iter_mut().zip(c) {
+                    *m += c * k;
+                }
+            }
+            let to = (y * target.width as usize + x) * 4;
+            let Some(d) = target.pixels.get_mut(to..to + 4) else { continue };
+            over(d, mixed.map(|v| v.round().clamp(0.0, 255.0) as u8));
         }
     }
 }

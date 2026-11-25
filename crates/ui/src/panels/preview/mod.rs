@@ -3,7 +3,7 @@
 //!
 //! The strip is a canvas whose view the line's placement sets (`app::models::preview::place`): dragging it shifts the
 //! line (`preview.setOffset`), a double-click on a glyph makes it the edited glyph (`editView.setCursor`). The line is
-//! rasterised as `preview.render` draws it, so Invert, Flip and Blur act on pixels; the picture is kept as a texture
+//! rasterised as `preview.render` draws it, colour glyphs laid over the ink, so Invert, Flip and Blur act on pixels; the picture is kept as a texture
 //! until what it shows changes. Both previews post the same commands with their own `target`.
 
 pub mod tokens;
@@ -23,8 +23,9 @@ use craft::ui::runtime::env::Env;
 use craft::ui::value_drag::Slider;
 use egui::{Color32, ColorImage, Pos2, Rect, TextureOptions, Ui};
 use fontcraft_engine::cmd::preview::{MAX_BLUR, blur_pixels, blur_radius, turn_pixels};
+use fontcraft_engine::cmd::preview_line::line_picture;
 use fontcraft_geom::Affine;
-use fontcraft_render::{Style, render_path};
+use fontcraft_render::Style;
 use serde_json::json;
 
 pub use self::tokens::PreviewTokens;
@@ -166,7 +167,7 @@ fn picture(model: &PreviewModel, placement: &Placement, ppp: f32, ink: Color32, 
     let s = placement.scale;
     let to_pixels = Affine::scale(ppp) * Affine::translate((placement.x0 - left, placement.baseline - top)) * Affine::scale_non_uniform(s, -s);
     let style = Style { ink: ink.to_srgba_unmultiplied(), background: paper.to_srgba_unmultiplied(), anti_alias: true };
-    let image = render_path(&model.outline, to_pixels, width, height, &style).ok()?;
+    let image = line_picture(&model.outline, &model.colors, to_pixels, width, height, &style).ok()?;
     let mut pixels = image.pixels;
     if placement.flip {
         pixels = turn_pixels(&pixels);
@@ -244,3 +245,7 @@ fn instance_menu(ui: &mut Ui, model: &PreviewModel, target: Target, words: &Prev
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic)]
 mod tests;
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::panic)]
+mod drawing_tests;

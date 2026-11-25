@@ -458,6 +458,8 @@ the active Edit View tab and is blank otherwise.
 - Invert (`preview.invert`), Flip upside down (`preview.flip`), blur slider
   (`preview.setBlur`).
 - Rendering uses intermediate and alternate layers and some custom parameters.
+- The line is shaped with the tab's features, script and language, as the edit view's text is; an instance's line
+  through a preview font of the instance. While the edit view draws in colour, the line does too.
 - `preview.render` (ours) returns the preview as an image for agents.
 
 **Testing exported fonts** (behaviour rows only; the export dialog is specified elsewhere):

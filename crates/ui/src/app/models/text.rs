@@ -55,6 +55,7 @@ pub struct TextModel {
     /// The other glyphs of the text, each placed.
     pub glyphs: Vec<TextGlyph>,
     /// The other glyphs of the text drawn in colour (`canvas::color::text_colors`).
+    #[plain_data(assume = "colour drawings shared between the glyphs of one name")]
     pub colors: Vec<crate::canvas::color::PlacedColor>,
     /// The kerned gaps as `[x0, y0, x1, y1]` and whether the kerning closes the gap.
     pub kerned: Vec<([f64; 4], bool)>,
@@ -133,6 +134,11 @@ impl ShaperSlot {
             .map(Arc::new)
             .map_err(|e| e.to_string());
         ShaperSlot(Some((preview, shaper)))
+    }
+
+    /// The shaper, while it is the one of `preview`.
+    pub fn ready(&self, preview: &Arc<PreviewFont>) -> Option<Arc<PreviewShaper>> {
+        self.shaper(Some(preview))?.as_ref().ok().cloned()
     }
 
     fn shaper(&self, preview: Option<&Arc<PreviewFont>>) -> Option<&Result<Arc<PreviewShaper>, String>> {

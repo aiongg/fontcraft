@@ -25,6 +25,7 @@
 
 pub mod assets;
 pub mod cmd;
+pub mod color_drawing;
 pub(crate) mod export_steps;
 pub mod extension_index;
 pub mod extensions;
@@ -38,6 +39,7 @@ pub mod io;
 pub(crate) mod linked;
 pub mod log;
 pub mod macros;
+pub mod preview_shapers;
 pub mod project;
 pub mod slots;
 pub mod spacing_state;

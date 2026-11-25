@@ -4,10 +4,10 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use fontcraft_engine::color::AssetStore;
-use fontcraft_engine::color::svg_draw::{self, SvgShape};
-use fontcraft_engine::imagery::{self, Rgba8};
+use fontcraft_color::AssetStore;
+use fontcraft_color::svg_draw::{self, SvgShape};
 use fontcraft_geom::Affine;
+use fontcraft_imagery::{self as imagery, Rgba8};
 use fontcraft_model::{Family, ShapeAttrs};
 use fontcraft_render::color::artwork::Pattern;
 

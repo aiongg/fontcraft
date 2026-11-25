@@ -109,7 +109,7 @@ fn render_draws_the_line_at_the_instance_with_its_widths() {
     assert!(text["svg"].as_str().unwrap().starts_with("<svg"));
     assert_eq!(text["warnings"].as_array().unwrap().len(), 1);
     let features = run(&mut s, "preview.render", json!({"glyphs": ["a"], "features": ["liga"]}));
-    assert_eq!(features["warnings"].as_array().unwrap().len(), 1, "feature code is not applied, and says so");
+    assert_eq!(features["warnings"].as_array().unwrap().len(), 1, "a feature the font does not have is named");
 
     run_err(&mut s, "preview.render", json!({}));
     run_err(&mut s, "preview.render", json!({"glyphs": ["a"], "format": "gif"}));
@@ -118,6 +118,41 @@ fn render_draws_the_line_at_the_instance_with_its_widths() {
     run_err(&mut s, "preview.render", json!({"glyphs": ["a"], "instance": "Regular", "master": "thin"}));
     run_err(&mut s, "preview.render", json!({"glyphs": ["missing"]}));
     run_err(&mut s, "preview.render", json!({"glyphs": vec!["a"; 1001]}));
+}
+
+#[test]
+fn render_shapes_with_the_features_asked_for() {
+    let mut s = session();
+    s.edit("glyphs", |font| {
+        let mut all: Vec<Arc<Glyph>> = font.glyphs.iter().cloned().collect();
+        let mut add = |name: &str, unicode: Option<u32>| {
+            let mut g = Glyph::clone(&glyph(name, 0, 150.0, 150.0));
+            g.unicodes = unicode.into_iter().collect();
+            all.push(Arc::new(g));
+        };
+        add("a_b", None);
+        add("beh-ar", Some(0x628));
+        for form in ["init", "medi", "fina"] {
+            add(&format!("beh-ar.{form}"), None);
+        }
+        font.glyphs = GlyphTable::from_glyphs(all);
+        Ok(())
+    })
+    .unwrap();
+    run(&mut s, "font.features.addFeature", json!({"tag": "liga", "code": "sub a b by a_b;"}));
+    for form in ["init", "medi", "fina"] {
+        run(&mut s, "font.features.addFeature", json!({"tag": form, "code": format!("script arab;\nsub beh-ar by beh-ar.{form};")}));
+    }
+    let plain = run(&mut s, "preview.render", json!({"text": "ab"}));
+    assert_eq!((plain["glyphs"].clone(), plain["direction"].clone()), (json!(["a", "b"]), json!("ltr")));
+    for instance in ["master", "Regular"] {
+        let r = run(&mut s, "preview.render", json!({"text": "ab", "features": ["liga"], "instance": instance}));
+        assert_eq!((r["glyphs"].clone(), r["warnings"].clone()), (json!(["a_b"]), json!([])), "{instance}: {r}");
+    }
+    let r = run(&mut s, "preview.render", json!({"text": "\u{628}\u{628}\u{628}", "features": ["init", "medi", "fina"]}));
+    assert_eq!((r["glyphs"].clone(), r["direction"].clone()), (json!(["beh-ar.init", "beh-ar.medi", "beh-ar.fina"]), json!("rtl")), "{r}");
+    run_err(&mut s, "preview.render", json!({"text": "ab", "features": ["toolong"]}));
+    run_err(&mut s, "preview.render", json!({"text": "ab", "direction": "up"}));
 }
 
 #[test]
