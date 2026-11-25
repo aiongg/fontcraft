@@ -47,7 +47,7 @@ fn batch(s: &mut Session, p: &Value) -> Result<Value> {
         Ok(()) => Ok(json!({ "results": results })),
         Err(e) if written.count > 0 => {
             let why = match e {
-                EngineError::BadParams { message, .. } => message,
+                crate::EngineError::BadParams { message, .. } => message,
                 e => e.to_string(),
             };
             Err(p.bad(format!("{why}; the files its steps wrote stay: {}", files_named(&written))))
