@@ -210,7 +210,8 @@ the fonts can be checked with other readers (fontTools' `TTFont(...).ensureDecom
   `cargo xtask roundtrip` runs this over the whole corpus and prints, per format and version,
   how many files come back identical; files saved by the format's reference tool are reported
   apart, since only they are held to byte identity. Accepted differences, each with its reason,
-  are in `xtask/roundtrip-allow.toml`.
+  are in `xtask/roundtrip-allow.toml`. A designspace whose masters are not UFOs in the corpus is counted
+  as not applicable.
 - **CFF tables.** `crates/cff/crosscheck/crosscheck.py` (run with the fontmake tool's Python,
   outside the gate) compiles each corpus UFO and a few synthetic fonts with ufo2ft at
   `--optimize-cff 1`, records what its charstring pen receives, has the `cff_from_json` example

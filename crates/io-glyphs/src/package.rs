@@ -84,6 +84,12 @@ fn text<'a>(files: &'a Files, path: &str) -> Result<&'a str> {
 
 /// Reads a package from its files.
 pub fn read_package(files: &Files) -> Result<Font> {
+    read_package_reporting(files).map(|(font, _)| font)
+}
+
+/// [`read_package`], with warnings about what breaks the format's rules and was read in a plainer
+/// form (the `lenient` module).
+pub fn read_package_reporting(files: &Files) -> Result<(Font, Vec<String>)> {
     let info = openstep::parse(text(files, FONTINFO)?)?;
     let Value::Dict(mut root) = info.root else { return Err(bad(FONTINFO, "the top level is not a dictionary")) };
     if root.get("glyphs").is_some() {
@@ -212,8 +218,9 @@ pub fn read_package(files: &Files) -> Result<Font> {
         .map(|(p, b)| (p.clone(), Arc::from(b.as_slice())))
         .collect();
     font.files = Arc::new(FileStore(side));
+    let warnings = crate::lenient::repair(&mut font);
     font.check()?;
-    Ok(font)
+    Ok((font, warnings))
 }
 
 /// Writes a document as a package's files.

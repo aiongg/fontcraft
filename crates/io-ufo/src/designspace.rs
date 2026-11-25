@@ -309,6 +309,7 @@ fn read_as(text: &str, ufos: &BTreeMap<String, Files>, convert: bool) -> Result<
     let default_index = sources.iter().position(|s| s.layer.is_none() && s.location == defaults).unwrap_or(0);
 
     // Read each source's UFO as its master; a UFO two sources share is read for each.
+    let mut warnings: Vec<String> = Vec::new();
     let mut read: Vec<Option<ReadUfo>> = Vec::new();
     let mut main_of: HashMap<String, usize> = HashMap::new();
     for (i, s) in sources.iter().enumerate() {
@@ -318,7 +319,10 @@ fn read_as(text: &str, ufos: &BTreeMap<String, Files>, convert: bool) -> Result<
         }
         let files = ufos.get(&s.filename).ok_or_else(|| bad(&s.filename, "the UFO is missing"))?;
         let r = ufo::read_master(files, &s.id).map_err(|e| prefix_error(&s.filename, e))?;
-        main_of.entry(s.filename.clone()).or_insert(i);
+        if !main_of.contains_key(&s.filename) {
+            warnings.extend(r.warnings.iter().map(|w| format!("{}: {w}", s.filename)));
+            main_of.insert(s.filename.clone(), i);
+        }
         read.push(Some(r));
     }
     for s in &sources {
@@ -496,7 +500,7 @@ fn read_as(text: &str, ufos: &BTreeMap<String, Files>, convert: bool) -> Result<
     }
     crate::glyphkeys::read(&mut font, &default_id);
     crate::libkeys::read(&mut font, true, &default_id);
-    let warnings: Vec<String> = crate::colorkeys::read(&mut font).into_iter().collect();
+    warnings.extend(crate::colorkeys::read(&mut font));
     crate::gdef::strip_derived(&mut font, &default_id);
     let mut converted = intermediate.iter().any(|b| *b);
     if convert
