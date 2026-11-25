@@ -33,6 +33,11 @@
 //!   Paste asks for the clipboard's text and hands it back to `window.project.paste`. Copy and Paste fired while the
 //!   instance list holds the keyboard focus go to that list, which posts the same commands.
 //!
+//! - In the Kerning window, Copy runs `kerning.copyPairs` on the selected rows and puts its `text` on the clipboard;
+//!   Paste (`dialog.pasteKerningConflict` without pairs) asks for the clipboard's text and pastes it into the master and
+//!   direction listed; Select All selects every listed row. A menu gives the keyboard focus back to the list before its
+//!   command runs, so the Edit menu reaches the list as the keys do.
+//!
 //! The text goes out through [`Clipboard::out`], which the shell hands to the window's clipboard.
 //!
 //! Why paste reads the clipboard itself: craft hands the platform's paste event only to a focused component that lists
@@ -113,6 +118,8 @@ pub enum PasteKind {
     Special,
     /// Feature entries into the Features sidebar.
     FeatureEntries,
+    /// Kerning pairs into the master and direction the Kerning window lists (`dialog.pasteKerningConflict`).
+    KerningPairs,
     /// Instances copied in the Project panel, into the project with this id (`window.project.paste`).
     ProjectInstances(u64),
 }
@@ -130,11 +137,12 @@ pub struct Clipboard {
     pub pending: Option<PendingPdf>,
 }
 
-/// After a run of `id`: Copy and Cut put their `json` text on the clipboard, Copy Glyph Names its `text`.
+/// After a run of `id`: Copy and Cut put their `json` text on the clipboard, Copy Glyph Names, Copy Feature Entries and
+/// Copy Kerning Pairs their `text`.
 pub fn after_run(app: &mut FontCraftApp, id: &str, result: &Value) {
     let key = match id {
         COPY | CUT => "json",
-        "glyph.copyGlyphNames" | "font.features.copyEntries" => "text",
+        "glyph.copyGlyphNames" | "font.features.copyEntries" | "kerning.copyPairs" => "text",
         _ => return,
     };
     if let Some(text) = result.get(key).and_then(Value::as_str) {
@@ -179,7 +187,8 @@ fn edit_command(id: &str) -> Option<EditCommand> {
 }
 
 /// Hands an Edit command the person fired with no parameters to the list that holds the keyboard focus and takes it
-/// (the Features sidebar and the Project panel's instance list take Copy and Paste); `true` when the list took it, and
+/// (the Features sidebar and the Project panel's instance list take Copy and Paste, the Kerning window's list takes
+/// Select All too); `true` when the list took it, and
 /// the document is left alone.
 pub fn to_focused_list(app: &FontCraftApp, command: &CommandRef) -> bool {
     let Some(edit) = edit_command(&command.id) else { return false };
@@ -230,6 +239,16 @@ pub fn paste_msg(app: &mut FontCraftApp, text: &str, kind: PasteKind) -> Result<
     if let PasteKind::ProjectInstances(project) = kind {
         let params = json!({ "project": project, "text": text });
         return Ok(Msg::Shell(CommandRef::with_params(crate::shell::project::PASTE, params)));
+    }
+    if kind == PasteKind::KerningPairs {
+        let window = &app.models.kerning_window;
+        let mut params = Map::new();
+        params.insert("text".into(), json!(text));
+        params.insert("direction".into(), json!(window.direction));
+        if let Some(master) = &window.master {
+            params.insert("master".into(), json!(master));
+        }
+        return Ok(Msg::Shell(CommandRef::with_params("dialog.pasteKerningConflict", Value::Object(params))));
     }
     let glyphs = holds_glyphs(text);
     if kind == PasteKind::Special {

@@ -9,12 +9,14 @@ use craft::ui::contract::Tracked;
 use craft::ui::dialog::{DialogResult, DialogStack, StackDialog};
 use craft::ui::runtime::commands::CommandRef;
 use craft::ui::testing::Fixture;
+use craft_ext::ui::list::{EditCommand, deliver};
 use egui::{Key, Modifiers};
 use fontcraft_engine::Session;
 use fontcraft_engine::model::Layer;
 use serde_json::{Map, Value, json};
 
 use super::{Props, show};
+use crate::app::clipboard::{self, PasteKind};
 use crate::app::models::kerning_window::{KernRow, KerningWindowModel};
 use crate::app::{APP, FontCraftApp, Msg};
 use crate::dialogs::kerning_audit::AuditDialog;
@@ -168,6 +170,180 @@ fn show_all_glyphs_puts_every_pair_of_the_current_row_into_the_text() {
     assert!(app.status.contains("both"), "one side alone is refused: {}", app.status);
 }
 
+/// The list follows the writing direction of the tab until the window names one; what the window posts goes to the
+/// direction listed, and a new tab for a pair takes it.
+#[test]
+fn an_arabic_pair_is_listed_edited_and_deleted_in_its_direction() {
+    let mut session = kerned_session(-60.0);
+    session.execute("kerning.setPair", &json!({"left": "o", "right": "T", "value": -30, "direction": "rtl"})).expect("a right-to-left pair");
+    let mut app = app_over(session);
+    ran(&mut app, shell("window.kerning", json!({})));
+    assert_eq!(listed(&app).len(), 2);
+    ran(&mut app, shell("editView.setWritingDirection", json!({"direction": "rtl"})));
+    assert_eq!(listed(&app), vec![("o".into(), "T".into(), -30.0)], "the tab's direction");
+    ran(&mut app, shell("window.kerning", json!({"direction": "vertical"})));
+    assert!(listed(&app).is_empty());
+    ran(&mut app, shell("window.kerning", json!({"direction": null})));
+
+    ran(&mut app, shell("window.kerning", json!({"select": [{"left": "o", "right": "T"}]})));
+    let model = app.models.kerning_window.clone();
+    assert_eq!((model.direction.as_str(), model.selected.clone()), ("rtl", vec![0]));
+    let mut p = super::scope(&model);
+    for (k, v) in [("left", json!("o")), ("right", json!("T")), ("value", json!(-44))] {
+        p.insert(k.into(), v);
+    }
+    ran(&mut app, Msg::run("kerning.setPair", Value::Object(p)));
+    assert_eq!(listed(&app), vec![("o".into(), "T".into(), -44.0)]);
+    let mut sent = Vec::new();
+    super::delete(&app.models.kerning_window, &[0], false, &mut sent);
+    for msg in sent {
+        ran(&mut app, msg);
+    }
+    assert!(listed(&app).is_empty());
+    assert_eq!(stored(&mut app, "T", "@o"), Some(-60.0), "the left-to-right pairs stay");
+}
+
+/// Adds a second master m02 whose layers are 600 wide.
+fn add_master(session: &mut Session) {
+    session
+        .edit("setup", |font| {
+            let mut m = font.default_master()?.clone();
+            m.id = "m02".into();
+            m.name = "Bold".into();
+            Arc::make_mut(&mut font.masters).push(m);
+            let names: Vec<String> = font.glyphs.iter().map(|g| g.name.clone()).collect();
+            for name in names {
+                font.glyph_mut(&name)?.layers.push(Layer::new("m02", 600.0));
+            }
+            Ok(())
+        })
+        .expect("a second master");
+}
+
+/// Copy, switch master, Paste: without a clash the pairs arrive in the master shown; with one the question opens.
+#[test]
+fn copied_pairs_paste_into_the_master_shown() {
+    let mut session = kerned_session(-60.0);
+    add_master(&mut session);
+    let mut app = app_over(session);
+    ran(&mut app, shell("window.kerning", json!({})));
+    ran(&mut app, shell("window.kerning", json!({"select": "all"})));
+    let model = app.models.kerning_window.clone();
+    assert_eq!(model.selected, vec![0, 1]);
+    let mut p = super::scope(&model);
+    p.insert("pairs".into(), super::pairs_json(&model, &model.selected));
+    ran(&mut app, Msg::run("kerning.copyPairs", Value::Object(p)));
+    let text = app.clipboard.out.take().expect("the pairs' text");
+    ran(&mut app, shell("view.selectMaster", json!({"master": "m02"})));
+    assert!(listed(&app).is_empty());
+
+    ran(&mut app, shell("dialog.pasteKerningConflict", json!({})));
+    assert_eq!(app.clipboard.request.take(), Some(PasteKind::KerningPairs), "Paste asks for the clipboard's text");
+    clipboard::paste(&mut app, &text, PasteKind::KerningPairs);
+    app.drain();
+    assert_eq!(listed(&app), vec![("T".into(), "@o".into(), -60.0), ("A".into(), "V".into(), -100.0)]);
+    assert!(app.models.kerning_window.selected.is_empty(), "Select All ended with the first master's list");
+
+    let params = json!({"left": "T", "right": "@o", "value": -10, "master": "m02"});
+    app.run_now(Msg::run("kerning.setPair", params), false).expect("the pair is set");
+    clipboard::paste(&mut app, &text, PasteKind::KerningPairs);
+    app.drain();
+    match app.view.kerning.question.take() {
+        Some(Question::Paste { params, count, .. }) => assert_eq!((params["master"].clone(), count), (json!("m02"), 1)),
+        other => panic!("a clash asks, got {other:?}"),
+    }
+    assert_eq!(listed(&app).first().map(|r| r.2), Some(-10.0), "asking pastes nothing");
+}
+
+/// A pair that names a glyph the font lacks can be selected and deleted; the status line says why it is not shown.
+#[test]
+fn an_obsolete_row_is_selected_and_deleted() {
+    let mut app = app_over(kerned_session(-60.0));
+    app.run_now(Msg::run("kerning.pastePairs", json!({"pairs": [{"left": "gone", "right": "A", "value": -20}]})), false).expect("pasted");
+    app.status.clear();
+    ran(&mut app, shell("window.kerning", json!({})));
+    app.sent.push(shell("window.kerning", json!({"select": [{"left": "gone", "right": "A"}]})));
+    app.drain();
+    assert!(app.status.contains("gone"), "{}", app.status);
+    let selected = app.models.kerning_window.selected.clone();
+    assert_eq!(selected.len(), 1);
+    app.status.clear();
+    let mut sent = Vec::new();
+    super::delete(&app.models.kerning_window, &selected, false, &mut sent);
+    for msg in sent {
+        ran(&mut app, msg);
+    }
+    assert_eq!(stored(&mut app, "gone", "A"), None);
+    app.sent.push(shell("kerning.selectNextPair", json!({})));
+    app.drain();
+    assert_eq!(app.models.kerning_window.current, Some(0), "the steps go on");
+}
+
+/// The minus button deletes from the master shown, with Option held from every master; Copy, Paste and Select All
+/// handed to the focused list post its commands.
+#[test]
+fn the_minus_button_and_the_edit_commands_act_on_the_list() {
+    let model = Tracked::new(KerningWindowModel {
+        has_doc: true,
+        master: Some("m01".into()),
+        direction: "rtl".into(),
+        rows: vec![row("A", "V", -100.0), row("L", "T", -60.0)],
+        total: 2,
+        selected: vec![1],
+        current: Some(1),
+        ..Default::default()
+    });
+    let posted = Rc::new(RefCell::new(Vec::new()));
+    let seen = Rc::clone(&posted);
+    let mut fixture = Fixture::new(move |ui| {
+        let mut sent = Vec::new();
+        show(ui, Props { model: &model, sent: &mut sent });
+        seen.borrow_mut().extend(sent);
+    });
+    fixture.room(egui::vec2(720.0, 560.0)).settle();
+    let minus = fixture.by_label("Delete the selected pairs").expect("the minus button");
+    fixture.hold(Modifiers::ALT).click(&minus).hold(Modifiers::NONE).settle();
+    let pair = json!([{"left": "L", "right": "T"}]);
+    let expected = json!({"master": "m01", "direction": "rtl", "pairs": pair, "allMasters": true});
+    assert!(posted.borrow().contains(&Msg::run("kerning.deletePairs", expected)), "{:?}", posted.borrow());
+
+    let l = fixture.by_label("L").expect("the L row");
+    fixture.click(&l).settle();
+    posted.borrow_mut().clear();
+    let ctx = fixture.ctx().clone();
+    for edit in [EditCommand::Copy, EditCommand::Paste, EditCommand::SelectAll] {
+        assert!(deliver(&ctx, edit), "{edit:?}");
+        fixture.settle();
+    }
+    let copy = json!({"master": "m01", "direction": "rtl", "pairs": pair});
+    assert_eq!(
+        *posted.borrow(),
+        vec![Msg::run("kerning.copyPairs", copy), shell("dialog.pasteKerningConflict", json!({})), shell("window.kerning", json!({"select": "all"}))]
+    );
+}
+
+/// With Font View in front a chosen row opens a tab for the pair when none is open, else brings the last tab forward;
+/// the text around the pair stays.
+#[test]
+fn a_row_chosen_from_font_view_shows_in_an_edit_view_tab() {
+    let mut app = FontCraftApp::new(kerned_session(-60.0), Arc::new(Host::builder(APP).build()));
+    app.project();
+    let names = |app: &FontCraftApp| -> Vec<String> {
+        let text = &app.view.text;
+        (0..text.text.len()).filter_map(|i| text.item_glyph(i).map(str::to_string)).collect()
+    };
+    ran(&mut app, shell("window.kerning", json!({"select": [{"left": "A", "right": "V"}]})));
+    assert!(!app.font_view_shows());
+    assert_eq!(names(&app), ["A", "V"]);
+    ran(&mut app, shell("editView.setText", json!({"glyphs": ["T", "A", "V", "o"]})));
+    ran(&mut app, shell("editView.setCursor", json!({"index": 2})));
+    crate::shell::tabs::show(&mut app, None);
+    ran(&mut app, shell("kerning.selectPreviousPair", json!({})));
+    assert!(!app.font_view_shows());
+    assert_eq!(app.view.tabs.tabs.len(), 1, "the same tab");
+    assert_eq!(names(&app), ["T", "T", "c", "o"], "the text around the pair stays");
+}
+
 /// The rename question answers All Pairs with scope font and This Pair with scope pair, with the name typed.
 #[test]
 fn the_rename_question_answers_with_the_scope_and_the_new_name() {
@@ -276,19 +452,7 @@ fn the_audit_dialog_buttons_ask_for_a_run() {
 #[test]
 fn match_kerning_asks_then_reports_each_master() {
     let mut session = kerned_session(-60.0);
-    session
-        .edit("setup", |font| {
-            let mut m = font.default_master()?.clone();
-            m.id = "m02".into();
-            m.name = "Bold".into();
-            Arc::make_mut(&mut font.masters).push(m);
-            let names: Vec<String> = font.glyphs.iter().map(|g| g.name.clone()).collect();
-            for name in names {
-                font.glyph_mut(&name)?.layers.push(Layer::new("m02", 600.0));
-            }
-            Ok(())
-        })
-        .expect("a second master");
+    add_master(&mut session);
     let mut app = app_over(session);
     ran(&mut app, shell("dialog.matchKerning", json!({})));
     let asked = app.view.kerning.matching.clone().expect("the question");

@@ -180,7 +180,7 @@ fn pair_grid(ui: &mut Ui, words: &PairsPreviewWords, model: &PairsPreviewModel, 
         if let CollectionEvent::Activate(at) = event
             && let Some(row) = rows.get(*at)
         {
-            sent.push(Msg::run("kerning.showPairInEditView", json!({ "left": row.left, "right": row.right })));
+            sent.push(Msg::Shell(CommandRef::with_params("kerning.showPairInEditView", json!({ "left": row.left, "right": row.right }))));
         }
     }
 }

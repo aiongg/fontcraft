@@ -1,16 +1,18 @@
-//! The Kerning window (`window.kerning`): the stored pairs of the current master, left to right, listed by
+//! The Kerning window (`window.kerning`): the stored pairs of the current master in one writing direction, listed by
 //! `kerning.listPairs`, with the search options, sorting, editing, deletion and the clean-up actions.
 //!
 //! | Input | Does |
 //! |---|---|
 //! | typing in the search field | `kerning.filterPairs {term}` |
 //! | Match, Entries, Sides, Only Glyphs Selected in Font View, Reset | the search options (`kerning.filterPairs`, `kerning.resetFilter`) |
+//! | Writing Direction | `window.kerning {direction}`: the Edit View tab's, or one chosen here |
 //! | header press | `kerning.sortPairs` by the column; a second press reverses the order |
 //! | row press (Shift, Cmd as in lists), arrows | selects rows (`window.kerning {select}`) |
 //! | Value field | `kerning.setPair` on the current row |
 //! | double press on a left group, or F2 | renames it in place; confirming asks `dialog.renameKerningGroup` |
 //! | secondary press on a group cell | asks `dialog.renameKerningGroup` for that side's group |
-//! | Delete, − button | `kerning.deletePairs` on the selected rows |
+//! | Delete, − button (with Option: from all masters) | `kerning.deletePairs` on the selected rows |
+//! | Copy, Paste, Select All (keys and the Edit menu, while the list has the keyboard) | `kerning.copyPairs` on the selected rows, `dialog.pasteKerningConflict` with the clipboard's text, `window.kerning {select: "all"}` |
 //! | Show All Glyphs | `kerning.showAllGlyphs` on the current row: every glyph pair it covers in the edit view |
 //! | Clean Up, Compress | `kerning.cleanUp`, `kerning.compress` on the master shown |
 
@@ -30,6 +32,7 @@ use craft::ui::runtime::commands::CommandRef;
 use craft::ui::runtime::env::Env;
 use craft::ui::table::Table;
 use craft::ui::text::{NumberField, TextField};
+use craft_ext::ui::list::{CollectionEdits as _, EditCommand};
 use egui::Ui;
 use serde_json::{Map, Value, json};
 
@@ -64,6 +67,7 @@ craft::ui::words! {
         right: "fontcraftKerningWindow.right" = "Right";
         empty: "fontcraftKerningWindow.empty" = "No kerning pairs";
         delete: "fontcraftKerningWindow.delete" = "Delete the selected pairs";
+        delete_tip: "fontcraftKerningWindow.deleteTip" = "Delete the selected pairs (Option: from all masters)";
         show_all: "fontcraftKerningWindow.showAll" = "Show All Glyphs";
         show_all_tip: "fontcraftKerningWindow.showAllTip" = "Put every glyph pair the current row covers into the edit view";
         clean_up: "fontcraftKerningWindow.cleanUp" = "Clean Up";
@@ -72,8 +76,16 @@ craft::ui::words! {
         of: "fontcraftKerningWindow.of" = "of";
         selected: "fontcraftKerningWindow.selected" = "selected";
         linked: "fontcraftKerningWindow.linked" = "the kerning of master";
+        direction: "fontcraftKerningWindow.direction" = "Writing Direction";
+        tab_direction: "fontcraftKerningWindow.tabDirection" = "As in Edit View";
+        ltr: "fontcraftKerningWindow.leftToRight" = "Left to Right";
+        rtl: "fontcraftKerningWindow.rightToLeft" = "Right to Left";
+        vertical: "fontcraftKerningWindow.topToBottom" = "Top to Bottom";
     }
 }
+
+/// The Edit commands the list takes.
+const LIST_EDITS: [EditCommand; 3] = [EditCommand::Copy, EditCommand::Paste, EditCommand::SelectAll];
 
 const LEFT: ColumnKey = ColumnKey::new("left");
 const VALUE: ColumnKey = ColumnKey::new("value");
@@ -179,7 +191,17 @@ fn search_bar(ui: &mut Ui, words: &KerningWindowWords, model: &KerningWindowMode
             sent.push(shell("kerning.filterPairs", json!({ "side": (!side.is_empty()).then_some(side) })));
         }
     });
+    let directions = [
+        Entry::new(String::new(), words.tab_direction.clone()),
+        Entry::new("ltr".to_string(), words.ltr.clone()),
+        Entry::new("rtl".to_string(), words.rtl.clone()),
+        Entry::new("vertical".to_string(), words.vertical.clone()),
+    ];
     let _ = Row::new().fill_width().show(ui, |ui, _| {
+        let own = model.own_direction.clone().unwrap_or_default();
+        if let Some(picked) = Select::new(words.direction.clone(), Bind::given(own), &directions).show(ui).events.committed() {
+            sent.push(shell("window.kerning", json!({ "direction": (!picked.is_empty()).then_some(picked) })));
+        }
         let only = Checkbox::new(Bind::given(search.selected_glyphs_only)).label(words.selected_only.clone()).show(ui);
         if let Some(on) = only.events.committed() {
             sent.push(shell("kerning.filterPairs", json!({ "selectedGlyphsOnly": on })));
@@ -239,9 +261,26 @@ fn pair_table(ui: &mut Ui, words: &KerningWindowWords, model: &KerningWindowMode
             picked.remove(at);
             picked.push(lead);
         }
-        let select: Vec<Value> = picked.iter().filter_map(|&i| rows.get(i)).map(pair_json).collect();
-        sent.push(shell("window.kerning", json!({ "select": select })));
+        if picked.len() > 1 && picked.len() == rows.len() {
+            sent.push(shell("window.kerning", json!({ "select": "all" })));
+        } else {
+            let select: Vec<Value> = picked.iter().filter_map(|&i| rows.get(i)).map(pair_json).collect();
+            sent.push(shell("window.kerning", json!({ "select": select })));
+        }
     }
+    for edit in out.edit_commands(ui, &LIST_EDITS) {
+        match edit {
+            EditCommand::Copy if !model.selected.is_empty() => {
+                let mut p = scope(model);
+                p.insert("pairs".into(), pairs_json(model, &model.selected));
+                sent.push(Msg::run("kerning.copyPairs", Value::Object(p)));
+            }
+            EditCommand::Paste => sent.push(shell("dialog.pasteKerningConflict", json!({}))),
+            EditCommand::SelectAll => sent.push(shell("window.kerning", json!({ "select": "all" }))),
+            _ => {}
+        }
+    }
+    let all_masters = ui.input(|i| i.modifiers.alt);
     for event in &out.events {
         match event {
             CollectionEvent::Column(ColumnEvent::Sort { key, descending, .. }) => {
@@ -249,7 +288,7 @@ fn pair_table(ui: &mut Ui, words: &KerningWindowWords, model: &KerningWindowMode
                     sent.push(shell("kerning.sortPairs", json!({ "column": column.id(), "descending": descending })));
                 }
             }
-            CollectionEvent::Delete(picked) => delete(model, picked, sent),
+            CollectionEvent::Delete(picked) => delete(model, picked, all_masters, sent),
             CollectionEvent::Rename(EditEvent::Commit { after: rename, .. } | EditEvent::Set { after: rename, .. }) => {
                 if let Some(row) = rows.get(rename.key) {
                     ask_rename(model, row, Column::Left, Some(rename.name.trim()), sent);
@@ -283,13 +322,20 @@ fn ask_rename(model: &KerningWindowModel, row: &KernRow, column: Column, to: Opt
     sent.push(shell("dialog.renameKerningGroup", Value::Object(p)));
 }
 
-fn delete(model: &KerningWindowModel, picked: &[usize], sent: &mut Vec<Msg>) {
-    let pairs: Vec<Value> = picked.iter().filter_map(|&i| model.rows.get(i)).map(pair_json).collect();
-    if pairs.is_empty() {
+/// The pairs of the rows at `picked`.
+fn pairs_json(model: &KerningWindowModel, picked: &[usize]) -> Value {
+    Value::Array(picked.iter().filter_map(|&i| model.rows.get(i)).map(pair_json).collect())
+}
+
+fn delete(model: &KerningWindowModel, picked: &[usize], all_masters: bool, sent: &mut Vec<Msg>) {
+    if picked.is_empty() {
         return;
     }
     let mut p = scope(model);
-    p.insert("pairs".into(), Value::Array(pairs));
+    p.insert("pairs".into(), pairs_json(model, picked));
+    if all_masters {
+        p.insert("allMasters".into(), json!(true));
+    }
     sent.push(Msg::run("kerning.deletePairs", Value::Object(p)));
 }
 
@@ -316,9 +362,10 @@ fn footer(ui: &mut Ui, words: &KerningWindowWords, model: &KerningWindowModel, s
     let current = model.current.and_then(|i| model.rows.get(i));
     let _ = Row::new().fill_width().show(ui, |ui, _| {
         let minus =
-            IconButton::new(IconId::new("minus")).label(words.delete.clone()).tooltip(words.delete.clone()).enabled(!model.selected.is_empty());
+            IconButton::new(IconId::new("minus")).label(words.delete.clone()).tooltip(words.delete_tip.clone()).enabled(!model.selected.is_empty());
         if minus.show(ui).clicked() {
-            delete(model, &model.selected, sent);
+            let all_masters = ui.input(|i| i.modifiers.alt);
+            delete(model, &model.selected, all_masters, sent);
         }
         let value = NumberField::new(words.pair_value.clone(), Bind::given(current.map(|r| r.value))).enabled(current.is_some()).show(ui);
         if let (Some(Some(v)), Some(row)) = (value.edit.events.committed(), current) {

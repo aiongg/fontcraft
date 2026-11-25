@@ -273,7 +273,8 @@ same way is still to be observed.
 ### 3.8 Kerning window (`window.kerning`, Window › Kerning, Cmd+Alt+K)
 
 Lists all pairs of the current master for the current writing direction
-(`kerning.windowListsCurrentDirection`). Data source: `kerning.listPairs`.
+(`kerning.windowListsCurrentDirection`), which the window's own direction control can override.
+Data source: `kerning.listPairs`.
 
 Viewing:
 
@@ -288,7 +289,7 @@ Viewing:
   - Reset (`kerning.resetFilter`)
 - Selecting a row shows the pair in Edit View and replaces the pair that was there; Up/Down walk
   the list (`kerning.showPairInEditView`, `kerning.selectNextPair`,
-  `kerning.selectPreviousPair`). A row with groups shows one example pair; actions menu ›
+  `kerning.selectPreviousPair`). An obsolete pair is selected without being shown. A row with groups shows one example pair; actions menu ›
   Show All Glyphs inserts every member combination (`kerning.showAllGlyphs`).
 
 Editing:
@@ -498,9 +499,9 @@ step in `observe`.
     Code change once observed: `check` in `crates/spacing/src/sync.rs`
     (`spacing.listOutOfSyncMetrics`).
 24. **Writing direction of the Kerning window.** **Answered in part (release notes, build 3807):**
-    the window has its own control. Code change: `crates/ui/src/app/models/kerning_window.rs` (which asks
-    for `ltr`) and `crates/ui/src/panels/kerning_window/mod.rs` list left-to-right pairs
-    only (`window.kerning`).
+    the window has its own control. FontCraft's control follows the Edit View tab until a direction is
+    chosen in it (`window.kerning`). **Open:** whether the reference's control follows the tab, and
+    whether choosing a direction there changes the tab's.
 25. **Show All Glyphs.** **Answered in part (release notes, builds 3312 and 3820):** spaces go
     between Arabic pairs, so that they do not join. Code change: `show_all` in
     `crates/ui/src/shell/kerning_window.rs` puts one between all pairs (`kerning.showAllGlyphs`).

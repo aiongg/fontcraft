@@ -4,6 +4,7 @@
 use std::collections::HashMap;
 
 use craft::ui::contract::{PlainData, Tracked};
+use fontcraft_textlayout::Direction;
 use serde_json::{Map, Value, json};
 
 use super::ProjectCx;
@@ -31,6 +32,8 @@ pub struct KerningWindowModel {
     pub source: Option<String>,
     /// "ltr", "rtl" or "vertical".
     pub direction: String,
+    /// The direction the window's control names; `None`: the one of the Edit View tab.
+    pub own_direction: Option<String>,
     pub rows: Vec<KernRow>,
     /// The pairs the master has in the direction, listed or not.
     pub total: usize,
@@ -44,6 +47,22 @@ pub struct KerningWindowModel {
     pub error: Option<String>,
     /// The document revision and the query the rows came from: the same pair is not asked for twice.
     pub asked: Option<(u64, u64, String)>,
+    /// What "every row" means now.
+    pub scope: Option<AllRows>,
+}
+
+/// Every row of a list: the document and the query without its sort. Select All holds it, so it ends with the list it
+/// was made on.
+#[derive(PlainData, Clone, Debug, Default, PartialEq, Eq)]
+pub struct AllRows {
+    document: u64,
+    query: String,
+}
+
+/// The direction the window lists: its own, else the one of the Edit View tab (the tab shown last while Font View
+/// shows).
+pub fn direction(view: &crate::app::ViewState) -> Direction {
+    view.kerning.direction.unwrap_or_else(|| view.text.direction.layout())
 }
 
 /// `kerning.listPairs`'s parameters for the window's search and sort.
@@ -54,7 +73,7 @@ fn list_params(cx: &ProjectCx<'_>, master: Option<&str>) -> Value {
     if let Some(m) = master {
         p.insert("master".into(), json!(m));
     }
-    p.insert("direction".into(), json!("ltr"));
+    p.insert("direction".into(), json!(direction(cx.view).name()));
     p.insert("term".into(), json!(search.term));
     p.insert("match".into(), json!(search.matching));
     if let Some(k) = &search.kind {
@@ -73,6 +92,13 @@ fn list_params(cx: &ProjectCx<'_>, master: Option<&str>) -> Value {
     Value::Object(p)
 }
 
+fn without_sort(params: &Value) -> String {
+    let mut p = params.as_object().cloned().unwrap_or_default();
+    p.remove("sort");
+    p.remove("descending");
+    Value::Object(p).to_string()
+}
+
 /// Lists the pairs again while the window shows and the document, the search or the sort moved; the selection
 /// keeps the rows still listed.
 pub fn project(model: &mut Tracked<KerningWindowModel>, cx: &mut ProjectCx<'_>) {
@@ -81,7 +107,14 @@ pub fn project(model: &mut Tracked<KerningWindowModel>, cx: &mut ProjectCx<'_>) 
     }
     let mut next = (**model).clone();
     let Some(doc) = cx.session.active().map(|d| (d.id, d.revision)) else {
-        super::set(model, KerningWindowModel { search: cx.view.kerning.search.clone(), sort: cx.view.kerning.sort, ..Default::default() });
+        let empty = KerningWindowModel {
+            search: cx.view.kerning.search.clone(),
+            sort: cx.view.kerning.sort,
+            direction: direction(cx.view).name().to_string(),
+            own_direction: cx.view.kerning.direction.map(|d| d.name().to_string()),
+            ..Default::default()
+        };
+        super::set(model, empty);
         return;
     };
     let master = cx.session.font().ok().and_then(|f| crate::shell::masters::current_master(f, &cx.view.layers)).map(|m| m.id.clone());
@@ -90,6 +123,7 @@ pub fn project(model: &mut Tracked<KerningWindowModel>, cx: &mut ProjectCx<'_>) 
     if next.asked != asked {
         next.asked = asked;
         next.has_doc = true;
+        next.direction = direction(cx.view).name().to_string();
         match cx.session.query("kerning.listPairs", &params) {
             Ok(v) => {
                 let listed = v.get("pairs").and_then(Value::as_array).map(Vec::as_slice).unwrap_or_default();
@@ -106,14 +140,15 @@ pub fn project(model: &mut Tracked<KerningWindowModel>, cx: &mut ProjectCx<'_>) 
                     .collect();
                 let text = |k: &str| v.get(k).and_then(Value::as_str).map(str::to_string);
                 next.total = v.get("total").and_then(Value::as_u64).and_then(|n| usize::try_from(n).ok()).unwrap_or(next.rows.len());
+                next.scope = Some(AllRows { document: doc.0, query: without_sort(&params) });
                 next.master = text("master");
                 next.source = text("source");
-                next.direction = text("direction").unwrap_or_else(|| "ltr".into());
                 next.error = None;
             }
             Err(e) => {
                 next.rows.clear();
                 next.total = 0;
+                next.scope = None;
                 next.error = Some(e.to_string());
             }
         }
@@ -121,8 +156,13 @@ pub fn project(model: &mut Tracked<KerningWindowModel>, cx: &mut ProjectCx<'_>) 
     let kerning = &cx.view.kerning;
     next.search = kerning.search.clone();
     next.sort = kerning.sort;
+    next.own_direction = kerning.direction.map(|d| d.name().to_string());
     let at: HashMap<String, usize> = next.rows.iter().enumerate().map(|(i, r)| (row_id(&r.left, &r.right), i)).collect();
-    next.selected = kerning.selected.iter().filter_map(|id| at.get(id).copied()).collect();
+    next.selected = if kerning.all.is_some() && kerning.all == next.scope {
+        (0..next.rows.len()).collect()
+    } else {
+        kerning.selected.iter().filter_map(|id| at.get(id).copied()).collect()
+    };
     next.current = kerning.current.as_ref().and_then(|id| at.get(id).copied());
     super::set(model, next);
 }

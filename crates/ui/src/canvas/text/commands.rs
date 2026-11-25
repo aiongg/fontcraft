@@ -109,7 +109,7 @@ const COMMANDS: &[UiCommand] = &[
         "Show Pair in Edit View",
         &[],
         None,
-        "{left: name|\"@group\", right: name|\"@group\"} put a kerning pair into the edit view's text in place of the pair at the current glyph (the current glyph and the one before it; with no glyph before it, at the cursor); the cursor ends between the two. A group stands for its first member on the side facing the pair",
+        "{left: name|\"@group\", right: name|\"@group\"} put a kerning pair into the edit view's text in place of the pair at the current glyph (the current glyph and the one before it; with no glyph before it, at the cursor); the cursor ends between the two. A group stands for its first member on the side facing the pair in the tab's direction. While Font View shows, the tab shown last comes to the front; with none open the pair opens in a new tab",
     ),
     command(
         "view.showGroupMembers",
@@ -299,14 +299,32 @@ fn toggle(app: &mut FontCraftApp, p: &Map<String, Value>) -> Result<(), String> 
 pub fn show_pair(app: &mut FontCraftApp, p: &Map<String, Value>) -> Result<(), String> {
     let left = string(p, "left")?.ok_or("`left` (a glyph name or @group) is required")?.to_string();
     let right = string(p, "right")?.ok_or("`right` (a glyph name or @group) is required")?.to_string();
+    show_pair_of(app, &left, &right, None)
+}
+
+/// Shows the pair of the sides `left` and `right`, whose groups face each other in `direction` (`None`: the tab's).
+pub(crate) fn show_pair_of(
+    app: &mut FontCraftApp,
+    left: &str,
+    right: &str,
+    direction: Option<fontcraft_textlayout::Direction>,
+) -> Result<(), String> {
+    let font = app.session.font().map_err(|e| e.to_string())?;
+    let direction = direction.unwrap_or_else(|| app.view.text.direction.layout());
+    let l = side_glyph(font, direction, Position::First, left)?;
+    let r = side_glyph(font, direction, Position::Second, right)?;
+    if !crate::shell::tabs::bring_edit_view(app) {
+        crate::shell::tabs::open_glyphs(app, &[l, r])?;
+        super::set_direction(app, direction);
+        app.view.text.text.set_cursor(1);
+        super::follow(app);
+        return Ok(());
+    }
     let font = app.session.font().map_err(|e| e.to_string())?;
     if !super::shows_text(font, &app.view) {
         super::hold_shown_glyph(app);
     }
     let font = app.session.font().map_err(|e| e.to_string())?;
-    let direction = app.view.text.direction.layout();
-    let l = side_glyph(font, direction, Position::First, &left)?;
-    let r = side_glyph(font, direction, Position::Second, &right)?;
     let mut next = app.view.text.clone();
     let range = match next.edited_index() {
         Some(i) if i > 0 && next.item_glyph(i - 1).is_some() => i - 1..i + 1,
