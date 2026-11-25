@@ -316,7 +316,8 @@ version then becomes 4 where both states carry meaning.
 **Output naming.** `-o` names one file and takes one SOURCE. The build must give exactly one file,
 and the file's extension must match its format and container (`.woff` or `.woff2` chooses that
 container when `--container` is not given). Otherwise each
-file is named by the instance's `fileName` parameter, else by its PostScript name, inside
+file is named by the instance's `fileName` parameter, else, for a master of a designspace, by its UFO,
+else by its PostScript name, inside
 `--output-dir` (default: the current folder); with both formats, each goes into a `ttf` or `otf`
 subfolder. A source without a family name: a `.glyphs` or `.glyphspackage` source takes
 glyphsLib's default family, `Unnamed font`, as fontmake does (`Unnamedfont-Regular.ttf`); any
