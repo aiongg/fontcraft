@@ -69,7 +69,7 @@ fn drawings(app: &mut FontCraftApp) -> Vec<ReporterDrawing> {
     let Some(doc) = app.session.active() else { return Vec::new() };
     let font: &Font = &doc.font;
     let Some(glyph) = font.glyph(&target.glyph) else { return Vec::new() };
-    let Some(layer) = glyph.layer(&target.layer) else { return Vec::new() };
+    let Some(layer) = target.layer_in(font) else { return Vec::new() };
     // The background, edited as a layer, has the foreground's id: tell the two apart.
     let (layer, side) = match target.side {
         LayerSide::Foreground => (Cow::Borrowed(layer), ""),

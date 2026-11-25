@@ -226,7 +226,7 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
                 return Err(args.err(format!("layer `{layer}` is not the layer being edited (`{}`)", target.layer)));
             }
             let font = app.session.font().map_err(|e| e.to_string())?;
-            let layer = font.glyph(&target.glyph).and_then(|g| g.layer(&target.layer)).ok_or_else(|| args.err("the edited layer is missing"))?;
+            let layer = target.layer_in(font).ok_or_else(|| args.err("the edited layer is missing"))?;
             let mut selection = Selection::new();
             selection.annotations.extend(0..layer.parts(target.side).annotations.len());
             app.tools.selection = selection;

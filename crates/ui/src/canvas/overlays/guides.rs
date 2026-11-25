@@ -179,7 +179,7 @@ impl Coordinates {
 /// The global guides of the target's master whose filter leaves the edited glyph out.
 pub fn out_of_scope(session: &Session, font: &Font, target: &Target) -> Vec<usize> {
     let Some(glyph) = font.glyph(&target.glyph) else { return Vec::new() };
-    let Some(master) = glyph.layer(&target.layer).and_then(|l| font.masters.iter().find(|m| m.id == l.master)) else { return Vec::new() };
+    let Some(master) = target.layer_in(font).and_then(|l| font.masters.iter().find(|m| m.id == l.master)) else { return Vec::new() };
     if master.guides.iter().all(|g| g.filter.as_deref().is_none_or(|f| f.trim().is_empty())) {
         return Vec::new();
     }
@@ -196,7 +196,7 @@ pub fn out_of_scope(session: &Session, font: &Font, target: &Target) -> Vec<usiz
 /// The guides of the target's layer that show their measurement: local, then the global ones in scope.
 pub fn measured(session: &Session, target: &Target, out_of_scope: &[usize]) -> Vec<GuideRef> {
     let Ok(font) = session.font() else { return Vec::new() };
-    let Some(layer) = font.glyph(&target.glyph).and_then(|g| g.layer(&target.layer)) else { return Vec::new() };
+    let Some(layer) = target.layer_in(font) else { return Vec::new() };
     let global: &[Guide] = font.masters.iter().find(|m| m.id == layer.master).map(|m| m.guides.as_slice()).unwrap_or_default();
     let local = layer.info.guides.iter().enumerate().map(|(index, g)| (GuideScope::Local, index, g));
     let global = global.iter().enumerate().filter(|(i, _)| !out_of_scope.contains(i)).map(|(index, g)| (GuideScope::Global, index, g));

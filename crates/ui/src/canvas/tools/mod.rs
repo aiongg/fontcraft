@@ -43,6 +43,14 @@ pub struct Target {
     pub side: LayerSide,
 }
 
+impl Target {
+    /// The target's layer: a master, special or backup layer. [`Glyph::layer`](fontcraft_engine::model::Glyph::layer)
+    /// finds master layers only.
+    pub fn layer_in<'f>(&self, font: &'f Font) -> Option<&'f Layer> {
+        font.glyph(&self.glyph)?.layers.iter().find(|l| l.id == self.layer)
+    }
+}
+
 /// What the canvas's tool layers paint.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ToolView {

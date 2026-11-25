@@ -209,6 +209,44 @@ fn text_notes_are_typed_on_the_canvas() {
     assert_eq!(annotations(&app)[0].text.as_deref(), Some("Kern"));
 }
 
+/// A text note is typed and reopened on a backup layer too, and the guide and stem overlays read that layer.
+#[test]
+fn notes_and_overlays_work_on_a_backup_layer() {
+    let mut app = edit_app();
+    app.session
+        .edit("setup", |font| {
+            let first = font.masters[0].id.clone();
+            let mut backup = font.glyph("A").unwrap().layer(&first).unwrap().clone();
+            backup.id = "bk".into();
+            font.glyph_mut("A")?.layers.push(backup);
+            Ok(())
+        })
+        .unwrap();
+    shell(&mut app, "layers.select", json!({"layer": "bk"}));
+    shell(&mut app, "annotation.setTool", json!({"tool": "text"}));
+    let texts = |app: &FontCraftApp| -> Vec<Option<String>> {
+        let glyph = app.session.font().unwrap().glyph("A").unwrap();
+        glyph.layers.iter().find(|l| l.id == "bk").unwrap().info.annotations.iter().map(|a| a.text.clone()).collect()
+    };
+    pointer(&mut app, PointerKind::Down, 500.0, 500.0);
+    pointer(&mut app, PointerKind::Up, 500.0, 500.0);
+    let note = app.overlays.note.as_mut().expect("the field opens on the backup layer's note");
+    note.text = "old".into();
+    note.done = Some(true);
+    app.drain();
+    pointer(&mut app, PointerKind::DoubleClick, 505.0, 495.0);
+    let note = app.overlays.note.as_mut().expect("a double-click reopens it");
+    note.text = "older".into();
+    note.done = Some(true);
+    app.drain();
+    assert_eq!(texts(&app), [Some("older".to_string())]);
+    assert!(annotations(&app).is_empty(), "the master layer takes none");
+
+    let target = crate::canvas::tools::target(&app.session, &app.view).unwrap();
+    let font = app.session.font().unwrap();
+    assert!(super::autometer::measure(font, &target, [true; 3]).is_some(), "stems of the backup layer");
+}
+
 /// Stems, the quick measurement and audit switches reach the layers.
 #[test]
 fn autometer_and_audit_switches_reach_the_layers() {

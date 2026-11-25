@@ -21,7 +21,7 @@ const MAX_LABELS: usize = 2_000;
 
 /// The auto-meter's measurement of the target's layer: `[stems, counters, corners]` say which parts.
 pub fn measure(font: &Font, target: &Target, parts: [bool; 3]) -> Option<Value> {
-    let layer = font.glyph(&target.glyph)?.layer(&target.layer)?;
+    let layer = target.layer_in(font)?;
     let master = font.masters.iter().find(|m| m.id == layer.master)?;
     let [stems, counters, corners] = parts;
     let options = MeterOptions { stems, counters, corners, ..MeterOptions::default() };
@@ -31,7 +31,7 @@ pub fn measure(font: &Font, target: &Target, parts: [bool; 3]) -> Option<Value> 
 /// The quick measurement through `at`: from, to and the distance. With `shift`, horizontally or vertically, whichever
 /// is nearer the free measurement's direction.
 pub fn quick(font: &Font, target: &Target, at: Point, shift: bool) -> Option<([f64; 2], [f64; 2], f64)> {
-    let layer = font.glyph(&target.glyph)?.layer(&target.layer)?;
+    let layer = target.layer_in(font)?;
     let parts = layer.parts(target.side);
     let mut found = quick_measure_parts(font, &layer.master, &parts, at, None).ok()?;
     if shift {

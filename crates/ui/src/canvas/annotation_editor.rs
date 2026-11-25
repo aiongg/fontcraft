@@ -55,7 +55,7 @@ pub fn after_tool_run(app: &mut FontCraftApp, id: &str, params: &Value) {
     }
     let Some(target) = super::tools::target(&app.session, &app.view) else { return };
     let Ok(font) = app.session.font() else { return };
-    let Some(layer) = font.glyph(&target.glyph).and_then(|g| g.layer(&target.layer)) else { return };
+    let Some(layer) = target.layer_in(font) else { return };
     let annotations = layer.parts(target.side).annotations;
     let index = match app.tools.selection.annotations.iter().copied().collect::<Vec<_>>().as_slice() {
         [one] => *one,
@@ -87,7 +87,7 @@ pub fn double_click(app: &mut FontCraftApp, pos: Point) {
     let view = super::tools::apply::tools_view(&super::tools::apply::camera(app));
     let tol = view.units(f64::from(super::tools::tokens::ToolTokens::standard().hit_tolerance));
     let Ok(font) = app.session.font() else { return };
-    let Some(layer) = font.glyph(&target.glyph).and_then(|g| g.layer(&target.layer)) else { return };
+    let Some(layer) = target.layer_in(font) else { return };
     let annotations = layer.parts(target.side).annotations;
     let hit = annotations.iter().enumerate().rev().find(|(_, a)| Kind::of(a) == Kind::Text && hits(a, &view, pos, tol));
     let Some((index, a)) = hit else { return };
