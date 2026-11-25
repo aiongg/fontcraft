@@ -80,6 +80,8 @@ craft::ui::words! {
         /// The button of a value edited in its own dialog.
         edit: "fontcraftFontInfo.edit" = "Edit…";
         edit_tip: "fontcraftFontInfo.editTip" = "Edit the value in its dialog";
+        /// The tooltip of the mark of a row only some of the selected masters or exports hold.
+        some_lack: "fontcraftFontInfo.someLack" = "Not every selected entry has this row. Editing it adds it to the others.";
         /// The language menu of a localizable field.
         language: "fontcraftFontInfo.language" = "Language";
         add_language: "fontcraftFontInfo.addLanguage" = "Add a language";

@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use fontcraft_engine::{Session, clock::fixed_clock};
 use fontcraft_model::plist::Value as PlistValue;
-use fontcraft_model::{Font, Instance, Master, Param};
+use fontcraft_model::{Font, Instance, Master, Param, PropertyValue};
 use serde_json::{Value, json};
 
 fn run(s: &mut Session, id: &str, p: Value) -> Value {
@@ -158,6 +158,78 @@ fn localizable_fields_gain_and_lose_languages() {
         run(&mut s, "edit.undo", json!({}));
     }
     assert_eq!(s.font().unwrap(), &start);
+}
+
+/// A localized edit of several exports is one undo step: a language change keeps each export's own text, an added
+/// language leaves a text already there alone, and exports without a language are left alone when it goes.
+#[test]
+fn localized_edits_reach_several_exports_in_one_step() {
+    let mut s = session();
+    let set = |p: Value| {
+        let mut all = json!({"scope": "instance", "key": "styleNames"});
+        for (k, v) in p.as_object().unwrap() {
+            all[k] = v.clone();
+        }
+        all
+    };
+    run(&mut s, "font.info.setLocalizedValue", set(json!({"target": 0, "language": "DEU", "value": "Normal"})));
+    run(&mut s, "font.info.setLocalizedValue", set(json!({"target": 1, "language": "DEU", "value": "Fett"})));
+    let texts = |s: &Session, language: &str| -> Vec<Option<String>> {
+        let text = |i: &Instance| match &i.properties.get("styleNames")?.value {
+            PropertyValue::Localized(l) => l.iter().find(|l| l.language == language).map(|l| l.value.clone()),
+            PropertyValue::Single(_) => None,
+        };
+        s.font().unwrap().instances.iter().map(text).collect()
+    };
+    let before = undo_steps(&mut s);
+    let r = run(&mut s, "font.info.setLocalizedValue", set(json!({"targets": [0, 1], "from": "DEU", "language": "FRA"})));
+    assert_eq!(r["targets"], json!([0, 1]));
+    assert_eq!(texts(&s, "FRA"), [Some("Normal".to_string()), Some("Fett".into())]);
+    assert_eq!(texts(&s, "DEU"), [None, None]);
+    assert_eq!(undo_steps(&mut s), before + 1);
+    run(&mut s, "edit.undo", json!({}));
+    assert_eq!(texts(&s, "DEU"), [Some("Normal".to_string()), Some("Fett".into())]);
+
+    run(&mut s, "font.info.removeLocalizedValue", set(json!({"target": 0, "language": "DEU"})));
+    run(&mut s, "font.info.setLocalizedValue", set(json!({"targets": [0, 1], "language": "DEU", "value": "", "onlyMissing": true})));
+    assert_eq!(texts(&s, "DEU"), [Some(String::new()), Some("Fett".into())]);
+    refused(&mut s, "font.info.setLocalizedValue", set(json!({"targets": [0, 1], "from": "ITA", "language": "FRA"})));
+    run(&mut s, "font.info.removeLocalizedValue", set(json!({"target": 0, "language": "DEU"})));
+    let r = run(&mut s, "font.info.removeLocalizedValue", set(json!({"targets": [0, 1], "language": "DEU"})));
+    assert_eq!((r["targets"].clone(), r["fieldRemoved"].clone()), (json!([1]), json!(true)));
+    refused(&mut s, "font.info.removeLocalizedValue", set(json!({"targets": [0, 1], "language": "DEU"})));
+}
+
+/// Rows are copied and removed one by one: `index` picks among rows of one name, a target without a row keeps its
+/// others, built-in fields stay, and one undo step brings everything back.
+#[test]
+fn single_rows_copy_and_go() {
+    let mut s = session();
+    for value in ["RemoveOverlap", "RoundCorner; 10"] {
+        run(&mut s, "font.customParameters.add", json!({"scope": "instance", "targets": [0], "name": "Filter", "value": value}));
+    }
+    run(&mut s, "font.customParameters.add", json!({"scope": "instance", "targets": [0, 1], "name": "Remove Glyphs", "value": ["A"]}));
+    let rows = json!([{"key": "Filter", "kind": "param", "index": 1}, {"key": "Remove Glyphs"}, {"key": "weightClass"}]);
+    let copied = run(&mut s, "font.info.copyRows", json!({"scope": "instance", "target": 0, "rows": [{"key": "Filter", "index": 1}]}));
+    assert_eq!(copied["rows"].as_array().unwrap().len(), 1);
+    assert_eq!(copied["rows"][0]["value"], "RoundCorner; 10");
+    let before = undo_steps(&mut s);
+    let r = run(&mut s, "font.info.removeRows", json!({"scope": "instance", "targets": [0, 1], "rows": rows}));
+    assert_eq!(r["removed"], 3);
+    assert_eq!(r["skipped"].as_array().unwrap().len(), 1, "the weight class is built in");
+    let counts = |s: &Session| s.font().unwrap().instances.iter().map(|i| i.params.0.len()).collect::<Vec<_>>();
+    assert_eq!(counts(&s), [1, 0]);
+    assert_eq!(undo_steps(&mut s), before + 1);
+    refused(&mut s, "font.info.removeRows", json!({"scope": "instance", "targets": [1], "rows": rows}));
+    run(&mut s, "edit.undo", json!({}));
+    assert_eq!(counts(&s), [3, 1]);
+
+    // A parameter only one export holds is set on both, as one step.
+    let set = |add: bool| json!({"scope": "instance", "targets": [0, 1], "name": "Filter", "index": 0, "value": "AddExtremes", "addMissing": add});
+    refused(&mut s, "font.customParameters.set", set(false));
+    run(&mut s, "font.customParameters.set", set(true));
+    assert_eq!(counts(&s), [3, 2]);
+    assert_eq!(s.font().unwrap().instances[1].params.get("Filter").and_then(PlistValue::as_str), Some("AddExtremes"));
 }
 
 #[test]

@@ -33,6 +33,11 @@
 //!   Paste asks for the clipboard's text and hands it back to `window.project.paste`. Copy and Paste fired while the
 //!   instance list holds the keyboard focus go to that list, which posts the same commands.
 //!
+//! - In Font Info, Copy, Cut, Paste and Cmd+Delete act on the selected rows while nothing has the keyboard
+//!   (`panels::font_info::rows::takes_edits`), through `font.info.rows.copy` and its siblings. The Masters and Exports
+//!   lists take Copy and Paste for the rows too, so rows copied from one entry paste on others after a click on them.
+//!   Edit › Paste of copied rows while the panel shows pastes them into the shown tab (`font.info.pasteRows`).
+//!
 //! The text goes out through [`Clipboard::out`], which the shell hands to the window's clipboard.
 //!
 //! Why paste reads the clipboard itself: craft hands the platform's paste event only to a focused component that lists
@@ -50,6 +55,7 @@ use craft_ext::ui::list::{EditCommand, deliver};
 use serde_json::{Map, Value, json};
 
 use super::{FontCraftApp, Msg};
+use crate::panels::font_info::rows;
 
 const COPY: &str = "edit.copy";
 const CUT: &str = "edit.cut";
@@ -116,6 +122,8 @@ pub enum PasteKind {
     Special,
     /// Feature entries into the Features sidebar.
     FeatureEntries,
+    /// Font Info rows into what the shown tab shows (`font.info.rows.paste`).
+    InfoRows,
     /// Instances copied in the Project panel, into the project with this id (`window.project.paste`).
     ProjectInstances(u64),
 }
@@ -137,7 +145,7 @@ pub struct Clipboard {
 pub fn after_run(app: &mut FontCraftApp, id: &str, result: &Value) {
     let key = match id {
         COPY | CUT => "json",
-        "glyph.copyGlyphNames" | "font.features.copyEntries" => "text",
+        "glyph.copyGlyphNames" | "font.features.copyEntries" | "font.info.copyRows" => "text",
         _ => return,
     };
     if let Some(text) = result.get(key).and_then(Value::as_str) {
@@ -185,11 +193,32 @@ fn edit_command(id: &str, by_key: bool) -> Option<EditCommand> {
 
 /// Hands an Edit command the person fired with no parameters to the list that holds the keyboard focus and takes it
 /// (the Features sidebar and the Project panel's instance list take Copy and Paste, the Masters and Exports lists of
-/// Font Info take Cmd+Delete); `true` when the list took it, and the document is left alone. `by_key`: a key fired it,
+/// Font Info take all but Select All), else to the selected Font Info rows while nothing has the keyboard; `true` when the list took it, and the document is left alone. `by_key`: a key fired it,
 /// so a click on Glyph › Remove Glyph never reaches a list.
-pub fn to_focused_list(app: &FontCraftApp, command: &CommandRef, by_key: bool) -> bool {
+pub fn to_focused_list(app: &mut FontCraftApp, command: &CommandRef, by_key: bool) -> bool {
     let Some(edit) = edit_command(&command.id, by_key) else { return false };
-    is_empty(&command.params) && app.window.as_ref().is_some_and(|ctx| deliver(ctx, edit))
+    let Some(ctx) = app.window.as_ref().filter(|_| is_empty(&command.params)) else { return false };
+    if deliver(ctx, edit) {
+        return true;
+    }
+    let Some(id) = rows::edit_row_command(edit).filter(|_| rows::takes_edits(ctx)) else { return false };
+    ctx.request_repaint();
+    app.sent.push(Msg::Shell(CommandRef::new(id)));
+    true
+}
+
+/// Whether the Font Info panel shows a tab with rows.
+fn info_rows_show(app: &FontCraftApp) -> bool {
+    use craft::behavior::dock::PanelState;
+    let panel = crate::shell::dock::PanelId::FontInfo;
+    app.view.workspace.layout.panel_state(&panel) != PanelState::Hidden && app.models.font_info.shown_rows().is_some()
+}
+
+/// Whether clipboard text holds Font Info rows: ours, or the property list the reference app copies.
+fn holds_info_rows(text: &str) -> bool {
+    let t = text.trim_start();
+    let ours = t.starts_with("{\"") && t.contains("fontcraftRows");
+    (ours || t.starts_with('(')) && fontcraft_engine::fontinfo::rows::from_text(text).is_ok_and(|rows| !rows.is_empty())
 }
 
 /// Font View shows with glyphs selected: copying and pasting act on whole glyphs.
@@ -232,6 +261,12 @@ pub fn paste_msg(app: &mut FontCraftApp, text: &str, kind: PasteKind) -> Result<
     }
     if kind == PasteKind::FeatureEntries {
         return Ok(Msg::run("font.features.pasteEntries", json!({ "text": text })));
+    }
+    if kind == PasteKind::InfoRows || (kind == PasteKind::Paste && holds_info_rows(text) && info_rows_show(app)) {
+        let (target, _) = app.models.font_info.shown_rows().ok_or("Paste: the shown Font Info tab has no rows")?;
+        let mut params = target.params();
+        params.insert("text".into(), json!(text));
+        return Ok(Msg::run("font.info.pasteRows", Value::Object(params)));
     }
     if let PasteKind::ProjectInstances(project) = kind {
         let params = json!({ "project": project, "text": text });
@@ -295,7 +330,7 @@ pub fn read_waiting(app: &mut FontCraftApp) -> bool {
     let read = read();
     if kind == PasteKind::Paste && reads_pdf(app) {
         match &read {
-            Ok(Some(text)) if !pasteable(text) && text.len() <= MAX_PASTE_BYTES => {
+            Ok(Some(text)) if !pasteable(text) && !(holds_info_rows(text) && info_rows_show(app)) && text.len() <= MAX_PASTE_BYTES => {
                 start_pdf(app, Some(text.clone()));
                 return true;
             }

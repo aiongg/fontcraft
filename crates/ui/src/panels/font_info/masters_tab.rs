@@ -22,6 +22,8 @@
 //! | a number's value | `font.master.setNumber` |
 //! | a number's minus | `font.numbers.remove` |
 //!
+//! The list takes Copy and Paste for the selected rows ([`rows::list_edits`]).
+//!
 //! The list and the fields scroll apart, so the list stays while the fields move. The reply of a run that adds or moves
 //! masters selects them (`shell::font_info::after_run`).
 //!
@@ -45,7 +47,6 @@ use craft::ui::runtime::commands::CommandRef;
 use craft::ui::runtime::env::{Env, Label};
 use craft::ui::sections::Section;
 use craft::ui::text::{NumberField, TextField};
-use craft_ext::ui::list::{CollectionEdits as _, EditCommand};
 use egui::Ui;
 use serde_json::{Value, json};
 
@@ -238,9 +239,7 @@ fn master_list(ui: &mut Ui, model: &MastersTabModel, words: &MastersWords, sent:
             _ => {}
         }
     }
-    if out.edit_commands(ui, &[EditCommand::Delete]).contains(&EditCommand::Delete) {
-        sent.extend(remove_selected(model));
-    }
+    sent.extend(rows::list_edits(ui, &out, remove_selected(model)));
 }
 
 /// The plus menu and the minus button under the list.

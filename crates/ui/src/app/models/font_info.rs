@@ -14,7 +14,7 @@ use fontcraft_engine::model::{DEFAULT_LANGUAGE, Font};
 use serde_json::{Value as Json, json};
 
 use super::ProjectCx;
-use crate::shell::font_info::{FontInfoTab, Target};
+use crate::shell::font_info::{FontInfoTab, RowKey, RowsView, Target};
 
 /// Most rows, axes, entries or languages a model holds; the rest are counted, not shown.
 pub const MAX_SHOWN: usize = 256;
@@ -37,6 +37,45 @@ pub struct FontInfoModel {
     /// The Exports tab; empty while another tab shows.
     pub exports: super::font_exports::ExportsModel,
     pub masters_tab: super::font_masters::MastersTabModel,
+}
+
+impl FontInfoModel {
+    /// What the shown tab's rows act on and its rows in order, the added fields before the parameters; `None` on a tab
+    /// without rows.
+    pub fn shown_rows(&self) -> Option<(Target, Vec<&RowModel>)> {
+        match self.tab {
+            FontInfoTab::Font if self.open => Some((Target::font(), self.font.fields.iter().chain(&self.font.params).collect())),
+            FontInfoTab::Masters if !self.masters_tab.selected.is_empty() => {
+                let rows = self.masters_tab.name.iter().chain(&self.masters_tab.params);
+                Some((self.masters_tab.target(), rows.collect()))
+            }
+            FontInfoTab::Exports if !self.exports.selected.is_empty() => {
+                let target = Target { scope: Scope::Instance, indices: self.exports.selected.clone() };
+                Some((target, self.exports.rows.iter().chain(&self.exports.params).collect()))
+            }
+            _ => None,
+        }
+    }
+
+    /// Marks the rows `view` selects, on the tab of the scope they were selected in.
+    fn mark_rows(&mut self, view: &RowsView) {
+        let rows: Vec<&mut RowModel> = match (self.tab, view.scope) {
+            (FontInfoTab::Font, Some(Scope::Font)) => self.font.fields.iter_mut().chain(&mut self.font.params).collect(),
+            (FontInfoTab::Masters, Some(Scope::Master)) => self.masters_tab.name.iter_mut().chain(&mut self.masters_tab.params).collect(),
+            (FontInfoTab::Exports, Some(Scope::Instance)) => self.exports.rows.iter_mut().chain(&mut self.exports.params).collect(),
+            _ => return,
+        };
+        for row in rows {
+            let key = row.key();
+            row.mark = if view.rows.last() == Some(&key) {
+                RowMark::Lead
+            } else if view.rows.contains(&key) {
+                RowMark::Selected
+            } else {
+                RowMark::None
+            };
+        }
+    }
 }
 
 /// The Font tab.
@@ -123,9 +162,29 @@ pub struct RowModel {
     pub enabled: bool,
     /// Built-in fields stay.
     pub removable: bool,
-    /// The targets hold different values.
+    /// The targets that hold the row hold different values.
     pub mixed: bool,
+    /// The targets that hold the row, when others of the selection lack it; empty when all hold it.
+    pub holders: Vec<usize>,
+    pub mark: RowMark,
     pub editor: Editor,
+}
+
+impl RowModel {
+    /// The row as `font.info.rows.select` and the row commands name it.
+    pub fn key(&self) -> RowKey {
+        RowKey { param: self.sort == RowSort::Param, key: self.key.clone(), index: self.occurrence }
+    }
+}
+
+/// Whether a row is selected.
+#[derive(PlainData, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum RowMark {
+    #[default]
+    None,
+    Selected,
+    /// Selected last: Shift-click selects from here.
+    Lead,
 }
 
 /// How a row edits its value.
@@ -244,7 +303,7 @@ pub fn project(model: &mut Tracked<FontInfoModel>, cx: &mut ProjectCx<'_>) {
         axes,
         predefined,
     };
-    let value = FontInfoModel {
+    let mut value = FontInfoModel {
         open: true,
         tab,
         font: font_tab,
@@ -255,6 +314,7 @@ pub fn project(model: &mut Tracked<FontInfoModel>, cx: &mut ProjectCx<'_>) {
         exports,
         masters_tab: super::font_masters::project(font, &cx.view.font_info.masters),
     };
+    value.mark_rows(&cx.view.font_info.rows);
     super::set(model, value);
 }
 
@@ -292,26 +352,42 @@ fn axis_warnings(cx: &mut ProjectCx<'_>) -> Vec<Vec<String>> {
     reply.get("axes").and_then(Json::as_array).map(|axes| axes.iter().take(MAX_SHOWN).map(read).collect()).unwrap_or_default()
 }
 
-/// The rows of `kind` of `target`, in stored order, each marked mixed where another target holds a different value.
+/// The rows of `kind` any of `target`'s masters or exports holds, in stored order: the first one's, then those only a
+/// later one holds. A row is mixed where the targets that hold it hold different values.
 pub fn rows(font: &Font, target: &Target, kind: RowKind) -> Vec<RowModel> {
-    let of = |at: usize| rows_of(font, target.scope, at).into_iter().filter(|r| r.kind == kind);
-    let others: Vec<HashMap<(String, usize), Value>> =
-        if target.below_font() { target.indices.iter().skip(1).map(|at| keyed(of(*at))).collect() } else { Vec::new() };
+    let indices: Vec<usize> = if target.below_font() && !target.indices.is_empty() { target.indices.clone() } else { vec![target.first()] };
     let masters: Vec<(&str, &str)> = font.masters.iter().map(|m| (m.id.as_str(), m.name.as_str())).collect();
-    let mut seen: HashMap<String, usize> = HashMap::new();
-    let mut out = Vec::new();
-    for row in of(target.first()).take(MAX_SHOWN) {
-        let count = seen.entry(row.key.clone()).or_insert(0);
-        let occurrence = *count;
-        *count = count.saturating_add(1);
-        let lookup = (row.key.clone(), occurrence);
-        let mixed = others.iter().any(|o| o.get(&lookup).is_none_or(|v| *v != row.value));
+    let mut place: HashMap<(String, usize), usize> = HashMap::new();
+    // The row of the first target that holds it, its occurrence, its holders, and whether they disagree.
+    let mut found: Vec<(Row, usize, Vec<usize>, bool)> = Vec::new();
+    for &at in &indices {
+        let mut seen: HashMap<String, usize> = HashMap::new();
+        for row in rows_of(font, target.scope, at).into_iter().filter(|r| r.kind == kind) {
+            let count = seen.entry(row.key.clone()).or_insert(0);
+            let occurrence = *count;
+            *count = count.saturating_add(1);
+            let key = (row.key.clone(), occurrence);
+            if let Some(held) = place.get(&key).copied() {
+                if let Some((first, _, holders, mixed)) = found.get_mut(held) {
+                    holders.push(at);
+                    *mixed |= first.value != row.value;
+                }
+            } else if found.len() < MAX_SHOWN {
+                place.insert(key, found.len());
+                found.push((row, occurrence, vec![at], false));
+            }
+        }
+    }
+    let model = |(row, occurrence, holders, mixed): (Row, usize, Vec<usize>, bool)| {
         let mut model = row_model(&row, target.scope, &masters);
         model.occurrence = occurrence;
         model.mixed = mixed;
-        out.push(model);
-    }
-    out
+        if holders.len() < indices.len() {
+            model.holders = holders;
+        }
+        model
+    };
+    found.into_iter().map(model).collect()
 }
 
 /// One built-in field of `target` (a master's `name`, an instance's `weightClass`…); `None` when it does not set it.
@@ -321,18 +397,6 @@ pub fn builtin(font: &Font, target: &Target, key: &str) -> Option<RowModel> {
     let mut model = row_model(&row, target.scope, &[]);
     model.mixed = mixed;
     Some(model)
-}
-
-/// Rows by (key, occurrence among the rows of that key).
-fn keyed(rows: impl Iterator<Item = Row>) -> HashMap<(String, usize), Value> {
-    let mut out = HashMap::new();
-    let mut seen: HashMap<String, usize> = HashMap::new();
-    for row in rows {
-        let count = seen.entry(row.key.clone()).or_insert(0);
-        out.insert((row.key, *count), row.value);
-        *count = count.saturating_add(1);
-    }
-    out
 }
 
 fn row_model(row: &Row, scope: Scope, masters: &[(&str, &str)]) -> RowModel {
@@ -356,6 +420,8 @@ fn row_model(row: &Row, scope: Scope, masters: &[(&str, &str)]) -> RowModel {
                 enabled: true,
                 removable: !built_in,
                 mixed: false,
+                holders: Vec::new(),
+                mark: RowMark::None,
                 editor,
             }
         }
@@ -367,6 +433,8 @@ fn row_model(row: &Row, scope: Scope, masters: &[(&str, &str)]) -> RowModel {
             enabled: row.enabled,
             removable: true,
             mixed: false,
+            holders: Vec::new(),
+            mark: RowMark::None,
             editor: param_editor(&row.key, &row.value, scope, masters),
         },
     }

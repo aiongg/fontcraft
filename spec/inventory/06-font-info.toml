@@ -257,13 +257,13 @@ label = "Set Localized Value"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{scope: 'font'|'master'|'instance', target?: id|name|index, key: string, language: string, value: string}"
+params = "{scope: 'font'|'master'|'instance', target?: id|name|index, targets?: [id|name|index], key: string, language: string, value?: string, from?: string, onlyMissing?: bool}"
 area = "font-info"
 milestone = "M7"
 summary = "Adds or changes one language entry of a localizable field. In the UI the plus button beside the field adds another localization row and the language menu picks its language."
 ref = "Font Info"
 status = "handbook"
-notes = "Documented, not yet observed. Languages are OpenType language system tags without trailing spaces, as the file format stores them (GlyphsSDK `infoValue.language`: dflt, DEU…). M7 plan § 4: M7.3."
+notes = "Documented, not yet observed. Languages are OpenType language system tags without trailing spaces, as the file format stores them (GlyphsSDK `infoValue.language`: dflt, DEU…). M7 plan § 4: M7.3. M7.31: several targets as one undo step; `from` moves a language's text and keeps each target's own, `onlyMissing` leaves targets that have the language alone."
 guesses = [
   "A language tag the name table cannot map to a Windows language id is refused, except dflt (the default); the language menu of the reference app settles which tags it offers.",
 ]
@@ -277,13 +277,13 @@ label = "Remove Localized Value"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{scope: 'font'|'master'|'instance', target?: id|name|index, key: string, language: string}"
+params = "{scope: 'font'|'master'|'instance', target?: id|name|index, targets?: [id|name|index], key: string, language: string}"
 area = "font-info"
 milestone = "M7"
 summary = "Removes one language entry from a localizable field, the counterpart of the minus button on a localization row."
 ref = "Font Info"
 status = "handbook"
-notes = "Documented, not yet observed. M7 plan § 4: M7.3."
+notes = "Documented, not yet observed. M7 plan § 4: M7.3. M7.31: several targets as one undo step; those without the language are left alone."
 guesses = [
   "Removing the last language entry of a field removes the field; removing its default (dflt) entry while others remain is allowed, and export then uses the English entry as the default name; the reference app settles both.",
 ]
@@ -297,13 +297,13 @@ label = "Copy Rows"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{scope: 'font'|'master'|'instance', target?: id|name|index, keys?: [string]}"
+params = "{scope: 'font'|'master'|'instance', target?: id|name|index, targets?: [id|name|index], keys?: [string], rows?: [{key: string, kind?: 'field'|'param', index?: integer}]}"
 area = "font-info"
 milestone = "M7"
 summary = "Returns the selected Font Info rows (fields, custom parameters) as a transferable value and, in the UI, puts them on the clipboard. The UI reaches it through the normal Edit > Copy (Cmd+C) while rows are selected, so it has no menu entry or shortcut of its own."
 ref = "Font Info"
 status = "handbook"
-notes = "Documented, not yet observed. M7 plan § 4: M7.3."
+notes = "Documented, not yet observed. M7 plan § 4: M7.3. M7.31: `rows` names single rows, each taken from the first target that holds it; the window puts the property-list text on the clipboard."
 guesses = [
   "Rows are copied as our own JSON (scope, kind, key, value, enabled) and, for custom parameters and fields, also as property-list text in the file format's spelling, so a text editor or another document can read them; copying rows in the reference app and pasting into a text editor settles the format.",
 ]
@@ -323,7 +323,7 @@ milestone = "M7"
 summary = "Inserts previously copied rows into the current tab. The UI reaches it through Edit > Paste (Cmd+V); how a pasted row that already exists is merged, and whether pasting into another font or tab is allowed, is not documented."
 ref = "Font Info"
 status = "handbook"
-notes = "Documented, not yet observed. M7 plan § 4: M7.3."
+notes = "Documented, not yet observed. M7 plan § 4: M7.3. M7.31: the window pastes into the font, masters or exports its tab shows (`font.info.rows.paste`, or Edit › Paste while the clipboard holds rows and the panel shows) and lists the skipped rows in the status line."
 guesses = [
   "The mode append adds parameters after the others and, since a field cannot repeat, replaces a field the target has; skip leaves out every row the target already has; pasting in the reference app settles both.",
   "A pasted row whose field or single-valued parameter is already present replaces its value, a repeatable parameter is appended, a row not allowed in the target scope is skipped and listed, and pasting between tabs and between documents is allowed; pasting in the reference app settles all four.",
@@ -331,6 +331,23 @@ guesses = [
 ]
 observe = [
   "In font A (m7-one), copy a field row and a parameter row, then paste them into the Exports tab, into font B (m7-two)'s Font tab, and back into font A (m7-one)'s Font tab where they already exist: note for each whether the rows are added, replaced, duplicated or refused.",
+]
+
+[[command]]
+id = "font.info.removeRows"
+label = "Remove Rows"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{scope: 'font'|'master'|'instance', targets?: [id|name|index], rows: [{key: string, kind?: 'field'|'param', index?: integer}]}"
+area = "font-info"
+milestone = "M7"
+summary = "Removes the selected rows, added fields and custom parameters alike, from each target as one undo step. A target without a row keeps its others, and built-in fields stay. The UI reaches it through Cmd+Delete and Edit > Cut while rows are selected."
+ref = "Font Info"
+status = "handbook"
+notes = "The handbook documents Cmd+Delete on selected rows. M7.31; `font.info.removeField` and `font.customParameters.remove` remove one kind and refuse a target without the row."
+guesses = [
+  "Rows of several kinds go in one undo step, and a target that lacks some of them loses the others; undoing after Cmd+Delete on two kinds of row in the reference app settles it.",
 ]
 
 [[behavior]]
@@ -349,7 +366,7 @@ milestone = "M7"
 summary = "A row normally shows a minus button at its right edge; rows that show a plus button there (localizable fields) swap it for the minus button while Alt is held."
 ref = "Font Info"
 status = "handbook"
-notes = "Documented, not yet observed. M7 plan § 4: M7.15."
+notes = "Documented, not yet observed. M7.31 (`param_value::languages`): the minus removes its line's language; the last language's minus removes the field."
 
 [[behavior]]
 id = "fontInfo.rows.selection"
@@ -358,12 +375,14 @@ milestone = "M7"
 summary = "Clicking a row selects it and Cmd+click builds a selection of several rows. The selection is what Cmd+Delete, Copy and Paste act on."
 ref = "Font Info"
 status = "handbook"
-notes = "Documented, not yet observed. M7 plan § 4: M7.15."
+notes = "Documented, not yet observed. M7.31: `font.info.rows.select`, `.copy`, `.cut`, `.paste` and `.delete` (`crates/ui/src/shell/font_info.rs`); a click on a row's label selects it, and Copy, Cut, Paste and Cmd+Delete act on the selected rows while nothing has the keyboard. The Masters and Exports lists take Copy and Paste for the rows too."
 guesses = [
+  "The label is what a click selects by: a click in the field edits its value; clicking the parts of a row in the reference app settles where it selects.",
   "Shift-click adds every row between the last row clicked and the clicked one; Shift-clicking in the reference app settles it.",
-  "Copy puts the rows' JSON on the system clipboard, and a selected row of a parameter whose name repeats copies every row of that name; pasting copied rows into a text editor from the reference app settles the format.",
+  "Copy puts the rows' property-list text on the system clipboard, and a selected row of a parameter whose name repeats is copied alone; pasting copied rows into a text editor from the reference app settles the format.",
   "Paste replaces the rows with the same key in the shown font, masters or exports and appends repeatable parameters; pasting a row the target has in the reference app settles it.",
-  "Cmd+Delete removes the selected fields in one undo step and each selected parameter in one of its own, and leaves built-in fields; undoing after Cmd+Delete in the reference app settles the steps.",
+  "Cmd+Delete removes the selected rows as one undo step and leaves built-in fields, and Cut copies the rows before it removes them so; undoing after Cmd+Delete, and Cut with a row selected, in the reference app settle both.",
+  "Selected rows stay selected when other masters or exports are picked, so rows copied from one are pasted or removed on others; picking another export with a row selected in the reference app settles it.",
 ]
 
 [[behavior]]
@@ -373,7 +392,7 @@ milestone = "M7"
 summary = "A localizable field shows a language menu and a plus button; each added row holds the same field in another language chosen from the menu."
 ref = "Font Info"
 status = "handbook"
-notes = "Documented, not yet observed. M7 plan § 4: M7.15."
+notes = "Documented, not yet observed. M7 plan § 4: M7.15. M7.31: every language line shows the plus, and an edit on several exports is one undo step."
 guesses = [
   "The plus button adds the first language the field lacks, in the name table's tag order after the default language, with empty text; picking another language in a row's menu moves its text there; clicking the plus in the reference app settles both.",
 ]
@@ -960,13 +979,13 @@ label = "Set Custom Parameter"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{scope: 'font'|'master'|'instance', targets?: [id|name|index], name: string, index?: integer, value?: any, enabled?: bool}"
+params = "{scope: 'font'|'master'|'instance', targets?: [id|name|index], name: string, index?: integer, value?: any, enabled?: bool, addMissing?: bool}"
 area = "font-info"
 milestone = "M7"
 summary = "Changes the value of an existing custom parameter row."
 ref = "Font Info › Font › Custom Parameters"
 status = "inferred"
-notes = "`enabled` is the row's checkbox (customParameters.enableCheckbox); the value is checked against the catalogue's kind for the name. `index` picks one of several rows of the same name. M7 plan § 4: M7.2. M7.21: the value lists, syntaxes and ranges of `crates/fontinfo/src/syntax.rs` apply as for add, and a refused value changes nothing; a value naming a missing master or palette is kept and listed under `warnings`."
+notes = "`enabled` is the row's checkbox (customParameters.enableCheckbox); the value is checked against the catalogue's kind for the name. `index` picks one of several rows of the same name. M7 plan § 4: M7.2. M7.21: the value lists, syntaxes and ranges of `crates/fontinfo/src/syntax.rs` apply as for add, and a refused value changes nothing; a value naming a missing master or palette is kept and listed under `warnings`. M7.31: `addMissing` adds the row to the targets that lack it."
 guesses = [
   "A value is checked against the catalogue's kind before it is stored, and an unknown name is refused rather than stored as is; editing a row in the running app's Font Info would settle it.",
 ]
@@ -1393,7 +1412,10 @@ milestone = "M7"
 summary = "With several masters selected, name, metrics, stems, numbers and custom parameters are edited for all of them at once. A field whose values differ shows a gray Multiple Values placeholder until a new value is typed."
 ref = "Font Info › Masters › Managing Masters"
 status = "handbook"
-notes = "Documented, not yet observed. M7 plan § 4: M7.5 (font.master.get with several masters returns `null` for a value that differs), M7.17 (placeholder: the name, icon, metric positions and zones, stem widths, custom parameters, and the read-only axes coordinates and number values)."
+notes = "Documented, not yet observed. M7 plan § 4: M7.5 (font.master.get with several masters returns `null` for a value that differs), M7.17 (placeholder: the name, icon, metric positions and zones, stem widths, custom parameters, axes coordinates and number values). M7.31: the tab lists the rows any selected master holds; a row some lack shows how many hold it, its check box and minus act on those, and editing it adds it to the others."
+guesses = [
+  "A parameter only some of the selected masters hold is listed after the first one's rows with a count such as 1/2, and a new value for it is set on all of them; selecting two masters of which one has a parameter settles it.",
+]
 observe = [
   "In font B (m7-two), select both masters on the Masters tab: note which fields show Multiple Values, then edit a metric and check whether both masters get it.",
 ]
@@ -3274,7 +3296,7 @@ milestone = "M7"
 summary = "The note field highlights Markdown as plain text styling: italic with single asterisks or underscores, bold with double ones, inline links and angle-bracket autolinks, and headings of level one to six marked with number signs. The text is stored unrendered."
 ref = "Font Info › Notes"
 status = "handbook"
-notes = "Documented, not yet observed. M7 plan § 4: M7.16 (`notes_tab::highlight`)."
+notes = "Documented, not yet observed. The Notes tab is a plain text field; M7.35 builds the highlighting."
 guesses = [
   "Headings of every level take the section heading size and the strong text colour, bold takes the strong text colour, italic slants, links take the accent colour, and the Markdown syntax itself is dimmed; the reference app's Notes tab settles the styles.",
   "Underscore emphasis needs a word boundary on both sides and asterisk emphasis does not, emphasis and links stay within one line, and an autolink needs an http, https or mailto address; typing the edge cases in the reference app settles them.",
@@ -3291,7 +3313,7 @@ milestone = "M7"
 summary = "The Exports tab shows a short preview of the selected instance drawn in its own outlines: the glyphs of Aang126 by default, or the glyphs an Instance Preview parameter lists."
 ref = "Appendix › Custom Parameters (Instance Preview)"
 status = "handbook"
-notes = "Documented in the description of the Instance Preview parameter, which calls the tab Instances; not yet observed. M7 plan § 4: M7.18. An instance between masters is drawn from the session's interpolated instance view (X.ui3, crates/ui/src/panels/font_info/exports_tab.rs)."
+notes = "Documented in the description of the Instance Preview parameter, which calls the tab Instances; not yet observed. M7 plan § 4: M7.18. The Exports tab draws no preview; M7.35 builds it."
 guesses = [
   "The preview sits above the instance's fields, one line high, and draws the first selected instance; an instance between masters is drawn interpolated, and a variable font setting shows none; the Exports tab of the reference app settles placement.",
   "The default `Aang126` is read as characters and drawn with the glyphs mapped to them, skipping characters the font lacks; the reference app settles whether it names glyphs instead.",

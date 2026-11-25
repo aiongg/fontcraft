@@ -536,6 +536,82 @@ fn added_and_moved_entries_are_selected() {
     assert_eq!(app.models.font_info.exports.selected, vec![had + added.len()]);
 }
 
+/// Three parameters of one export are copied and pasted on five others as one undo step, through the same commands the
+/// Edit menu's Copy and Paste run; Cmd+Delete removes the selected rows.
+#[test]
+fn rows_copied_from_one_export_paste_on_five() {
+    use crate::app::clipboard::{PasteKind, paste};
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    let send = |app: &mut FontCraftApp, msg: Msg| {
+        app.sent.push(msg);
+        app.drain();
+        app.drain();
+    };
+    send(&mut app, shell("font.info", json!({ "tab": "exports" })));
+    for _ in 0..6 {
+        send(&mut app, Msg::run("font.instance.add", json!({})));
+    }
+    let first = app.session.font().expect("a font").instances.len() - 6;
+    for (name, value) in [("Filter", "RemoveOverlap"), ("Filter", "AddExtremes"), ("fileName", "Sample")] {
+        let params = json!({ "scope": "instance", "targets": [first], "name": name, "value": value });
+        send(&mut app, Msg::run("font.customParameters.add", params));
+    }
+    send(&mut app, shell("font.info.exports.select", json!({ "instances": [first] })));
+    let rows =
+        json!([{ "kind": "param", "key": "Filter" }, { "kind": "param", "key": "Filter", "index": 1 }, { "kind": "param", "key": "fileName" }]);
+    send(&mut app, shell("font.info.rows.select", json!({ "scope": "instance", "rows": rows })));
+    send(&mut app, shell("font.info.rows.copy", json!({})));
+    let text = app.clipboard.out.take().expect("the rows on the clipboard");
+    let others: Vec<usize> = (first + 1..first + 6).collect();
+    send(&mut app, shell("font.info.exports.select", json!({ "instances": others })));
+    let counts =
+        |app: &FontCraftApp| -> Vec<usize> { app.session.font().expect("a font").instances.iter().skip(first).map(|i| i.params.0.len()).collect() };
+    for kind in [PasteKind::InfoRows, PasteKind::Paste] {
+        paste(&mut app, &text, kind);
+        app.drain();
+        assert_eq!(counts(&app), vec![3; 6], "{kind:?}: {}", app.status);
+        send(&mut app, Msg::run("edit.undo", json!({})));
+        assert_eq!(counts(&app), vec![3, 0, 0, 0, 0, 0], "one undo step");
+    }
+    send(&mut app, shell("font.info.exports.select", json!({ "instances": [first] })));
+    send(&mut app, shell("font.info.rows.delete", json!({})));
+    assert_eq!(counts(&app), vec![0; 6]);
+}
+
+/// A parameter only the second of two selected masters holds shows with its holder; its minus acts on that master, and
+/// editing it adds it to the other. A language change over several exports is one command.
+#[test]
+fn a_row_only_one_target_holds_shows_and_is_edited_on_both() {
+    use super::param_value::Edit;
+    use super::rows::{RowAction, commands};
+    use crate::app::models::font_info::RowModel;
+    use crate::shell::font_info::Target;
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    app.sent.push(shell("font.info", json!({ "tab": "masters" })));
+    app.sent.push(Msg::run("font.master.add", json!({ "name": "Bold" })));
+    app.sent.push(Msg::run("font.customParameters.add", json!({ "scope": "master", "targets": [1], "name": "typoAscender", "value": 800 })));
+    app.sent.push(shell("font.info.masters.select", json!({ "masters": [0, 1] })));
+    app.drain();
+    let (target, row) = {
+        let tab = &app.models.font_info.masters_tab;
+        (tab.target(), tab.params.iter().find(|r| r.key == "typoAscender").cloned().expect("the second master's row"))
+    };
+    assert_eq!((row.holders.clone(), row.mixed), (vec![1], false));
+    let remove = json!({ "scope": "master", "targets": [1], "name": "typoAscender", "index": 0 });
+    assert_eq!(commands(&target, &row, &RowAction::Remove), vec![Msg::run("font.customParameters.remove", remove)]);
+    app.sent.extend(commands(&target, &row, &RowAction::Edit(Edit::Value(json!(750)))));
+    app.drain();
+    assert!(app.status.is_empty(), "{}", app.status);
+    let held: Vec<usize> = app.session.font().expect("a font").masters.iter().map(|m| m.params.0.len()).collect();
+    assert_eq!(held, vec![1, 1]);
+
+    let exports = Target { scope: fontcraft_engine::fontinfo::Scope::Instance, indices: vec![0, 1, 2, 3] };
+    let names = RowModel { key: "styleNames".into(), ..RowModel::default() };
+    let change = Edit::ChangeLanguage { from: "DEU".into(), to: "FRA".into() };
+    let want = json!({ "scope": "instance", "targets": [0, 1, 2, 3], "key": "styleNames", "from": "DEU", "language": "FRA" });
+    assert_eq!(commands(&exports, &names, &RowAction::Edit(change)), vec![Msg::run("font.info.setLocalizedValue", want)]);
+}
+
 /// Cmd-click adds an entry to the selection; Active, Style Name, an axis coordinate, Bold and minus post their
 /// commands on the selected entries.
 #[test]
