@@ -157,7 +157,7 @@ pub struct Guide {
     /// The glyphs it is shown in, as a glyph predicate.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub filter: Option<String>,
-    /// Where the guide's label sits (`left`, `center` or `right`).
+    /// The sidebearing a version 3 or later source counts the position from (`left`, `center` or `right`), as read.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub orientation: Option<String>,
     /// A UFO guideline's colour, as the UFO writes it (`"r,g,b,a"`).
