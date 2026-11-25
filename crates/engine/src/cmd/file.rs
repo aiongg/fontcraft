@@ -30,7 +30,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Open…",
             ["File"],
             Some("Cmd+O"),
-            "{path: string, face?: number, keepGlyphNames?: bool} open a font as a new document, recognising it by content: a .fontcraft file, a .glyphs file (format versions 2 to 4), a .glyphspackage folder, a UFO folder (versions 2 and 3), a .designspace file with the UFOs it names (one document, a master per source), or a compiled font (TrueType, OpenType with CFF, a collection member chosen by face, WOFF, WOFF2). A compiled font opens view-only: save it with Save As to a source format. A UFOZ is saved back as a UFOZ. GlyphData*.xml files beside the source and in an Info folder beside it add to the glyph data for this document, unless the font's Ignore custom GlyphData file parameter is on. A UFO or designspace has its composites aligned automatically as it opens, so their metrics follow their bases (aligned counts the glyphs that changed); with the user setting user.disableAutomaticAlignmentForImportedFiles on, the font's Disable Automatic Alignment option is switched on instead. A UFO, designspace or compiled font has its glyphs renamed to the nice names the glyph data gives their names (`uni0041` becomes `A`), keeping their places and code points (renamed counts them); a glyph whose name feature code or other text uses keeps it, with a warning. keepGlyphNames (default: the user setting user.keepGlyphNamesFromImportedFiles) or the font's Use Custom Naming option keeps the file's names. warnings lists what reading a compiled font left out and the glyph data files that could not be used. A .fontcraftproject file opens as a project, as project.open does, with its reply → {title, path, format, version?, glyphs, masters, viewOnly, aligned, renamed, warnings}",
+            "{path: string, face?: number, keepGlyphNames?: bool} open a font as a new document, recognising it by content: a .fontcraft file, a .glyphs file (format versions 2 to 4), a .glyphspackage folder, a UFO folder (versions 2 and 3), a .designspace file with the UFOs it names (one document, a master per source), or a compiled font (TrueType, OpenType with CFF, a collection member chosen by face, WOFF, WOFF2). A compiled font opens view-only: save it with Save As to a source format. A collection of several fonts needs face (collection.list gives the members); each member opens as its own document, titled with its family and style. A UFOZ is saved back as a UFOZ. GlyphData*.xml files beside the source and in an Info folder beside it add to the glyph data for this document, unless the font's Ignore custom GlyphData file parameter is on. A UFO or designspace has its composites aligned automatically as it opens, so their metrics follow their bases (aligned counts the glyphs that changed); with the user setting user.disableAutomaticAlignmentForImportedFiles on, the font's Disable Automatic Alignment option is switched on instead. A UFO, designspace or compiled font has its glyphs renamed to the nice names the glyph data gives their names (`uni0041` becomes `A`), keeping their places and code points (renamed counts them); a glyph whose name feature code or other text uses keeps it, with a warning. keepGlyphNames (default: the user setting user.keepGlyphNamesFromImportedFiles) or the font's Use Custom Naming option keeps the file's names. warnings lists what reading the file left out (the tables of a compiled font that are not read, the parts of a source that could not be read) and the glyph data files that could not be used. A .fontcraftproject file opens as a project, as project.open does, with its reply → {title, path, format, version?, glyphs, masters, viewOnly, face?, aligned, renamed, warnings}",
             always,
             open
         ).files(const { &[FileParam::read("path")] }),
@@ -39,7 +39,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Save",
             ["File"],
             Some("Cmd+S"),
-            "{path?: string, force?: bool, document?: number} write the document to its file in the format it was opened in (or to `path`, choosing the format from its extension). document: the session id of the document meant, which the app passes when it asks to overwrite; refused when another document is active, and left out of the command log. Refuses when the file changed on disk since it was read (for a designspace: the document or any of its UFOs), unless force is true. Single files (a UFOZ among them) are written atomically; a package or UFO folder rewrites only changed files; a designspace writes its UFOs, then the document → {path, format, version?, bytes, filesWritten, filesRemoved, losses}",
+            "{path?: string, force?: bool, document?: number, smartComponents?: \"components\"|\"outlines\", strict?: bool} write the document to its file in the format it was opened or last saved in (or to `path`, choosing the format from its extension). smartComponents as in file.saveAs. strict: true refuses, writing nothing, when the format cannot hold part of the document (file.lossReport lists it); in the window, a person's Save asks first when the report has something the file did not already leave out, unless strict is given. document: the session id of the document meant, which the app passes when it asks to overwrite; refused when another document is active, and left out of the command log. Refuses when the file changed on disk since it was read (for a designspace: the document or any of its UFOs), unless force is true. Single files (a UFOZ among them) are written atomically; a package or UFO folder rewrites only changed files; a designspace writes its UFOs, then the document → {path, format, version?, bytes, filesWritten, filesRemoved, losses}",
             has_doc,
             save
         ).files(const { &[FileParam::write("path")] }).writes_files(),
@@ -48,7 +48,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Save As…",
             ["File"],
             Some("Cmd+Shift+S"),
-            "{path: string, format?: \"fontcraft\"|\"glyphs\"|\"glyphspackage\"|\"ufo\"|\"ufoz\"|\"designspace\", version?: 2|3|4, compress?: bool, force?: bool, smartComponents?: \"components\"|\"outlines\"} write the document to a new file and make that its file; format defaults to the path's extension, version to the one the document has (3 for a new document; .glyphs has 2 to 4, UFO 2 and 3). A single UFO holds one master; a UFOZ is a UFO in a ZIP archive, under a folder named after the file; a designspace writes a UFO per master beside it. compress: gzip a .fontcraft file (default: as it was opened). smartComponents (UFO, UFOZ and designspace): keep smart components as components with their values in the glyph lib (default), or draw them as outlines interpolated from the smart glyph's pole layers; the document keeps its components. losses lists what the format cannot hold → {path, format, version?, bytes, filesWritten, filesRemoved, losses}",
+            "{path: string, format?: \"fontcraft\"|\"glyphs\"|\"glyphspackage\"|\"ufo\"|\"ufoz\"|\"designspace\", version?: 2|3|4, compress?: bool, force?: bool, smartComponents?: \"components\"|\"outlines\", strict?: bool} write the document to a new file and make that its file; format defaults to the path's extension, version to the one the document has (3 for a new document; .glyphs has 2 to 4, UFO 2 and 3). A single UFO holds one master; a UFOZ is a UFO in a ZIP archive, under a folder named after the file; a designspace writes a UFO per master beside it. compress: gzip a .fontcraft file (default: as it was opened). smartComponents (UFO, UFOZ and designspace): keep smart components as components with their values in the glyph lib (default), or draw them as outlines interpolated from the smart glyph's pole layers; the document keeps its components. losses lists what the format cannot hold; strict: true refuses instead, writing nothing. In the window a person's Save As asks first (file.lossReport), unless strict is given → {path, format, version?, bytes, filesWritten, filesRemoved, losses}",
             has_doc,
             save_as
         ).files(const { &[FileParam::write("path")] }).writes_files(),
@@ -57,7 +57,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Export UFO",
             [],
             None,
-            "{destination: string, masters?: [string], productionNames?: bool, decomposeSmartStuff?: bool} write each chosen master (default: all) as its own UFO 3 into the destination folder, named Family-Style.ufo. The document keeps its file and format. productionNames: write each glyph under its production name (its own, else the glyph data's), components, kerning, groups and the glyph order following; the document keeps its names; a glyph whose production name is taken or breaks the naming rules, or whose name feature code or other text uses, keeps its name and is listed in losses. decomposeSmartStuff: draw smart components as outlines interpolated from the smart glyph's pole layers (default true); false keeps them as components with their values in the glyph lib → {files: [{path, master, filesWritten}], losses}",
+            "{destination: string, masters?: [string], productionNames?: bool, decomposeSmartStuff?: bool, strict?: bool} write each chosen master (default: all) as its own UFO 3 into the destination folder, named Family-Style.ufo. The document keeps its file and format. productionNames: write each glyph under its production name (its own, else the glyph data's), components, kerning, groups and the glyph order following; the document keeps its names; a glyph whose production name is taken or breaks the naming rules, or whose name feature code or other text uses, keeps its name and is listed in losses. decomposeSmartStuff: draw smart components as outlines interpolated from the smart glyph's pole layers (default true); false keeps them as components with their values in the glyph lib. strict: true refuses, writing nothing, when a UFO cannot hold part of the font; in the window a person's export asks first (file.lossReport), unless strict is given → {files: [{path, master, filesWritten}], losses}",
             has_doc,
             export_ufo
         ).files(const { &[FileParam::write("destination")] }).writes_files(),
@@ -95,7 +95,7 @@ fn open(s: &mut Session, p: &Value) -> Result<Value> {
     let face = p.opt_int("face", 0, i64::from(u16::MAX))?.map(|f| f as u32);
     let keep_names = p.bool_or("keepGlyphNames", s.settings().get_bool(super::import_naming::KEEP_GLYPH_NAMES).unwrap_or(false))?;
     // A file that is already open is shown, not opened a second time (`file.openTwiceActivates`).
-    if let Some(i) = super::shared::find_open(s, &path) {
+    if let Some(i) = super::shared::find_open_face(s, &path, face) {
         s.set_active(i)?;
         remember(s, &path);
         let doc = s.doc()?;
@@ -105,7 +105,10 @@ fn open(s: &mut Session, p: &Value) -> Result<Value> {
     }
     let (font, mut warnings) = crate::io::open(&path, face)?;
     let font = crate::linked::resolve(&font, Some(&path), &mut warnings)?.unwrap_or(font);
-    let (font, aligned) = super::shared::align_imported(s, font, &mut warnings);
+    // A native file holds its composites' positions and its glyphs' names, whatever format its
+    // font was first read from.
+    let native = crate::is_native_path(&path);
+    let (font, aligned) = if native { (font, 0) } else { super::shared::align_imported(s, font, &mut warnings) };
     let glyph_data = crate::glyph_data::source_files(&path, &mut warnings);
     // Every reader checks the font it returns.
     s.push_document(font, Some(path.clone()));
@@ -114,22 +117,47 @@ fn open(s: &mut Session, p: &Value) -> Result<Value> {
         warnings.extend(s.set_source_glyph_data(&files)?);
     }
     // After the glyph data beside the source is in place, so its names count.
-    let renamed = if keep_names { 0 } else { super::import_naming::name_imported(s, &mut warnings) };
+    let renamed = if keep_names || native { 0 } else { super::import_naming::name_imported(s, &mut warnings) };
+    let member = face.filter(|_| super::collection::is_collection_file(&path));
+    if let Some(face) = member {
+        let doc = s.doc_mut()?;
+        doc.title = member_title(&doc.font).unwrap_or_else(|| format!("{} {}", doc.title, u64::from(face) + 1));
+        doc.set_ext(crate::CollectionFace(face));
+    }
     let doc = s.doc()?;
-    let save_format = crate::io::SaveFormat::of_source(doc.font.source.format);
-    let format = match doc.font.source.format {
+    let save_format = crate::io::SaveFormat::of_source(doc.file_format());
+    let format = match doc.file_format() {
         fontcraft_model::SourceFormat::Binary => Some("binary"),
         fontcraft_model::SourceFormat::Ufoz => Some("ufoz"),
         _ => save_format.map(|f| f.name()),
     };
     let version = doc.font.source.glyphs_version.or(doc.font.source.ufo_version);
-    let reply = json!({
+    let mut reply = json!({
         "title": doc.title, "path": doc.path.as_ref().map(|p| p.to_string_lossy()), "format": format,
         "version": version, "glyphs": doc.font.glyphs.len(), "masters": doc.font.masters.len(), "viewOnly": save_format.is_none(), "warnings": warnings,
         "aligned": aligned, "renamed": renamed,
     });
+    if let (Some(face), Some(map)) = (member, reply.as_object_mut()) {
+        map.insert("face".into(), json!(face));
+    }
     remember(s, &path);
     Ok(reply)
+}
+
+/// Longest title taken from a collection member's names, in characters.
+#[cfg(not(target_arch = "wasm32"))]
+const MAX_MEMBER_TITLE: usize = 100;
+
+/// The title of a document opened from a collection member: its family and style, which Save As
+/// offers as the file name, so characters a file name cannot have become hyphens. `None` when it
+/// has no family name.
+#[cfg(not(target_arch = "wasm32"))]
+fn member_title(font: &Font) -> Option<String> {
+    let family = font.family_name.trim();
+    let style = font.masters.first().map(|m| m.name.trim()).unwrap_or_default();
+    let name = if style.is_empty() { family.to_string() } else { format!("{family} {style}") };
+    let safe = |c: char| if c.is_control() || matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|') { '-' } else { c };
+    (!family.is_empty()).then(|| name.chars().take(MAX_MEMBER_TITLE).map(safe).collect())
 }
 
 /// Puts a document just opened or saved first in the recent documents. The list is a
@@ -148,7 +176,7 @@ fn open(_: &mut Session, _: &Value) -> Result<Value> {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn write_document(s: &mut Session, p: &Params, path: std::path::PathBuf, format: crate::io::SaveFormat, version: Option<u32>) -> Result<Value> {
-    use crate::io::{self, SaveFormat};
+    use crate::io;
     let outlines = smart_outlines(p)?;
     if outlines && !format.is_ufo() {
         return Err(p.bad("`smartComponents` applies to UFO, UFOZ and designspace files"));
@@ -163,8 +191,45 @@ fn write_document(s: &mut Session, p: &Params, path: std::path::PathBuf, format:
     }
     let mut font = Font::clone(&doc.font);
     crate::assets::rebase_image_paths(&mut font, doc.path.as_deref(), &path);
-    // The version a format family is written in: the one asked for, else the one read, else the
-    // newest that is not a draft (3 for both). Converting between versions is not supported yet.
+    let version = prepare(p, &mut font, format, version)?;
+    let (smart, smart_losses) = smart_choice(&font, outlines);
+    if p.bool_or("strict", false)? {
+        refuse_losses(p, format.name(), &io::save_losses(smart.as_ref().unwrap_or(&font), format))?;
+    }
+    let mut saved = io::save(smart.as_ref().unwrap_or(&font), &path, format)?;
+    saved.losses.extend(smart_losses);
+    let font = Arc::new(font);
+    let doc = s.doc_mut()?;
+    let (id, old_path) = (doc.id, doc.path.replace(path.clone()));
+    doc.title = path.file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| doc.title.clone());
+    doc.font = font.clone();
+    doc.saved = font;
+    doc.stamp = io::document_stamp(&path, &doc.font);
+    doc.set_ext(crate::SavedAs(format.source()));
+    doc.remove_ext::<crate::CollectionFace>();
+    // Undo steps carry their own folder (`HistoryEntry::path`). The starting font of a running
+    // batch or interaction becomes an undo step under the new folder, so it is rewritten here.
+    let rebase = |font: &mut Arc<Font>| *font = crate::assets::rebased(Arc::clone(font), old_path.as_deref(), Some(&path));
+    if let Some(batch) = s.batch.as_mut() {
+        batch.before.iter_mut().filter(|(d, _)| *d == id).for_each(|(_, before)| rebase(before));
+    }
+    if let Some(it) = s.interaction.as_mut().filter(|it| it.doc == id) {
+        rebase(&mut it.before);
+    }
+    remember(s, &path);
+    Ok(json!({
+        "path": path.to_string_lossy(), "format": format.name(), "version": version, "bytes": saved.bytes,
+        "filesWritten": saved.files_written, "filesRemoved": saved.files_removed, "losses": saved.losses,
+    }))
+}
+
+/// Makes `font`, a copy of the document's, what a save in `format` writes: the version its format
+/// family is written in (the one asked for, else the one read, else the newest that is not a
+/// draft, 3 for both) and the format it is then read from. Returns the version. Converting
+/// between versions is not supported yet.
+#[cfg(not(target_arch = "wasm32"))]
+pub(super) fn prepare(p: &Params, font: &mut Font, format: crate::io::SaveFormat, version: Option<u32>) -> Result<Option<u32>> {
+    use crate::io::SaveFormat;
     let pick = |have: Option<u32>, range: std::ops::RangeInclusive<u32>| -> Result<u32> {
         let want = version.or(have).unwrap_or(3);
         if !range.contains(&want) {
@@ -191,35 +256,26 @@ fn write_document(s: &mut Session, p: &Params, path: std::path::PathBuf, format:
     if format != SaveFormat::Native {
         font.source.format = format.source();
     }
-    let (smart, smart_losses) = smart_choice(&font, outlines);
-    let mut saved = io::save(smart.as_ref().unwrap_or(&font), &path, format)?;
-    saved.losses.extend(smart_losses);
-    let font = Arc::new(font);
-    let doc = s.doc_mut()?;
-    let (id, old_path) = (doc.id, doc.path.replace(path.clone()));
-    doc.title = path.file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| doc.title.clone());
-    doc.font = font.clone();
-    doc.saved = font;
-    doc.stamp = io::document_stamp(&path, &doc.font);
-    // Undo steps carry their own folder (`HistoryEntry::path`). The starting font of a running
-    // batch or interaction becomes an undo step under the new folder, so it is rewritten here.
-    let rebase = |font: &mut Arc<Font>| *font = crate::assets::rebased(Arc::clone(font), old_path.as_deref(), Some(&path));
-    if let Some(batch) = s.batch.as_mut() {
-        batch.before.iter_mut().filter(|(d, _)| *d == id).for_each(|(_, before)| rebase(before));
-    }
-    if let Some(it) = s.interaction.as_mut().filter(|it| it.doc == id) {
-        rebase(&mut it.before);
-    }
-    remember(s, &path);
-    Ok(json!({
-        "path": path.to_string_lossy(), "format": format.name(), "version": version, "bytes": saved.bytes,
-        "filesWritten": saved.files_written, "filesRemoved": saved.files_removed, "losses": saved.losses,
-    }))
+    Ok(version)
 }
+
+/// `strict`: an error naming what a write in `format` would leave out, when it leaves anything out.
+#[cfg(not(target_arch = "wasm32"))]
+fn refuse_losses(p: &Params, format: &str, losses: &[Value]) -> Result<()> {
+    if losses.is_empty() {
+        return Ok(());
+    }
+    let named: Vec<&str> = losses.iter().filter_map(|l| l.get("what").and_then(Value::as_str)).take(MAX_NAMED_LOSSES).collect();
+    Err(p.bad(format!("`strict`: {format} cannot hold part of this font, so nothing was written: {}", named.join("; "))))
+}
+
+/// Most losses the `strict` refusal names.
+#[cfg(not(target_arch = "wasm32"))]
+const MAX_NAMED_LOSSES: usize = 5;
 
 /// `smartComponents`: whether a UFO or designspace write draws smart components as outlines.
 #[cfg(not(target_arch = "wasm32"))]
-fn smart_outlines(p: &Params) -> Result<bool> {
+pub(super) fn smart_outlines(p: &Params) -> Result<bool> {
     match p.opt_str("smartComponents")? {
         None | Some("components") => Ok(false),
         Some("outlines") => Ok(true),
@@ -230,7 +286,7 @@ fn smart_outlines(p: &Params) -> Result<bool> {
 /// With `outlines`, the font to write with its smart components drawn as outlines, and what that
 /// did, for the losses. The document keeps its components.
 #[cfg(not(target_arch = "wasm32"))]
-fn smart_choice(font: &Font, outlines: bool) -> (Option<Font>, Vec<Value>) {
+pub(super) fn smart_choice(font: &Font, outlines: bool) -> (Option<Font>, Vec<Value>) {
     if !outlines {
         return (None, Vec::new());
     }
@@ -264,7 +320,7 @@ fn save(s: &mut Session, p: &Value) -> Result<Value> {
         None => {
             let doc = s.doc()?;
             let path = doc.path.clone().ok_or_else(|| p.bad("the document has never been saved: give a `path`"))?;
-            let format = SaveFormat::of_source(doc.font.source.format)
+            let format = SaveFormat::of_source(doc.file_format())
                 .ok_or_else(|| EngineError::Unsupported("saving in the format this document was opened from; use Save As".into()))?;
             (path, format)
         }
@@ -338,9 +394,12 @@ fn export_ufo(s: &mut Session, p: &Value) -> Result<Value> {
     if destination.exists() && !destination.is_dir() {
         return Err(p.bad(format!("{} is a file: give a folder", destination.display())));
     }
-    std::fs::create_dir_all(&destination).map_err(|e| EngineError::Io(format!("cannot create {}: {e}", destination.display())))?;
     let (smart, smart_losses) = smart_choice(font, outlines);
     let written = smart.as_ref().unwrap_or(font);
+    if p.bool_or("strict", false)? {
+        refuse_losses(&p, "UFO", &crate::io::export_losses(written))?;
+    }
+    std::fs::create_dir_all(&destination).map_err(|e| EngineError::Io(format!("cannot create {}: {e}", destination.display())))?;
     let (named, name_losses) = if production { super::import_naming::production_copy(written, &data) } else { (written.clone(), Vec::new()) };
     let mut exported = crate::io::export_ufos(&named, &masters, &destination)?;
     exported.losses.extend(smart_losses);

@@ -12,6 +12,7 @@ pub mod close;
 pub mod console;
 pub mod context_menu;
 pub mod dropped;
+pub mod file_questions;
 pub mod files;
 pub mod font_view;
 pub mod menu_alternates;
@@ -21,6 +22,7 @@ pub mod models;
 mod msg;
 mod notices;
 pub mod open;
+pub mod open_report;
 pub mod preview_host;
 pub mod sidebar;
 pub mod startup;
@@ -113,6 +115,10 @@ pub struct ViewState {
     pub settings: crate::shell::settings::SettingsState,
     /// The question asked when a save finds its file changed on disk.
     pub changed_on_disk: Option<crate::dialogs::changed_on_disk::Asked>,
+    /// The questions asked before a save that leaves data out and before opening a font collection.
+    pub file_questions: file_questions::FileQuestions,
+    /// What opening the documents reported, and whether the notice and the list show.
+    pub open_report: open_report::OpenReports,
     /// The document the unsaved-changes dialog shows.
     pub unsaved_shown: crate::dialogs::unsaved::Shown,
     /// The Table Viewer's font, table, view, search, tree and what it read.
@@ -182,6 +188,8 @@ impl Default for ViewState {
             start: Default::default(),
             settings: Default::default(),
             changed_on_disk: None,
+            file_questions: Default::default(),
+            open_report: Default::default(),
             unsaved_shown: Default::default(),
             table_viewer: Default::default(),
             compare_fonts: Default::default(),
@@ -475,6 +483,12 @@ impl FontCraftApp {
                 if ask_files && self.picks.ask(&self.host, &self.session, &command) {
                     return Ok(json!({ "picker": true }));
                 }
+                if ask_files
+                    && origin == Origin::Person
+                    && let Some(asked) = file_questions::ask(self, &command)
+                {
+                    return Ok(asked);
+                }
                 let params = if command.params.is_null() { json!({}) } else { command.params.clone() };
                 if matches!(command.id.as_str(), "file.save" | "file.saveAs") {
                     crate::shell::tabs::upkeep::store_display_strings(self);
@@ -502,6 +516,7 @@ impl FontCraftApp {
                 } else {
                     Vec::new()
                 };
+                open_report::after_run(self, &command.id, &reply);
                 crate::shell::start::after_run(self, &command.id);
                 crate::canvas::tools::apply::adopt(self, &reply);
                 if origin == Origin::Person {

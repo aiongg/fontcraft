@@ -27,7 +27,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "List Collection Members",
             [],
             None,
-            "{file: path} the members of a collection (a WOFF2 collection is unwrapped; a single font lists as one member): index, PostScript name, outline flavour, tables, and the tables whose data another member shares → {format, members: [{index, postscriptName, flavour: \"truetype\"|\"cff\", tables: [tag], shared: [tag]}]}",
+            "{file: path} the members of a collection (a WOFF2 collection is unwrapped; a single font lists as one member): index, PostScript name, family and style names, number of glyphs, outline flavour, tables, and the tables whose data another member shares → {format, members: [{index, postscriptName, family, style, glyphs, flavour: \"truetype\"|\"cff\", tables: [tag], shared: [tag]}]}",
             always,
             list
         ).files(const { &[FileParam::read("file")] }),
@@ -99,12 +99,22 @@ fn list(_: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("collection.list", p)?;
     let input = font_input(&p, p.str("file")?)?;
     let members = collection::list(&input.bytes)?;
+    let sfnt = fontcraft_container::to_sfnt(&input.bytes).map_err(container_error)?;
+    let file = skrifa::raw::FileRef::new(&sfnt).ok();
     let rows: Vec<Value> = members
         .iter()
         .map(|m| {
+            let face = file.as_ref().and_then(|f| match f {
+                skrifa::raw::FileRef::Font(f) => Some(f.clone()),
+                skrifa::raw::FileRef::Collection(c) => c.get(m.index).ok(),
+            });
+            let named = face.as_ref().map(member_names);
             json!({
                 "index": m.index,
                 "postscriptName": m.postscript_name,
+                "family": named.as_ref().and_then(|n| n.family.clone()),
+                "style": named.as_ref().and_then(|n| n.style.clone()),
+                "glyphs": named.as_ref().map(|n| n.glyphs),
                 "flavour": flavour_name(m.flavour),
                 "tables": m.tables.iter().map(|t| tag_text(*t)).collect::<Vec<_>>(),
                 "shared": m.shared.iter().map(|t| tag_text(*t)).collect::<Vec<_>>(),
@@ -112,6 +122,55 @@ fn list(_: &mut Session, p: &Value) -> Result<Value> {
         })
         .collect();
     Ok(json!({ "format": input.kind.name(), "members": rows }))
+}
+
+/// Longest name `collection.list` gives, in characters.
+const MAX_NAME: usize = 256;
+
+struct MemberNames {
+    family: Option<String>,
+    style: Option<String>,
+    glyphs: u32,
+}
+
+/// A member's family and style (the typographic names, else the basic ones; English, else the
+/// first language) and its number of glyphs.
+fn member_names(font: &skrifa::FontRef<'_>) -> MemberNames {
+    use skrifa::MetadataProvider as _;
+    use skrifa::raw::TableProvider as _;
+    use skrifa::string::StringId;
+    let name = |ids: [StringId; 2]| {
+        ids.into_iter().find_map(|id| {
+            let mut strings = font.localized_strings(id);
+            let english = strings.clone().find(|s| s.language().is_some_and(|l| l.starts_with("en")));
+            let text: String = english.or_else(|| strings.next())?.chars().filter(|c| !c.is_control()).take(MAX_NAME).collect();
+            (!text.trim().is_empty()).then_some(text)
+        })
+    };
+    MemberNames {
+        family: name([StringId::TYPOGRAPHIC_FAMILY_NAME, StringId::FAMILY_NAME]),
+        style: name([StringId::TYPOGRAPHIC_SUBFAMILY_NAME, StringId::SUBFAMILY_NAME]),
+        glyphs: font.maxp().map(|m| u32::from(m.num_glyphs())).unwrap_or(0),
+    }
+}
+
+/// Whether the file at `path` is a font collection (or a WOFF2 one), by its first bytes.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn is_collection_file(path: &Path) -> bool {
+    use std::io::Read as _;
+    // A named pipe or a device can wait for a writer forever.
+    if !std::fs::metadata(path).is_ok_and(|m| m.is_file()) {
+        return false;
+    }
+    let mut head = Vec::new();
+    let read = std::fs::File::open(path).and_then(|f| f.take(8).read_to_end(&mut head));
+    read.is_ok() && (head.starts_with(b"ttcf") || (head.starts_with(b"wOF2") && head.get(4..8) == Some(b"ttcf".as_slice())))
+}
+
+/// The browser reads no files by path.
+#[cfg(target_arch = "wasm32")]
+pub fn is_collection_file(_: &Path) -> bool {
+    false
 }
 
 // ── collection.pack ──────────────────────────────────────────────────────────────────────────

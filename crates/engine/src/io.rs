@@ -323,7 +323,7 @@ fn keep_stored_tables(font: &mut Font, sfnt: &[u8], face: Option<u32>) {
     let Ok(file) = skrifa::raw::FileRef::new(sfnt) else { return };
     let face = match file {
         skrifa::raw::FileRef::Font(f) => f,
-        skrifa::raw::FileRef::Collection(c) => match face.and_then(|i| c.get(i).ok()) {
+        skrifa::raw::FileRef::Collection(c) => match face.or((c.len() == 1).then_some(0)).and_then(|i| c.get(i).ok()) {
             Some(f) => f,
             None => return,
         },
@@ -465,23 +465,64 @@ fn is_native(body: &str) -> bool {
     json_key && body.get(..body.len().min(4096)).unwrap_or(body).contains("\"fontcraft\"")
 }
 
+/// Most glyphs one entry of a loss report names.
+pub const MAX_LOSS_GLYPHS: usize = 256;
+
+/// One kind of loss while it is counted: how many, and the glyphs they are in.
+#[derive(Default)]
+pub(crate) struct Lost {
+    entries: usize,
+    glyphs: Vec<String>,
+}
+
+impl Lost {
+    /// Counts `n` more in `glyph` (glyphs come in font order, so a repeat is the last one named).
+    pub(crate) fn add(&mut self, n: usize, glyph: Option<&str>) {
+        self.entries = self.entries.saturating_add(n);
+        if let Some(glyph) = glyph
+            && self.glyphs.len() < MAX_LOSS_GLYPHS
+            && self.glyphs.last().is_none_or(|last| last != glyph)
+        {
+            self.glyphs.push(glyph.to_string());
+        }
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.entries == 0
+    }
+
+    /// The loss report's entry: `glyphs` is there only when glyphs lose something.
+    pub(crate) fn entry(self, family: &str, what: &str) -> Value {
+        let mut entry = json!({ "family": family, "entries": self.entries, "what": what });
+        if !self.glyphs.is_empty()
+            && let Some(map) = entry.as_object_mut()
+        {
+            map.insert("glyphs".into(), json!(self.glyphs));
+        }
+        entry
+    }
+}
+
 /// What saving could not keep: extra entries and kept shapes of other format families. The UFO
 /// and designspace readers' entries are records of the files as read; only the data some of them
 /// hold is reported ([`fontcraft_io_ufo::ufo::kept_data_losses`]), not the file layout, and
 /// neither are the layouts the .glyphs reader keeps ([`fontcraft_io_glyphs::LAYOUT_KEY`]).
 fn losses(font: &Font, targets: &[Family]) -> Vec<Value> {
-    let mut counts: BTreeMap<&'static str, usize> = BTreeMap::new();
+    let mut counts: BTreeMap<&'static str, Lost> = BTreeMap::new();
+    // The glyph whose entries are being counted; `None` for the font's own.
+    let current: std::cell::Cell<Option<&str>> = std::cell::Cell::new(None);
     let record = |f: Family| matches!(f, Family::Ufo | Family::Designspace);
     let mut count = |x: &fontcraft_model::Extra| {
         let layout = |e: &fontcraft_model::ExtraEntry| e.key.as_str().starts_with(fontcraft_io_glyphs::LAYOUT_KEY);
         for e in x.iter().filter(|e| !targets.contains(&e.family) && !record(e.family) && !layout(e)) {
-            *counts.entry(family_name(e.family)).or_default() += 1;
+            counts.entry(family_name(e.family)).or_default().add(1, current.get());
         }
     };
     count(&font.extra);
     font.metrics.iter().for_each(|m| count(&m.extra));
     font.masters.iter().for_each(|m| count(&m.extra));
     for g in font.glyphs.iter() {
+        current.set(Some(&g.name));
         count(&g.extra);
         for l in &g.layers {
             count(&l.extra);
@@ -523,21 +564,21 @@ fn losses(font: &Font, targets: &[Family]) -> Vec<Value> {
         }
     }
     let mut out: Vec<Value> =
-        counts.into_iter().map(|(family, entries)| json!({ "family": family, "entries": entries, "what": "keys read from that format, which this one has no place for" })).collect();
-    let mut shapes: BTreeMap<&'static str, usize> = BTreeMap::new();
+        counts.into_iter().map(|(family, lost)| lost.entry(family, "keys read from that format, which this one has no place for")).collect();
+    let mut shapes: BTreeMap<&'static str, Lost> = BTreeMap::new();
     for g in font.glyphs.iter() {
         for l in &g.layers {
             for s in l.shapes.iter().chain(l.info.background.iter().flat_map(|b| b.shapes.iter())) {
                 if let Shape::Raw(r) = s
                     && !targets.contains(&r.family)
                 {
-                    *shapes.entry(family_name(r.family)).or_default() += 1;
+                    shapes.entry(family_name(r.family)).or_default().add(1, Some(&g.name));
                 }
             }
         }
     }
-    for (family, n) in shapes {
-        out.push(json!({ "family": family, "entries": n, "what": "shapes read from that format that the model keeps as written, left out" }));
+    for (family, lost) in shapes {
+        out.push(lost.entry(family, "shapes read from that format that the model keeps as written, left out"));
     }
     if !targets.contains(&Family::Designspace) {
         let items = fontcraft_io_ufo::ufo::kept_data_losses(font, targets.contains(&Family::Ufo));
@@ -570,13 +611,16 @@ fn side_file_losses(font: &Font) -> Option<Value> {
 /// axes), layers without a name, and the other layers of masters stored as a layer of another
 /// UFO.
 fn ufo_layer_losses(font: &Font, designspace: bool) -> Option<Value> {
-    let n = fontcraft_io_ufo::ufo::layers_left_out(font, designspace);
+    let mut lost = Lost::default();
+    for (glyph, n) in fontcraft_io_ufo::ufo::layers_left_out_by_glyph(font, designspace) {
+        lost.add(n, Some(&glyph));
+    }
     let what = if designspace {
         "layers without a name, alternate layers in a font without axes, and other layers of masters stored as a layer of another UFO, which a designspace cannot hold yet"
     } else {
         "alternate layers and layers without a name, which a UFO cannot hold yet"
     };
-    (n > 0).then(|| json!({ "family": "glyphs", "entries": n, "what": what }))
+    (!lost.is_empty()).then(|| lost.entry("glyphs", what))
 }
 
 /// Font information (properties, parameters, settings, user data, instance fields) a UFO, or a
@@ -777,6 +821,24 @@ pub struct Exported {
     pub losses: Vec<Value>,
 }
 
+/// What [`export_ufos`] would leave out of `font`, worked out without writing, as [`save_losses`]
+/// works it out for a save.
+pub fn export_losses(font: &Font) -> Vec<Value> {
+    let mut font = font.clone();
+    font.source.ufo_version = Some(3);
+    let converted = ufo_images_as_png_by_header(&font, FilesFrom::PerMaster);
+    export_loss_report(converted.as_ref().unwrap_or(&font))
+}
+
+/// The losses of exporting `font`, as [`export_ufos`] has prepared it.
+fn export_loss_report(font: &Font) -> Vec<Value> {
+    let mut losses = losses(font, &[Family::Ufo]);
+    losses.extend(ufo_layer_losses(font, false));
+    losses.extend(side_file_losses(font));
+    losses.extend(ufo_info_losses(font, FilesFrom::PerMaster));
+    losses
+}
+
 /// Writes each of `masters` as its own UFO 3 into the folder `destination`.
 pub fn export_ufos(font: &Font, masters: &[String], destination: &Path) -> Result<Exported> {
     let mut font = font.clone();
@@ -784,10 +846,7 @@ pub fn export_ufos(font: &Font, masters: &[String], destination: &Path) -> Resul
     if let Some(converted) = ufo_images_as_png(&font, FilesFrom::PerMaster) {
         font = converted;
     }
-    let mut losses = losses(&font, &[Family::Ufo]);
-    losses.extend(ufo_layer_losses(&font, false));
-    losses.extend(side_file_losses(&font));
-    losses.extend(ufo_info_losses(&font, FilesFrom::PerMaster));
+    let losses = export_loss_report(&font);
     let mut taken = Vec::new();
     let mut files = Vec::new();
     for id in masters {

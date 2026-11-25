@@ -134,6 +134,7 @@ mod layout_convert;
 mod layout_features;
 mod layout_normalize;
 mod linked_sources;
+mod loss_report;
 mod macros;
 mod masters;
 mod match_masters;

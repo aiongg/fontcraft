@@ -2753,7 +2753,7 @@ kind = "engine"
 params = "{file: path}"
 area = "cli-tools"
 milestone = "M12"
-summary = "Read-only query returning, per member font of a collection, its index, names, outline flavour, table list and which tables share data with which other members."
+summary = "Read-only query returning, per member font of a collection, its index, PostScript name, family and style, number of glyphs, outline flavour, table list and which tables share data with which other members."
 ref = "docs/spec/20-cli.md › collection"
 status = "docs"
 

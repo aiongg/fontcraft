@@ -104,13 +104,26 @@ label = "Export UFO"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{destination: path, masters?: [ids], productionNames?: bool, decomposeSmartStuff?: bool (default true)}"
+params = "{destination: path, masters?: [ids], productionNames?: bool, decomposeSmartStuff?: bool (default true), strict?: bool}"
 area = "import-export"
 milestone = "M1"
 summary = "Writes each chosen master as its own UFO 3 package into the destination folder. Options rename glyphs to production names and decide whether editor-only constructs are turned into plain paths or dropped. Headless form of the dialog's UFO tab. Smart components are drawn as outlines unless decomposeSmartStuff is false, as in the reference's export dialog; file.saveAs and CLI convert keep them as components unless asked."
 ref = "Import & Export › Exporting Font Files › Exporting UFO"
 status = "handbook"
 notes = "productionNames renames a copy of the font before writing it (export.ufoProductionNames, M1.9)."
+
+[[command]]
+id = "file.lossReport"
+label = "Loss Report"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{format?: string, version?: 2|3|4, smartComponents?: components|outlines, exportUfo?: bool, decomposeSmartStuff?: bool} → {format, version?, losses, privateData, fresh, smartComponents}"
+area = "import-export"
+milestone = "M1"
+summary = "What saving the active document in a format, or exporting it as UFO, would leave out, without writing anything. `fresh` is what the document's file does not already leave out, which the window asks about before a person's save (roundtrip.lossReport)."
+ref = "FontCraft addition"
+status = "docs"
 
 [[command]]
 id = "file.exportMetrics"
@@ -481,6 +494,7 @@ milestone = "M1"
 summary = "UFO cannot hold editor-only constructs such as smart components and corner components. With Decompose Smart Stuff on (the default) they are converted to ordinary paths; with it off they are left out of the exported UFO altogether. FontCraft draws smart components as outlines when it is on (export.ufoSmartComponentsAsOutlines) and keeps them as components with their values in the glyph lib when it is off."
 ref = "Import & Export › Exporting Font Files › Exporting UFO"
 status = "handbook"
+notes = "FontCraft: a person's UFO export asks first when a UFO cannot hold part of the font (roundtrip.lossReport); corner components, caps, brushes and segments, which stay in the glyph lib, are among what it lists."
 
 [[behavior]]
 id = "export.ufoSmartComponentsAsOutlines"
@@ -549,6 +563,10 @@ milestone = "M1"
 summary = "Save dialog with a format chooser offering the three built-in source formats and any formats contributed by plug-ins."
 ref = "Import & Export › Source Formats"
 status = "handbook"
+notes = "FontCraft: the format follows the chosen extension (file.saveAs). Save As to a format that cannot hold part of the document asks before writing (roundtrip.lossReport)."
+observe = [
+  "Save As a version 4 file with contextual kerning as UFO, then as a version 3 file: note whether a message appears before or after the file is written, its text and its buttons.",
+]
 
 [[behavior]]
 id = "source.threeBuiltInFormats"
@@ -573,6 +591,10 @@ milestone = "M1"
 summary = "A file made by an older application version is kept in its original format version when saved, so the older version can still open it. Features that the older version cannot store are then unavailable or lost until the font's File format version (Font Info › Other › File Saving) is switched to Version 3."
 ref = "Import & Export › Source Formats › Glyphs File"
 status = "handbook"
+notes = "FontCraft: after File format version is lowered, the next Save asks before it leaves out what that version cannot hold (roundtrip.lossReport)."
+observe = [
+  "Switch a version 4 file with contextual kerning to Version 3 in Font Info and save: note any message.",
+]
 
 [[behavior]]
 id = "source.newFilesAreVersion3"
@@ -656,10 +678,10 @@ label = "Open…"
 menu = ["File"]
 shortcut = "Cmd+O"
 kind = "engine"
-params = '{path: path, keepGlyphNames?: bool, disableAutomaticAlignment?: bool, fontIndex?: number}'
+params = '{path: path, keepGlyphNames?: bool, disableAutomaticAlignment?: bool, face?: number}'
 area = "import-export"
 milestone = "M1"
-summary = "Opens a source (.glyphs, .glyphspackage, .ufo) or a compiled font (.otf, .ttf, .ttc, .pfb) as a document. The item is File › Open… with the platform's Cmd+O shortcut; fontIndex picks one font of a collection, a FontCraft addition."
+summary = "Opens a source (.glyphs, .glyphspackage, .ufo) or a compiled font (.otf, .ttf, .ttc, .pfb) as a document. The item is File › Open… with the platform's Cmd+O shortcut; face picks one font of a collection, a FontCraft addition."
 ref = "Import & Export › Opening Font Files"
 status = "handbook"
 notes = "FontCraft additions (M13.55d): a BDF or PCF bitmap font opens as a bitmap-only font whose glyphs come from the file and whose strike holds the bitmaps (formats `bdf`, `pcf`; gzip-compressed `.pcf.gz` and `.bdf.gz`, Windows `fnt` and `fon` added in M13.55e, TeX `pk` and `gf` and Mac `nfnt` in M13.55f; a FON file or a Mac family opens with one strike per font or size, its glyphs from the first strike, the smallest of a Mac family, and the other strikes holding the bitmaps whose names that strike has), and a compiled font's EBLC/EBDT (or bloc/bdat) strikes open as the font's bitmap strikes, so a bitmap-only `.otb` opens with its glyphs and strikes (table EBDT). The handbook says nothing about bitmap fonts."
@@ -675,6 +697,19 @@ observe = [
   "Drop a .ttf on an open font window and note whether it opens or is refused.",
   "In File › Open…, note the file types the chooser offers and whether it allows choosing several files.",
 ]
+
+[[command]]
+id = "file.openReport"
+label = "Open Warnings…"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{show?: bool (default true), dismiss?: bool}"
+area = "import-export"
+milestone = "M1"
+summary = "Lists what opening the active document left out or could not read, as the warnings of file.open gave it; dismiss closes the bar over the document that counts them (open.compiledIsLossy)."
+ref = "FontCraft addition"
+status = "docs"
 
 [[command]]
 id = "file.openFolder"
@@ -709,6 +744,7 @@ milestone = "M1"
 summary = "Opening a compiled font is a reconstruction, not a faithful load: some hinting data and some OpenType tables are dropped, so re-exporting never reproduces the original binary. Sources are the preferred starting point."
 ref = "Import & Export › Opening Font Files"
 status = "handbook"
+notes = "FontCraft: what opening a file left out (tables of a compiled font that are not read, parts of a source that were skipped) is in file.open's warnings; the window keeps them per document, counts them in the bar over it and lists them with Show Warnings… (file.openReport)."
 
 [[behavior]]
 id = "open.compiledIsViewOnly"
@@ -717,6 +753,14 @@ milestone = "M1"
 summary = "A compiled font opens in a view-only state. It becomes a normal editable document once saved to one of the source formats with Save As. Exactly which edits are blocked before that is not stated."
 ref = "Import & Export › Opening Font Files"
 status = "handbook"
+notes = "FontCraft: Save is refused (in the window it asks for a source file); edits run. The title shows View Only and a bar over the document says so, with Save As…, until the document is saved to a source format or the bar is closed. A .fontcraft file saved from a compiled font is an ordinary document."
+guesses = [
+  "Edits are not blocked in a view-only document; only Save is.",
+  "View Only stands in parentheses after the title, and a bar over the document says why; the reference's mark is not documented.",
+]
+observe = [
+  "Open a compiled font: note the mark that says it is view-only, which menu commands and panel fields are disabled, and whether drawing in the Edit View is refused.",
+]
 
 [[behavior]]
 id = "open.recordsGlyphOrder"

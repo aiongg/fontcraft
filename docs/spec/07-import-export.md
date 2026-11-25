@@ -140,6 +140,9 @@ add formats (`open.compiledFormats`).
   open-then-export differs from the original (`open.compiledIsLossy`).
 - The document opens view-only until saved to a source format with Save As
   (`open.compiledIsViewOnly`).
+- FontCraft: edits run in a view-only document and only Save is refused; the title and a bar over the
+  document say so, and the bar counts the warnings of the open (`file.openReport` lists them). A font
+  collection of several fonts asks which to open; each opens as its own document.
 - Glyph order is stored as a `glyphOrder` custom parameter on the font
   (`open.recordsGlyphOrder`).
 - Glyph names are converted to the built-in scheme unless the setting Keep Glyph Names from

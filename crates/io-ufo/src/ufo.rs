@@ -2224,21 +2224,23 @@ pub(crate) fn braced_coordinates(name: &str) -> Option<Vec<f64>> {
 /// designspace (`designspace`) holds alternate layers, as glyphs of their own and rules, in a
 /// font with axes.
 pub fn layers_left_out(font: &Font, designspace: bool) -> usize {
+    layers_left_out_by_glyph(font, designspace).iter().map(|(_, n)| n).sum()
+}
+
+/// [`layers_left_out`] by glyph, in font order: each glyph that loses layers and how many.
+pub fn layers_left_out_by_glyph(font: &Font, designspace: bool) -> Vec<(String, usize)> {
     let expanded = crate::colorglyphs::expand(font);
     let font = expanded.as_ref().unwrap_or(font);
     // Colour layers in the list are measured once for the whole walk.
     let _boxes = crate::colorkeys::Scope::enter();
     let layer_master = |id: &str| font.masters.iter().any(|m| m.id == id && m.extra.get(Family::Designspace, "layer").is_some());
-    font.glyphs
-        .iter()
-        .flat_map(|g| g.layers.iter())
-        .filter(|l| {
-            !l.is_master_layer()
-                && (ufo_layer_name(font, l).is_none() || layer_master(&l.master))
-                && !(designspace && crate::designspace::alternate_comes_back(font, l))
-                && crate::colorkeys::listed(font, l).is_none()
-        })
-        .count()
+    let left_out = |l: &Layer| {
+        !l.is_master_layer()
+            && (ufo_layer_name(font, l).is_none() || layer_master(&l.master))
+            && !(designspace && crate::designspace::alternate_comes_back(font, l))
+            && crate::colorkeys::listed(font, l).is_none()
+    };
+    font.glyphs.iter().map(|g| (g.name.clone(), g.layers.iter().filter(|l| left_out(l)).count())).filter(|(_, n)| *n > 0).collect()
 }
 
 fn code_points_of(v: Option<&Value>) -> Vec<u32> {

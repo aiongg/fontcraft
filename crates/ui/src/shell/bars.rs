@@ -2,7 +2,7 @@
 
 use craft::behavior::IconId;
 use craft::ui::bars::{Bar, BarKind};
-use craft::ui::buttons::IconButton;
+use craft::ui::buttons::{Button, IconButton};
 use craft::ui::contract::tooltip::with_chord;
 use craft::ui::contract::{Props as _, Show as _, ShowContainer as _};
 use craft::ui::display::Text;
@@ -56,6 +56,59 @@ fn palette_button(ui: &mut Ui, shows: bool, sent: &mut Vec<crate::app::Msg>) {
         .show(ui);
     if out.clicked() {
         sent.push(crate::app::Msg::Shell(toggle));
+    }
+}
+
+/// The bar over a view-only document or one whose open gave warnings: what it says, Save As…, Show Warnings… and a
+/// button that closes it (`app/open_report.rs`).
+pub fn notice(ui: &mut Ui, notice: &crate::app::open_report::DocumentNotice, sent: &mut Vec<crate::app::Msg>) {
+    let words = Env::of(ui).words::<NoticeBarWords>();
+    let chrome = Env::of(ui).words::<ChromeWords>();
+    let warnings = match notice.warnings {
+        0 => String::new(),
+        1 => words.one_warning.as_str().to_string(),
+        n => format!("{n} {}", words.warnings.as_str()),
+    };
+    let text = match (notice.view_only, notice.warnings) {
+        (true, 0) => words.view_only.as_str().to_string(),
+        (true, _) => format!("{} {warnings}", words.view_only.as_str()),
+        (false, _) => warnings,
+    };
+    let (view_only, listed) = (notice.view_only, notice.warnings > 0);
+    // The end group runs in its own closure beside the body's, so it posts into its own list.
+    let mut end_sent = Vec::new();
+    let end = &mut end_sent;
+    let labels = words.clone();
+    let _ = Bar::new(chrome.notice.clone(), BarKind::Status)
+        .trailing(move |ui, _| {
+            let report = |params: serde_json::Value| crate::app::Msg::Shell(CommandRef::with_params("file.openReport", params));
+            if view_only && Button::new(labels.save_as.clone()).id_salt("fontcraftShell.notice.saveAs").show(ui).clicked() {
+                end.push(crate::app::Msg::run("file.saveAs", serde_json::json!({})));
+            }
+            if listed && Button::new(labels.show.clone()).id_salt("fontcraftShell.notice.show").show(ui).clicked() {
+                end.push(report(serde_json::json!({})));
+            }
+            let close = IconButton::new(IconId::new("close")).label(labels.close.clone()).id_salt("fontcraftShell.notice.close");
+            if close.show(ui).clicked() {
+                end.push(report(serde_json::json!({ "dismiss": true })));
+            }
+        })
+        .show(ui, |ui, _| {
+            Text::new(text.clone()).show(ui);
+        });
+    sent.extend(end_sent);
+}
+
+craft::ui::words! {
+    /// The words of the bar over a view-only document or one whose open gave warnings.
+    pub struct NoticeBarWords {
+        view_only: "fontcraftNoticeBar.viewOnly" = "View only: this file's format is read but not written. Save As writes the font to a source format.";
+        one_warning: "fontcraftNoticeBar.oneWarning" = "Opening it gave one warning.";
+        /// After their number.
+        warnings: "fontcraftNoticeBar.warnings" = "warnings came from opening it.";
+        save_as: "fontcraftNoticeBar.saveAs" = "Save As…";
+        show: "fontcraftNoticeBar.show" = "Show Warnings…";
+        close: "fontcraftNoticeBar.close" = "Close Notice";
     }
 }
 

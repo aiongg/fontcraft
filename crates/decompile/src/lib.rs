@@ -133,7 +133,8 @@ pub fn decompile(bytes: &[u8], face: Option<u32>) -> Result<Decompiled, Decompil
         FileRef::Font(f) => f,
         FileRef::Collection(c) => {
             let count = c.len();
-            let face = face.ok_or(DecompileError::ChooseFace { count })?;
+            // A collection of one font needs no choice.
+            let face = face.or((count == 1).then_some(0)).ok_or(DecompileError::ChooseFace { count })?;
             c.get(face).map_err(|_| DecompileError::NoSuchFace { face })?
         }
     };

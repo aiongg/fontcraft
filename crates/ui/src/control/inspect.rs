@@ -21,6 +21,8 @@ pub const INSPECT: &[Inspect] = &[
     crate::canvas::hoi::inspect,
     crate::shell::space_center::inspect,
     crate::app::close::inspect,
+    crate::app::file_questions::inspect,
+    crate::app::open_report::inspect,
     crate::shell::start::inspect,
     crate::shell::settings::inspect,
     crate::shell::table_viewer::inspect,
