@@ -238,6 +238,14 @@ fn file_open_aligns_an_imported_ufo_unless_the_user_setting_disables_it() {
     assert_eq!(aacute(&kept), (1.0, 0.0, 0.0), "the components stay where the file puts them");
     assert_eq!(kept.font().unwrap().info.settings.disables_automatic_alignment, Some(true));
 
+    // A native file made of it keeps the positions, read again for a review too.
+    let native = dir.join("Stale.fontcraft");
+    run(&mut s, "file.saveAs", json!({ "path": native }));
+    let mut opened = Session::new();
+    let r = run(&mut opened, "file.open", json!({ "path": native }));
+    assert_eq!((&r["aligned"], aacute(&opened)), (&json!(0), (1.0, 0.0, 0.0)), "{r}");
+    assert_eq!(run(&mut opened, "file.reviewExternalChanges", json!({}))["glyphs"], json!([]));
+
     // A compiled font opens view-only and without anchors: its composites stay as compiled.
     let ttf = dir.join("Stale.ttf");
     run(&mut s, "file.exportStatic", json!({ "destination": ttf }));

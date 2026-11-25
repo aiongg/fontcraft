@@ -299,7 +299,7 @@ fn new_losses(before: &Font, after: &Font) -> Vec<String> {
     let Some(format) = crate::io::SaveFormat::of_source(after.source.format) else { return Vec::new() };
     let (old, new) = (crate::io::save_losses(before, format), crate::io::save_losses(after, format));
     let name = format.name();
-    super::loss_report::fresh(&old, &new)
+    super::loss_report::fresh(&old, &new, false)
         .into_iter()
         .map(|Fresh { entry, added, grew }| {
             let what = entry.get("what").and_then(Value::as_str).unwrap_or_default();

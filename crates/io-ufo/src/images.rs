@@ -12,8 +12,7 @@
 use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 
-use fontcraft_model::{Family, Font, Image};
-use fontcraft_plist::Value;
+use fontcraft_model::{Font, Image};
 
 use crate::ufo::FilesFrom;
 
@@ -36,12 +35,7 @@ fn prefix(font: &Font, files: FilesFrom, master: &str) -> Option<String> {
     if !fontcraft_model::is_ufo_family(font.source.format) {
         return None;
     }
-    let file = font.masters.iter().find(|m| m.id == master).and_then(|m| m.extra.get(Family::Designspace, "filename")).and_then(Value::as_str);
-    match (files, file) {
-        (FilesFrom::Single, _) | (FilesFrom::PerMaster, None) => Some(String::new()),
-        (FilesFrom::PerMaster | FilesFrom::Designspace, Some(f)) => Some(format!("{f}/")),
-        (FilesFrom::Designspace, None) => None,
-    }
+    crate::ufo::files_prefix(font, files, master)
 }
 
 /// The images of a layer: its own and its background's.

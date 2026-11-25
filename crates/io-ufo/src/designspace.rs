@@ -914,6 +914,55 @@ pub fn ufo_file_name(font: &Font, m: &Master, taken: &[String]) -> String {
     name
 }
 
+/// Moves the files `font` holds beside its UFOs ([`Font::files`]) from where a document of the
+/// UFO format `from` keeps them to where the writer of `to` looks: a UFO's at the root, a
+/// designspace's under its UFO's file name, which the master they came with then keeps. Returns
+/// the files of UFOs the one written is not, which are taken out.
+pub fn move_files(font: &mut Font, from: SourceFormat, to: SourceFormat) -> Vec<String> {
+    let (from, to) = (from == SourceFormat::Designspace, to == SourceFormat::Designspace);
+    if from == to || font.files.is_empty() {
+        return Vec::new();
+    }
+    if to {
+        // The name `write` gives the UFO.
+        let Some(source) = font.masters.iter().find(|m| ufo::read_from_ufo(m)).or(font.masters.first()).map(|m| m.id.clone()) else {
+            return Vec::new();
+        };
+        let mut taken: Vec<String> = Vec::new();
+        for m in font.masters.iter() {
+            let f = ds_str(&m.extra, "filename").map_or_else(|| ufo_file_name(font, m, &taken), str::to_string);
+            let found = m.id == source;
+            taken.push(f);
+            if found {
+                break;
+            }
+        }
+        let Some(name) = taken.pop() else { return Vec::new() };
+        if let Some(m) = Arc::make_mut(&mut font.masters).iter_mut().find(|m| m.id == source) {
+            m.extra.insert(Family::Designspace, "filename", Value::String(name.as_str().into()));
+        }
+        let files = std::mem::take(Arc::make_mut(&mut font.files));
+        font.files = Arc::new(FileStore(files.0.into_iter().map(|(path, bytes)| (format!("{name}/{path}"), bytes)).collect()));
+        return Vec::new();
+    }
+    // Several masters are not one UFO: `ufo::write` refuses them.
+    let [master] = font.masters.as_slice() else { return Vec::new() };
+    let prefix = ds_str(&master.extra, "filename").map(|f| format!("{f}/"));
+    let files = std::mem::take(Arc::make_mut(&mut font.files));
+    let mut kept = BTreeMap::new();
+    let mut lost = Vec::new();
+    for (path, bytes) in files.0 {
+        match prefix.as_deref().and_then(|p| path.strip_prefix(p)) {
+            Some(rel) => {
+                kept.insert(rel.to_string(), bytes);
+            }
+            None => lost.push(path),
+        }
+    }
+    font.files = Arc::new(FileStore(kept));
+    lost
+}
+
 /// The design value a dimension element holds for an axis.
 fn dimension_value(d: &Element, axis: Option<&AxisInfo>) -> Option<f64> {
     let x = d.attr("xvalue").and_then(|v| v.trim().parse::<f64>().ok());

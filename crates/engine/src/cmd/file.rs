@@ -103,15 +103,18 @@ fn open(s: &mut Session, p: &Value) -> Result<Value> {
             json!({ "title": doc.title, "path": doc.path.as_ref().map(|p| p.to_string_lossy()), "alreadyOpen": true, "glyphs": doc.font.glyphs.len() }),
         );
     }
-    let (font, mut warnings) = crate::io::open(&path, face)?;
+    let mut native = false;
+    let (font, mut warnings) = crate::io::open_source(&path, face, &mut native)?;
     let font = crate::linked::resolve(&font, Some(&path), &mut warnings)?.unwrap_or(font);
     // A native file holds its composites' positions and its glyphs' names, whatever format its
     // font was first read from.
-    let native = crate::is_native_path(&path);
     let (font, aligned) = if native { (font, 0) } else { super::shared::align_imported(s, font, &mut warnings) };
     let glyph_data = crate::glyph_data::source_files(&path, &mut warnings);
     // Every reader checks the font it returns.
     s.push_document(font, Some(path.clone()));
+    if native {
+        s.doc_mut()?.set_file_format(fontcraft_model::SourceFormat::Native);
+    }
     if !glyph_data.is_empty() {
         let files: Vec<(&str, &[u8])> = glyph_data.iter().map(|(n, b)| (n.as_str(), b.as_slice())).collect();
         warnings.extend(s.set_source_glyph_data(&files)?);
@@ -184,22 +187,22 @@ fn write_document(s: &mut Session, p: &Params, path: std::path::PathBuf, format:
     let doc = s.doc()?;
     // Another program may have changed the file since it was read or last written here.
     if doc.path.as_deref() == Some(path.as_path()) && !p.bool_or("force", false)? {
-        let now = io::document_stamp(&path, &doc.font);
+        let now = io::document_stamp(&path, &doc.saved, doc.file_format());
         if now.is_some() && now != doc.stamp {
             return Err(p.bad(format!("{} changed on disk since it was opened; save elsewhere, or pass force: true to overwrite", path.display())));
         }
     }
     let mut font = Font::clone(&doc.font);
     crate::assets::rebase_image_paths(&mut font, doc.path.as_deref(), &path);
-    let (version, dropped) = prepare(p, &mut font, format, version)?;
+    let Prepared { version, losses: left_out, parked } = prepare(p, doc, &mut font, format, version)?;
     let (smart, smart_losses) = smart_choice(&font, outlines);
     if p.bool_or("strict", false)? {
         let mut losses = io::save_losses(smart.as_ref().unwrap_or(&font), format);
-        losses.extend(dropped.clone());
+        losses.extend(left_out.iter().cloned());
         refuse_losses(p, format.name(), &losses)?;
     }
     let mut saved = io::save(smart.as_ref().unwrap_or(&font), &path, format)?;
-    saved.losses.extend(dropped);
+    saved.losses.extend(left_out);
     saved.losses.extend(smart_losses);
     let font = Arc::new(font);
     let doc = s.doc_mut()?;
@@ -207,8 +210,10 @@ fn write_document(s: &mut Session, p: &Params, path: std::path::PathBuf, format:
     doc.title = path.file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| doc.title.clone());
     doc.font = font.clone();
     doc.saved = font;
-    doc.stamp = io::document_stamp(&path, &doc.font);
-    doc.set_ext(crate::SavedAs(format.source()));
+    doc.set_file_format(format.source());
+    if let Some(parked) = parked {
+        doc.set_ext(parked);
+    }
     doc.remove_ext::<crate::CollectionFace>();
     // Undo steps carry their own folder (`HistoryEntry::path`). The starting font of a running
     // batch or interaction becomes an undo step under the new folder, so it is rewritten here.
@@ -226,13 +231,23 @@ fn write_document(s: &mut Session, p: &Params, path: std::path::PathBuf, format:
     }))
 }
 
-/// Makes `font`, a copy of the document's, what a save in `format` writes: the version its format
-/// family is written in (the one asked for, else the one read, else the newest that is not a
-/// draft, 3 for both) and the format it is then read from, without the files of its source the
-/// format has no place for. Returns the version and the loss of those files. Converting between
-/// versions is not supported yet.
+/// What [`prepare`] did.
 #[cfg(not(target_arch = "wasm32"))]
-pub(super) fn prepare(p: &Params, font: &mut Font, format: crate::io::SaveFormat, version: Option<u32>) -> Result<(Option<u32>, Option<Value>)> {
+pub(super) struct Prepared {
+    pub version: Option<u32>,
+    /// The files the format has no place for.
+    pub losses: Vec<Value>,
+    /// The files it took out of the font, to keep with the document once it is saved.
+    pub parked: Option<crate::io::ParkedFiles>,
+}
+
+/// Makes `font`, a copy of `doc`'s, what a save in `format` writes: the version its format
+/// family is written in (the one asked for, else the one read, else the newest that is not a
+/// draft, 3 for both) and the format it is then read from, with the files beside its source where
+/// the format keeps them ([`crate::io::place_files`]). Converting between versions is not
+/// supported yet.
+#[cfg(not(target_arch = "wasm32"))]
+pub(super) fn prepare(p: &Params, doc: &crate::DocState, font: &mut Font, format: crate::io::SaveFormat, version: Option<u32>) -> Result<Prepared> {
     use crate::io::SaveFormat;
     let pick = |have: Option<u32>, range: std::ops::RangeInclusive<u32>| -> Result<u32> {
         let want = version.or(have).unwrap_or(3);
@@ -257,12 +272,29 @@ pub(super) fn prepare(p: &Params, font: &mut Font, format: crate::io::SaveFormat
             Some(v)
         }
     };
-    let mut dropped = None;
+    let kept = doc.ext::<crate::io::ParkedFiles>();
+    let (mut losses, parked) = crate::io::place_files(font, format, kept);
     if format != SaveFormat::Native {
-        dropped = crate::io::drop_foreign_files(font, format);
         font.source.format = format.source();
     }
-    Ok((version, dropped))
+    // Files an earlier save parked are left out of this one too, unless it writes the file that
+    // one wrote.
+    let own = doc.path.is_some() && SaveFormat::of_source(doc.file_format()) == Some(format);
+    if parked.is_none()
+        && !own
+        && let Some(kept) = kept.filter(|k| k.left_out_of(font.source.format))
+    {
+        losses.push(kept.loss());
+    }
+    Ok(Prepared { version, losses, parked })
+}
+
+/// The files parked with `doc` ([`crate::io::ParkedFiles`]) that its exported UFOs leave out and
+/// its own file, when that is a UFO, does not already.
+#[cfg(not(target_arch = "wasm32"))]
+pub(super) fn parked_export_loss(doc: &crate::DocState) -> Option<Value> {
+    let own_ufo = fontcraft_model::is_ufo_family(doc.file_format());
+    doc.ext::<crate::io::ParkedFiles>().filter(|k| !own_ufo && k.left_out_of(doc.font.source.format)).map(crate::io::ParkedFiles::loss)
 }
 
 /// `strict`: an error naming what a write in `format` would leave out, when it leaves anything out.
@@ -402,12 +434,16 @@ fn export_ufo(s: &mut Session, p: &Value) -> Result<Value> {
     }
     let (smart, smart_losses) = smart_choice(font, outlines);
     let written = smart.as_ref().unwrap_or(font);
+    let parked = parked_export_loss(s.doc()?);
     if p.bool_or("strict", false)? {
-        refuse_losses(&p, "UFO", &crate::io::export_losses(written))?;
+        let mut losses = crate::io::export_losses(written);
+        losses.extend(parked.clone());
+        refuse_losses(&p, "UFO", &losses)?;
     }
     std::fs::create_dir_all(&destination).map_err(|e| EngineError::Io(format!("cannot create {}: {e}", destination.display())))?;
     let (named, name_losses) = if production { super::import_naming::production_copy(written, &data) } else { (written.clone(), Vec::new()) };
     let mut exported = crate::io::export_ufos(&named, &masters, &destination)?;
+    exported.losses.extend(parked);
     exported.losses.extend(smart_losses);
     exported.losses.extend(name_losses);
     let files: Vec<Value> =

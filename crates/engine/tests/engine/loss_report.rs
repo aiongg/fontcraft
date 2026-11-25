@@ -92,6 +92,7 @@ fn a_compiled_font_becomes_editable_and_collection_members_open_apart() {
     run(&mut s, "file.open", json!({"path": ttc, "face": 0}));
     assert_eq!(s.documents().len(), before + 2, "a second member is not the document already open");
     let shown = run(&mut s, "file.open", json!({"path": ttc, "face": 1}));
+    run(&mut s, "file.reviewExternalChanges", json!({}));
     assert_eq!((shown["alreadyOpen"].as_bool(), s.documents().len()), (Some(true), before + 2));
 
     let native = dir.join("Two.fontcraft");
@@ -126,5 +127,144 @@ fn a_packages_files_stay_out_of_a_ufo() {
     assert!(side(&saved["losses"]) && !ufo.join("notes.txt").exists(), "{saved}");
     let again = s.execute("file.save", &json!({})).unwrap();
     assert!(!side(&again["losses"]) && !ufo.join("notes.txt").exists(), "{again}");
-    let _ = std::fs::remove_dir_all(&dir);
+    // The document still has them: another file says it leaves them out, a package gets them back.
+    let native = run(&mut s, "file.lossReport", json!({ "format": "fontcraft" }));
+    assert!(side(&native["losses"]) && side(&native["fresh"]), "{native}");
+    let back = dir.join("Back.glyphspackage");
+    let saved = run(&mut s, "file.saveAs", json!({ "path": back }));
+    assert!(!side(&saved["losses"]), "{saved}");
+    assert_eq!(std::fs::read(back.join("notes.txt")).unwrap(), b"kept beside the glyphs");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// A UFO saved in `dir` with a file in its `data/`, opened again.
+fn ufo_with_data(dir: &std::path::Path) -> Session {
+    let ufo = dir.join("Font.ufo");
+    let mut s = Session::with_document();
+    run(&mut s, "file.saveAs", json!({ "path": ufo }));
+    std::fs::create_dir_all(ufo.join("data")).unwrap();
+    std::fs::write(ufo.join("data/org.example.txt"), b"ours").unwrap();
+    let mut s = Session::new();
+    run(&mut s, "file.open", json!({ "path": ufo }));
+    s
+}
+
+/// A UFO's other files stay out of a `.glyphs` file and a package, which say so, and come back in the next UFO.
+#[test]
+fn a_ufos_files_stay_out_of_other_sources_and_come_back() {
+    let dir = fontcraft_testkit::temp_dir("ufo-to-glyphs");
+    let mut s = ufo_with_data(&dir);
+    let data = |losses: &Value| losses.as_array().unwrap().iter().any(|l| l["family"] == "ufo" && l["files"].to_string().contains("org.example"));
+    let saved = run(&mut s, "file.saveAs", json!({ "path": dir.join("Font.glyphs") }));
+    assert!(data(&saved["losses"]), "{saved}");
+    let again = run(&mut s, "file.lossReport", json!({}));
+    assert!(!data(&again["fresh"]), "{again}");
+    let exported = run(&mut s, "file.exportUfo", json!({ "destination": dir.join("out") }));
+    assert!(data(&exported["losses"]), "{exported}");
+
+    let pkg = dir.join("Font.glyphspackage");
+    let saved = run(&mut s, "file.saveAs", json!({ "path": pkg }));
+    assert!(data(&saved["losses"]) && !pkg.join("data").exists(), "{saved}");
+    let native = run(&mut s, "file.saveAs", json!({ "path": dir.join("Font.fontcraft") }));
+    assert!(data(&native["losses"]), "{native}");
+    let again = run(&mut s, "file.lossReport", json!({}));
+    assert!(!data(&again["fresh"]), "{again}");
+
+    let back = dir.join("Back.ufo");
+    let saved = run(&mut s, "file.saveAs", json!({ "path": back }));
+    assert!(!data(&saved["losses"]), "{saved}");
+    assert_eq!(std::fs::read(back.join("data/org.example.txt")).unwrap(), b"ours");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// A UFO's other files follow it into a designspace, through a `.glyphs` file too, and back into a UFO.
+#[test]
+fn a_ufos_files_follow_it_into_a_designspace_and_back() {
+    let dir = fontcraft_testkit::temp_dir("ufo-to-designspace");
+    let data = "data/org.example.txt";
+    let mut s = ufo_with_data(&dir);
+    run(&mut s, "spacing.setWidth", json!({ "glyphs": ["A"], "value": 610 }));
+    let ds = dir.join("ds/Font.designspace");
+    std::fs::create_dir_all(dir.join("ds")).unwrap();
+    run(&mut s, "file.saveAs", json!({ "path": ds }));
+    assert_eq!(std::fs::read(dir.join("ds/Untitled-Regular.ufo").join(data)).unwrap(), b"ours");
+    // The font undo brings back was a UFO's; it saves as the designspace all the same.
+    run(&mut s, "edit.undo", json!({}));
+    run(&mut s, "file.save", json!({}));
+
+    let mut s = Session::new();
+    run(&mut s, "file.open", json!({ "path": ds }));
+    run(&mut s, "file.saveAs", json!({ "path": dir.join("Between.glyphs") }));
+    let back = dir.join("Back.ufo");
+    run(&mut s, "file.saveAs", json!({ "path": back }));
+    assert_eq!(std::fs::read(back.join(data)).unwrap(), b"ours");
+    assert!(!back.join("Untitled-Regular.ufo").exists());
+    run(&mut s, "file.exportUfo", json!({ "destination": dir.join("out") }));
+    assert_eq!(std::fs::read(dir.join("out/Untitled-Regular.ufo").join(data)).unwrap(), b"ours");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// A compiled font or a `.glyphs` source named `.fontcraft` is what it holds: Save does not write a native file over it.
+#[test]
+fn a_misnamed_file_keeps_its_own_format() {
+    let dir = fontcraft_testkit::temp_dir("misnamed");
+    let mut s = Session::with_document();
+    let (ttf, named) = (dir.join("One.ttf"), dir.join("One.fontcraft"));
+    run(&mut s, "file.exportStatic", json!({ "destination": ttf, "timestamp": 0 }));
+    std::fs::copy(&ttf, &named).unwrap();
+    let mut opened = Session::new();
+    let r = run(&mut opened, "file.open", json!({ "path": named }));
+    assert_eq!((r["format"].as_str(), r["viewOnly"].as_bool()), (Some("binary"), Some(true)), "{r}");
+    assert!(opened.execute("file.save", &json!({})).is_err());
+    assert_eq!(std::fs::read(&named).unwrap(), std::fs::read(&ttf).unwrap());
+
+    let (glyphs, named) = (dir.join("Two.glyphs"), dir.join("Two.fontcraft"));
+    run(&mut s, "file.saveAs", json!({ "path": glyphs }));
+    std::fs::copy(&glyphs, &named).unwrap();
+    let mut opened = Session::new();
+    let r = run(&mut opened, "file.open", json!({ "path": named }));
+    assert_eq!(r["format"], "glyphs", "{r}");
+    run(&mut opened, "spacing.setWidth", json!({ "glyphs": ["A"], "value": 611 }));
+    run(&mut opened, "file.save", json!({}));
+    let mut opened = Session::new();
+    assert_eq!(run(&mut opened, "file.open", json!({ "path": named }))["format"], "glyphs");
+
+    // A native file under another name is a native file.
+    let (native, named) = (dir.join("Three.fontcraft"), dir.join("Three.json"));
+    run(&mut s, "file.saveAs", json!({ "path": native }));
+    std::fs::copy(&native, &named).unwrap();
+    let mut opened = Session::new();
+    let r = run(&mut opened, "file.open", json!({ "path": named }));
+    assert_eq!((r["format"].as_str(), run(&mut opened, "file.save", json!({}))["format"].as_str()), (Some("fontcraft"), Some("fontcraft")), "{r}");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// Repairing one glyph and adding the same loss to another is asked about, though the count is the same.
+#[test]
+fn a_loss_that_moves_to_another_glyph_is_new() {
+    let dir = fontcraft_testkit::temp_dir("loss-moves");
+    let mut s = Session::with_document();
+    let unnamed = |s: &mut Session, on: &str, off: Option<&str>| {
+        s.edit("fixture", |f| {
+            let mut layer = fontcraft_model::Layer::new("m01", 600.0);
+            layer.id = format!("extra-{on}");
+            if let Ok(mut g) = f.glyph_mut(on) {
+                g.layers.push(layer);
+            }
+            if let Some(off) = off
+                && let Ok(mut g) = f.glyph_mut(off)
+            {
+                g.layers.retain(|l| l.is_master_layer());
+            }
+            Ok(())
+        })
+        .unwrap();
+    };
+    unnamed(&mut s, "A", None);
+    run(&mut s, "file.saveAs", json!({ "path": dir.join("Font.ufo") }));
+    assert_eq!(run(&mut s, "file.lossReport", json!({}))["fresh"], json!([]));
+    unnamed(&mut s, "B", Some("A"));
+    let r = run(&mut s, "file.lossReport", json!({}));
+    assert!(r["fresh"].as_array().unwrap().iter().any(|l| l["glyphs"] == json!(["B"])), "{r}");
+    std::fs::remove_dir_all(&dir).unwrap();
 }

@@ -16,9 +16,10 @@ use fontcraft_io_ufo::ufo::FilesFrom;
 use std::collections::BTreeMap;
 use std::io::Read as _;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::SystemTime;
 
-use fontcraft_model::{Family, Font, Shape, SourceFormat};
+use fontcraft_model::{Family, FileStore, Font, Shape, SourceFormat};
 use serde_json::{Value, json};
 
 use crate::{EngineError, Result};
@@ -132,11 +133,11 @@ impl Stamp {
     }
 }
 
-/// The stamp of a document's files: the file or folder at `path`, and for a designspace also
-/// every UFO it names.
-pub fn document_stamp(path: &Path, font: &Font) -> Option<Stamp> {
+/// The stamp of a document's files: the file or folder at `path`, of the format `format`, and for
+/// a designspace also every UFO that `font`, the font as the files hold it, names.
+pub fn document_stamp(path: &Path, font: &Font, format: SourceFormat) -> Option<Stamp> {
     let mut s = stamp(path)?;
-    if font.source.format == SourceFormat::Designspace {
+    if format == SourceFormat::Designspace {
         let dir = path.parent().unwrap_or(Path::new("."));
         let mut seen = Vec::new();
         for m in font.masters.iter() {
@@ -248,6 +249,12 @@ pub fn feature_dir(path: &Path) -> Option<std::path::PathBuf> {
 /// Reads the source at `path`, recognising its format by content, with what reading it left out
 /// or read in a plainer form. `face` chooses a member of a font collection.
 pub fn open(path: &Path, face: Option<u32>) -> Result<(Font, Vec<String>)> {
+    open_source(path, face, &mut false)
+}
+
+/// [`open`], which sets `native` when the file is a native one, whatever its name and whatever
+/// format its font was first read from ([`Font::source`]).
+pub(crate) fn open_source(path: &Path, face: Option<u32>, native: &mut bool) -> Result<(Font, Vec<String>)> {
     let meta = std::fs::metadata(path).map_err(|e| io_err("open", path, e))?;
     if meta.is_dir() {
         if path.join("metainfo.plist").is_file() {
@@ -275,6 +282,7 @@ pub fn open(path: &Path, face: Option<u32>) -> Result<(Font, Vec<String>)> {
         return bitmap_font::open(path, &bytes);
     }
     if fontcraft_format::is_compressed(&bytes) {
+        *native = true;
         return Ok((fontcraft_format::load(&bytes)?, Vec::new()));
     }
     if fontcraft_decompile::sniff(&bytes).is_some() {
@@ -310,6 +318,7 @@ pub fn open(path: &Path, face: Option<u32>) -> Result<(Font, Vec<String>)> {
         return Err(EngineError::Io(format!("{} is not a font source this build can read", path.display())));
     }
     if is_native(body) {
+        *native = true;
         return Ok((fontcraft_format::load(&bytes)?, Vec::new()));
     }
     Ok(fontcraft_io_glyphs::read_reporting(text)?)
@@ -597,34 +606,76 @@ fn losses(font: &Font, targets: &[Family]) -> Vec<Value> {
     out
 }
 
-/// Files beside another format's document (a package's UI state, feature files), which a UFO does
-/// not take.
-fn side_file_losses(font: &Font) -> Option<Value> {
-    let foreign = !fontcraft_model::is_ufo_family(font.source.format);
-    (foreign && !font.files.is_empty()).then(|| side_files(font, "glyphspackage", "files beside the glyphs in the package"))
-}
-
-fn side_files(font: &Font, family: &str, what: &str) -> Value {
-    let names: Vec<&str> = font.files.0.keys().map(String::as_str).collect();
+/// The files `files` beside a source of `format` (a package's UI state and feature files, a UFO's
+/// `data/` and `images/`), as a loss.
+fn side_files(files: &FileStore, format: SourceFormat) -> Value {
+    let (family, what) = if fontcraft_model::is_ufo_family(format) {
+        ("ufo", "files beside the glyphs in the UFO")
+    } else {
+        ("glyphspackage", "files beside the glyphs in the package")
+    };
+    let names: Vec<&str> = files.0.keys().map(String::as_str).collect();
     json!({ "family": family, "entries": names.len(), "what": what, "files": names })
 }
 
-/// Drops the files `font` holds beside its source when a save in `format` has no place for them: a
-/// package's in a UFO, a UFO's in a package. Returns what was dropped, as a loss. The caller then
-/// makes `font` one of `format`, after which the writer takes whatever files it holds.
-pub fn drop_foreign_files(font: &mut Font, format: SaveFormat) -> Option<Value> {
-    let from_ufo = fontcraft_model::is_ufo_family(font.source.format);
-    let loss = if format.is_ufo() && !from_ufo {
-        side_file_losses(font)
-    } else if format == SaveFormat::GlyphsPackage && from_ufo && !font.files.is_empty() {
-        Some(side_files(font, "ufo", "files beside the glyphs in the UFO"))
-    } else {
-        None
-    };
-    if loss.is_some() {
-        font.files = Default::default();
+/// The files a document held beside a source of another format family, kept with it
+/// ([`crate::DocState::ext`]) while its own format has no place for them, for a save back.
+#[derive(Clone)]
+pub(crate) struct ParkedFiles {
+    /// The format whose writer knows the files' paths.
+    format: SourceFormat,
+    files: Arc<FileStore>,
+}
+
+impl ParkedFiles {
+    pub(crate) fn loss(&self) -> Value {
+        side_files(&self.files, self.format)
     }
-    loss
+
+    /// Whether a document whose font is of `format` has no place for the files.
+    pub(crate) fn left_out_of(&self, format: SourceFormat) -> bool {
+        fontcraft_model::is_ufo_family(self.format) != fontcraft_model::is_ufo_family(format)
+    }
+}
+
+/// Puts the files `font` holds beside its source where a save in `format` looks for them. Those of
+/// the other format family (a package's in a UFO, a UFO's in a `.glyphs` file or a package) are
+/// taken out, and `parked` ones `format` takes are put back when the font has none; a UFO's move
+/// to where a designspace keeps them, and back. Returns what is left out, as losses, and the files
+/// taken out, to park. The caller then makes `font` one of `format`.
+pub(crate) fn place_files(font: &mut Font, format: SaveFormat, parked: Option<&ParkedFiles>) -> (Vec<Value>, Option<ParkedFiles>) {
+    let from = font.source.format;
+    let to = if format == SaveFormat::Native { from } else { format.source() };
+    let (mut losses, mut out, mut keyed) = (Vec::new(), None, from);
+    if !font.files.is_empty() && fontcraft_model::is_ufo_family(from) != fontcraft_model::is_ufo_family(to) {
+        let taken = ParkedFiles { format: from, files: std::mem::take(&mut font.files) };
+        losses.push(taken.loss());
+        out = Some(taken);
+    }
+    if font.files.is_empty()
+        && let Some(p) = parked.filter(|p| !p.left_out_of(to))
+    {
+        font.files = p.files.clone();
+        keyed = p.format;
+    }
+    if fontcraft_model::is_ufo_family(to) {
+        let lost = fontcraft_io_ufo::designspace::move_files(font, keyed, to);
+        if !lost.is_empty() {
+            losses.push(json!({ "family": "designspace", "entries": lost.len(), "what": "files of the designspace's other UFOs", "files": lost }));
+        }
+    }
+    (losses, out)
+}
+
+/// `font` with its files where a save in `format` looks for them ([`place_files`]), and the losses
+/// of that; `None` when nothing moves.
+fn placed(font: &Font, format: SaveFormat) -> Option<(Font, Vec<Value>)> {
+    if format == SaveFormat::Native || font.files.is_empty() || font.source.format == format.source() {
+        return None;
+    }
+    let mut font = font.clone();
+    let (losses, _) = place_files(&mut font, format, None);
+    Some((font, losses))
 }
 
 /// Layers a UFO has no place for yet: alternate layers (a designspace holds them, in a font with
@@ -710,10 +761,13 @@ fn ufo_images_as_png_by_header(font: &Font, files: FilesFrom) -> Option<Font> {
 /// is named by the save but not here.
 pub fn save_losses(font: &Font, format: SaveFormat) -> Vec<Value> {
     let own = crate::linked::unlinked(font);
-    let font: &Font = &own;
+    let (moved, dropped) = placed(&own, format).unzip();
+    let font: &Font = moved.as_ref().unwrap_or(&own);
     let files_from = if format == SaveFormat::Designspace { FilesFrom::Designspace } else { FilesFrom::Single };
     let converted = if format.is_ufo() { ufo_images_as_png_by_header(font, files_from) } else { None };
-    loss_report(converted.as_ref().unwrap_or(font), format)
+    let mut losses = loss_report(converted.as_ref().unwrap_or(font), format);
+    losses.extend(dropped.unwrap_or_default());
+    losses
 }
 
 /// The losses of saving `font`, as [`save`] has prepared it, in `format`.
@@ -722,7 +776,6 @@ fn loss_report(font: &Font, format: SaveFormat) -> Vec<Value> {
     let mut losses = if format == SaveFormat::Native { Vec::new() } else { losses(font, format.families()) };
     if format.is_ufo() {
         losses.extend(ufo_layer_losses(font, format == SaveFormat::Designspace));
-        losses.extend(side_file_losses(font));
         losses.extend(ufo_info_losses(font, files_from));
     }
     if matches!(format, SaveFormat::Glyphs | SaveFormat::GlyphsPackage) {
@@ -730,8 +783,7 @@ fn loss_report(font: &Font, format: SaveFormat) -> Vec<Value> {
     }
     // A single file has no place for a package's side files (UI state, version 4 feature files).
     if format == SaveFormat::Glyphs && !font.files.is_empty() {
-        let names: Vec<&str> = font.files.0.keys().map(String::as_str).collect();
-        losses.push(json!({ "family": "glyphspackage", "entries": names.len(), "what": "files beside the glyphs in the package", "files": names }));
+        losses.push(side_files(&font.files, SourceFormat::GlyphsPackage));
     }
     losses
 }
@@ -741,11 +793,13 @@ fn loss_report(font: &Font, format: SaveFormat) -> Vec<Value> {
 /// no longer has. Linked glyphs and masters (Import Font, Import Master) are left out.
 pub fn save(font: &Font, path: &Path, format: SaveFormat) -> Result<Saved> {
     let own = crate::linked::unlinked(font);
-    let font: &Font = &own;
+    let (moved, dropped) = placed(&own, format).unzip();
+    let font: &Font = moved.as_ref().unwrap_or(&own);
     let files_from = if format == SaveFormat::Designspace { FilesFrom::Designspace } else { FilesFrom::Single };
     let converted = if format.is_ufo() { ufo_images_as_png(font, files_from) } else { None };
     let font: &Font = converted.as_ref().unwrap_or(font);
-    let losses = loss_report(font, format);
+    let mut losses = loss_report(font, format);
+    losses.extend(dropped.unwrap_or_default());
     match format {
         SaveFormat::Native | SaveFormat::Glyphs => {
             let bytes = if format == SaveFormat::Native {
@@ -854,7 +908,9 @@ pub fn export_losses(font: &Font) -> Vec<Value> {
 fn export_loss_report(font: &Font) -> Vec<Value> {
     let mut losses = losses(font, &[Family::Ufo]);
     losses.extend(ufo_layer_losses(font, false));
-    losses.extend(side_file_losses(font));
+    if !font.files.is_empty() && !fontcraft_model::is_ufo_family(font.source.format) {
+        losses.push(side_files(&font.files, font.source.format));
+    }
     losses.extend(ufo_info_losses(font, FilesFrom::PerMaster));
     losses
 }

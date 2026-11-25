@@ -1777,12 +1777,23 @@ pub fn lib_carries(p: &Param) -> bool {
 pub enum FilesFrom {
     /// [`write`]: one UFO, its files from the root of [`Font::files`].
     Single,
-    /// [`write_one`]: one UFO per master, its files under the master's designspace file name when
-    /// it has one, else from the root.
+    /// [`write_one`]: one UFO per master, its files under the master's file name in a designspace,
+    /// else from the root.
     PerMaster,
     /// A designspace: each UFO's files under its master's file name; a master without one gets a
     /// new name, under which the font holds no files.
     Designspace,
+}
+
+/// Where the writer `files` names finds the files of the UFO of the master `master` in
+/// [`Font::files`]; `None` when it finds none.
+pub(crate) fn files_prefix(font: &Font, files: FilesFrom, master: &str) -> Option<String> {
+    let m = font.masters.iter().find(|m| m.id == master);
+    match files {
+        FilesFrom::Single => Some(String::new()),
+        FilesFrom::PerMaster => Some(m.and_then(|m| designspace_file(font, m)).map(|f| format!("{f}/")).unwrap_or_default()),
+        FilesFrom::Designspace => m.and_then(|m| m.extra.get(Family::Designspace, "filename")).and_then(Value::as_str).map(|f| format!("{f}/")),
+    }
 }
 
 /// What saving `font` as one UFO ([`write`]) leaves out of its font information and user data,
@@ -2016,12 +2027,7 @@ pub(crate) fn layer_losses(font: &Font, files: FilesFrom) -> Vec<String> {
         if !fontcraft_model::is_ufo_family(font.source.format) {
             return None;
         }
-        let file = font.masters.iter().find(|m| m.id == master).and_then(|m| m.extra.get(Family::Designspace, "filename")).and_then(Value::as_str);
-        match (files, file) {
-            (FilesFrom::Single, _) | (FilesFrom::PerMaster, None) => Some(String::new()),
-            (FilesFrom::PerMaster | FilesFrom::Designspace, Some(f)) => Some(format!("{f}/")),
-            (FilesFrom::Designspace, None) => None,
-        }
+        files_prefix(font, files, master)
     };
     let not_in_images = |i: &Option<Image>, prefix: Option<&str>| {
         i.as_ref().and_then(|i| i.path.as_deref()).is_some_and(|p| {
@@ -2485,11 +2491,21 @@ fn write_kerning(font: &Font, master: &Master, version: u32) -> Dict {
     if unchanged { kept } else { out }
 }
 
+/// The file name of `master`'s UFO in `font`, a designspace: a designspace's masters keep their UFO's other files under
+/// it ([`Font::files`]). `None` in any other document, also one that was a designspace before.
+pub(crate) fn designspace_file<'a>(font: &Font, master: &'a Master) -> Option<&'a str> {
+    (font.source.format == SourceFormat::Designspace).then(|| master.extra.get(Family::Designspace, "filename").and_then(Value::as_str))?
+}
+
+/// Whether `master` was read from a UFO.
+pub(crate) fn read_from_ufo(master: &Master) -> bool {
+    ufo_get(&master.extra, METAINFO).is_some()
+}
+
 /// Writes one master of a document as a UFO of its own, with the document's font-wide values.
 pub fn write_one(font: &Font, master_id: &str) -> Result<Files> {
     let master = font.master(master_id)?;
-    // A master read from a designspace keeps its UFO's other files under the UFO's name.
-    let prefix = master.extra.get(Family::Designspace, "filename").and_then(Value::as_str).map(|f| format!("{f}/")).unwrap_or_default();
+    let prefix = designspace_file(font, master).map(|f| format!("{f}/")).unwrap_or_default();
     write_master(font, &Target { master, default: master, layer_masters: Vec::new(), prefix, designspace: false })
 }
 

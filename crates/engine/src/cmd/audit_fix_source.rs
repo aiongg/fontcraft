@@ -52,7 +52,7 @@ pub(super) fn fix_source(s: &mut Session, p: &Params, target: &str) -> Result<Va
     if format == SaveFormat::Designspace && !req.in_place {
         return Err(p.bad("a designspace names its UFOs, so a copy of it would write over them: give `inPlace`, or an `output` in another format"));
     }
-    let read = crate::io::document_stamp(input, &font);
+    let read = crate::io::document_stamp(input, &font, font.source.format);
 
     let mut own = s.without_documents();
     own.push_document(font, Some(input.to_path_buf()));
@@ -73,7 +73,7 @@ pub(super) fn fix_source(s: &mut Session, p: &Params, target: &str) -> Result<Va
         if req.no_clobber && !req.in_place && output.exists() {
             return Err(EngineError::Io(format!("{} exists and noClobber is set", output.display())));
         }
-        if req.in_place && crate::io::document_stamp(input, &doc.font) != read {
+        if req.in_place && crate::io::document_stamp(input, &doc.saved, doc.saved.source.format) != read {
             return Err(EngineError::Io(format!("{target} changed on disk while it was fixed, so nothing was written")));
         }
         let mut font = doc.font.as_ref().clone();

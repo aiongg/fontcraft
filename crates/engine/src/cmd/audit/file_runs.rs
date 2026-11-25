@@ -40,7 +40,7 @@ pub(super) struct FileRun {
 #[cfg(not(target_arch = "wasm32"))]
 fn stamp_of(path: &Path, designspace: Option<&Font>) -> Option<Stamp> {
     match designspace {
-        Some(font) => crate::io::document_stamp(path, font),
+        Some(font) => crate::io::document_stamp(path, font, font.source.format),
         None => crate::io::stamp(path),
     }
 }
