@@ -365,3 +365,32 @@ fn added_glyphs_become_the_selection() {
     run(&mut app, "edit.undo", json!({}));
     assert!(selected(&app).is_empty(), "undo takes the copies out of the selection");
 }
+
+/// A value a List View cell was given stays in it with the reason while the command refuses it; a taken one goes on to
+/// the row below, and another selection drops the refused one.
+#[test]
+fn a_refused_list_value_stays_in_its_cell() {
+    use super::CellDraft;
+
+    let mut app = app();
+    shell(&mut app, "fontView.setViewMode", json!({"mode": "list"}));
+    shell(&mut app, "fontView.setSelection", json!({"glyphs": ["A"]}));
+    let edit = |app: &mut FontCraftApp, text: &str| {
+        let draft = CellDraft { glyph: "A".into(), column: Column::Unicode, text: text.into(), error: None };
+        app.sent.push(Msg::View(crate::app::ViewMsg::FontViewCell(Some(draft))));
+        app.sent.push(Msg::run("glyph.setUnicodes", json!({"glyphs": ["A"], "unicodes": [text]})));
+        app.sent.push(Msg::View(crate::app::ViewMsg::FontViewNextCell { glyph: "B".into(), column: Column::Unicode }));
+        app.drain();
+    };
+    edit(&mut app, "nothex");
+    let m = &app.models.font_view;
+    let draft = m.draft.clone().expect("the refused value");
+    assert!(draft.text == "nothex" && draft.error.is_some_and(|e| !e.is_empty()));
+    assert_eq!((selected(&app), m.edit_cell), (vec!["A".to_string()], Some(Column::Unicode)), "the cell keeps the keyboard");
+    edit(&mut app, "0391");
+    assert_eq!((app.models.font_view.draft.clone(), selected(&app)), (None, vec!["B".to_string()]));
+    shell(&mut app, "fontView.setSelection", json!({"glyphs": ["A"]}));
+    edit(&mut app, "nothex");
+    shell(&mut app, "fontView.setSelection", json!({"glyphs": ["C"]}));
+    assert_eq!(app.models.font_view.draft, None);
+}

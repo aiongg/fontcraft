@@ -5,6 +5,7 @@ use std::rc::Rc;
 
 use craft::ui::contract::Tracked;
 use craft::ui::runtime::commands::CommandRef;
+use craft::ui::runtime::env::WordSet as _;
 use craft::ui::testing::Fixture;
 use egui::{Key, Modifiers};
 use serde_json::json;
@@ -30,8 +31,10 @@ fn model_of(names: &[&str], mode: ViewMode, selected: Vec<usize>) -> FontViewMod
             if let Some(cell) = cells.get_mut(Column::Name.index()) {
                 *cell = (*name).to_string();
             }
-            if let Some(cell) = cells.get_mut(Column::Unicode.index()) {
-                *cell = unicode(i);
+            for column in [Column::Unicode, Column::Char] {
+                if let Some(cell) = cells.get_mut(column.index()) {
+                    *cell = unicode(i);
+                }
             }
             GlyphRow { name: (*name).to_string(), export: true, cells, ..GlyphRow::default() }
         })
@@ -118,8 +121,10 @@ const TWELVE: [&str; 12] = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K
 /// What one key press posts in a Font View over [`TWELVE`] in `mode` with the glyph `at` selected and the keyboard
 /// (a click on its cell gives it the keyboard and changes nothing).
 fn after_key(mode: ViewMode, at: usize, key: Key, mods: Modifiers) -> Vec<Msg> {
-    let (mut fixture, posted) = open(model_of(&TWELVE, mode, vec![at]));
-    // In the list, a click on the selected row's name could start a rename: the Unicode cell is clicked instead.
+    let mut m = model_of(&TWELVE, mode, vec![at]);
+    // A column no field edits: in the list, a click on the selected row's name could start a rename.
+    m.columns = vec![Column::Name, Column::Char];
+    let (mut fixture, posted) = open(m);
     let label = match mode {
         ViewMode::List => unicode(at),
         _ => TWELVE.get(at).copied().unwrap_or_default().to_string(),
@@ -252,8 +257,8 @@ fn the_status_column_edit_equals_set_status() {
         .collect();
     assert!(texts.iter().any(|t| t == "Draft"), "A's cell shows its status: {texts:?}");
 
-    assert_eq!(super::list::status_request("A", "1"), Msg::run("glyph.setStatus", json!({"glyphs": ["A"], "status": 1})));
-    assert_eq!(super::list::status_request("A", ""), Msg::run("glyph.setStatus", json!({"glyphs": ["A"], "status": null})));
+    assert_eq!(super::list::status_request(&["A".to_string()], "1"), Msg::run("glyph.setStatus", json!({"glyphs": ["A"], "status": 1})));
+    assert_eq!(super::list::status_request(&["A".to_string()], ""), Msg::run("glyph.setStatus", json!({"glyphs": ["A"], "status": null})));
 }
 
 /// With a strike shown, a cell with a bitmap draws it as a texture, and a glyph without one still shows its name even
@@ -421,4 +426,90 @@ fn a_reveal_is_taken_and_show_all_clears_the_filters() {
     posted.borrow_mut().clear();
     fixture.click(&button).settle();
     assert!(posted.borrow().contains(&shell("fontView.setSearch", json!({"query": ""}))), "{:?}", posted.borrow());
+}
+
+/// A List View over A to C with B selected, showing `column` beside the names, and what typing `text` into B's cell of
+/// it and pressing `key` posts.
+fn typed_into(column: Column, value: &str, text: &str, selected: Vec<usize>) -> Vec<Msg> {
+    let lead = selected.last().copied().unwrap_or_default();
+    let mut m = model(ViewMode::List, selected);
+    m.columns = vec![Column::Name, column];
+    m.master = Some("m01".into());
+    for row in &mut m.rows {
+        if let Some(cell) = row.cells.get_mut(column.index()) {
+            *cell = value.to_string();
+        }
+    }
+    let name = m.name(lead).unwrap_or_default().to_string();
+    let label = format!("{}, {name}", super::list::header(&super::list::ColumnWords::english(), column).as_str());
+    let (mut fixture, posted) = open(m);
+    let field = fixture.by_label(&label).unwrap_or_else(|| panic!("{label}"));
+    posted.borrow_mut().clear();
+    fixture.click(&field).key(Key::A, Modifiers::COMMAND).type_text(text).key(Key::Enter, Modifiers::NONE).settle();
+    posted.take()
+}
+
+/// Each text cell of the lead row runs the command of its property, then Return goes on to the row below; with several
+/// rows selected the edit changes all of them.
+#[test]
+fn list_cells_run_their_commands() {
+    let cases = [
+        (Column::Unicode, "0042", "0042 0062", "glyph.setUnicodes", json!({"glyphs": ["B"], "unicodes": ["0042", "0062"]})),
+        (Column::ProductionName, "", "uni0042", "glyph.setProductionName", json!({"glyphs": ["B"], "productionName": "uni0042"})),
+        (Column::Script, "latin", "greek", "glyph.setScript", json!({"glyphs": ["B"], "script": "greek"})),
+        (Column::SubCategory, "", "Uppercase", "glyph.setCategory", json!({"glyphs": ["B"], "subCategory": "Uppercase"})),
+        (Column::SortName, "B", "Z", "glyph.setSortName", json!({"glyphs": ["B"], "sortName": "Z"})),
+        (Column::Note, "", "check", "glyph.setNote", json!({"glyphs": ["B"], "note": "check"})),
+        (Column::Tags, "", "one, two", "glyph.setTags", json!({"glyphs": ["B"], "tags": ["one", "two"]})),
+        (Column::Components, "", "A", "glyph.setComponents", json!({"glyph": "B", "layer": "m01", "components": "A"})),
+        (Column::Lsb, "40", "55", "spacing.setLeftSidebearing", json!({"glyphs": ["B"], "layer": "m01", "value": 55.0})),
+        (Column::Width, "600", "=A", "spacing.setWidth", json!({"glyphs": ["B"], "layer": "m01", "value": "=A"})),
+        (Column::LeftGroup, "", "H", "kerning.setLeftGroup", json!({"glyphs": ["B"], "group": "H"})),
+    ];
+    for (column, value, text, id, params) in cases {
+        let posted = typed_into(column, value, text, vec![1]);
+        assert!(posted.contains(&Msg::run(id, params)), "{column:?}: {posted:?}");
+        let next = ViewMsg::FontViewNextCell { glyph: "C".into(), column };
+        assert!(posted.contains(&Msg::View(next)), "{column:?}: {posted:?}");
+    }
+    let posted = typed_into(Column::Note, "", "check", vec![0, 2, 1]);
+    assert!(posted.contains(&Msg::run("glyph.setNote", json!({"glyphs": ["A", "C", "B"], "note": "check"}))), "{posted:?}");
+    assert!(!posted.iter().any(|m| matches!(m, Msg::View(ViewMsg::FontViewNextCell { .. }))), "{posted:?}");
+    let posted = typed_into(Column::Note, "same", "same", vec![1]);
+    assert!(!posted.iter().any(|m| matches!(m, Msg::Run(_))), "an unchanged value sets nothing: {posted:?}");
+}
+
+/// Only the lead row holds fields, whatever the length of the list; the Exports check box of any row sets the flag; a
+/// value the glyph data gives is offered as Automatic, and a pick sets the property.
+#[test]
+fn list_fields_are_the_lead_rows() {
+    let names: Vec<String> = (0..10_000).map(|i| format!("g{i}")).collect();
+    let refs: Vec<&str> = names.iter().map(String::as_str).collect();
+    let mut m = model_of(&refs, ViewMode::List, vec![1]);
+    m.columns = vec![Column::Name, Column::Note, Column::Export];
+    let (mut fixture, posted) = open(m);
+    assert!(fixture.by_label("Note, g1").is_some() && fixture.by_label("Note, g2").is_none());
+    let check = fixture.by_label("Exports, g3").expect("the check box");
+    posted.borrow_mut().clear();
+    fixture.click(&check).settle();
+    assert!(posted.borrow().contains(&Msg::run("glyph.setExport", json!({"glyphs": ["g3"], "export": false}))), "{:?}", posted.borrow());
+
+    let mut m = model(ViewMode::List, vec![1]);
+    if let Some(row) = m.rows.get_mut(1) {
+        row.derived = 1 << Column::Category.index();
+        if let Some(cell) = row.cells.get_mut(Column::Category.index()) {
+            *cell = "Letter".into();
+        }
+        if let Some(cell) = row.cells.get_mut(Column::Color.index()) {
+            *cell = "Yellow".into();
+        }
+    }
+    let words = super::list::ColumnWords::english();
+    let (current, entries) = super::list_edit::pop_up(&m, 1, Column::Category, &words);
+    assert_eq!((current.as_str(), entries.len()), ("", 9));
+    assert_eq!(super::list_edit::pop_up(&m, 1, Column::Color, &words).0, "3");
+    let set = |column, value| super::list_edit::command(&m, 1, column, value);
+    assert_eq!(set(Column::Category, "Symbol"), Some(Msg::run("glyph.setCategory", json!({"glyphs": ["B"], "category": "Symbol"}))));
+    assert_eq!(set(Column::Color, ""), Some(Msg::run("glyph.setColorLabel", json!({"glyphs": ["B"], "color": null}))));
+    assert_eq!(set(Column::Case, "noCase"), Some(Msg::run("glyph.setCase", json!({"glyphs": ["B"], "case": "noCase"}))));
 }

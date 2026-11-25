@@ -17,12 +17,12 @@ use craft::ui::contract::{PlainData, Tracked};
 use fontcraft_engine::cmd::status;
 use fontcraft_engine::model::glyphdata::GlyphData;
 use fontcraft_engine::model::strike::BitmapStrike;
-use fontcraft_engine::model::{ColorLabel, Font, Glyph, GlyphProps, Prop, Shape, glyph_order, glyph_props, keeps_alternates, metric};
+use fontcraft_engine::model::{ColorLabel, Font, Glyph, GlyphProps, Prop, PropSource, Shape, glyph_order, glyph_props, keeps_alternates, metric};
 use serde_json::Value;
 
 use super::ProjectCx;
 use super::cell_marks::{self, CellMarks};
-use crate::app::font_view::{Column, Sort, ViewMode};
+use crate::app::font_view::{CellDraft, Column, Sort, ViewMode};
 use crate::canvas::color;
 
 /// Most points one cell outline keeps; the rest of a larger outline is left out of the cell.
@@ -67,6 +67,10 @@ pub struct FontViewModel {
     pub focus_search: bool,
     /// The row the grid or the list scrolls to on this pass.
     pub reveal: Option<usize>,
+    /// The List View column whose cell in the lead row takes the keyboard on this pass.
+    pub edit_cell: Option<Column>,
+    /// A List View value not taken yet, with why.
+    pub draft: Option<CellDraft>,
     /// How many selected glyphs the search or the sidebar hides.
     pub hidden: usize,
     /// The master the cells draw and the Components cell edits.
@@ -125,6 +129,10 @@ pub struct GlyphRow {
     pub unicode: Option<String>,
     /// List View: the text of every column, by [`Column::index`]. Empty in Grid View.
     pub cells: Vec<String>,
+    /// List View: a bit per column, by [`Column::index`], whose value comes from the glyph data, not from the glyph.
+    pub derived: u32,
+    /// List View: the note has several lines, of which the cell shows the first.
+    pub long_note: bool,
     /// Grid View: the outline. `None` in List View.
     pub art: Option<Arc<CellArt>>,
     /// The code of the status the glyph is in (its stored one, else the default; `None` for a stored code the font
@@ -152,6 +160,19 @@ impl FontViewModel {
     /// The row of the glyph named `name`.
     pub fn row_of(&self, name: &str) -> Option<usize> {
         self.rows.iter().position(|r| r.name == name)
+    }
+
+    /// Whether the value of `column` in row `at` comes from the glyph data.
+    pub fn is_derived(&self, at: usize, column: Column) -> bool {
+        let bit = 1u32.checked_shl(column.index() as u32).unwrap_or(0);
+        self.rows.get(at).is_some_and(|r| r.derived & bit != 0)
+    }
+
+    /// The glyphs an edit in row `at` changes: the selected ones when the row is among them, else its own.
+    pub fn edited(&self, at: usize) -> Vec<String> {
+        let own = [at];
+        let rows: &[usize] = if self.selected.contains(&at) { &self.selected } else { &own };
+        rows.iter().filter_map(|&i| self.name(i)).map(str::to_string).collect()
     }
 
     /// The name of row `at`.
@@ -288,6 +309,9 @@ pub fn project(model: &mut Tracked<FontViewModel>, cache: &mut OutlineCache, fil
                 let status = in_status.map(|s| s.name.as_str());
                 let cell = Cell { font: &font, glyph, id, master: &master, props: props.get(glyph), status };
                 row.cells = Column::ALL.iter().map(|c| cell.text(*c)).collect();
+                row.derived =
+                    Column::ALL.iter().filter(|c| cell.is_derived(**c)).fold(0, |bits, c| bits | 1u32.checked_shl(c.index() as u32).unwrap_or(0));
+                row.long_note = glyph.info.note.trim_end().lines().nth(1).is_some();
             }
         }
         glyphs.push(glyph);
@@ -338,6 +362,8 @@ pub fn project(model: &mut Tracked<FontViewModel>, cache: &mut OutlineCache, fil
         search: state.search.query.clone(),
         focus_search: state.focus_search,
         reveal,
+        edit_cell: state.edit_cell,
+        draft: state.draft.clone(),
         hidden,
         master: Some(master),
         ascender,
@@ -454,6 +480,11 @@ impl Cell<'_> {
             Column::SortName => &p.sort_name,
             _ => return None,
         })
+    }
+
+    /// Whether the column's value comes from the glyph data rather than from the glyph.
+    fn is_derived(&self, column: Column) -> bool {
+        self.prop(column).is_some_and(|p| !matches!(p.source, PropSource::Stored))
     }
 
     fn text(&self, column: Column) -> String {

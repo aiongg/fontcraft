@@ -5,6 +5,7 @@
 //! |---|---|
 //! | [`grid`] | Grid View: one tile per shown glyph, its outline, its name from the label size up |
 //! | [`list`] | List View: one row per shown glyph, a column per property, sort and column choice, edits in place |
+//! | [`list_edit`] | List View's fields and the commands its edits run |
 //! | [`cells`] | the outline painter of a grid cell |
 //! | [`marks`] | a grid cell's colour labels, badges and Unicode mark |
 //! | [`keys`] | what the grid's and the list's selection, keys and requests post |
@@ -19,6 +20,7 @@ pub mod grid;
 pub mod inspector;
 pub mod keys;
 pub mod list;
+pub mod list_edit;
 pub mod marks;
 pub mod metrics;
 pub mod search;

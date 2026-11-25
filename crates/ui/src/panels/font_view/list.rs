@@ -1,26 +1,32 @@
 //! List View (`fontView.list`): a row per shown glyph and a column per glyph property. A header press sorts
 //! (`fontView.sortByColumn`); the header menu shows and hides columns and a header drag moves one
-//! (`fontView.setColumns`); the Name cell renames the glyph, and the Status cell is a pop-up of the font's statuses
-//! that runs `glyph.setStatus` on the row's glyph (No Status clears the stored one). The table lays out only the rows
-//! in view.
+//! (`fontView.setColumns`); the Name cell renames the glyph, the Status cell is a pop-up of the font's statuses that
+//! runs `glyph.setStatus` (No Status clears the stored one) and the Exports cell a check box. The other cells that have
+//! a setter are fields in the lead row (`list_edit`): a click on one in the selected row edits it, so a double-click
+//! in any row does. Values that come from the glyph data are muted. The table lays out only the rows in view.
 
 use std::cell::RefCell;
 
-use craft::behavior::{ColumnKey, ColumnWidth};
-use craft::ui::contract::{Bind, CollectionEvent, ColumnEvent, ColumnSort, ColumnSpec, Entry, Props as _, ShowCollection as _};
-use craft::ui::list::ListRow;
+use craft::behavior::{ColumnKey, ColumnWidth, GesturePhase};
+use craft::ui::contract::{
+    Bind, CollectionEvent, ColumnEvent, ColumnKind, ColumnSort, ColumnSpec, Entry, Props as _, ShowCollection as _, ToggleColumn,
+};
+use craft::ui::list::{ListRow, ToggleCell, ToggleState};
 use craft::ui::pickers::Select;
 use craft::ui::runtime::commands::CommandRef;
 use craft::ui::runtime::env::{Env, Label};
+use craft::ui::runtime::focus::{self, FocusTarget};
 use craft::ui::table::Table;
+use craft::ui::text::TextField;
 use egui::Ui;
 use serde_json::json;
 
 use super::grid::Shown;
+use super::list_edit::{self, CellEdit};
 use super::{FontViewWords, keys};
-use crate::app::Msg;
 use crate::app::font_view::Column;
 use crate::app::models::font_view::FontViewModel;
+use crate::app::{Msg, ViewMsg};
 
 craft::ui::words! {
     /// List View's column headers.
@@ -50,6 +56,10 @@ craft::ui::words! {
         status: "fontcraftFontViewColumn.status" = "Status";
         /// The Status pop-up's entry that clears the stored status.
         no_status: "fontcraftFontViewColumn.noStatus" = "No Status";
+        /// The Color pop-up's entry that clears the colour.
+        no_color: "fontcraftFontViewColumn.noColor" = "No Color";
+        /// The entry of the other pop-ups that returns to the glyph data's value.
+        automatic: "fontcraftFontViewColumn.automatic" = "Automatic";
     }
 }
 
@@ -91,8 +101,9 @@ fn column_of(key: &ColumnKey) -> Option<Column> {
     key.as_str().and_then(Column::parse)
 }
 
-/// The Status column's width, in control heights.
-const STATUS_WIDTH: f32 = 6.0;
+/// The width of a pop-up column and of the check box column, in control heights: their cells are not measured as text.
+const POP_UP_WIDTH: f32 = 6.0;
+const CHECK_WIDTH: f32 = 3.0;
 
 pub fn show(ui: &mut Ui, model: &FontViewModel, sent: &mut Vec<Msg>) {
     let env = Env::of(ui);
@@ -103,20 +114,36 @@ pub fn show(ui: &mut Ui, model: &FontViewModel, sent: &mut Vec<Msg>) {
         .columns
         .iter()
         .map(|&c| {
-            // A pop-up cell is not measured as text, so the Status column takes a width that fits a status name.
-            let width = if c == Column::Status { ColumnWidth::Controls(STATUS_WIDTH) } else { ColumnWidth::Content };
+            let width = match c {
+                Column::Export => ColumnWidth::Controls(CHECK_WIDTH),
+                _ if c == Column::Status || list_edit::is_pop_up(c) => ColumnWidth::Controls(POP_UP_WIDTH),
+                _ => ColumnWidth::Content,
+            };
             let spec = ColumnSpec::new(key(c), header(&headers, c), width).sortable().resizable().movable();
             let spec = if c == Column::Name { spec } else { spec.hideable() };
             // The first column's text is the row's own, which starts at the leading edge; its header does too.
+            let spec = if c == Column::Export && c != first { spec.kind(ColumnKind::Toggle(ToggleColumn::default())) } else { spec };
             if c.is_numeric() && c != first { spec.numeric() } else { spec }
         })
         .collect();
     let sort = model.sort.map(|s| ColumnSort::new(key(s.column), !s.ascending));
     let mut selection = keys::selection(model);
+    let lead = selection.lead;
+    let pop_ups: Vec<(Column, String, Vec<Entry<String>>)> = lead
+        .into_iter()
+        .flat_map(|row| model.columns.iter().copied().filter(|c| list_edit::is_pop_up(*c)).map(move |c| (row, c)))
+        .map(|(row, c)| {
+            let (current, entries) = list_edit::pop_up(model, row, c, &headers);
+            (c, current, entries)
+        })
+        .collect();
+    // What the lead row's fields reported, with each field's id.
+    let edits: RefCell<Vec<(CellEdit, egui::Id)>> = RefCell::new(Vec::new());
+    let chosen: RefCell<Option<(Column, String)>> = RefCell::new(None);
     let source = Shown::new(model);
     let statuses = status_entries(model, &headers);
-    // The Status pop-up a row picked from: the glyph and the entry's value.
-    let picked: RefCell<Option<(String, String)>> = RefCell::new(None);
+    // The Status pop-up a row picked from: the row and the entry's value.
+    let picked: RefCell<Option<(usize, String)>> = RefCell::new(None);
     let table = Table::<usize>::new(words.glyphs.clone(), specs);
     let table = match model.reveal {
         Some(row) => table.reveal(row),
@@ -135,13 +162,78 @@ pub fn show(ui: &mut Ui, model: &FontViewModel, sent: &mut Vec<Msg>) {
             let cells = model.rows.get(*row).map(|r| r.cells.as_slice()).unwrap_or_default();
             let text = |c: Column| cells.get(c.index()).cloned().unwrap_or_default();
             let mut list_row = ListRow::new(text(first)).cells(icx.cells()).striped(icx.row.striped);
-            for &c in model.columns.iter().skip(1) {
+            if model.is_derived(*row, first) {
+                list_row = list_row.cell_muted(key(first));
+            }
+            for &c in &model.columns {
+                let is_lead = lead == Some(*row);
+                if is_lead
+                    && list_edit::is_text(model, *row, c)
+                    && let Some(glyph) = model.rows.get(*row)
+                {
+                    let draft = model.draft.as_ref().filter(|d| d.glyph == glyph.name && d.column == c && d.error.is_some());
+                    let shown = draft.map_or_else(|| text(c), |d| d.text.clone());
+                    let label = format!("{}, {}", header(&headers, c).as_str(), glyph.name);
+                    let mut field = TextField::new(label, Bind::given(shown.clone()))
+                        .select_on_focus()
+                        .submits()
+                        .limit(list_edit::MAX_CELL_CHARS)
+                        .id_salt(("fontcraftFontView.cell", c.id(), glyph.name.as_str()));
+                    if let Some(error) = draft.and_then(|d| d.error.clone()) {
+                        field = field.tooltip(error);
+                    }
+                    let (edits, row) = (&edits, *row);
+                    list_row = list_row.cell_field(key(c), field, move |out| {
+                        let edit = CellEdit {
+                            row,
+                            column: c,
+                            shown,
+                            text: out.events.committed().cloned(),
+                            submitted: out.submitted,
+                            escaped: out.escaped,
+                            tab: out.left_by_tab,
+                        };
+                        edits.borrow_mut().push((edit, out.response.id));
+                    });
+                    continue;
+                }
+                if is_lead
+                    && let Some((_, current, entries)) = pop_ups.iter().find(|(column, ..)| *column == c)
+                    && let Some(glyph) = model.rows.get(*row)
+                {
+                    let label = format!("{}, {}", header(&headers, c).as_str(), glyph.name);
+                    let chosen = &chosen;
+                    let field =
+                        Select::new(label, Bind::given(current.clone()), entries).id_salt(("fontcraftFontView.popUp", c.id(), glyph.name.as_str()));
+                    list_row = list_row.cell_field(key(c), field, move |out| {
+                        if let Some(value) = out.events.committed()
+                            && value != current
+                        {
+                            *chosen.borrow_mut() = Some((c, value.clone()));
+                        }
+                    });
+                    continue;
+                }
+                // The first column's text is the row's own.
+                if c == first {
+                    continue;
+                }
+                if c == Column::Export
+                    && let Some(glyph) = model.rows.get(*row)
+                {
+                    let name = format!("{}, {}", headers.export.as_str(), glyph.name);
+                    list_row = list_row.toggle(ToggleCell::check(key(c), ToggleState::of(glyph.export), name));
+                    continue;
+                }
+                if model.is_derived(*row, c) {
+                    list_row = list_row.cell_muted(key(c));
+                }
                 if c == Column::Status
                     && !statuses.is_empty()
                     && let Some(glyph) = model.rows.get(*row)
                 {
                     let current = glyph.status.map(|code| code.to_string()).unwrap_or_default();
-                    let name = glyph.name.clone();
+                    let at = *row;
                     let picked = &picked;
                     let field = Select::new(headers.status.clone(), Bind::given(current.clone()), &statuses)
                         .id_salt(("fontcraftFontView.status", glyph.name.as_str()));
@@ -149,7 +241,7 @@ pub fn show(ui: &mut Ui, model: &FontViewModel, sent: &mut Vec<Msg>) {
                         if let Some(value) = out.events.committed()
                             && *value != current
                         {
-                            *picked.borrow_mut() = Some((name, value.clone()));
+                            *picked.borrow_mut() = Some((at, value.clone()));
                         }
                     });
                     continue;
@@ -158,14 +250,32 @@ pub fn show(ui: &mut Ui, model: &FontViewModel, sent: &mut Vec<Msg>) {
             }
             list_row
         });
-    if let Some((glyph, value)) = picked.take() {
-        sent.push(status_request(&glyph, &value));
+    if let Some((row, value)) = picked.take() {
+        sent.push(status_request(&model.edited(row), &value));
+    }
+    if let (Some((column, value)), Some(row)) = (chosen.take(), lead) {
+        sent.extend(list_edit::command(model, row, column, &value));
+    }
+    if model.edit_cell.is_some() {
+        sent.push(Msg::View(ViewMsg::FontViewEditCell(None)));
+    }
+    for (edit, id) in edits.take() {
+        if model.edit_cell == Some(edit.column) {
+            let _ = focus::request(ui.ctx(), FocusTarget::Id(id));
+        }
+        sent.extend(list_edit::messages(model, &edit));
     }
     keys::revealed(model, sent);
     keys::requests(ui.ctx(), model, &selection, &out.events, sent);
     for event in &out.events {
-        if let CollectionEvent::Column(change) = event {
-            column_request(model, change, sent);
+        match event {
+            CollectionEvent::Column(change) => column_request(model, change, sent),
+            CollectionEvent::Toggle(edit) if matches!(edit.phase(), None | Some(GesturePhase::Commit)) => {
+                if let Some(cell) = edit.value() {
+                    sent.push(Msg::run("glyph.setExport", json!({"glyphs": model.edited(cell.key), "export": cell.on})));
+                }
+            }
+            _ => {}
         }
     }
 }
@@ -181,9 +291,9 @@ fn status_entries(model: &FontViewModel, words: &ColumnWords) -> Vec<Entry<Strin
 }
 
 /// `glyph.setStatus` for a Status pop-up's pick: a code, or empty for No Status.
-pub fn status_request(glyph: &str, value: &str) -> Msg {
+pub fn status_request(glyphs: &[String], value: &str) -> Msg {
     let status = value.parse::<i64>().map_or(serde_json::Value::Null, |code| json!(code));
-    Msg::run("glyph.setStatus", json!({"glyphs": [glyph], "status": status}))
+    Msg::run("glyph.setStatus", json!({"glyphs": glyphs, "status": status}))
 }
 
 /// The shell command for a change the header made.

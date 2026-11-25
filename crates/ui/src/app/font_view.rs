@@ -86,6 +86,17 @@ impl Search {
     }
 }
 
+/// A value typed into a List View cell: kept while the command it ran has not succeeded, so a refused value stays in
+/// its cell with the reason.
+#[derive(PlainData, Clone, Debug, PartialEq)]
+pub struct CellDraft {
+    pub glyph: String,
+    pub column: Column,
+    pub text: String,
+    /// Why the command refused it; `None` until it ran.
+    pub error: Option<String>,
+}
+
 /// Font View's view state: no engine command changes it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct FontViewState {
@@ -106,6 +117,10 @@ pub struct FontViewState {
     pub focus_search: bool,
     /// The glyph the grid or the list scrolls to on the next pass.
     pub reveal: Option<String>,
+    /// The List View column whose cell in the lead row takes the keyboard on the next pass.
+    pub edit_cell: Option<Column>,
+    /// The List View value not yet taken.
+    pub draft: Option<CellDraft>,
     /// The strike the grid draws; `None` draws the outlines.
     pub strike: Option<StrikeView>,
 }
@@ -124,6 +139,8 @@ impl Default for FontViewState {
             anchor: None,
             focus_search: false,
             reveal: None,
+            edit_cell: None,
+            draft: None,
             strike: None,
         }
     }
@@ -430,11 +447,31 @@ impl FontCraftApp {
     /// What follows engine command `command` that returned `reply`: a new glyph becomes the Font View selection;
     /// returns the status notice the reply calls for.
     pub(super) fn after_command(&mut self, command: &CommandRef, reply: &Value) -> Option<String> {
+        if self.view.font_view.draft.take().is_some() {
+            self.view_revision += 1;
+        }
         let made = results(&command.id, reply);
         if !made.is_empty() {
             self.select_and_reveal(made);
         }
         incompatible_notice(&command.id, reply).or_else(|| added_notice(&command.id, reply))
+    }
+
+    /// What follows an engine command that failed: the List View value it was to set stays in its cell with `error`.
+    pub(super) fn refuse_draft(&mut self, error: &str) {
+        if let Some(draft) = self.view.font_view.draft.as_mut().filter(|d| d.error.is_none()) {
+            draft.error = Some(error.to_string());
+            self.view_revision += 1;
+        }
+    }
+
+    /// After Return in a List View cell: the same cell of `glyph`, the next row, takes the keyboard; a refused value
+    /// keeps it.
+    pub(super) fn next_cell(&mut self, glyph: String, column: Column) {
+        if self.view.font_view.draft.is_none() {
+            self.select_and_reveal(vec![glyph]);
+        }
+        self.view.font_view.edit_cell = Some(column);
     }
 
     /// Selects `glyphs` in Font View, which scrolls to the first of them when it next shows.
@@ -443,6 +480,7 @@ impl FontCraftApp {
         fv.reveal = glyphs.first().cloned();
         fv.anchor = glyphs.last().cloned();
         fv.selected = glyphs;
+        fv.draft = None;
         self.view_revision += 1;
     }
 

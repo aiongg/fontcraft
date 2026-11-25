@@ -1219,9 +1219,12 @@ milestone = "M4"
 summary = "Shows the visible glyphs as a table of glyph properties that can be sorted, rearranged and partly edited in place."
 ref = "Font View › List View; Glyph Properties"
 status = "handbook"
-notes = "Tab and Shift+Tab move between the fields of List View (tutorial \"Kerning\", updated for version 3; fixed in 4.0, build 3812)."
+notes = "Tab and Shift+Tab move between the fields of List View (tutorial \"Kerning\", updated for version 3; fixed in 4.0, build 3812). Built: the fields stand in the lead row only, so a click on a cell of the selected row edits it and a double-click does so in any row. Return commits and goes to the same cell one row down, Tab to the next text cell, Escape cancels. A refused value stays in its cell with the reason as its tooltip and in the status line. With several glyphs selected an edit changes all of them."
 guesses = [
   "A click on an editable cell of the only selected row, or a double-click on it, starts editing; a click on an Exports cell flips the flag; a double-click on a cell that cannot be edited opens the glyph. The reference's list edits like a spreadsheet, with Tab and Shift+Tab moving between fields (tutorial \"Kerning\", glyphsapp.com/learn/kerning); what starts the editing is not documented.",
+  "Category, Case, Direction and Color are pop-ups; the entry Automatic returns to the glyph data's value. Subcategory and Script are text, as any value may be stored. Settled by observation.",
+  "A note of several lines is not edited in its cell, which holds one line. Settled by observation.",
+  "Return goes to the row below only while one glyph is selected. Settled by observation.",
   "Values that come from the glyph data rather than from the glyph are drawn dimmed. Settled by observation.",
 ]
 observe = [
@@ -1948,6 +1951,7 @@ milestone = "M4"
 summary = "The Char column renders the glyph's character in the system font. A glyph with several code points shows only the first; a glyph with none shows nothing."
 ref = "Font View › Glyph Properties › Char"
 status = "handbook"
+notes = "The interface font draws the character; the outline of a glyph whose character it lacks is not built."
 guesses = ["A character the interface font lacks is drawn with the glyph's own outline from the document, at row height in the text colour, instead of a system font's. Settled by observing the reference with a code point that the system fonts lack."]
 observe = [
   "Give a glyph the value U+E000 and an unassigned CJK code point: note what the Char column draws.",
@@ -2008,7 +2012,7 @@ milestone = "M4"
 summary = "List View has a column for every property the Glyph Properties section describes: besides ID, Char, Name, Unicode, Note, Components and Last Changed, these are the metrics (LSB, RSB, width), kerning groups, Exports, colour label, tags, production name, script, category, subcategory, case, writing direction and sort name."
 ref = "Font View › List View"
 status = "handbook"
-notes = "The handbook says each column is a glyph property and points at Glyph Properties for the list (05 question 14, checked in the M4 planning pass). Metric and kerning-group cells are read-only until M5. Documented, not yet observed."
+notes = "The handbook says each column is a glyph property and points at Glyph Properties for the list (05 question 14, checked in the M4 planning pass). Every cell with a setter is edited in place (M4.32): metric cells take a number or a key and set the layer of the master Font View shows. Documented, not yet observed."
 guesses = [
   "Every column is shown by default, in this order: ID, Char, Name, Unicode, Production Name, Script, Category, Subcategory, Case, Direction, Exports, Color, Tags, Sort Name, Note, Components, Last Changed, LSB, RSB, Width, Left Group, Right Group. Settled by observation (05 question 14).",
   "Besides the four cells the handbook calls editable (Name, Unicode, Note, Components), cells of properties that have a set command (Exports, colour, tags, production name, script, category, subcategory, case, direction, sort name) are editable too. Settled by observation.",

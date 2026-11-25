@@ -265,6 +265,7 @@ fn set_selection(app: &mut FontCraftApp, p: &Value) -> Result<(), String> {
         return Err(format!("no glyph named `{unknown}`"));
     }
     let fv = &mut app.view.font_view;
+    fv.draft = None;
     let current = std::mem::take(&mut fv.selected);
     fv.selected = match mode {
         "remove" => {

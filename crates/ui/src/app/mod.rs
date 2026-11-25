@@ -505,6 +505,7 @@ impl FontCraftApp {
                     Ok(reply) => reply,
                     Err(e) => {
                         let error = e.to_string();
+                        self.refuse_draft(&error);
                         crate::shell::start::after_error(self, &command.id, &error);
                         crate::dialogs::changed_on_disk::after_error(self, &command.id, &params, &error);
                         return Err(error);
@@ -622,6 +623,9 @@ impl FontCraftApp {
             ViewMsg::FeaturePreview(ask) => self.view.font_info.features.preview = ask,
             ViewMsg::FeatureFind(find) => self.view.font_info.features.find = find,
             ViewMsg::FontViewSearchFocused => self.view.font_view.focus_search = false,
+            ViewMsg::FontViewCell(draft) => self.view.font_view.draft = draft,
+            ViewMsg::FontViewEditCell(column) => self.view.font_view.edit_cell = column,
+            ViewMsg::FontViewNextCell { glyph, column } => self.next_cell(glyph, column),
             ViewMsg::FontViewRevealed => self.view.font_view.reveal = None,
             ViewMsg::Bitmap(input) => return crate::shell::bitmap_editor::input(self, input),
         }
