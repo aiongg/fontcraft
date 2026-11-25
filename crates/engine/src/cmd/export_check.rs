@@ -37,6 +37,9 @@ const MAX_IN_MESSAGE: usize = 50;
 const MAX_SKIPPED_GLYPHS: usize = 256;
 /// Most jobs of one document a check looks at.
 const MAX_JOBS: usize = 64;
+/// Most jobs of one document looked at to list what else stops an export that failed, which the
+/// person waits for.
+const MAX_REFUSAL_JOBS: usize = 8;
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![cmd!(
@@ -44,7 +47,7 @@ pub fn specs() -> Vec<CommandSpec> {
         "Check Export",
         [],
         None,
-        "{document?: title or path, tab?: \"otf\" (default)|\"variable\", params?: {…}} what would stop an export of the document (default: the active one) or keep one of its fonts from being written, all at once and without writing anything. tab and params name the export: the parameters of file.exportStatic (otf) or file.exportVariable (variable). Checked: the names of the exported glyphs, code points given to two glyphs, layers that are not compatible, the feature code of each font, and everything else that decides a font's glyphs and tables; outlines are not prepared. A failing export lists its errors the same way in its message → {tab, document, ok, errors: [{kind: \"glyphName\"|\"codepoint\"|\"incompatible\"|\"features\"|\"glyph\"|\"font\", message, glyph?, layer?, character?, position? (from 1), codepoint?, glyphs?, entry?: {kind, name, index?}, line?, column?, instances?: [name]}], more?: errors not listed, skipped: [{instance, source, reason, glyphs?: [{glyph, layer?, message}]}], warnings: [text], files: how many font files it would write (otf)}",
+        "{document?: title or path, tab?: \"otf\" (default)|\"variable\", params?: {…}} what would stop an export of the document (default: the active one) or keep one of its fonts from being written, all at once and without writing anything. tab and params name the export: the parameters of file.exportStatic (otf) or file.exportVariable (variable). Checked: the names of the exported glyphs, code points given to two glyphs, layers that are not compatible, the feature code of each font, and everything else that decides a font's glyphs and tables; outlines are not prepared. A failing export lists the errors of its first 8 fonts the same way in its message → {tab, document, ok, errors: [{kind: \"glyphName\"|\"codepoint\"|\"incompatible\"|\"features\"|\"glyph\"|\"font\", message, glyph?, layer?, character?, position? (from 1), codepoint?, glyphs?, entry?: {kind, name, index?}, line?, column?, instances?: [name], document? and documentId? (of an export of several documents)}], more?: errors not listed, skipped: [{instance, source, reason, glyphs?: [{glyph, layer?, message}]}], warnings: [text], files: how many font files it would write (otf)}",
         has_doc,
         export_check
     )]
@@ -99,10 +102,14 @@ impl Problems {
         }
     }
 
-    /// Says that the problems added since the last call are those of the document `title`.
-    fn in_document(&mut self, title: &str) {
+    /// Says that the problems added since the last call are those of the document `title`, with
+    /// its session id when it is open.
+    fn in_document(&mut self, title: &str, id: Option<u64>) {
         for problem in self.list.iter_mut().skip(self.from) {
             problem.insert("document".into(), json!(title));
+            if let Some(id) = id {
+                problem.insert("documentId".into(), json!(id));
+            }
         }
         self.from = self.list.len();
     }
@@ -305,6 +312,8 @@ pub(super) enum Build<'a> {
 
 /// One font of an export, as its checks read it.
 pub(super) struct Subject<'a> {
+    /// The open document's id; `None` for a project's font.
+    pub id: Option<u64>,
     pub title: &'a str,
     pub path: Option<&'a Path>,
     pub font: &'a Font,
@@ -323,18 +332,19 @@ struct Checked {
 }
 
 impl Subject<'_> {
-    /// Adds everything that stops this export.
-    fn check(&self, found: &mut Problems) -> Result<Checked> {
+    /// Adds everything that stops this export, of at most `limit` of its jobs.
+    fn check(&self, found: &mut Problems, limit: usize) -> Result<Checked> {
         glyph_names(self.font, found);
         match &self.build {
             Build::Static { jobs, req } => {
                 let mut report = Report::default();
                 let sink = Sink::new(&req.dest, false, self.outside)?;
-                let jobs = jobs.get(..MAX_JOBS).unwrap_or(jobs);
+                let jobs = jobs.get(..limit).unwrap_or(jobs);
                 compile::check(self.font, self.title, self.path, &self.data, jobs, req, sink, &mut report, found)?;
                 // A font refused for its glyphs never reached its feature code.
                 if !found.is_empty() && !found.has("features") {
-                    self.feature_code(found);
+                    let font = crate::export_steps::linked(self.font, self.path, &mut report.warnings)?;
+                    self.feature_code(&font, found);
                 }
                 // Each job reports what preparing the font reports.
                 let mut seen = BTreeSet::new();
@@ -342,41 +352,52 @@ impl Subject<'_> {
                 Ok(Checked { skipped: report.skipped, warnings: report.warnings, files: report.planned })
             }
             Build::Variable { settings } => {
-                for &setting in settings.iter().take(MAX_JOBS) {
+                let mut warnings = Vec::new();
+                let font = crate::export_steps::linked(self.font, self.path, &mut warnings)?;
+                for &setting in settings.iter().take(limit) {
                     crate::work::check()?;
-                    let label = setting.and_then(|i| self.font.instances.get(i)).map(|i| i.name.as_str());
-                    match fontcraft_compile::var::incompatible_glyphs(self.font, setting) {
+                    let label = setting.and_then(|i| font.instances.get(i)).map(|i| i.name.as_str());
+                    match fontcraft_compile::var::incompatible_glyphs(&font, setting) {
                         Ok(list) => list.iter().for_each(|(glyph, mismatches)| incompatible(found, label, glyph, mismatches)),
                         Err(e) => found.add("font", e.to_string(), label, Value::Null),
                     }
                 }
-                codepoints(self.font, found);
+                codepoints(&font, found);
                 // The check below compiles one master's code, which variable syntax is no part of.
-                if !varies_features(self.font) {
-                    self.feature_code(found);
+                if !varies_features(&font) {
+                    self.feature_code(&font, found);
                 }
-                Ok(Checked::default())
+                Ok(Checked { warnings, ..Checked::default() })
             }
         }
     }
 
-    /// The font's feature code as Font Info compiles it, for the first master. What the code
-    /// cannot be compiled for (a value missing in the master) is the export's to report.
-    fn feature_code(&self, found: &mut Problems) {
-        let Ok(master) = self.font.default_master() else { return };
+    /// The feature code of `font`, the subject's with its linked sources, as Font Info compiles it,
+    /// for the first master. What the code cannot be compiled for (a value missing in the master)
+    /// is the export's to report.
+    fn feature_code(&self, font: &Font, found: &mut Problems) {
+        let Ok(master) = font.default_master() else { return };
         let raw = json!({});
         let Ok(p) = Params::new("file.exportCheck", &raw) else { return };
-        let Ok(values) = MasterValues::new(self.font, &self.data, &master.id) else { return };
+        let Ok(values) = MasterValues::new(font, &self.data, &master.id) else { return };
         let cx = CheckContext { glyph_data: self.data.clone(), include_dir: self.path.and_then(super::shared::source_feature_dir) };
-        if let Ok(list) = compile_entries(self.font, &self.font.features, &master.id, &cx, &values, &p) {
-            features(found, self.font, None, &list);
+        if let Ok(list) = compile_entries(font, &font.features, &master.id, &cx, &values, &p) {
+            features(found, font, None, &list);
         }
     }
 }
 
 /// Document `doc` as an export of `build` reads it.
 pub(super) fn subject<'a>(s: &Session, doc: &'a crate::DocState, build: Build<'a>) -> Result<Subject<'a>> {
-    Ok(Subject { title: &doc.title, path: doc.path.as_deref(), font: &doc.font, data: s.glyph_data_of(doc)?, build, outside: s.export_outside() })
+    Ok(Subject {
+        id: Some(doc.id),
+        title: &doc.title,
+        path: doc.path.as_deref(),
+        font: &doc.font,
+        data: s.glyph_data_of(doc)?,
+        build,
+        outside: s.export_outside(),
+    })
 }
 
 /// Refuses an export before it builds when a font has a glyph name no export may write, listing
@@ -395,13 +416,13 @@ pub(super) fn refusal(subjects: &[Subject<'_>], cause: Option<EngineError>) -> E
     };
     let mut found = Problems::default();
     for subject in subjects {
-        match subject.check(&mut found) {
+        match subject.check(&mut found, MAX_REFUSAL_JOBS) {
             Ok(_) => {}
             Err(EngineError::Cancelled) => return EngineError::Cancelled,
             Err(e) => found.add("font", e.to_string(), None, Value::Null),
         }
         if subjects.len() > 1 {
-            found.in_document(subject.title);
+            found.in_document(subject.title, subject.id);
         }
     }
     if let Some((e, subject)) = cause.as_ref().zip(subjects.first()) {
@@ -457,12 +478,12 @@ fn export_check(s: &mut Session, v: &Value) -> Result<Value> {
         "otf" => {
             let p = Params::new("file.exportStatic", &given)?;
             let plan = super::compile_export::static_plan(s, &p, &doc.font)?;
-            subject(s, doc, Build::Static { jobs: &plan.jobs, req: &plan.req })?.check(&mut found)?
+            subject(s, doc, Build::Static { jobs: &plan.jobs, req: &plan.req })?.check(&mut found, MAX_JOBS)?
         }
         "variable" => {
             let p = Params::new("file.exportVariable", &given)?;
             let settings = compile::picked_settings(&p, &doc.font)?;
-            subject(s, doc, Build::Variable { settings: &settings })?.check(&mut found)?
+            subject(s, doc, Build::Variable { settings: &settings })?.check(&mut found, MAX_JOBS)?
         }
         other => return Err(p.bad(format!("`tab` is \"otf\" or \"variable\", got \"{other}\""))),
     };

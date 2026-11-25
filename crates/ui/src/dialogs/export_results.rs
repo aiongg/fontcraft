@@ -159,14 +159,15 @@ pub fn run(host: &mut DialogHost, app: &mut FontCraftApp) {
     match host.get_mut::<ExportResultsDialog>() {
         Some(dialog) => {
             app.sent.append(&mut dialog.outbox);
-            if !results.open {
-                dialog.closing = true;
-            } else if dialog.results.serial != results.serial {
+            dialog.closing = !results.open;
+            if results.open && dialog.results.serial != results.serial {
                 dialog.results = results.clone();
                 dialog.selected = Selection::default();
             }
         }
-        None if results.open => host.open(ExportResultsDialog::new(results.clone())),
+        None if results.open => {
+            host.open(ExportResultsDialog::new(results.clone()));
+        }
         None => {}
     }
 }

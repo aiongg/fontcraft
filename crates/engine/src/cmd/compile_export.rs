@@ -31,7 +31,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Export All",
             ["File"],
             Some("Cmd+Alt+E"),
-            "{documents?: [string], outlines?: [\"truetype\"|\"cff\"], containers?: [\"plain\"|\"woff\"|\"woff2\"], destination?: string, fallbackDestination?: string, removeOverlap?: bool, autohint?: bool, cbdt?: bool, timestamp?: number|\"now\", versionStamp?: bool} export every exportable instance of every open document (or of the documents named by title or path) without the Export dialog. What the parameters leave out comes, for each document, from the OTF settings of its last successful export (file.exportSettings: outline format, containers, removeOverlap, autohint, cbdt, and the folder while its Export Destination box was ticked), else from the defaults (truetype, plain, removeOverlap true, autohint and cbdt false); each document is written into its own folder, as file.exportStatic names the files; with both outline formats, the files go into ttf and otf subfolders. fallbackDestination: the folder for the documents with no folder from either (the desktop asks for it once); without it such a document is refused, naming it. Instances between masters are skipped and listed. A designspace without axes is refused when it states a location, or when it has two or more sources and instances to build. removeOverlap, autohint: as in file.exportStatic. Existing files are replaced; a failing export writes nothing → {documents: [{title, destination, fonts, skipped}], written, warnings}",
+            "{documents?: [string], outlines?: [\"truetype\"|\"cff\"], containers?: [\"plain\"|\"woff\"|\"woff2\"], destination?: string, fallbackDestination?: string, removeOverlap?: bool, autohint?: bool, cbdt?: bool, timestamp?: number|\"now\", versionStamp?: bool} export every exportable instance of every open document (or of the documents named by title or path) without the Export dialog. What the parameters leave out comes, for each document, from the OTF settings of its last successful export (file.exportSettings: outline format, containers, removeOverlap, autohint, cbdt, and the folder while its Export Destination box was ticked), else from the defaults (truetype, plain, removeOverlap true, autohint and cbdt false); each document is written into its own folder, as file.exportStatic names the files; with both outline formats, the files go into ttf and otf subfolders. fallbackDestination: the folder for the documents with no folder from either (the desktop asks for it once); without it such a document is refused, naming it. Instances between masters are skipped and listed. A designspace without axes is refused when it states a location, or when it has two or more sources and instances to build. removeOverlap, autohint: as in file.exportStatic. Existing files are replaced; a failing export writes nothing → {documents: [{title, documentId, destination, fonts, skipped}], written, warnings}",
             has_doc,
             export_all
         ).files(const { &[FileParam::write("destination"), FileParam::write("fallbackDestination")] }).writes_files(),
@@ -277,7 +277,7 @@ fn export_all(s: &mut Session, v: &Value) -> Result<Value> {
         compile::build(&doc.font, &doc.title, doc.path.as_deref(), s.glyph_data_of(doc)?, jobs, req, sink, &mut report)
             .map_err(|e| export_check::refusal(&subjects, Some(e)))?;
         warnings.append(&mut report.warnings);
-        reports.push((doc.title.clone(), folder, report));
+        reports.push((doc, folder, report));
     }
     let written: usize = reports.iter().map(|(_, _, r)| r.file_count()).sum();
     if written == 0 {
@@ -291,7 +291,9 @@ fn export_all(s: &mut Session, v: &Value) -> Result<Value> {
     }
     let documents: Vec<Value> = reports
         .iter()
-        .map(|(title, folder, r)| json!({ "title": title, "destination": folder.to_string_lossy(), "fonts": r.fonts_json(false), "skipped": r.skipped }))
+        .map(|(doc, folder, r)| {
+            json!({ "title": doc.title, "documentId": doc.id, "destination": folder.to_string_lossy(), "fonts": r.fonts_json(false), "skipped": r.skipped })
+        })
         .collect();
     Ok(json!({ "documents": documents, "written": written, "warnings": warnings }))
 }

@@ -9,7 +9,7 @@ use std::path::PathBuf;
 
 use craft::ui::runtime::commands::CommandRef;
 use craft::ui::runtime::env::WordSet as _;
-use fontcraft_engine::EngineError;
+use fontcraft_engine::{DocState, EngineError};
 use serde_json::{Map, Value, json};
 
 use super::{FontCraftApp, Msg};
@@ -164,12 +164,13 @@ impl Reader<'_> {
         }
     }
 
-    /// The document called `title`, else `doc`.
+    /// The document `v` names by its id, or by the title under `key`; else `doc`.
     fn document(&self, v: &Value, key: &str, doc: Option<u64>) -> Option<u64> {
-        let title = v.get(key).and_then(Value::as_str);
-        match title {
-            Some(title) => self.app.session.documents().iter().find(|d| d.title == title).map(|d| d.id),
-            None => doc,
+        let find = |is: &dyn Fn(&DocState) -> bool| self.app.session.documents().iter().find(|d| is(d)).map(|d| d.id);
+        match (v.get("documentId").and_then(Value::as_u64), v.get(key).and_then(Value::as_str)) {
+            (Some(id), _) => find(&|d| d.id == id),
+            (None, Some(title)) => find(&|d| d.title == title),
+            (None, None) => doc,
         }
     }
 

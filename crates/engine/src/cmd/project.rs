@@ -557,6 +557,7 @@ fn export(s: &mut Session, v: &Value) -> Result<Value> {
     let mut report = Report { warnings, ..Report::default() };
     let mut sink = Sink::new(&req.dest, false, s.export_outside())?;
     let subjects = [Subject {
+        id: None,
         title: &title,
         path: Some(&font_path),
         font: &font,

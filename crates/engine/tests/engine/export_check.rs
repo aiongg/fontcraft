@@ -87,3 +87,27 @@ fn a_skipped_instance_names_its_glyphs() {
     assert_eq!((kinds(&variable["errors"]), &variable["errors"][0]["glyph"]), (vec!["incompatible"], &json!("A")), "{variable}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// The errors of an export of two documents of one title say which of them they are about.
+#[test]
+fn errors_of_documents_with_one_title_name_the_document() {
+    let dir = temp("titles");
+    let mut s = Session::new();
+    for folder in ["one", "two"] {
+        let path = dir.join(folder).join("TestSans.glyphs");
+        std::fs::create_dir_all(dir.join(folder)).unwrap();
+        std::fs::write(&path, TWO_MASTERS).unwrap();
+        run(&mut s, "file.open", json!({ "path": path }));
+    }
+    s.edit("Add", |font| {
+        font.add_glyph("1one", vec![0xE001], 500.0)?;
+        Ok(())
+    })
+    .unwrap();
+    let id = s.active().unwrap().id;
+    let error = s.execute("file.exportAll", &json!({ "destination": dir.join("out"), "timestamp": 0 })).unwrap_err();
+    let data = error.data().cloned().unwrap();
+    let bad = data["errors"].as_array().unwrap().iter().find(|e| e["kind"] == "glyphName").unwrap();
+    assert_eq!((&bad["document"], &bad["documentId"]), (&json!("TestSans"), &json!(id)), "{data}");
+    let _ = std::fs::remove_dir_all(&dir);
+}

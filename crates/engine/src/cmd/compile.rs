@@ -474,13 +474,13 @@ fn skip(job: &Job, reason: &str) -> Value {
     json!({ "instance": job.label, "source": job.source, "reason": reason })
 }
 
-/// [`skip`] of a job whose font could not be interpolated: with the glyphs that keep it from being,
-/// when that is why.
-fn skip_interpolated(job: &Job, e: &fontcraft_compile::CompileError, font: &Font) -> Value {
+/// [`skip`] of a job of `font` that could not be interpolated: with the glyphs that keep it from
+/// being, when that is why. They are the font's, so `incompatible` keeps them for the other jobs.
+fn skip_interpolated(job: &Job, e: &fontcraft_compile::CompileError, font: &Font, incompatible: &mut Option<Vec<Value>>) -> Value {
     use fontcraft_compile::CompileError;
     let mut skipped = skip(job, &format!("it cannot be interpolated: {e}"));
     if let (CompileError::Interp(fontcraft_interp::InterpError::Incompatible { .. }), Some(entry)) = (e, skipped.as_object_mut()) {
-        let glyphs = super::export_check::skipped_glyphs(font);
+        let glyphs = incompatible.get_or_insert_with(|| super::export_check::skipped_glyphs(font));
         if !glyphs.is_empty() {
             entry.insert("glyphs".into(), json!(glyphs));
         }
@@ -636,7 +636,7 @@ pub(super) fn build(
     sink: &mut Sink,
     report: &mut Report,
 ) -> Result<()> {
-    build_with(font, source, path, data, jobs, req, sink, report, None, None)
+    build_with(font, source, path, data, jobs, req, sink, report, &mut None, None, None)
 }
 
 /// What [`build`] would do, without drawing or writing anything: the fonts it would skip go to
@@ -654,9 +654,10 @@ pub(super) fn check(
     report: &mut Report,
     found: &mut super::export_check::Problems,
 ) -> Result<()> {
+    let mut incompatible = None;
     for job in jobs {
         let one = std::slice::from_ref(job);
-        match build_with(font, source, path, data.clone(), one, req, &mut sink, report, None, Some(&mut *found)) {
+        match build_with(font, source, path, data.clone(), one, req, &mut sink, report, &mut incompatible, None, Some(&mut *found)) {
             Ok(()) => {}
             Err(EngineError::Cancelled) => return Err(EngineError::Cancelled),
             Err(e) => super::export_check::add_error(found, font, Some(job), &e),
@@ -669,7 +670,7 @@ pub(super) fn check(
 pub(super) type Rewrite<'a> = &'a dyn Fn(&Job, Flavour, Vec<u8>) -> Result<Vec<u8>>;
 
 /// [`build`], with `rewrite` run on each compiled font. With `found` it checks the jobs instead of
-/// building them ([`check`]).
+/// building them ([`check`]). `incompatible` is for [`skip_interpolated`].
 #[allow(clippy::too_many_arguments)]
 fn build_with(
     font: &Font,
@@ -680,6 +681,7 @@ fn build_with(
     req: &Request,
     sink: &mut Sink,
     report: &mut Report,
+    incompatible: &mut Option<Vec<Value>>,
     rewrite: Option<Rewrite<'_>>,
     mut found: Option<&mut super::export_check::Problems>,
 ) -> Result<()> {
@@ -711,7 +713,7 @@ fn build_with(
             Some(_) => match fontcraft_compile::sources_at(&source_job, &job.target, &mut report.warnings) {
                 Ok((s, p)) => Some((s.into_owned(), p.into_owned())),
                 Err(e) => {
-                    report.skipped.push(skip_interpolated(job, &e, whole));
+                    report.skipped.push(skip_interpolated(job, &e, whole, incompatible));
                     continue;
                 }
             },
@@ -1509,7 +1511,7 @@ pub(super) fn compile_into(s: &mut Session, p: &Value, staged: Option<&mut Sink>
     };
     let rewrite: Option<Rewrite<'_>> = if layouts.is_some() || sel.formats.cff2 || sel.output.rewrites() { Some(&relayout) } else { None };
     if !jobs.is_empty() {
-        build_with(font, &doc.title, doc.path.as_deref(), data, &jobs, &req, sink, &mut report, rewrite, None)?;
+        build_with(font, &doc.title, doc.path.as_deref(), data, &jobs, &req, sink, &mut report, &mut None, rewrite, None)?;
     }
     let (raw_tables, mut rewrite_notes) = raw.take();
     report.warnings.append(&mut rewrite_notes);
