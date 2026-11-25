@@ -14,9 +14,11 @@ mod glyphsets;
 mod guesses;
 mod layers;
 mod observe;
+mod offset;
 mod overlap;
 mod paramcatalog;
 mod parity;
+mod pathops_noop;
 mod roundtrip;
 mod sha256;
 mod spec;
@@ -67,10 +69,18 @@ commands:
                   (known differences with a reason: xtask/roundtrip-allow.toml)
   audit [--match TEXT]
                   run the outline audit (`outlines` profile) on every source of the corpus comparison set
-  overlap [--out DIR] [--reference FILE] [--match TEXT] [--quadratic]
+  offset [--out DIR] [--reference FILE] [--match TEXT]
+                  run Offset Curve, Make Stroke and path strokes on every glyph layer of the corpus comparison
+                  set and measure them (inputs for crates/pathops/crosscheck/stroke.py go to DIR/layers.jsonl)
+  overlap [--out DIR] [--reference FILE]... [--match TEXT] [--quadratic] [--editor]
                   remove overlaps on every glyph layer of the corpus comparison set and measure it
-                  (--quadratic: convert the input to quadratic curves first)
-                  (inputs for crates/pathops/crosscheck/reference.py go to DIR/layers.jsonl)
+                  (--quadratic: convert the input to quadratic curves first; --editor: run the command's
+                  contour-level operation and report start points and merge points)
+                  (inputs for crates/pathops/crosscheck/reference.py go to DIR/layers.jsonl; one
+                  --reference per operation that script ran)
+  pathops-noop [--out DIR] [--match TEXT]
+                  run Correct Path Direction and Add Extremes on every master layer of the corpus's .glyphs
+                  sources and report what they change (the full lists go to DIR/summary.txt)
   testfonts [--out DIR]
                   build the synthetic test fonts for the checks in the reference app and write them
                   as .glyphs files with a README (default DIR: plan/local/testfonts/)
@@ -96,7 +106,9 @@ fn main() -> ExitCode {
         Some("glyphsets") => glyphsets::run(&root(), &rest),
         Some("roundtrip") => roundtrip::run(&root(), &rest),
         Some("audit") => audit::run(&root(), &rest),
+        Some("offset") => offset::run(&root(), &rest),
         Some("overlap") => overlap::run(&root(), &rest),
+        Some("pathops-noop") => pathops_noop::run(&root(), &rest),
         Some("testfonts") => testfonts::run(&root(), &rest),
         Some("-h" | "--help" | "help") | None => {
             print!("{USAGE}");

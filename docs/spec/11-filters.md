@@ -165,8 +165,9 @@ How FontCraft runs it (our design, documented behaviour not yet observed):
 - Corners stay sharp: the offset lines meet in a mitre, bevelled beyond 4 times the offset.
 - Exact mode (the default): curves are offset as cubics within 0.25 units of the true offset, split
   where needed. The outline is united with the stroke of its own paths (positive) or reduced by it
-  (negative), so overlaps, loops and stems thinner than the offset resolve. Opposite signs run as two
-  passes, horizontal first. Quadratic curves come out cubic.
+  (negative), so overlaps, loops and stems thinner than the offset resolve. A curve that turns
+  tighter than the offset is also stroked stretch by stretch, so no part of its stroke cancels
+  another. Opposite signs run as two passes, horizontal first. Quadratic curves come out cubic.
 - An open path without Make Stroke moves to the right of its direction.
 - Make Stroke: each side reaches `2 · (1 − position)` (left) and `2 · position` (right) times the
   distances, so position 50 gives a stroke twice the distance wide. Overlaps are removed.
@@ -221,8 +222,9 @@ How FontCraft runs it (our design, documented behaviour not yet observed):
   corners. An open path has no filled side: with nothing selected, all its corners are rounded.
 - Visual corrections multiply the radius by `tan(a / 2)` (1 at a right angle), limited to a factor
   between 1/4 and 4, so every rounding starts `radius` units from its corner.
-- Smooth nodes, nearly straight nodes (less than 1° of turn) and corners next to quadratic
-  segments stay. New points are rounded to the grid.
+- Smooth nodes and nearly straight nodes (less than 1° of turn) stay. Next to a quadratic spline the
+  neighbouring segment is the piece that touches the corner, and the arc is a quadratic spline. New
+  points are rounded to the grid.
 - Export string `RoundCorner; radius; visualcorrection`. The dialog's first values are ours:
   radius 20, visual corrections off.
 
@@ -237,8 +239,8 @@ How FontCraft runs it (our design, documented behaviour not yet observed):
 - A stem ending is a straight segment between two corners that point out of the filled area. The
   segments on either side are straight and parallel (within 5°). The ending is at most the stem
   width plus 10% across those sides, and cut at most 20° off square, so italic stems qualify.
-- The stem is the `stem` parameter, or the widest of the master's vertical stems when it is 0 or
-  left out. Endings thinner than the stem (arms, crossbar ends) are rounded too. With no vertical
+- The stem is the `stem` parameter, or the one of the master's vertical stems nearest the ending's
+  width when it is 0 or left out. Endings thinner than the stem (arms, crossbar ends) are rounded too. With no vertical
   stem and no `stem`, the filter fails and names the missing stem.
 - Each ending becomes a half circle as wide as the ending: two smooth quarter-circle cubics. The
   half circle covers the area of the square end it replaces, so the sides get `w·π/8` shorter and

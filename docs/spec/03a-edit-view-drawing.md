@@ -891,14 +891,19 @@ Question 31 stays open and blocks only `path.sharpenCorner`.
 16. **Correct Path Direction**: the resulting shape order (sort key) and tie-breaks for the
     bottom-left start node.
     **Answered for M3 (our decision, 2026-10-09):** outer contours counter-clockwise and counters
-    clockwise, decided by nesting; shapes sorted by bounding box (left, then bottom); the start node
-    is the lowest, then leftmost, on-curve node (the `startPointPosition` rule).
+    clockwise, decided by nesting; shapes sorted from the bottom left to the top right, by the sum of the
+    coordinates of the bounding box's bottom-left corner, then by its left edge; the start node is the
+    lowest, then leftmost, on-curve node (the `startPointPosition` rule). What saved sources say is in
+    docs/plans/M3.md › M3.32.
 17. **Add Extremes**: the "very short segment" threshold and the "slightly off" tolerance; whether
     a selection limits the command; whether inflections can be added in bulk.
     **Answered for M3 (our decision, 2026-10-09):** an extreme is skipped when it would leave a
-    segment shorter than 3 units (the `shortSegments` threshold). A node within 2 units and 2° of an
-    extreme keeps its place and its handles are made exactly horizontal or vertical, which puts the
-    extreme on the node (the `almostOrthogonalHandle` thresholds). The command acts on the
+    segment shorter than 3 units (the `shortSegments` threshold), or shorter than both 10 units and a
+    tenth of the curve's chord. A smooth node between two cubics within 2 units or 1% of the curve's
+    chord of an extreme moves onto it and the two curves are refitted, when they stay within half a
+    unit of the old ones. Any other node within 2 units and 2° of an extreme keeps its place and its
+    handles are made exactly horizontal or vertical, which puts the extreme on the node (the
+    `almostOrthogonalHandle` thresholds). The command acts on the
     targets given, else the whole layer. Inflections in bulk: `path.addInflections`, our command,
     also the audit's fix.
 18. **Reverse Contours**: shortcut (none stated in this chapter) and the label of the Option

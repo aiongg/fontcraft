@@ -3,19 +3,32 @@
 
 use std::collections::HashSet;
 
-use fontcraft_geom::{Point, Vec2};
+use fontcraft_geom::{CubicBez, ParamCurve, Point, Vec2};
 
 use crate::PathOpError;
-use crate::contour::{Contour, Node, Piece, RNode, Ring, round_to_grid, split_segment, unit_roots};
+use crate::contour::{Contour, Node, NodeKind, Piece, RNode, Ring, dist_to_segment, round_to_grid, split_segment, unit_roots};
 
 /// Add Extremes skips an extreme that would leave a segment shorter than this many units (the
-/// `shortSegments` threshold).
+/// `shortSegments` threshold)…
 pub const MIN_EXTREME_SEGMENT: f64 = 3.0;
-/// A handle within this many degrees of horizontal or vertical, at a node within
-/// [`NEAR_EXTREME_DISTANCE`] of an extreme, is made exactly horizontal or vertical (the
+/// …or shorter than both this many units and this share of the curve it is on (its chord). The
+/// share keeps the extremes of small round shapes.
+pub const SHORT_EXTREME_SEGMENT: f64 = 10.0;
+pub const SHORT_EXTREME_SHARE: f64 = 0.1;
+/// A smooth node between two cubics moves onto an extreme this close: this many units, or this
+/// share of the length (along the chord) of the segment the extreme is on, whichever is more.
+pub const NEAR_EXTREME_DISTANCE: f64 = 2.0;
+pub const NEAR_EXTREME_SHARE: f64 = 0.01;
+/// A node moves onto an extreme only when the two refitted curves stay within this many units of
+/// the old ones.
+pub const MAX_EXTREME_SHIFT: f64 = 0.5;
+/// Where the node cannot move, a handle within this many degrees of horizontal or vertical, at a
+/// node within [`NEAR_EXTREME_DISTANCE`] of an extreme, is made exactly horizontal or vertical (the
 /// `almostOrthogonalHandle` thresholds).
 pub const NEAR_EXTREME_DEGREES: f64 = 2.0;
-pub const NEAR_EXTREME_DISTANCE: f64 = 2.0;
+/// Points sampled on a curve that is refitted, and rounds of the fit.
+const FIT_SAMPLES: usize = 24;
+const FIT_ROUNDS: usize = 4;
 /// Even forced, an extreme closer than this many units to a node, or to the extreme before it,
 /// is not a new point.
 const SAME_POINT: f64 = 1e-3;
@@ -75,12 +88,15 @@ struct Extreme {
 /// Add Extremes (or Force Extremes) on one contour, on the segments whose two end nodes are in
 /// `selected` (indices into `contour.nodes`), or on all of them.
 ///
-/// First, a node whose handle is within 2° of horizontal or vertical, and that has an extreme of
-/// that direction within 2 units on the handle's segment, has its handles that are within 2° made
-/// exactly horizontal or vertical: the extreme moves onto the node and no point is added next to
-/// it. Then a node goes at each point inside a curve where the tangent is horizontal or vertical.
-/// Add Extremes skips an extreme closer than 3 units to an end of its segment or to the extreme
-/// before it (distances along the chord); Force Extremes adds every extreme that is a new point.
+/// First, a smooth node between two cubics with an extreme near it (within 2 units or 1% of the
+/// segment) moves onto the extreme, its handles made exactly horizontal or vertical and the two
+/// curves refitted, when they stay within half a unit of the old ones. Where a node cannot move, a
+/// node whose handle is within 2° of horizontal or vertical, and that has an extreme of that
+/// direction within 2 units on the handle's segment, keeps its place and has its handles that are
+/// within 2° made exactly horizontal or vertical. Either way the extreme is on the node and no
+/// point is added next to it. Then a node goes at each point inside a curve where the tangent is horizontal or vertical.
+/// Add Extremes skips an extreme closer than 3 units, or than both 10 units and a tenth of its
+/// segment's chord, to an end of its segment or to the extreme before it; Force Extremes adds every extreme that is a new point.
 /// New nodes are smooth and rounded to `grid`, and their handles are lined up with them so the
 /// tangent stays exactly horizontal or vertical. A quadratic spline that gets a node has each of
 /// its implied on-curve points made a node.
@@ -90,7 +106,7 @@ pub fn add_extremes(contour: &Contour, selected: Option<&[usize]>, options: Extr
     let chosen = |r: &RNode| set.as_ref().is_none_or(|s| r.src.is_some_and(|i| s.contains(&i)));
 
     for j in 0..ring.len() {
-        if ring.nodes.get(j).is_some_and(chosen) {
+        if ring.nodes.get(j).is_some_and(chosen) && !move_onto_extreme(&mut ring, j, options.grid) {
             align_near_extreme(&mut ring, j);
         }
     }
@@ -170,7 +186,8 @@ fn extremes(ring: &Ring, j: usize, options: ExtremesOptions) -> Vec<Extreme> {
         }
     }
     found.sort_by(|x, y| x.piece.cmp(&y.piece).then(x.t.total_cmp(&y.t)));
-    let min = if options.force { SAME_POINT } else { MIN_EXTREME_SEGMENT };
+    let short = SHORT_EXTREME_SEGMENT.min(SHORT_EXTREME_SHARE * seg.from.distance(seg.to));
+    let min = if options.force { SAME_POINT } else { MIN_EXTREME_SEGMENT.max(short) };
     let end = round_to_grid(seg.to, options.grid);
     let mut last = round_to_grid(seg.from, options.grid);
     let mut kept = Vec::with_capacity(found.len());
@@ -183,6 +200,167 @@ fn extremes(ring: &Ring, j: usize, options: ExtremesOptions) -> Vec<Extreme> {
         kept.push(e);
     }
     kept
+}
+
+/// The segment that ends at node `j` when it is a cubic.
+fn cubic(ring: &Ring, j: usize) -> Option<CubicBez> {
+    let seg = ring.seg(j)?;
+    match (seg.kind, seg.ctrl) {
+        (NodeKind::Curve, [a, b]) => Some(CubicBez::new(seg.from, a.point, b.point, seg.to)),
+        _ => None,
+    }
+}
+
+/// Moves node `j`, smooth between two cubics, onto the nearest extreme close to it on either of
+/// them, and refits the two. Returns whether it did.
+fn move_onto_extreme(ring: &mut Ring, j: usize, grid: f64) -> bool {
+    let Some((next, target, na, nb)) = moved_onto_extreme(ring, j, grid) else { return false };
+    if let Some(r) = ring.nodes.get_mut(j) {
+        r.node.point = target;
+        r.node.smooth = true;
+        for (h, p) in r.ctrl.iter_mut().zip([na.p1, na.p2]) {
+            h.point = p;
+        }
+    }
+    if let Some(r) = ring.nodes.get_mut(next) {
+        for (h, p) in r.ctrl.iter_mut().zip([nb.p1, nb.p2]) {
+            h.point = p;
+        }
+    }
+    true
+}
+
+/// The node after `j`, where node `j` moves and its two curves after the move. The curves must stay
+/// within [`MAX_EXTREME_SHIFT`] of the old ones, and a node whose handle is horizontal or vertical is
+/// an extreme already.
+fn moved_onto_extreme(ring: &Ring, j: usize, grid: f64) -> Option<(usize, Point, CubicBez, CubicBez)> {
+    let next = ring.next(j).filter(|n| *n != j)?;
+    if ring.looks_smooth(j, NEAR_EXTREME_DEGREES) != Some(true) {
+        return None;
+    }
+    let (a, b) = (cubic(ring, j)?, cubic(ring, next)?);
+    let node = a.p3;
+    let level = |v: Vec2| v.x == 0.0 || v.y == 0.0;
+    if level(a.p3 - a.p2) || level(b.p1 - b.p0) {
+        return None;
+    }
+    // The nearest extreme, as (distance, on the incoming curve, parameter, axis).
+    let mut best: Option<(f64, bool, f64, Axis)> = None;
+    for (incoming, c) in [(true, a), (false, b)] {
+        let near = NEAR_EXTREME_DISTANCE.max(NEAR_EXTREME_SHARE * c.p0.distance(c.p3));
+        let (qa, qb, qc) = Piece::Cubic(c).deriv_coeffs();
+        for axis in [Axis::X, Axis::Y] {
+            for t in unit_roots(axis.of(qa), axis.of(qb), axis.of(qc)) {
+                let d = c.eval(t).distance(node);
+                let this_end = if incoming { t > 0.5 } else { t < 0.5 };
+                if this_end && d <= near && best.is_none_or(|(e, ..)| d < e) {
+                    best = Some((d, incoming, t, axis));
+                }
+            }
+        }
+    }
+    let (_, incoming, t, axis) = best?;
+    let c = if incoming { a } else { b };
+    let (qa, qb, qc) = Piece::Cubic(c).deriv_coeffs();
+    let along = qa * (t * t) + qb * t + qc;
+    let direction = match axis {
+        Axis::X => Vec2::new(0.0, along.y.signum()),
+        Axis::Y => Vec2::new(along.x.signum(), 0.0),
+    };
+    let target = round_to_grid(c.eval(t), grid);
+    let sample = |c: CubicBez| (1..=FIT_SAMPLES).map(move |i| c.eval(i as f64 / FIT_SAMPLES as f64));
+    let (mut na, mut nb) = if incoming {
+        let mut points = vec![target];
+        points.extend(sample(a.subsegment(t..1.0)));
+        points.extend(sample(b));
+        (CubicBez { p3: target, ..a.subsegment(0.0..t) }, fit(&points, direction, unit(b.p3 - b.p2)?)?)
+    } else {
+        let mut points = vec![a.p0];
+        points.extend(sample(a));
+        points.extend(sample(b.subsegment(0.0..t)));
+        if let Some(last) = points.last_mut() {
+            *last = target;
+        }
+        (fit(&points, unit(a.p1 - a.p0)?, direction)?, CubicBez { p0: target, ..b.subsegment(t..1.0) })
+    };
+    for p in [&mut na.p1, &mut na.p2, &mut nb.p1, &mut nb.p2] {
+        *p = round_to_grid(*p, grid);
+    }
+    match axis {
+        Axis::X => (na.p2.x, nb.p1.x) = (target.x, target.x),
+        Axis::Y => (na.p2.y, nb.p1.y) = (target.y, target.y),
+    }
+    let runs_on = (na.p3 - na.p2).dot(direction) > 0.0 && (nb.p1 - nb.p0).dot(direction) > 0.0;
+    let close = within(&[a, b], &[na, nb]) && within(&[na, nb], &[a, b]);
+    (runs_on && close).then_some((next, target, na, nb))
+}
+
+fn unit(v: Vec2) -> Option<Vec2> {
+    (v.hypot() > 1e-9).then(|| v.normalize())
+}
+
+/// Do all of `a`'s sampled points lie within [`MAX_EXTREME_SHIFT`] of `b`?
+fn within(a: &[CubicBez], b: &[CubicBez]) -> bool {
+    let points = |cs: &[CubicBez], n: usize| -> Vec<Point> { cs.iter().flat_map(|c| (0..=n).map(move |i| c.eval(i as f64 / n as f64))).collect() };
+    let line = points(b, 2 * FIT_SAMPLES);
+    points(a, FIT_SAMPLES).iter().all(|p| line.windows(2).any(|w| matches!(w, [q, r] if dist_to_segment(*p, *q, *r) <= MAX_EXTREME_SHIFT)))
+}
+
+/// The cubic from the first of `points` to the last that leaves along `from` and arrives along `to`
+/// (unit vectors) and lies closest to the points: least squares over the two handle lengths, with
+/// parameters by chord length, improved by Newton steps.
+fn fit(points: &[Point], from: Vec2, to: Vec2) -> Option<CubicBez> {
+    let (p0, p3) = (*points.first()?, *points.last()?);
+    let mut params = Vec::with_capacity(points.len());
+    let mut length = 0.0;
+    let mut last = p0;
+    for p in points {
+        length += p.distance(last);
+        last = *p;
+        params.push(length);
+    }
+    if !(length.is_finite() && length > 0.0) {
+        return None;
+    }
+    for u in &mut params {
+        *u /= length;
+    }
+    let mut best = None;
+    for _ in 0..FIT_ROUNDS {
+        let (mut c00, mut c01, mut c11, mut x0, mut x1) = (0.0, 0.0, 0.0, 0.0, 0.0);
+        for (p, &u) in points.iter().zip(&params) {
+            let v = 1.0 - u;
+            let (b0, b1, b2, b3) = (v * v * v, 3.0 * v * v * u, 3.0 * v * u * u, u * u * u);
+            let (e0, e1) = (from * b1, to * -b2);
+            let rest = p.to_vec2() - p0.to_vec2() * (b0 + b1) - p3.to_vec2() * (b2 + b3);
+            c00 += e0.dot(e0);
+            c01 += e0.dot(e1);
+            c11 += e1.dot(e1);
+            x0 += e0.dot(rest);
+            x1 += e1.dot(rest);
+        }
+        let det = c00 * c11 - c01 * c01;
+        if !(det.is_finite() && det.abs() > 1e-12) {
+            break;
+        }
+        let (h0, h1) = ((x0 * c11 - x1 * c01) / det, (c00 * x1 - c01 * x0) / det);
+        if !(h0.is_finite() && h1.is_finite() && h0 > 0.0 && h1 > 0.0) {
+            break;
+        }
+        let c = CubicBez::new(p0, p0 + from * h0, p3 - to * h1, p3);
+        best = Some(c);
+        let (qa, qb, qc) = Piece::Cubic(c).deriv_coeffs();
+        for (p, u) in points.iter().zip(&mut params) {
+            let off = c.eval(*u) - *p;
+            let d1 = (qa * (*u * *u) + qb * *u + qc) * 3.0;
+            let d2 = (qa * (2.0 * *u) + qb) * 3.0;
+            let below = d1.dot(d1) + off.dot(d2);
+            if below.abs() > 1e-12 {
+                *u = (*u - off.dot(d1) / below).clamp(0.0, 1.0);
+            }
+        }
+    }
+    best
 }
 
 /// Makes the handles of node `j` exactly horizontal or vertical where one of them is nearly so and
@@ -286,20 +464,70 @@ mod tests {
         assert_eq!(added.nodes.iter().filter(|n| n.on_curve()).count(), 3);
         let forced = add_extremes(&c, None, ExtremesOptions { force: true, grid: 0.0 }).unwrap();
         assert_eq!(forced.nodes.iter().filter(|n| n.on_curve()).count(), 4);
+        // Less than five units from the end of a 344-unit curve is short; a circle of radius 9 cut at its
+        // diagonals gets its extremes, seven units from their neighbours.
+        let long = BezPath::from_svg("M0,0 C0,150 270,208 280,200 L280,0 Z").unwrap();
+        let c = contours_from_bez(&long).remove(0);
+        assert_eq!(add_extremes(&c, None, ExtremesOptions { force: false, grid: 1.0 }).unwrap(), c);
+        let mut small = rotated_circle();
+        for n in &mut small.nodes {
+            n.point = (n.point.to_vec2() * 0.09).to_point();
+        }
+        let added = add_extremes(&small, None, ExtremesOptions { force: false, grid: 0.0 }).unwrap();
+        assert_eq!(added.nodes.iter().filter(|n| n.on_curve()).count(), 8);
+    }
+
+    /// An ellipse-like arch whose right half is cut a little before its top, so the node nearest the
+    /// top is off it: (0,0) up to a top at (100, 100) and down to (200, 0).
+    fn arch_cut_at(t: f64) -> Contour {
+        let left = CubicBez::new(Point::new(0.0, 0.0), Point::new(0.0, 55.0), Point::new(45.0, 100.0), Point::new(100.0, 100.0));
+        let right = CubicBez::new(Point::new(100.0, 100.0), Point::new(155.0, 100.0), Point::new(200.0, 55.0), Point::new(200.0, 0.0));
+        let (short, rest) = (right.subsegment(0.0..t), right.subsegment(t..1.0));
+        // The left curve and the first bit of the right one as one curve.
+        let mut points = vec![left.p0];
+        points.extend((1..=24).map(|i| left.eval(i as f64 / 24.0)));
+        points.extend((1..=4).map(|i| short.eval(i as f64 / 4.0)));
+        let long = fit(&points, Vec2::new(0.0, 1.0), (short.p3 - short.p2).normalize()).unwrap();
+        let mut path = BezPath::new();
+        path.move_to(long.p0);
+        path.curve_to(long.p1, long.p2, long.p3);
+        path.curve_to(rest.p1, rest.p2, rest.p3);
+        path.close_path();
+        contours_from_bez(&path).remove(0)
+    }
+
+    #[test]
+    fn a_node_just_off_an_extreme_moves_onto_it() {
+        let arch = arch_cut_at(0.01);
+        let off = arch.nodes.iter().find(|n| n.on_curve() && n.point.x > 50.0 && n.point.x < 150.0).unwrap().point;
+        assert!(off.x > 101.0 && off.x < 103.0, "{off:?}");
+        let out = add_extremes(&arch, None, ExtremesOptions { force: false, grid: 1.0 }).unwrap();
+        assert_eq!(out.nodes.len(), arch.nodes.len(), "{out:?}");
+        let at = out.nodes.iter().position(|n| n.on_curve() && n.point == Point::new(100.0, 100.0)).unwrap_or_else(|| panic!("{out:?}"));
+        assert!(out.nodes[at].smooth);
+        assert_eq!((out.nodes[at - 1].point.y, out.nodes[at + 1].point.y), (100.0, 100.0));
+        let d = coverage_difference(&[arch.to_bez().unwrap()], &[out.to_bez().unwrap()]).unwrap();
+        assert!(d.within(0.6, 0.005), "{d:?}");
+        // A second run changes nothing.
+        assert_eq!(add_extremes(&out, None, ExtremesOptions { force: false, grid: 1.0 }).unwrap(), out);
+        // A node further off than 2 units stays, and the extreme gets a node of its own.
+        let far = arch_cut_at(0.1);
+        let out = add_extremes(&far, None, ExtremesOptions { force: false, grid: 1.0 }).unwrap();
+        assert_eq!(out.nodes.len(), far.nodes.len() + 3, "{out:?}");
     }
 
     #[test]
     fn a_handle_slightly_off_horizontal_is_levelled() {
         // The handle into (100, 100) leans 1° above horizontal, so the curve's top lies just
-        // before the node. The handle is levelled instead of a point being forced in next to the
-        // node; the extreme on the right side is added.
-        let path = BezPath::from_svg("M0,0 L100,0 C150,0 150,100 100,100 C50,100 0,50 0,0 Z").unwrap();
+        // before the node, a corner where a straight segment leaves. The handle is levelled instead
+        // of a point being forced in next to the node; the extreme on the right side is added.
+        let path = BezPath::from_svg("M0,0 L100,0 C150,0 150,100 100,100 L0,100 Z").unwrap();
         let mut c = contours_from_bez(&path).remove(0);
-        // Nodes: (0,0) (100,0) handle handle (100,100) handle handle.
+        // Nodes: (0,0) (100,0) handle handle (100,100) (0,100).
         c.nodes[3].point.y = 100.0 + 1f64.to_radians().tan() * 50.0;
         let out = add_extremes(&c, None, ExtremesOptions { force: true, grid: 1.0 }).unwrap();
         let top = out.nodes.iter().position(|n| n.on_curve() && n.point == Point::new(100.0, 100.0)).unwrap();
         assert_eq!(out.nodes[top - 1].point.y, 100.0);
-        assert_eq!(out.nodes.iter().filter(|n| n.on_curve()).count(), 4);
+        assert_eq!(out.nodes.iter().filter(|n| n.on_curve()).count(), 5);
     }
 }

@@ -24,7 +24,7 @@
 //! from [`crate::stroker`], which path strokes share. Beyond [`MITER_LIMIT`] a corner is
 //! bevelled, or with Keep Compatible the mitre is shortened.
 
-use fontcraft_geom::{CubicBez, Point, Vec2};
+use fontcraft_geom::{CubicBez, ParamCurve, Point, Vec2};
 
 use super::round_corners::fill_sides;
 use super::{Args, Context, Filter, Input, Item, Param, ParamKind, Slot, Value};
@@ -32,7 +32,8 @@ use crate::boolean::takes_part;
 use crate::contour::{Contour, Node, NodeKind, RNode, Ring, Seg, round_to_grid};
 use crate::stroke::CapAxis;
 use crate::stroker::{
-    Bez, CapShape, Fit, JOIN_EPSILON, MITER_LIMIT, cap_edge, cut_normal, fit, intersect, miter_tip, offset_piece, reach, to_cut, unit,
+    Bez, CapShape, Fit, JOIN_EPSILON, MITER_LIMIT, cap_edge, cut_normal, fit, intersect, miter_tip, offset_dir, offset_piece, reach, tangent, to_cut,
+    unit,
 };
 use crate::{BoolOp, MAX_NODES, OpenPaths, OverlapOptions, PathOpError, SMOOTH_MAX_DEGREES, boolean, remove_overlap};
 
@@ -41,6 +42,12 @@ pub const MAX_OFFSET: f64 = 10_000.0;
 /// Most distance, in units, between a fitted offset curve and the true offset before the curve is
 /// split.
 const TOLERANCE: f64 = 0.25;
+/// Points of a curve tested for an offset that runs backwards.
+const FOLD_SAMPLES: usize = 16;
+/// Most a stretch of a curve turns, in radians, when its stroke is built as a band of its own
+/// (a little over a quarter turn, so a quarter circle stays whole).
+const MAX_BAND_TURN: f64 = 1.6;
+const MAX_TURN_DEPTH: u32 = 6;
 
 const CAP_STYLES: &[&str] = &["flat", "square", "round", "roundInset", "aligned"];
 
@@ -306,6 +313,7 @@ fn offset_exact(contours: &[Contour], rings: &[Ring], h: f64, v: f64, grid: f64)
             let left = ring_of(&side(&pieces, true, pen, 1.0, Joins::Stroke, &mut budget)?, true);
             let right = ring_of(&side(&pieces, true, pen, -1.0, Joins::Stroke, &mut budget)?, true);
             sweep.extend(remove_overlap(&[right.to_contour(), left.reversed().to_contour()], unrounded())?);
+            sweep.extend(tight_bands(&pieces, pen, [1.0, -1.0], &mut budget)?);
         }
         let op = if grow { BoolOp::Union } else { BoolOp::Difference };
         shape = boolean(&shape, &sweep, op, if i == last { grid } else { 0.0 })?;
@@ -383,6 +391,7 @@ fn stroke(
             parts.extend(path.into_iter().map(|c| on_grid(c, grid)));
         } else {
             parts.extend(remove_overlap(&path, unrounded())?);
+            parts.extend(tight_bands(&pieces, pen, [kl, kr], &mut budget)?);
         }
     }
     let mut out = if compatible { parts } else { remove_overlap(&parts, OverlapOptions { grid, open_paths: OpenPaths::Remove })? };
@@ -427,6 +436,60 @@ fn squeeze(mut rings: Vec<Ring>, v: f64) -> Vec<Ring> {
 /// starts with the segment that closes it.
 fn pieces_of(ring: &Ring) -> Vec<Bez> {
     ring.segment_ends().filter_map(|j| ring.seg(j)).flat_map(|s| s.pieces()).map(Bez::of_piece).filter(|b| !b.degenerate()).collect()
+}
+
+/// The bands between sides `ks` of the curves that turn tighter than the pen reaches on one of
+/// them. There the offset side folds over, and the two sides of the path cancel part of its
+/// stroke (a circle of radius 5 stroked 40 wide would have a hole). Each band covers a stretch that
+/// turns by at most [`MAX_BAND_TURN`], too little to cancel itself, so a stroke united with its
+/// bands is whole.
+fn tight_bands(pieces: &[Bez], pen: Vec2, ks: [f64; 2], budget: &mut usize) -> Result<Vec<Contour>, PathOpError> {
+    let [kl, kr] = ks;
+    let mut out = Vec::new();
+    for piece in pieces {
+        let Bez::Cubic(c) = piece else { continue };
+        if !ks.iter().any(|k| folds(c, pen, *k)) {
+            continue;
+        }
+        let mut stretches = Vec::new();
+        split_turns(*c, 0, &mut stretches);
+        for s in stretches {
+            let s = Bez::Cubic(s);
+            let mut band = offset_piece(&s, pen, kr, Fit::Pen(TOLERANCE), budget)?;
+            let left = offset_piece(&s, pen, kl, Fit::Pen(TOLERANCE), budget)?;
+            let (Some(r0), Some(r1), Some(l0), Some(l1)) =
+                (band.first().map(Bez::start), band.last().map(Bez::end), left.first().map(Bez::start), left.last().map(Bez::end))
+            else {
+                continue;
+            };
+            band.extend(straight(&[r1, l1]).between);
+            band.extend(left.iter().rev().map(Bez::reversed));
+            band.extend(straight(&[l0, r0]).between);
+            out.extend(remove_overlap(&[ring_of(&band, true).to_contour()], unrounded())?);
+        }
+    }
+    Ok(out)
+}
+
+/// Does side `k`'s offset of `c` run backwards anywhere?
+fn folds(c: &CubicBez, pen: Vec2, k: f64) -> bool {
+    (0..=FOLD_SAMPLES).any(|i| {
+        let t = i as f64 / FOLD_SAMPLES as f64;
+        matches!((tangent(c, t), offset_dir(c, t, pen, k)), (Some(a), Some(b)) if a.dot(b) < 0.0)
+    })
+}
+
+/// `c` in stretches whose control polygon turns by at most [`MAX_BAND_TURN`], in at most
+/// `2^MAX_TURN_DEPTH` pieces.
+fn split_turns(c: CubicBez, depth: u32, out: &mut Vec<CubicBez>) {
+    let legs: Vec<Vec2> = [c.p1 - c.p0, c.p2 - c.p1, c.p3 - c.p2].into_iter().filter_map(unit).collect();
+    let turn: f64 = legs.windows(2).map(|w| if let [a, b] = w { a.cross(*b).atan2(a.dot(*b)).abs() } else { 0.0 }).sum();
+    if turn <= MAX_BAND_TURN || depth >= MAX_TURN_DEPTH {
+        out.push(c);
+        return;
+    }
+    split_turns(c.subsegment(0.0..0.5), depth + 1, out);
+    split_turns(c.subsegment(0.5..1.0), depth + 1, out);
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -861,6 +924,37 @@ mod tests {
         }
         let expected = std::f64::consts::PI * 110.0 * 110.0;
         assert!((area(&out) - expected).abs() < expected * 0.002, "{}", area(&out));
+    }
+
+    #[test]
+    fn a_curve_tighter_than_the_offset_leaves_no_hole_and_no_loop() {
+        let disc = std::f64::consts::PI * 25.0 * 25.0;
+        for o in [options(20.0, 20.0), stroked(20.0, CapStyle::Flat)] {
+            let out = offset_curve(&[circle(5.0)], &o, 0.0).unwrap();
+            assert_eq!(out.len(), 1, "{out:?}");
+            assert!((area(&out) - disc).abs() < disc * 0.01, "{} against {disc}", area(&out));
+        }
+        // A slot whose ends turn tighter than the offset disappears when it shrinks.
+        let slot = {
+            let k = KAPPA * 8.0;
+            let n = |x: f64, y: f64, kind| Node::new(Point::new(x, y), kind);
+            let o = |x: f64, y: f64| Node::off(Point::new(x, y));
+            Contour::new(
+                true,
+                vec![
+                    n(0.0, 0.0, NodeKind::Line),
+                    n(200.0, 0.0, NodeKind::Line),
+                    o(200.0 + k, 0.0),
+                    o(208.0, 8.0 - k),
+                    n(208.0, 8.0, NodeKind::Curve),
+                    o(208.0, 8.0 + k),
+                    o(200.0 + k, 16.0),
+                    n(200.0, 16.0, NodeKind::Curve),
+                    n(0.0, 16.0, NodeKind::Line),
+                ],
+            )
+        };
+        assert!(offset_curve(&[slot], &options(-10.0, -10.0), 1.0).unwrap().is_empty());
     }
 
     #[test]

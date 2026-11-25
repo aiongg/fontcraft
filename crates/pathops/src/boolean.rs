@@ -1,11 +1,11 @@
 //! Union, difference and intersection with the nonzero rule, on Bézier paths and on contours, and
 //! the conversion of their results back to nodes (docs/plans/M3.md › M3.6, input rule 7).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use fontcraft_geom::{BezPath, PathEl, Point};
 
-use crate::contour::{Contour, Node, NodeKind, RNode, Ring, round_to_grid};
+use crate::contour::{Contour, Node, NodeKind, RNode, Ring, dist_to_segment, round_to_grid};
 use crate::{MAX_SEGMENTS, PathOpError, merge_close_points, prepare, snap_point};
 
 /// A result node with no input node at its place is smooth when its two directions are within
@@ -16,6 +16,10 @@ const MIN_AREA: f64 = 1e-9;
 /// An on-curve point between two quadratic pieces this close to the midpoint of their off-curve
 /// points is an implied point of one spline.
 const IMPLIED_EPSILON: f64 = 1e-9;
+/// A point between two straight segments this close, in units, to the line through its neighbours
+/// is on that line. Inputs are rounded to 1 / [`crate::SNAP`] units, which moves a point of one
+/// contour off the edge of another by less than this.
+const FLAT_DISTANCE: f64 = 2.0 / crate::SNAP;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BoolOp {
@@ -146,6 +150,8 @@ struct InputNodes {
     off: HashMap<(u64, u64), Node>,
     /// The start point of each input contour, in input order.
     starts: Vec<(u64, u64)>,
+    /// Where an input contour has a node on a straight line.
+    flat: HashSet<(u64, u64)>,
 }
 
 impl InputNodes {
@@ -153,18 +159,22 @@ impl InputNodes {
         let mut on = HashMap::new();
         let mut off = HashMap::new();
         let mut starts = Vec::with_capacity(inputs.len());
+        let mut flat = HashSet::new();
         for ring in inputs {
             if let Some(first) = ring.nodes.first() {
                 starts.push(key(first.node.point, grid));
             }
-            for r in &ring.nodes {
+            for (j, r) in ring.nodes.iter().enumerate() {
+                if is_flat(ring, j) {
+                    flat.insert(key(r.node.point, grid));
+                }
                 on.entry(key(r.node.point, grid)).or_insert(r.node);
                 for c in &r.ctrl {
                     off.entry(key(c.point, grid)).or_insert(*c);
                 }
             }
         }
-        Self { on, off, starts }
+        Self { on, off, starts, flat }
     }
 }
 
@@ -172,8 +182,9 @@ impl InputNodes {
 /// points are rounded to `grid`, nodes that are input nodes keep the input's point, tag and smooth
 /// flag, and each contour starts at the first input start point it passes through. Contours that
 /// do are ordered by that input contour; the others follow in engine order. Quadratic pieces that
-/// meet at the midpoint of their off-curve points become one spline again. Points left on a
-/// straight line where two contours merged stay.
+/// meet at the midpoint of their off-curve points become one spline again. A point the operation
+/// left on a straight line goes; a node an input contour already had on a straight line stays, and
+/// so does a contour's start.
 pub(crate) fn to_contours(results: &[BezPath], inputs: &[&Ring], grid: f64) -> Vec<Contour> {
     let known = InputNodes::new(inputs, grid);
     let mut out: Vec<(usize, Contour)> = Vec::new();
@@ -273,6 +284,17 @@ fn settle(mut ring: Ring, known: &InputNodes, grid: f64) -> Option<(usize, Ring)
             j += 1;
         }
     }
+    // Points left on a straight line where contours met go, unless the line had a node there
+    // before or the contour starts there.
+    let mut j = usize::from(found.is_some());
+    while j < ring.len() && ring.len() > 2 {
+        let drawn = ring.nodes.get(j).is_some_and(|r| known.flat.contains(&key(r.node.point, grid)));
+        if !drawn && is_flat(&ring, j) {
+            ring.nodes.remove(j);
+        } else {
+            j += 1;
+        }
+    }
     // Input nodes come back as they were; every other point goes on the grid.
     let mut matched = Vec::with_capacity(ring.len());
     for r in &mut ring.nodes {
@@ -320,6 +342,16 @@ fn settle(mut ring: Ring, known: &InputNodes, grid: f64) -> Option<(usize, Ring)
     Some((order, ring))
 }
 
+/// Does node `j` lie on a straight line, between two straight segments that run the same way?
+fn is_flat(ring: &Ring, j: usize) -> bool {
+    let Some(next) = ring.next(j) else { return false };
+    let (Some(into), Some(out)) = (ring.seg(j), ring.seg(next)) else { return false };
+    if ring.len() < 3 || into.kind != NodeKind::Line || out.kind != NodeKind::Line || into.is_curve() || out.is_curve() {
+        return false;
+    }
+    (into.to - into.from).dot(out.to - out.from) > 0.0 && dist_to_segment(into.to, into.from, out.to) <= FLAT_DISTANCE
+}
+
 /// Is node `j` an implied on-curve point between two quadratic pieces, and not an input node?
 fn implied(ring: &Ring, j: usize, known: &InputNodes, grid: f64) -> bool {
     let Some(r) = ring.nodes.get(j) else { return false };
@@ -359,6 +391,34 @@ mod tests {
         assert!((c.to_bez().unwrap().area() - 17_500.0).abs() < 1e-6);
         // The intersections are on the grid.
         assert!(c.nodes.iter().any(|n| n.point == Point::new(100.0, 50.0)));
+    }
+
+    #[test]
+    fn points_a_merge_leaves_on_a_straight_line_go() {
+        // A descender under a stem of the same width: its top corners end up on the stem's sides.
+        // The node drawn on the stem's right side stays.
+        let mut stem = rect(0.0, 0.0, 100.0, 500.0);
+        stem.nodes.insert(2, Node::new(Point::new(100.0, 300.0), NodeKind::Line));
+        let tail = rect(0.0, -200.0, 100.0, 50.0);
+        let out = remove_overlap(&[tail, stem], OverlapOptions::default()).unwrap();
+        let points: Vec<(f64, f64)> = out.iter().flat_map(|c| &c.nodes).map(|n| (n.point.x, n.point.y)).collect();
+        assert_eq!(points, vec![(0.0, -200.0), (100.0, -200.0), (100.0, 300.0), (100.0, 500.0), (0.0, 500.0)]);
+        // A slanted edge, whose meeting points are not on the grid: nothing is left on it, and
+        // the contour keeps its start although the merge puts that on a straight line.
+        let lower = Contour::new(true, rect(0.0, 0.0, 100.0, 100.0).nodes.into_iter().map(|n| slant(n, 0.1)).collect());
+        let upper = Contour::new(true, rect(0.0, 100.0, 100.0, 333.0).nodes.into_iter().map(|n| slant(n, 0.1)).collect());
+        let out = remove_overlap(&[lower.clone(), upper.clone()], OverlapOptions { grid: 0.0, ..OverlapOptions::default() }).unwrap();
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].nodes.len(), 4, "{out:?}");
+        // The upper contour starts at a corner that ends up on the left edge, and keeps that start.
+        let out = remove_overlap(&[upper, lower], OverlapOptions { grid: 0.0, ..OverlapOptions::default() }).unwrap();
+        assert_eq!(out[0].nodes[0].point, Point::new(10.0, 100.0));
+        assert_eq!(out[0].nodes.len(), 5, "{out:?}");
+    }
+
+    fn slant(mut n: Node, by: f64) -> Node {
+        n.point.x += by * n.point.y;
+        n
     }
 
     #[test]
