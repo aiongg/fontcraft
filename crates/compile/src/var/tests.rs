@@ -872,3 +872,99 @@ fn cff2_exports_are_subroutinised_and_draw_as_without_subroutines() {
         }
     }
 }
+
+/// Thin and Black with vertical metrics: typographic ascender 800 and 860, descender -200 and
+/// -240.
+/// - `A`: its own vertical width (1000, 1100) and origin (20 and 50 below the ascender);
+/// - `B`: neither;
+/// - `C`: a composite of both, with neither;
+/// - `D`: like `A`, with an intermediate layer at 500 (1010, 90 below);
+/// - `E`: like `B`, with an intermediate layer at 500.
+fn vertical_font() -> Font {
+    use fontcraft_model::plist::{Number, Value};
+    let mut f = two_masters();
+    let param = |name: &str, v: i64| Param::new(name, Value::Number(Number::int(v)));
+    Arc::make_mut(&mut f.info).params.0.extend([param("vheaVertAscender", 500), param("vheaVertDescender", -500), param("vheaVertLineGap", 0)]);
+    for (m, (ascender, descender)) in Arc::make_mut(&mut f.masters).iter_mut().zip([(800, -200), (860, -240)]) {
+        m.params.0.extend([param("typoAscender", ascender), param("typoDescender", descender)]);
+    }
+    let own = |mut l: Layer, width: f64, origin: f64| {
+        l.info.vert_width = Some(width);
+        l.info.vert_origin = Some(origin);
+        l
+    };
+    let brace = |mut l: Layer| {
+        l.id = "brace".into();
+        l.info.attrs.coordinates = vec![Some(500.0)];
+        l
+    };
+    let (thin, black) = (|| layer("thin", 600.0, vec![rect(500.0)]), || layer("black", 640.0, vec![rect(560.0)]));
+    let pair = |w: f64, dx: f64, master: &str| {
+        layer(master, w, vec![Shape::Component(Component::new("A", 0.0, 0.0)), Shape::Component(Component::new("B", dx, 0.0))])
+    };
+    let glyphs = vec![
+        glyph("A", 0x41, vec![own(thin(), 1000.0, 20.0), own(black(), 1100.0, 50.0)]),
+        glyph("B", 0x42, vec![thin(), black()]),
+        glyph("C", 0x43, vec![pair(900.0, 300.0, "thin"), pair(980.0, 340.0, "black")]),
+        glyph("D", 0x44, vec![own(thin(), 1000.0, 20.0), own(black(), 1100.0, 50.0), brace(own(thin(), 1010.0, 90.0))]),
+        glyph("E", 0x45, vec![thin(), black(), brace(thin())]),
+    ];
+    f.glyphs = GlyphTable::from_glyphs(glyphs.into_iter().map(Arc::new).collect());
+    f
+}
+
+// The numbers are fontc 1.0.0's and fontmake 3.12.1's on this source (`gvar`, `VVAR`, `VORG`),
+// but for the vertical origins of glyphs without an intermediate layer in a CFF2 font (see
+// docs/spec/40-compile.md § 4a).
+#[test]
+fn vertical_metrics_vary_through_vvar_and_the_phantom_points() {
+    use skrifa::raw::types::F2Dot14;
+    let gid = |v: &VariableFont, name: &str| GlyphId::new(v.compiled.glyph_order.iter().position(|g| g == name).unwrap() as u32);
+    // Per glyph: the deltas of the advance, the vertical origin and the bottom at 500 and at 900.
+    let expected = [
+        (".notdef", [(50.0, 30.0, -20.0), (100.0, 60.0, -40.0)]),
+        ("A", [(50.0, 15.0, -35.0), (100.0, 30.0, -70.0)]),
+        ("B", [(50.0, 30.0, -20.0), (100.0, 60.0, -40.0)]),
+        ("C", [(50.0, 30.0, -20.0), (100.0, 60.0, -40.0)]),
+        ("D", [(10.0, -70.0, -80.0), (100.0, 30.0, -70.0)]),
+        ("E", [(0.0, 0.0, 0.0), (100.0, 60.0, -40.0)]),
+    ];
+    let coords = [[F2Dot14::from_f32(0.5)], [F2Dot14::from_f32(1.0)]];
+
+    let f = vertical_font();
+    let tt = build(&f, None);
+    let font = FontRef::new(&tt.compiled.bytes).unwrap();
+    let (vmtx, vvar, gvar) = (font.vmtx().unwrap(), font.vvar().unwrap(), font.gvar().unwrap());
+    let (glyf, loca) = (font.glyf().unwrap(), font.loca(None).unwrap());
+    assert!(font.vhea().is_ok() && font.vorg().is_err() && vvar.v_org_mapping().is_none());
+    for (name, deltas) in expected {
+        let g = gid(&tt, name);
+        assert_eq!(vmtx.advance(g), Some(1000), "{name}");
+        for (at, (height, top, bottom)) in coords.iter().zip(deltas) {
+            assert_eq!(vvar.advance_delta(g, at).unwrap().to_f64(), height, "{name} advance at {at:?}");
+            let phantoms = gvar.phantom_point_deltas(&glyf, &loca, at, g).unwrap();
+            assert_eq!((phantoms[2].y.to_f64(), phantoms[3].y.to_f64()), (top, bottom), "{name} phantom points at {at:?}");
+        }
+    }
+
+    let cff2 = build_cff2(&f, None);
+    let font = FontRef::new(&cff2.compiled.bytes).unwrap();
+    let (vvar, vorg) = (font.vvar().unwrap(), font.vorg().unwrap());
+    assert!(font.vhea().is_ok() && font.gvar().is_err());
+    for (name, deltas) in expected {
+        let g = gid(&cff2, name);
+        assert_eq!(vorg.vertical_origin_y(g), if matches!(name, "A" | "D") { 780 } else { 800 }, "{name}");
+        for (at, (height, top, _)) in coords.iter().zip(deltas) {
+            assert_eq!(vvar.advance_delta(g, at).unwrap().to_f64(), height, "{name} CFF2 advance at {at:?}");
+            assert_eq!(vvar.v_origin_y_delta(g, at).unwrap().to_f64(), top, "{name} CFF2 origin at {at:?}");
+        }
+    }
+
+    // Without vertical metrics there is no table and the phantom points stay put.
+    let plain = build(&two_masters(), None);
+    let font = FontRef::new(&plain.compiled.bytes).unwrap();
+    assert!(font.vvar().is_err() && font.vmtx().is_err());
+    let (glyf, loca) = (font.glyf().unwrap(), font.loca(None).unwrap());
+    let phantoms = font.gvar().unwrap().phantom_point_deltas(&glyf, &loca, &coords[1], gid(&plain, "a")).unwrap();
+    assert_eq!((phantoms[2].y.to_f64(), phantoms[3].y.to_f64()), (0.0, 0.0));
+}

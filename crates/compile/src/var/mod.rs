@@ -10,7 +10,7 @@
 //! | Decomposition | [`decompose`]: inconsistent component transforms, the decomposition parameters | M9.5 |
 //! | Outlines | [`glyf`]: cubic to quadratic across sources, `glyf` from the origin; [`gvar`] with phantom points, IUP and shared tuples | M9.5 |
 //! | Axes and names | [`fvar`], [`avar`], [`names`] | M9.6 |
-//! | Metrics variations | [`hvar`] (`HVAR`, `VVAR`), [`mvar`] | M9.6 |
+//! | Metrics variations | [`hvar`] (`HVAR`, `VVAR`), [`mvar`] | M9.6, M9.38 |
 //! | Style attributes | [`stat`] | M9.7 |
 //! | Feature variations | [`featvar`]: alternate layers as `GSUB` feature variations, merged into the feature code's `GSUB` by the layout stage | M9.8 |
 //! | Variable layout | `fontcraft_features::var_layout`: kerning and marks with deltas | M9.9 |
@@ -190,8 +190,9 @@ struct Source {
     normalized: Vec<f64>,
     glyphs: Vec<ResolvedGlyph>,
     index: HashMap<String, usize>,
-    /// The global metrics, for a master source (`MVAR`).
-    metrics: Option<crate::info::GlobalMetrics>,
+    /// The global metrics there (`MVAR` for a master source, the vertical metrics of glyphs that
+    /// state none).
+    metrics: crate::info::GlobalMetrics,
 }
 
 impl Source {
@@ -254,9 +255,11 @@ fn mvar_values(origin: &crate::info::GlobalMetrics, sources: &[Source]) -> Resul
     // Masters that share a location (or the origin's) give one value.
     let mut masters: Vec<(&[f64], &crate::info::GlobalMetrics)> = Vec::new();
     for s in sources {
-        let Some(m) = s.metrics.as_ref() else { continue };
+        if s.master.is_none() {
+            continue;
+        }
         if s.normalized.iter().any(|v| *v != 0.0) && !masters.iter().any(|(l, _)| *l == s.normalized.as_slice()) {
-            masters.push((s.normalized.as_slice(), m));
+            masters.push((s.normalized.as_slice(), &s.metrics));
         }
     }
     let mut locations = vec![vec![0.0; masters.first().map_or(0, |m| m.0.len())]];
@@ -311,8 +314,48 @@ fn font_at(font: &Font, designspace: &fontcraft_interp::Designspace, location: &
     Ok(fontcraft_interp::instance::instance_font(&probe, index, &options)?)
 }
 
-fn phantoms(advance: f64) -> [(f64, f64); gvar::PHANTOM_POINTS] {
-    [(0.0, 0.0), (ot_round(advance), 0.0), (0.0, 0.0), (0.0, 0.0)]
+/// A glyph's vertical phantom points at one source: the y of its vertical origin and of the
+/// bottom of its vertical advance, both 0 in a font without vertical metrics.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+struct Vertical {
+    top: f64,
+    bottom: f64,
+}
+
+impl Vertical {
+    /// From a layer's own vertical width and origin, each falling back to `metrics`, with the
+    /// values `vmtx` would write (`compile.verticalMetrics`).
+    fn new(width: Option<f64>, origin: Option<f64>, metrics: &crate::info::GlobalMetrics) -> Vertical {
+        let height = crate::u16_of(width.unwrap_or(metrics.typo_ascender - metrics.typo_descender));
+        let top = crate::i16_of(origin.map_or(metrics.typo_ascender, |o| metrics.typo_ascender - o));
+        Vertical { top: f64::from(top), bottom: f64::from(top) - f64::from(height) }
+    }
+}
+
+/// The phantom points of a glyph of horizontal advance `advance`: left and right, top and bottom.
+fn phantoms(advance: f64, vertical: Vertical) -> [(f64, f64); gvar::PHANTOM_POINTS] {
+    [(0.0, 0.0), (ot_round(advance), 0.0), (0.0, vertical.top), (0.0, vertical.bottom)]
+}
+
+/// The phantom points at the end of a glyph's point list (zeros when it is too short).
+fn phantoms_of(points: &[(f64, f64)]) -> [(f64, f64); gvar::PHANTOM_POINTS] {
+    points.last_chunk().copied().unwrap_or_default()
+}
+
+/// The y of the vertical origin, which a CFF2 font keeps in `VORG` and `VVAR`.
+fn vertical_origin(points: &[(f64, f64)]) -> f64 {
+    let [_, _, top, _] = phantoms_of(points);
+    top.1
+}
+
+fn vertical_advance(points: &[(f64, f64)]) -> f64 {
+    let [_, _, top, bottom] = phantoms_of(points);
+    top.1 - bottom.1
+}
+
+fn horizontal_advance(points: &[(f64, f64)]) -> f64 {
+    let [_, right, _, _] = phantoms_of(points);
+    right.0
 }
 
 /// Compiles the variable font of `setting` (an index into `Font::instances`; `None` for the
@@ -388,7 +431,6 @@ pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, 
      -> Result<(), CompileError> {
         let normalized = designspace.to_normalized(&location)?.0;
         let index = glyphs.iter().enumerate().map(|(i, g)| (g.name.clone(), i)).collect();
-        let metrics = master.is_some().then_some(metrics);
         sources.push(Source { master, location, normalized, glyphs, index, metrics });
         Ok(())
     };
@@ -459,7 +501,9 @@ pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, 
                      warnings: &mut Vec<String>|
      -> Result<(Vec<Prepared>, crate::Extra), CompileError> {
         let programs = flavour == Flavour::TrueType && crate::tt_hints::compiles_glyph_programs(prepared, origin_resolved, &options);
-        let (outlines, per_glyph, cubic) = ctx.build(glyphs, settings, programs, warnings)?;
+        let info = crate::info::derive(origin_resolved, &options.style_name, &mut Vec::new());
+        let vertical = info.vertical.then_some(&info.metrics);
+        let (outlines, per_glyph, cubic) = ctx.build(glyphs, settings, programs, vertical, warnings)?;
         let mut extra = crate::Extra::default();
         if flavour == Flavour::Cff {
             let masters = cff2::master_privates(prepared, origin_resolved, &sources, warnings)?;
@@ -475,7 +519,7 @@ pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, 
                 write_fonts::dump_table(&gvar).map_err(|e| CompileError::Table { table: "gvar", message: e.to_string() })?,
             ));
         }
-        let advances = ctx.advances(&per_glyph)?;
+        let advances = metric_values(&per_glyph, "HVAR", horizontal_advance)?;
         let axes = VarAxes::from_designspace(&designspace)?;
         let instances = fvar::named_instances(font, &designspace)?;
         let mut allocator = names::NameAllocator::with_static(static_names.clone());
@@ -491,8 +535,13 @@ pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, 
         if advances.iter().any(|a| !a.deltas.is_empty()) {
             extra.tables.push((Tag::new(b"HVAR"), dump("HVAR", write_fonts::dump_table(&hvar::build_hvar(axis_count, &advances)?))?));
         }
-        let origin_metrics = crate::info::derive(origin_resolved, &options.style_name, &mut Vec::new()).metrics;
-        if let Some(mvar) = mvar::build_mvar(axis_count, &mvar_values(&origin_metrics, &sources)?)? {
+        if vertical.is_some() {
+            let heights = metric_values(&per_glyph, "VVAR", vertical_advance)?;
+            let origins = (flavour == Flavour::Cff).then(|| metric_values(&per_glyph, "VVAR", vertical_origin)).transpose()?;
+            let vvar = hvar::build_vvar(axis_count, &heights, origins.as_deref())?;
+            extra.tables.push((Tag::new(b"VVAR"), dump("VVAR", write_fonts::dump_table(&vvar))?));
+        }
+        if let Some(mvar) = mvar::build_mvar(axis_count, &mvar_values(&info.metrics, &sources)?)? {
             extra.tables.push((Tag::new(b"MVAR"), dump("MVAR", write_fonts::dump_table(&mvar))?));
         }
         if let Some(stat) = stat {
@@ -551,6 +600,33 @@ impl Outlines<'_> {
         }
         let found = self.glyph_sources.get(name)?.main.iter().find(|x| !x.is_master && x.location == s.location)?;
         Some(cff2::SourceLayer { master: found.master.clone(), intermediate: Some(found.layer_id.clone()) })
+    }
+
+    /// The global metrics of master `id` (`origin`'s are given).
+    fn master_metrics<'m>(&'m self, id: &str, origin: &'m crate::info::GlobalMetrics) -> Option<&'m crate::info::GlobalMetrics> {
+        if id == self.origin {
+            return Some(origin);
+        }
+        self.sources.iter().find(|s| s.master.as_deref() == Some(id)).map(|s| &s.metrics)
+    }
+
+    /// The vertical phantom points of glyph `r` at source `slot` (0 the origin, whose metrics are
+    /// `origin`; k + 1 source k). A layer without a vertical width or origin takes its master's
+    /// metrics; so does an intermediate layer, as both oracles read it (an interpolated value
+    /// would not be the layer's).
+    fn vertical(&self, r: &ResolvedGlyph, slot: usize, origin: Option<&crate::info::GlobalMetrics>) -> Vertical {
+        let Some(origin) = origin else { return Vertical::default() };
+        let Some(source) = slot.checked_sub(1).and_then(|k| self.sources.get(k)) else {
+            return Vertical::new(r.vert_width, r.vert_origin, origin);
+        };
+        if source.master.is_none()
+            && let Some(cff2::SourceLayer { master, intermediate: Some(id) }) = self.source_layer(&r.name, slot)
+            && let Some(layer) = self.prepared.glyph(&r.name).and_then(|g| g.layers.iter().find(|l| l.id == id))
+            && let Some(metrics) = self.master_metrics(&master, origin)
+        {
+            return Vertical::new(layer.info.vert_width, layer.info.vert_origin, metrics);
+        }
+        Vertical::new(r.vert_width, r.vert_origin, &source.metrics)
     }
 
     /// The sources besides the origin that `name` has a layer for (indices into `sources`).
@@ -630,12 +706,14 @@ impl Outlines<'_> {
 
     /// The outline of each glyph of `glyphs` (the origin's final order) and its points at each of
     /// its sources; for CFF2 the points are the advances' phantoms only and the cubic outlines of
-    /// each source come third. `programs`: glyph programs are compiled for the font.
+    /// each source come third. `programs`: glyph programs are compiled for the font. `vertical`:
+    /// the origin's metrics, when the font has vertical metrics.
     fn build(
         &self,
         glyphs: &[ResolvedGlyph],
         settings: &crate::outline::Settings,
         programs: bool,
+        vertical: Option<&crate::info::GlobalMetrics>,
         warnings: &mut Vec<String>,
     ) -> Result<BuiltOutlines, CompileError> {
         let index: HashMap<&str, usize> = glyphs.iter().enumerate().map(|(i, g)| (g.name.as_str(), i)).collect();
@@ -710,12 +788,15 @@ impl Outlines<'_> {
             let slots: Vec<usize> = std::iter::once(0)
                 .chain(ks.iter().filter(|&&k| self.sources.get(k).is_some_and(|s| s.index.contains_key(&g.name))).map(|k| k + 1))
                 .collect();
+            let ends: Vec<[(f64, f64); gvar::PHANTOM_POINTS]> =
+                slots.iter().zip(&drawn).map(|(&slot, (_, r))| phantoms(r.width, self.vertical(r, slot, vertical))).collect();
             let decomposed = decompose.get(i).copied().unwrap_or(false);
             if !decomposed && !g.components.is_empty() {
                 outlines.push(crate::outline::composite(g)?);
                 let points = drawn
                     .iter()
-                    .map(|(_, r)| {
+                    .zip(&ends)
+                    .map(|((_, r), end)| {
                         let mut ps: Vec<(f64, f64)> = r
                             .components
                             .iter()
@@ -724,7 +805,7 @@ impl Outlines<'_> {
                                 (ot_round(x), ot_round(y))
                             })
                             .collect();
-                        ps.extend(phantoms(r.width));
+                        ps.extend(end);
                         ps
                     })
                     .collect();
@@ -752,9 +833,8 @@ impl Outlines<'_> {
             if contours.len() != drawn.len() {
                 return Err(CompileError::Glyph { glyph: g.name.clone(), message: "a source of the glyph could not be drawn".into() });
             }
-            let advances: Vec<f64> = drawn.iter().map(|(_, r)| r.width).collect();
             if self.flavour == Flavour::Cff {
-                let points = advances.iter().map(|&a| phantoms(a).to_vec()).collect();
+                let points = ends.iter().map(|end| end.to_vec()).collect();
                 let origin_path = contours.first().map(|list| {
                     let mut path = BezPath::new();
                     list.iter().for_each(|c| path.extend(c.clone()));
@@ -771,7 +851,7 @@ impl Outlines<'_> {
             }
             if contours.iter().all(|c| c.iter().all(|p| p.elements().is_empty())) {
                 outlines.push(Prepared::Empty);
-                let points = advances.iter().map(|&a| phantoms(a).to_vec()).collect();
+                let points = ends.iter().map(|end| end.to_vec()).collect();
                 per_glyph.push(gvar::SourceOutlines { glyph: g.name.clone(), locations, points, contour_ends: Vec::new() });
                 continue;
             }
@@ -824,10 +904,10 @@ impl Outlines<'_> {
             }
             let points = simples
                 .iter()
-                .zip(&advances)
-                .map(|(s, &a)| {
+                .zip(&ends)
+                .map(|(s, end)| {
                     let mut ps: Vec<(f64, f64)> = s.contours.iter().flat_map(|c| c.iter().map(|p| (f64::from(p.x), f64::from(p.y)))).collect();
-                    ps.extend(phantoms(a));
+                    ps.extend(end);
                     ps
                 })
                 .collect();
@@ -839,36 +919,35 @@ impl Outlines<'_> {
         }
         Ok((outlines, per_glyph, cubic))
     }
+}
 
-    /// Each glyph's advance with its deltas, from the second phantom point of its sources.
-    fn advances(&self, glyphs: &[gvar::SourceOutlines]) -> Result<Vec<VarValue>, CompileError> {
-        let mut models = gvar::Models::default();
-        glyphs
-            .iter()
-            .map(|g| {
-                let advance = |ps: &Vec<(f64, f64)>| ps.len().checked_sub(3).and_then(|i| ps.get(i)).map_or(0.0, |p| p.0);
-                let values: Vec<Vec<f64>> = g.points.iter().map(|ps| vec![advance(ps)]).collect();
-                let default = values.first().and_then(|v| v.first()).copied().unwrap_or(0.0);
-                let default = i32::try_from(default as i64).unwrap_or(0);
-                if g.locations.len() < 2 {
-                    return Ok(VarValue { default, deltas: Vec::new() });
+/// Each glyph's value `get` reads from the phantom points of its sources, with its deltas.
+fn metric_values(glyphs: &[gvar::SourceOutlines], table: &'static str, get: fn(&[(f64, f64)]) -> f64) -> Result<Vec<VarValue>, CompileError> {
+    let mut models = gvar::Models::default();
+    glyphs
+        .iter()
+        .map(|g| {
+            let values: Vec<Vec<f64>> = g.points.iter().map(|ps| vec![get(ps)]).collect();
+            let default = values.first().and_then(|v| v.first()).copied().unwrap_or(0.0);
+            let default = i32::try_from(default as i64).unwrap_or(0);
+            if g.locations.len() < 2 {
+                return Ok(VarValue { default, deltas: Vec::new() });
+            }
+            let bad = |e: String| CompileError::Table { table, message: format!("glyph `{}`: {e}", g.glyph) };
+            let model = models.get(&g.locations).map_err(bad)?;
+            let mut deltas = Vec::new();
+            for (region, d) in gvar::region_deltas(model, &values).map_err(bad)? {
+                let d = d.first().copied().unwrap_or(0.0);
+                if !gvar::fits_i16(d) {
+                    return Err(bad(format!("a delta of {d} units does not fit the table")));
                 }
-                let bad = |e: String| CompileError::Table { table: "HVAR", message: format!("glyph `{}`: {e}", g.glyph) };
-                let model = models.get(&g.locations).map_err(bad)?;
-                let mut deltas = Vec::new();
-                for (region, d) in gvar::region_deltas(model, &values).map_err(bad)? {
-                    let d = d.first().copied().unwrap_or(0.0);
-                    if !gvar::fits_i16(d) {
-                        return Err(bad(format!("an advance delta of {d} units does not fit the table")));
-                    }
-                    if d != 0.0 {
-                        deltas.push((region, d as i32));
-                    }
+                if d != 0.0 {
+                    deltas.push((region, d as i32));
                 }
-                Ok(VarValue { default, deltas })
-            })
-            .collect()
-    }
+            }
+            Ok(VarValue { default, deltas })
+        })
+        .collect()
 }
 
 #[cfg(test)]

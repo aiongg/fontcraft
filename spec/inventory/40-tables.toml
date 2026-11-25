@@ -166,6 +166,7 @@ milestone = "M2"
 summary = "Written only when the source carries vertical data. Version 1.1; ascender, descender and line gap from the vertical global metrics, vertical caret slope (defaults rise 0, run 1, offset 0), advanceHeightMax, minimum top and bottom side bearing and yMaxExtent from the built glyphs. A FEA table vhea block overrides VertTypoAscender, VertTypoDescender and VertTypoLineGap."
 ref = "fontc fontbe/src/vertical_metrics.rs, fontir/src/ir.rs; AFDKO hotconv/hot.cpp"
 status = "docs"
+notes = "Static builds M2.2. A variable font writes it at the origin by the static rule (M9.38); vertical line metrics vary through MVAR."
 
 [[table]]
 tag = "vmtx"
@@ -177,6 +178,7 @@ milestone = "M2"
 summary = "Written together with vhea. Advance height per glyph from the glyph's height (or the font default), top side bearing as vertical origin minus the glyph's yMax, with the same trailing-run compression as hmtx."
 ref = "fontc fontbe/src/vertical_metrics.rs"
 status = "docs"
+notes = "Static builds M2.2. A variable font writes it at the origin by the static rule; the other sources vary it through VVAR and, in a TrueType font, the vertical phantom points (M9.38)."
 
 # ---------------------------------------------------------------------------------------------------
 # Tables: layout (M8)
@@ -291,7 +293,7 @@ milestone = "M9"
 summary = "Advance height deltas, built exactly like HVAR (direct or indirect store, whichever is smaller) and only when the font has vertical metrics, that is when vmtx is written."
 ref = "fontc fontbe/src/vvar.rs; write-fonts src/tables/vvar.rs"
 status = "docs"
-notes = "Built by `var::hvar::build_vvar` (M9.6) with the HVAR rules; the variable compile asks for it only when it writes vmtx."
+notes = "Built by `var::hvar::build_vvar` (M9.6, M9.38) with the HVAR rules, whenever the font has vhea and vmtx, also when no height varies (fontc 1.0.0 and fontmake 3.12.1 write it then too, run on a synthetic source). A glyph's heights come from its own sources: a layer's own vertical width, else its master's typographic ascender minus descender; an intermediate layer without one takes the metrics of the master it belongs to, as both oracles read it. In a CFF2 font VVAR also maps the vertical origins (fontTools varLib/__init__.py `_add_VHVAR`): one store, the heights' delta sets added first and the origins' after them, both with an index map. fontTools gives a glyph that a sparse master does not hold that master's default origin; FontCraft interpolates it (docs/spec/40-compile.md § 4a)."
 
 [[table]]
 tag = "MVAR"
@@ -473,7 +475,7 @@ milestone = "M12"
 summary = "Default vertical origin Y and per-glyph exceptions for CFF fonts with vertical metrics. read-fonts reads it. write-fonts ships generated/generated_vorg.rs but no module includes it, so it is not usable as published. makeotf derives the default origin from the typo ascender."
 ref = "read-fonts src/tables/vorg.rs; write-fonts generated/generated_vorg.rs, src/tables.rs; AFDKO hotconv/hot.cpp"
 status = "docs"
-notes = "Written by crates/compile/src/extras.rs for a CFF font with vertical metrics, as ufo2ft's setupTable_VORG builds it: each glyph's origin is its own vertical origin or the typographic ascender, the most frequent origin is the default (the first in glyph order among equally frequent ones), and every other glyph gets a record."
+notes = "Written by crates/compile/src/extras.rs for a CFF font with vertical metrics, as ufo2ft's setupTable_VORG builds it: each glyph's origin is its own vertical origin or the typographic ascender, the most frequent origin is the default (the first in glyph order among equally frequent ones), and every other glyph gets a record. A CFF2 variable font writes the origin's values the same way and varies them through the origin map of VVAR (M9.38)."
 
 [[table]]
 tag = "kern"
@@ -837,10 +839,10 @@ guesses = [
 id = "compile.overlapFlags"
 area = "compile"
 milestone = "M9"
-summary = "write-fonts can set OVERLAP_SIMPLE (first point of the first contour) and OVERLAP_COMPOUND, but fontc's backend never sets either (no use of those fields in fontbe). Our choice: set them on glyphs of variable TrueType fonts, where overlaps are kept, and never on static fonts whose overlaps were removed."
+summary = "write-fonts can set OVERLAP_SIMPLE (first point of the first contour) and OVERLAP_COMPOUND, but fontc's backend never sets either (no use of those fields in fontbe), and neither does fontmake (ufo2ft and fontTools' varLib). Our choice: OVERLAP_SIMPLE on every simple glyph of a variable TrueType font, where overlaps are kept; OVERLAP_COMPOUND on no composite; neither on static fonts."
 ref = "write-fonts src/tables/glyf/simple.rs, glyf/composite.rs; fontc fontbe/src/glyphs.rs"
-status = "inferred"
-notes = "M9.5 sets OVERLAP_SIMPLE on every simple glyph of a variable font; OVERLAP_COMPOUND on composites is not written yet."
+status = "observed"
+notes = "M9.5 sets OVERLAP_SIMPLE on every simple glyph of a variable font. M9.38 ran fontc 1.0.0 and fontmake 3.12.1 on a two-master source with a composite: simple flags 0x01 and component flags 0x0004 in both, so no oracle sets either overlap bit and OVERLAP_COMPOUND stays off."
 
 [[behavior]]
 id = "compile.cu2quTolerance"
@@ -1500,6 +1502,7 @@ milestone = "M9"
 summary = "Each glyph's point list ends with four phantom points: (0, 0), (advance width, 0), (0, vertical origin) and (0, vertical origin - advance height); the last two are (0, 0) when the font has no vertical metrics. For a composite the list is one point per component (its rounded offset) followed by the phantoms. Their deltas are stored like any other point, so advances vary even without HVAR."
 ref = "fontc fontbe/src/glyphs.rs (point_seqs_for_simple_glyph, point_seqs_for_composite_glyph)"
 status = "docs"
+notes = "Built in M9.5; the vertical phantom points in M9.38, checked against fontc 1.0.0 and fontmake 3.12.1 on a synthetic source with own, inherited and intermediate vertical metrics. The drawn .notdef varies with each master's metrics as in fontc; fontmake moves it by the ascender at a sparse master, whose temporary font has no OS/2 table (docs/spec/40-compile.md § 4a)."
 
 [[behavior]]
 id = "compile.gvarSharedTuples"

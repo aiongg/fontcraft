@@ -178,7 +178,7 @@ pub fn build_hvar_with(font: &SfntFont, options: &HvarOptions) -> Result<HvarBui
         TableAction::Kept
     };
     if vvar_action == TableAction::Built {
-        let table = build_vvar(axis_count, &vertical).map_err(compile_error)?;
+        let table = build_vvar(axis_count, &vertical, None).map_err(compile_error)?;
         out.insert(*b"VVAR", write_fonts::dump_table(&table).map_err(write_error)?);
     }
     Ok(HvarBuild {
