@@ -63,7 +63,8 @@ fn palette_button(ui: &mut Ui, shows: bool, sent: &mut Vec<crate::app::Msg>) {
 pub struct StatusProps<'a> {
     /// The last error or notice; empty when there is none.
     pub status: &'a str,
-    /// Why the edited or selected glyph cannot interpolate, shown while there is no error or notice; empty when it can.
+    /// The difference between the layers under the pointer, else why the edited or selected glyph cannot interpolate:
+    /// shown while there is no error or notice. Empty when there is neither.
     pub reason: &'a str,
     /// The Features menu, at the bar's start.
     pub features: &'a craft::ui::contract::Tracked<crate::app::models::text::FeaturesModel>,

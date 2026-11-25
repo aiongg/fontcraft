@@ -97,7 +97,7 @@ pub fn show(app: &mut FontCraftApp, ui: &mut Ui) {
             let edit = bars::edit_state(app);
             let hoi = crate::canvas::hoi::axis_choice(app);
             let FontCraftApp { status, models, sent, .. } = app;
-            bars::status(ui, bars::StatusProps { status, reason: &models.compatibility.reason, features: &models.features, edit, hoi, sent });
+            bars::status(ui, bars::StatusProps { status, reason: models.compatibility.line(), features: &models.features, edit, hoi, sent });
         })
         .start(Slot::new("fontcraft.tools").size(SlotSize::RailWidth), |ui, _, app: &mut FontCraftApp| {
             let FontCraftApp { tool_slots, view, sent, .. } = app;

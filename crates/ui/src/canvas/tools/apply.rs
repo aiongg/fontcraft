@@ -150,9 +150,12 @@ pub fn sync(app: &mut FontCraftApp) {
 
 /// Hands `input` to the toolbox and carries out its answer. Returns the errors, in order.
 pub fn input(app: &mut FontCraftApp, input: ToolInput) -> Vec<String> {
-    if let ToolInput::Pointer(ev) = &input
-        && let Some(errors) = crate::canvas::compatibility::pointer(app, ev)
-    {
+    let taken = match &input {
+        ToolInput::Pointer(ev) => crate::canvas::compatibility::pointer(app, ev),
+        ToolInput::Key(ev) => crate::canvas::compatibility::key(app, ev),
+        ToolInput::Modifiers(_) => None,
+    };
+    if let Some(errors) = taken {
         return errors;
     }
     if crate::canvas::text::text_mode(&app.view) {

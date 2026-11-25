@@ -253,9 +253,16 @@ pub struct CompatTokens {
     pub label_size: f32,
     /// How far a label sits from its point, in screen points.
     pub label_gap: f32,
-    /// Dash and gap lengths of component outlines and anchor lines.
+    /// Dash and gap lengths of anchor lines and of a dragged line.
     pub dash: f32,
     pub dash_gap: f32,
+    /// The checkered fill of components: the side of a square.
+    pub checker: f32,
+    /// The ends of the lines that can be dragged, and the ring around the one under the pointer.
+    pub end_radius: f32,
+    pub end_ring_radius: f32,
+    /// The lines of the selected nodes and the line end being dragged.
+    pub probe: Color32,
     /// The incompatibility bar: its height, how far above the ascender it sits and its least width.
     pub bar_height: f32,
     pub bar_gap: f32,
@@ -286,6 +293,10 @@ impl CompatTokens {
             label_gap: 4.0,
             dash: 4.0,
             dash_gap: 3.0,
+            checker: 8.0,
+            end_radius: 3.5,
+            end_ring_radius: 7.0,
+            probe: Color32::from_rgb(0xf0, 0x8c, 0x1e),
             bar_height: 5.0,
             bar_gap: 3.0,
             bar_min_width: 12.0,

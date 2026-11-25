@@ -122,6 +122,7 @@ pub struct Models {
     pub compatibility: Tracked<compatibility::CompatibilityModel>,
     /// Where the compatibility checks behind the indicators stand.
     pub compat_scan: incompatibility::Scan,
+    compat_probe: compatibility::ProbeSeen,
     /// The Info box and the Palette sections (`panels::info_box`, `panels::transformations`, …); projected outside the
     /// stamp, since they read the canvas's selection.
     pub palette: palette::PaletteModels,
@@ -251,6 +252,11 @@ impl Models {
     /// Brings the incompatibility indicators up to date; `projected` is [`Self::project`]'s answer on this pass.
     pub fn project_indicators(&mut self, projected: bool, cx: &mut ProjectCx<'_>) {
         incompatibility::project(&mut self.compat_scan, &mut self.font_view, &mut self.compatibility, &self.text, projected, cx);
+    }
+
+    /// Brings the Master Compatibility view's lines of the selected nodes up to date.
+    pub fn project_probe(&mut self, selection: &fontcraft_tools::Selection, stamp: Stamp, cx: &ProjectCx<'_>) {
+        compatibility::project_probe(&mut self.compatibility, &mut self.compat_probe, selection, stamp, cx);
     }
 
     /// Where the axis sweep is along its axis, 0 to 1: the clock of the timing graph's dots. `None` while no axis is

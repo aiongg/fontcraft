@@ -228,6 +228,9 @@ pub struct FontCraftApp {
     pub knobs: crate::canvas::color::knobs::KnobDrag,
     /// The press on an incompatibility bar or a line end of the Master Compatibility view (`canvas::compatibility`).
     pub compat_press: Option<crate::canvas::compatibility::Press>,
+    /// Where the pointer last was over the canvas, in the edited glyph's font units, while the Master Compatibility view
+    /// is on.
+    pub compat_pointer: Option<fontcraft_geom::Point>,
     /// The decoded image files and the image drag in progress (`canvas::images`).
     pub images: crate::canvas::images::Images,
     /// Moves with every applied [`ViewMsg`] and every view change a projection reads; part of the projection
@@ -318,6 +321,7 @@ impl FontCraftApp {
             tools: crate::canvas::tools::Tools::default(),
             knobs: Default::default(),
             compat_press: None,
+            compat_pointer: None,
             images: Default::default(),
             view_revision: 0,
             enabled_at: None,
@@ -562,6 +566,8 @@ impl FontCraftApp {
         models::compare::project_fonts(&mut self.models.compare_fonts, &mut cx);
         models::text_preview::project(&mut self.models.text_preview, &mut cx, &self.host);
         models::color::project(&mut self.models.color, &mut cx, &self.tools, stamp);
+        self.models.project_probe(&self.tools.selection, stamp, &cx);
+        crate::canvas::compatibility::refresh(self);
         if self.models.compat_scan.waiting()
             && let Some(ctx) = &self.window
         {

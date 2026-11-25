@@ -189,6 +189,8 @@ fn glyph_set_shape_order_and_swap_shapes() {
 
     run(&mut s, "glyph.swapShapes", json!({"glyph": "e", "layer": "m", "a": 0, "b": 2}));
     assert_eq!(edges(&s), [120.0, 10.0, 230.0]);
+    let hints: Vec<CornerHint> = e_layer(&s, "m").info.hints.iter().map(|h| corner_hint(h).unwrap().unwrap()).collect();
+    assert_eq!(hints, [CornerHint::new("_corner.a", 2, 1)], "the hint follows its path");
     refused(&mut s, "glyph.swapShapes", json!({"glyph": "e", "layer": "m", "a": 1, "b": 1}));
     refused(&mut s, "glyph.swapShapes", json!({"glyph": "e", "layer": "m", "a": 0, "b": 3}));
 }

@@ -419,7 +419,14 @@ fn set_shape_order(s: &mut Session, value: &Value) -> Result<Value> {
     if order.len() != count {
         return Err(p.bad(format!("`order` is not a permutation: it must name all {count} shapes of the layer, got {}", order.len())));
     }
-    let done = s.edit("Set Shape Order", |font| {
+    reorder_shapes(s, &p, &t, "Set Shape Order", &order)?;
+    t.layer = Some(t.layer_id(s.font()?)?);
+    Ok(json!({"glyph": t.glyph, "layer": t.layer, "order": order}))
+}
+
+/// Puts the target layer's shapes in `order`, a permutation of their indices, as one undo step named `label`.
+fn reorder_shapes(s: &mut Session, p: &Params, t: &Targets, label: &str, order: &[usize]) -> Result<()> {
+    let done = s.edit(label, |font| {
         let mut done = Renumbered::default();
         t.edit_layer(font, |layer| {
             let hinted = match t.side {
@@ -429,14 +436,14 @@ fn set_shape_order(s: &mut Session, value: &Value) -> Result<Value> {
             let before = hinted.then(|| layer.clone());
             let shapes = layer.parts_mut(t.side).shapes;
             let mut slots: Vec<Option<Shape>> = std::mem::take(shapes).into_iter().map(Some).collect();
-            for &i in &order {
+            for &i in order {
                 let shape = slots.get_mut(i).and_then(Option::take).ok_or_else(|| p.bad(format!("shape {i} does not resolve")))?;
                 shapes.push(shape);
             }
             // Hints follow their shapes to the new places: corner components by shape index,
             // PostScript hints and TrueType instructions by path index.
             if let Some(before) = before {
-                let mut new_of: Vec<usize> = (0..count).collect();
+                let mut new_of: Vec<usize> = (0..order.len()).collect();
                 for (new, &old) in order.iter().enumerate() {
                     if let Some(slot) = new_of.get_mut(old) {
                         *slot = new;
@@ -452,8 +459,7 @@ fn set_shape_order(s: &mut Session, value: &Value) -> Result<Value> {
         Ok(done)
     })?;
     s.hints_renumbered(done);
-    t.layer = Some(t.layer_id(s.font()?)?);
-    Ok(json!({"glyph": t.glyph, "layer": t.layer, "order": order}))
+    Ok(())
 }
 
 fn swap_shapes(s: &mut Session, value: &Value) -> Result<Value> {
@@ -471,16 +477,9 @@ fn swap_shapes(s: &mut Session, value: &Value) -> Result<Value> {
     if a == b {
         return Err(p.bad(format!("`a` and `b` are both shape {a}: there is nothing to swap")));
     }
-    s.edit("Swap Shapes", |font| {
-        t.edit_layer(font, |layer| {
-            let shapes = layer.parts_mut(t.side).shapes;
-            if a.max(b) >= shapes.len() {
-                return Err(p.bad("the layer changed: a shape does not resolve"));
-            }
-            shapes.swap(a, b);
-            Ok(())
-        })
-    })?;
+    let mut order: Vec<usize> = (0..count).collect();
+    order.swap(a, b);
+    reorder_shapes(s, &p, &t, "Swap Shapes", &order)?;
     t.layer = Some(t.layer_id(s.font()?)?);
     Ok(json!({"glyph": t.glyph, "layer": t.layer, "a": a, "b": b}))
 }
