@@ -170,6 +170,9 @@ pub struct LinkEnd {
 /// A line end being dragged.
 #[derive(PlainData, Clone, Debug, Default, PartialEq)]
 pub struct EndDrag {
+    /// The document, its revision and the glyph the drag began in: in any other the shapes are not those dragged.
+    pub document: Option<(u64, u64)>,
+    pub glyph: String,
     pub layer: String,
     pub placed: usize,
     pub shape: usize,

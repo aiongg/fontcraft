@@ -2,14 +2,21 @@
 
 use egui::{Color32, Mesh, Pos2, Rect, pos2};
 
-/// Most bands and most squares one fill is made of; the rest is left out.
+/// Most bands one fill is made of; the rest is left out.
 const MAX_BANDS: usize = 2_048;
-const MAX_SQUARES: usize = 20_000;
+/// Most work the fills of one frame are: bands, edges crossed and squares. What is beyond it is not filled.
+pub const MAX_FRAME_WORK: usize = 100_000;
 
 /// The checkered fill of `contours` (screen points) inside `clip`, every other square of a grid of `side` points. `None`
-/// when nothing is filled.
-pub fn checker(contours: &[Vec<Pos2>], clip: Rect, side: f32, color: Color32) -> Option<Mesh> {
-    if !(side.is_finite() && side >= 1.0 && clip.is_finite()) {
+/// when nothing is filled. `work` is what is left of the frame's [`MAX_FRAME_WORK`].
+pub fn checker(contours: &[Vec<Pos2>], clip: Rect, side: f32, color: Color32, work: &mut usize) -> Option<Mesh> {
+    if *work == 0 || !(side.is_finite() && side >= 1.0 && clip.is_finite()) {
+        return None;
+    }
+    // A component that is not on the canvas costs no more than its box.
+    let mut bounds = Rect::NOTHING;
+    contours.iter().flatten().filter(|p| p.is_finite()).for_each(|p| bounds.extend_with(*p));
+    if !bounds.intersects(clip) {
         return None;
     }
     // Each edge top end first, with its winding: +1 when the contour runs down it.
@@ -32,7 +39,10 @@ pub fn checker(contours: &[Vec<Pos2>], clip: Rect, side: f32, color: Color32) ->
     let step = side / 4.0;
     let first = (top / step).floor();
     let mut mesh = Mesh::default();
-    let mut squares = 0usize;
+    edges.sort_by(|a, b| a.0.y.total_cmp(&b.0.y));
+    let mut coming = edges.iter().copied().peekable();
+    // The edges a band can cross: those that begin above its middle and have not ended.
+    let mut open: Vec<(Pos2, Pos2, i32)> = Vec::new();
     let mut crossing: Vec<(f32, i32)> = Vec::new();
     for k in 0..MAX_BANDS {
         let y0 = ((first + k as f32) * step).max(top);
@@ -41,9 +51,16 @@ pub fn checker(contours: &[Vec<Pos2>], clip: Rect, side: f32, color: Color32) ->
             break;
         }
         let mid = (y0 + y1) / 2.0;
+        while let Some(edge) = coming.next_if(|(a, _, _)| a.y <= mid) {
+            open.push(edge);
+        }
+        open.retain(|(_, b, _)| b.y > mid);
         crossing.clear();
-        crossing
-            .extend(edges.iter().filter(|(a, b, _)| a.y <= mid && b.y > mid).map(|(a, b, w)| (a.x + (mid - a.y) * (b.x - a.x) / (b.y - a.y), *w)));
+        crossing.extend(open.iter().map(|(a, b, w)| (a.x + (mid - a.y) * (b.x - a.x) / (b.y - a.y), *w)));
+        *work = work.saturating_sub(crossing.len().saturating_add(1));
+        if *work == 0 {
+            break;
+        }
         crossing.sort_by(|a, b| a.0.total_cmp(&b.0));
         let row = (mid / side).floor();
         let mut winding = 0;
@@ -61,10 +78,10 @@ pub fn checker(contours: &[Vec<Pos2>], clip: Rect, side: f32, color: Color32) ->
                 let mut column = (from / side).floor();
                 while column * side < to {
                     if (column + row).rem_euclid(2.0) < 0.5 {
-                        if squares >= MAX_SQUARES {
+                        if *work == 0 {
                             return Some(mesh);
                         }
-                        squares += 1;
+                        *work = work.saturating_sub(1);
                         quad(&mut mesh, Rect::from_min_max(pos2((column * side).max(from), y0), pos2(((column + 1.0) * side).min(to), y1)), color);
                     }
                     let next = column + 1.0;
@@ -92,19 +109,28 @@ fn quad(mesh: &mut Mesh, rect: Rect, color: Color32) {
 mod tests {
     use egui::{Color32, Rect, pos2};
 
-    use super::checker;
+    use super::{MAX_FRAME_WORK, checker};
 
     /// Half of a square's area is filled, all of it inside the outline and the clip.
     #[test]
     fn every_other_square_inside_the_outline_is_filled() {
         let square = vec![pos2(0.0, 0.0), pos2(64.0, 0.0), pos2(64.0, 64.0), pos2(0.0, 64.0)];
         let clip = Rect::from_min_max(pos2(-100.0, -100.0), pos2(100.0, 100.0));
-        let mesh = checker(std::slice::from_ref(&square), clip, 8.0, Color32::WHITE).expect("filled");
+        let mut work = MAX_FRAME_WORK;
+        let mesh = checker(std::slice::from_ref(&square), clip, 8.0, Color32::WHITE, &mut work).expect("filled");
         let area: f32 = mesh.vertices.chunks(4).filter_map(|q| Some((q.get(2)?.pos - q.first()?.pos).x * (q.get(2)?.pos - q.first()?.pos).y)).sum();
         assert!((area - 64.0 * 32.0).abs() < 1.0, "{area}");
         let half = Rect::from_min_max(pos2(0.0, 0.0), pos2(64.0, 32.0));
-        let clipped = checker(&[square], half, 8.0, Color32::WHITE).expect("filled");
+        let clipped = checker(std::slice::from_ref(&square), half, 8.0, Color32::WHITE, &mut work).expect("filled");
         assert!(clipped.vertices.iter().all(|v| half.expand(0.01).contains(v.pos)));
-        assert!(checker(&[], clip, 8.0, Color32::WHITE).is_none());
+        assert!(checker(&[], clip, 8.0, Color32::WHITE, &mut work).is_none());
+
+        let left = work;
+        let away = Rect::from_min_max(pos2(80.0, 0.0), pos2(100.0, 100.0));
+        assert!(checker(std::slice::from_ref(&square), away, 8.0, Color32::WHITE, &mut work).is_none() && work == left, "off the canvas");
+        let mut little = 100;
+        let part = checker(std::slice::from_ref(&square), clip, 8.0, Color32::WHITE, &mut little).expect("filled in part");
+        assert!(little == 0 && part.vertices.len() < mesh.vertices.len(), "the frame's work bounds the fills together");
+        assert!(checker(&[square], clip, 8.0, Color32::WHITE, &mut little).is_none());
     }
 }

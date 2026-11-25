@@ -13,7 +13,8 @@
 //! | the edited layer's shapes | their index beside the start node or centre |
 //!
 //! A line end dragged onto the end of another shape's line on the same layer swaps the two shapes there
-//! (`glyph.swapShapes`); the press goes to the view before the tool ([`pointer`]).
+//! (`glyph.swapShapes`); the press goes to the view before the tool ([`pointer`]), as one on a bar does, while the Select
+//! or the Text tool is the active one. Another glyph, layer or document and an edit end the drag.
 //!
 //! It also paints the incompatibility bars (`compatibility.editViewRedBar`, projected by `app::models::incompatibility`
 //! whether or not the view is on) and, under the pointer, a bar's reason. A click on a bar edits its glyph and turns the
@@ -27,7 +28,7 @@ use serde_json::json;
 
 use super::camera::Camera;
 use super::layers::PaintCx;
-use super::paint::checker::checker;
+use super::paint::checker::{MAX_FRAME_WORK, checker};
 use super::paint::{flatten, screen};
 use super::tokens::CompatTokens;
 use super::tools::tokens::ToolTokens;
@@ -62,8 +63,41 @@ fn end_reach(t: &CompatTokens) -> f32 {
     t.end_radius.max(ToolTokens::standard().hit_tolerance)
 }
 
+/// The document the window edits and its revision.
+fn document(app: &FontCraftApp) -> Option<(u64, u64)> {
+    app.session.active().map(|d| (d.id, d.revision))
+}
+
+fn edited_glyph(app: &FontCraftApp) -> Option<&str> {
+    super::tools::edited_glyph(app.session.font().ok()?, &app.view)
+}
+
+/// Whether the glyph and the state of the document `drag` began in are still the edited ones.
+fn still_there(app: &FontCraftApp, drag: &EndDrag) -> bool {
+    document(app) == drag.document && edited_glyph(app) == Some(drag.glyph.as_str())
+}
+
+/// With the tools' own (`tools::apply::sync`): a line end's drag ends when what it would change is no longer there.
+pub fn sync(app: &mut FontCraftApp) {
+    if matches!(&app.compat_press, Some(Press::End(drag)) if !still_there(app, drag)) {
+        app.compat_press = None;
+    }
+}
+
+/// Forgets the last pointer position once the mouse has left the canvas. A position the control channel sent stays, as
+/// the window never saw that pointer come.
+fn forget_pointer(app: &mut FontCraftApp) {
+    let Some(ctx) = &app.window else { return };
+    let hovered = ctx.input(|i| i.pointer.hover_pos()).is_some_and(|at| app.view.canvas.rect.contains(at));
+    let left = std::mem::replace(&mut app.compat_hovered, hovered) && !hovered;
+    if left && app.compat_pointer.take().is_some() {
+        ctx.request_repaint();
+    }
+}
+
 /// After the projections: the dragged line end and the difference under the pointer.
 pub fn refresh(app: &mut FontCraftApp) {
+    forget_pointer(app);
     if app.models.compatibility.layers.is_empty() {
         app.compat_pointer = None;
         if matches!(app.compat_press, Some(Press::End(_))) {
@@ -146,7 +180,7 @@ pub fn pointer(app: &mut FontCraftApp, ev: &PointerEvent) -> Option<Vec<String>>
             PointerKind::Up => app.compat_press.take().map(|press| release(app, press, ev)),
             PointerKind::Down => {
                 app.compat_press = None;
-                pressed(app, ev)
+                down(app, ev)
             }
             PointerKind::Drag | PointerKind::Move | PointerKind::DoubleClick => {
                 drag_end(app, ev);
@@ -154,11 +188,25 @@ pub fn pointer(app: &mut FontCraftApp, ev: &PointerEvent) -> Option<Vec<String>>
             }
         };
     }
-    if ev.kind == PointerKind::Down { pressed(app, ev) } else { None }
+    match ev.kind {
+        PointerKind::Down => down(app, ev),
+        // What is left of a press taken here: after a drag that ended early, and a double click, whose position is from
+        // before the click (which may have changed the edited glyph and the tools' coordinates).
+        PointerKind::Drag | PointerKind::Up | PointerKind::DoubleClick if app.compat_taken => Some(Vec::new()),
+        _ => None,
+    }
 }
 
+fn down(app: &mut FontCraftApp, ev: &PointerEvent) -> Option<Vec<String>> {
+    let taken = pressed(app, ev);
+    app.compat_taken = taken.is_some();
+    taken
+}
+
+/// Under the other tools a press near a bar or an end is the tool's: it draws, pans or zooms there.
 fn pressed(app: &mut FontCraftApp, ev: &PointerEvent) -> Option<Vec<String>> {
-    if app.tools.toolbox.busy() || app.session.interaction().is_some() {
+    let pointing = super::text::text_mode(&app.view) || app.tools.toolbox.active_id() == "select";
+    if !pointing || app.tools.toolbox.busy() || app.session.interaction().is_some() {
         return None;
     }
     let camera = super::tools::apply::camera(app);
@@ -168,7 +216,8 @@ fn pressed(app: &mut FontCraftApp, ev: &PointerEvent) -> Option<Vec<String>> {
         Some(&LinkEnd { placed, shape: Some(shape), .. }) => {
             let layer = model.layers.get(placed)?.layer.clone();
             let here = [ev.pos.x, ev.pos.y];
-            Press::End(EndDrag { layer, placed, shape, from: here, at: here, moved: false, onto: None })
+            let glyph = edited_glyph(app)?.to_string();
+            Press::End(EndDrag { document: document(app), glyph, layer, placed, shape, from: here, at: here, moved: false, onto: None })
         }
         _ => Press::Bar(bar_at(&model.bars, &camera, t, at)?.clone()),
     };
@@ -188,7 +237,10 @@ fn drag_end(app: &mut FontCraftApp, ev: &PointerEvent) {
     drag.at = [ev.pos.x, ev.pos.y];
     drag.moved |= at.distance(from) > ToolTokens::standard().drag_threshold;
     let reach = app.models.canvas_tokens.compat.end_radius * DROP_RADII;
-    let found = end_at(&app.models.compatibility, &camera, at, reach, Some(drag.placed)).and_then(|end| end.shape);
+    let model = &app.models.compatibility;
+    // The view is projected again when a layer is hidden or shown.
+    let same = model.layers.get(drag.placed).is_some_and(|l| l.layer == drag.layer);
+    let found = end_at(model, &camera, at, reach, Some(drag.placed)).filter(|_| same).and_then(|end| end.shape);
     drag.onto = found.filter(|shape| *shape != drag.shape);
 }
 
@@ -197,9 +249,11 @@ fn drop_end(app: &mut FontCraftApp, ev: &PointerEvent) -> Vec<String> {
     drag_end(app, ev);
     let Some(Press::End(drag)) = app.compat_press.take() else { return Vec::new() };
     let Some(onto) = drag.onto.filter(|_| drag.moved) else { return Vec::new() };
-    let glyph = app.session.font().ok().and_then(|font| super::tools::edited_glyph(font, &app.view)).map(str::to_string);
-    let Some(glyph) = glyph else { return Vec::new() };
-    let swap = json!({"glyph": glyph, "layer": drag.layer, "a": drag.shape, "b": onto});
+    // The glyph may have changed since the tools were last synced, by a message of the same pass.
+    if !still_there(app, &drag) {
+        return Vec::new();
+    }
+    let swap = json!({"glyph": drag.glyph, "layer": drag.layer, "a": drag.shape, "b": onto});
     app.apply_msg(Msg::run("glyph.swapShapes", swap)).err().into_iter().collect()
 }
 
@@ -232,12 +286,13 @@ pub fn shapes(cx: &PaintCx<'_>) -> Vec<Shape> {
     let affine = cx.camera.affine();
     let font = FontId::proportional(t.label_size);
     let mut out = Vec::new();
+    let mut checker_work = MAX_FRAME_WORK;
     for layer in &model.layers {
         for shape in &layer.shapes {
             let stroke = Stroke::new(t.tint_width, t.tint(shape.index, false));
             let contours = flatten(&shape.outline, affine);
             if shape.component
-                && let Some(mesh) = checker(&contours, cx.rect, t.checker, t.tint(shape.index, false))
+                && let Some(mesh) = checker(&contours, cx.rect, t.checker, t.tint(shape.index, false), &mut checker_work)
             {
                 out.push(Shape::mesh(mesh));
             }
@@ -326,7 +381,7 @@ mod tests {
     use egui::epaint::ColorMode;
     use egui::{LayerId, Painter, Pos2, Rect, Shape};
     use fontcraft_engine::Session;
-    use fontcraft_tools::{Modifiers, PointerEvent, PointerKind};
+    use fontcraft_tools::{Key, KeyEvent, Modifiers, PointerEvent, PointerKind};
     use serde_json::json;
 
     use super::super::camera::Camera;
@@ -407,9 +462,13 @@ mod tests {
         assert!(app.status.is_empty(), "{}", app.status);
     }
 
-    /// The left edges of a layer's paths, in order.
+    /// The left edges of the paths of a layer of `n.test`, in order.
     fn lefts(app: &FontCraftApp, layer: &str) -> Vec<f64> {
-        let glyph = app.session.font().unwrap().glyph("n.test").unwrap();
+        lefts_of(app, "n.test", layer)
+    }
+
+    fn lefts_of(app: &FontCraftApp, glyph: &str, layer: &str) -> Vec<f64> {
+        let glyph = app.session.font().unwrap().glyph(glyph).unwrap();
         let shapes = &glyph.layers.iter().find(|l| l.id == layer).unwrap().shapes;
         let left = |s: &fontcraft_engine::model::Shape| match s {
             fontcraft_engine::model::Shape::Path(p) => p.nodes.iter().map(|n| n.x).fold(f64::INFINITY, f64::min),
@@ -418,12 +477,14 @@ mod tests {
         shapes.iter().map(left).collect()
     }
 
-    /// Two squares a master, the second master's in the other order: dragging one line end onto the other swaps them
-    /// there, in one undo step. A press elsewhere reaches the tool, and the probe follows the selection.
-    #[test]
-    fn dragging_a_line_end_onto_another_swaps_the_shapes_of_that_layer() {
+    fn run(app: &mut FontCraftApp, id: &str, params: serde_json::Value) {
+        app.session.execute(id, &params).unwrap();
+    }
+
+    /// The Master Compatibility view of `n.test` and the ids of its two masters: two squares a master, the second master's
+    /// in the other order.
+    fn crossed() -> (FontCraftApp, String, String) {
         let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
-        let run = |app: &mut FontCraftApp, id: &str, params: serde_json::Value| app.session.execute(id, &params).unwrap();
         run(&mut app, "font.master.add", json!({}));
         run(&mut app, "glyph.newGlyph", json!({"name": "n.test"}));
         let font = app.session.font().unwrap();
@@ -438,6 +499,14 @@ mod tests {
         app.view.canvas.rect = RECT;
         app.view.canvas.zoom = 0.5;
         app.drain();
+        (app, m0, m1)
+    }
+
+    /// Dragging one line end onto the other swaps the shapes there, in one undo step. A press elsewhere reaches the tool,
+    /// and the probe follows the selection.
+    #[test]
+    fn dragging_a_line_end_onto_another_swaps_the_shapes_of_that_layer() {
+        let (mut app, m0, m1) = crossed();
         let model = app.models.compatibility.clone();
         assert_eq!(model.links.len(), 2, "a line per shape");
         // The lines cross: the first shape's end lies right of the second's on the other master only.
@@ -475,5 +544,75 @@ mod tests {
         app.tools.selection = fontcraft_tools::Selection::new();
         app.drain();
         assert!(app.models.compatibility.probe.is_empty());
+    }
+
+    /// A line end's drag is of the glyph and the state of the document it began in: a change of either ends it, also one
+    /// of the same pass as the release. Escape ends it, and what is left of the press never reaches the tool.
+    #[test]
+    fn a_line_end_drag_ends_with_what_it_would_change() {
+        let (mut app, m0, m1) = crossed();
+        run(&mut app, "glyph.newGlyph", json!({"name": "m.test"}));
+        for layer in [&m0, &m1] {
+            for x in [0, 400] {
+                run(&mut app, "path.addRectangle", json!({"glyph": "m.test", "layer": layer, "x": x, "y": 0, "width": 100, "height": 100}));
+            }
+        }
+        let ends = |app: &FontCraftApp| [0, 1].map(|link| app.models.compatibility.links[link].ends[1].at);
+        let event = |kind, at: [f64; 2]| PointerEvent { kind, pos: fontcraft_geom::Point::new(at[0], at[1]), mods: Modifiers::NONE };
+        let select = |app: &mut FontCraftApp, glyph: &str| app.sent.push(Msg::View(ViewMsg::SelectGlyph(glyph.into())));
+        let drag = |app: &mut FontCraftApp| {
+            let [from, to] = ends(app);
+            pointer(app, PointerKind::Down, from);
+            pointer(app, PointerKind::Drag, to);
+            assert_eq!(app.models.compatibility.drag.as_ref().and_then(|d| d.onto), Some(1));
+            to
+        };
+        let unchanged = |app: &FontCraftApp| {
+            assert!(app.compat_press.is_none());
+            assert_eq!((lefts(app, &m1), lefts_of(app, "m.test", &m1)), (vec![400.0, 0.0], vec![0.0, 400.0]));
+        };
+
+        select(&mut app, "n.test");
+        app.drain();
+        let to = drag(&mut app);
+        select(&mut app, "m.test");
+        pointer(&mut app, PointerKind::Up, to);
+        unchanged(&app);
+
+        select(&mut app, "n.test");
+        app.drain();
+        let to = drag(&mut app);
+        select(&mut app, "m.test");
+        app.drain();
+        unchanged(&app);
+        pointer(&mut app, PointerKind::Up, to);
+        unchanged(&app);
+
+        select(&mut app, "n.test");
+        app.drain();
+        let to = drag(&mut app);
+        run(&mut app, "path.addRectangle", json!({"glyph": "n.test", "layer": m0, "x": 800, "y": 0, "width": 100, "height": 100}));
+        app.drain();
+        unchanged(&app);
+        pointer(&mut app, PointerKind::Up, to);
+        unchanged(&app);
+        run(&mut app, "edit.undo", json!({}));
+        app.drain();
+
+        let to = drag(&mut app);
+        let escape = KeyEvent::press(Key::Escape, Modifiers::NONE);
+        assert_eq!(crate::canvas::tools::apply::key(&mut app, escape), Some(Vec::new()), "the control channel's key");
+        unchanged(&app);
+        for kind in [PointerKind::Drag, PointerKind::Up, PointerKind::DoubleClick] {
+            assert_eq!(super::pointer(&mut app, &event(kind, to)), Some(Vec::new()), "{kind:?}");
+        }
+
+        // Under another tool the press is the tool's.
+        app.sent.push(Msg::View(ViewMsg::SelectTool("hand")));
+        app.drain();
+        let [from, _] = ends(&app);
+        for kind in [PointerKind::Down, PointerKind::Up, PointerKind::DoubleClick] {
+            assert_eq!(super::pointer(&mut app, &event(kind, from)), None, "{kind:?}");
+        }
     }
 }

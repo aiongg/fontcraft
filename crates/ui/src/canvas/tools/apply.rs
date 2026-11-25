@@ -93,9 +93,11 @@ pub fn pick_knob(app: &mut FontCraftApp, pos: Point) -> bool {
 /// Brings the tools in line with the app before they see an event.
 pub fn sync(app: &mut FontCraftApp) {
     let target = super::target(&app.session, &app.view);
+    crate::canvas::compatibility::sync(app);
     if target != app.tools.target {
         // Another glyph, layer or side: a gesture in progress ends without touching the new one.
         let _ = app.tools.toolbox.cancel();
+        app.compat_press = None;
         if app.tools.before.take().is_some() && app.session.interaction().is_some() {
             let _ = app.session.cancel();
         }
@@ -216,6 +218,9 @@ pub fn input(app: &mut FontCraftApp, input: ToolInput) -> Vec<String> {
 
 /// Whether the toolbox takes the key `ev` now, and what that did: `None` when the key is not the tools'.
 pub fn key(app: &mut FontCraftApp, ev: fontcraft_tools::KeyEvent) -> Option<Vec<String>> {
+    if let Some(errors) = crate::canvas::compatibility::key(app, &ev) {
+        return Some(errors);
+    }
     if crate::canvas::text::text_mode(&app.view) {
         return crate::canvas::text::input::takes_key(&ev).then(|| crate::canvas::text::input::input(app, ToolInput::Key(ev)));
     }
