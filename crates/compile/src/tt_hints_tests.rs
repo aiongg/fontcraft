@@ -505,6 +505,40 @@ fn autohint_hints_a_glyph_with_components_as_its_outline_and_leaves_composites_a
 }
 
 #[test]
+fn with_hint_composites_a_composite_is_hinted_as_one_outline() {
+    let font = |options: &str| {
+        let mut f = x_and_h(options, "");
+        f.add_glyph("xx", Vec::new(), 600.0).unwrap();
+        f.glyph_mut("xx").unwrap().layers[0].shapes.push(Shape::Component(fontcraft_model::Component::new("x", 0.0, 100.0)));
+        f
+    };
+    let out = compile_ttf(&font("--composites"), &autohinted()).unwrap();
+    assert!(!out.warnings.iter().any(|w| w.contains("TTFAutohint")), "{:?}", out.warnings);
+    let simple = |out: &Compiled| {
+        let font = FontRef::new(&out.bytes).unwrap();
+        matches!(font.loca(None).unwrap().get_glyf(gid(out, "xx"), &font.glyf().unwrap()).unwrap(), Some(RawGlyph::Simple(_)))
+    };
+    assert!(simple(&out));
+    runs_everywhere(&out.bytes);
+    assert!(!simple(&compile_ttf(&font(""), &autohinted()).unwrap()), "off by default");
+    assert!(!simple(&compile_ttf(&font("--composites"), &Options::default()).unwrap()), "only an autohinted build");
+}
+
+#[test]
+fn a_font_with_a_restricted_licence_is_autohinted_only_with_ignore_restrictions() {
+    let build = |options: &str| {
+        let mut f = x_and_h(options, "");
+        let params = &mut std::sync::Arc::make_mut(&mut f.info).params.0;
+        params.push(Param::new("fsType", Value::Array(Array { items: vec![Value::Number(Number::int(1))], ..Default::default() })));
+        let out = compile_ttf(&f, &autohinted()).unwrap();
+        let hinted = FontRef::new(&out.bytes).unwrap().table_data(skrifa::Tag::new(b"fpgm")).is_some();
+        (hinted, out.warnings.iter().any(|w| w.contains("Ignore Restrictions")))
+    };
+    assert_eq!(build(""), (false, true));
+    assert_eq!(build("--ignore-restrictions"), (true, false));
+}
+
+#[test]
 fn control_instruction_point_shifts_move_points_after_iup() {
     let shifted = compile_ttf(&x_and_h("", "x point 0-3 yshift 1 @ 12"), &autohinted()).unwrap();
     assert!(!shifted.warnings.iter().any(|w| w.contains("control")), "{:?}", shifted.warnings);

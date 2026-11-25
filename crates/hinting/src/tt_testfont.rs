@@ -1,6 +1,6 @@
 //! Test fonts built in memory for the interpreter tests: one glyph with a single contour of
 //! on-curve points, our `cvt `/`fpgm`/`prep` and a glyph program, run through skrifa's TrueType
-//! interpreter. Shared by the font-program and glyph-program tests.
+//! interpreter. Shared by the font-program, glyph-program and autohinter tests.
 
 use skrifa::instance::{LocationRef, Size};
 use skrifa::outline::{DrawSettings, Engine, HintingInstance, HintingOptions, OutlinePen, SmoothMode};
@@ -14,7 +14,7 @@ use write_fonts::tables::loca::LocaFormat;
 use write_fonts::tables::maxp::Maxp;
 use write_fonts::types::{Fixed, LongDateTime, Tag};
 
-use crate::FontPrograms;
+use crate::{FontPrograms, TtAutohintOptions};
 
 pub const UPEM: u16 = 1000;
 
@@ -99,6 +99,57 @@ pub fn font(programs: &FontPrograms, points: &[(i16, i16)], glyph_program: &[u8]
     b.add_raw(Tag::new(b"fpgm"), programs.fpgm.clone());
     b.add_raw(Tag::new(b"prep"), programs.prep.clone());
     b.build()
+}
+
+/// A font whose glyph 1 is the one contour of straight lines `glyph` has on master `m01` of
+/// `model`, hinted as an autohinted export hints it.
+pub fn autohinted(model: &fontcraft_model::Font, glyph: &str, options: &TtAutohintOptions) -> Vec<u8> {
+    use fontcraft_model::Shape;
+    let mut settings = crate::HintSettings::for_master(model, "m01").unwrap();
+    let measured = crate::prepare_settings(model, &mut settings, options);
+    let layer = model.glyph(glyph).unwrap().layer("m01").unwrap();
+    let Some(Shape::Path(path)) = layer.shapes.first() else { panic!("`{glyph}` has no path") };
+    let points: Vec<(i16, i16)> = path.nodes.iter().map(|n| (n.x as i16, n.y as i16)).collect();
+    let outline: Vec<_> = path.nodes.iter().map(|n| crate::OutlinePoint { x: n.x, y: n.y, on_curve: true }).collect();
+    let n = u16::try_from(points.len()).unwrap();
+    let map = crate::VecPointMap { paths: vec![(0..n).map(Some).collect()], count: n };
+    let control = crate::control::ControlInstructions::default();
+    let hints = crate::autohint_glyph(&crate::AutoGlyph {
+        glyph,
+        layer,
+        settings: &settings,
+        zones: None,
+        stems: None,
+        options,
+        control: &control,
+        points: Some(&map),
+        delta_column: None,
+    })
+    .unwrap();
+
+    let mut programs = crate::font_programs(&settings, &[], "m01").unwrap();
+    programs.fpgm.extend(crate::autohint_fpgm().unwrap());
+    let functions = fontcraft_ttasm::FunctionTable::from_fpgm(&programs.fpgm).unwrap();
+    programs.limits.merge(&fontcraft_ttasm::analyse(&programs.fpgm, &functions).unwrap());
+    let (cvt, prep) = crate::autohint_prep(options, &settings, &programs.layout, measured.x_height).unwrap();
+    programs.limits.merge(&fontcraft_ttasm::analyse(&prep, &functions).unwrap());
+    programs.cvt.extend(cvt);
+    programs.prep.extend(prep);
+    let program = crate::glyph_program(&crate::GlyphContext {
+        glyph,
+        instructions: &hints.instructions,
+        points: &map,
+        outline: crate::GlyphOutline { points: &outline, contour_ends: &[n - 1], advance: 1000.0 },
+        layout: &programs.layout,
+        functions: &functions,
+        settings: &settings,
+        zones: None,
+        stems: None,
+        delta_column: None,
+        auto_stems: true,
+    })
+    .unwrap();
+    font(&programs, &points, &program.bytes)
 }
 
 #[derive(Default)]
