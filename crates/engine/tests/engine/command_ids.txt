@@ -417,6 +417,8 @@ hoi.convertToHandles
 hoi.centerRotation
 hoi.setRotationDirection
 hoi.removeCurve
+glyph.setSourceActive
+view.showSourceInfluence
 font.instance.addForEachMaster
 font.instance.toMaster
 font.instance.addVariableFontSetting
@@ -699,6 +701,7 @@ capComponent.setFit
 capComponent.setGlyph
 capComponent.setScale
 capComponent.setAlignment
+component.setInstanceLocation
 segmentComponent.add
 segmentComponent.decompose
 segmentComponent.setGlyph
