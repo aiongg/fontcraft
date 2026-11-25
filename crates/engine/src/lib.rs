@@ -630,7 +630,7 @@ impl Session {
     }
 
     /// Sets the user's custom glyph data files (name, bytes), in order: the app reads them from
-    /// its settings folder. Malformed files are skipped; the problems are returned.
+    /// the `Info` folder of its settings folder ([`Session::load_user_info`]). Malformed files are skipped; the problems are returned.
     pub fn set_user_glyph_data(&mut self, files: &[(&str, &[u8])]) -> Vec<String> {
         let mut problems = Vec::new();
         let parsed = glyph_data::parse_files(files, &mut problems);

@@ -2676,10 +2676,11 @@ milestone = "M4"
 summary = "A user-supplied GlyphData.xml changes glyph properties for all files on the machine and can teach the app custom names, so that Unicode values and categories are still assigned automatically for them. Per-file overrides on individual glyphs remain possible on top."
 ref = "Font View › Names & Unicode › Glyph Info Database; Naming Glyphs"
 status = "handbook"
-notes = "crates/glyphdata reads custom files (GlyphData::with_custom): files later in the list win per record. The session merges the user's files (Session::set_user_glyph_data, given by the app) and the files beside the document's source (read by file.open); a malformed file is skipped and reported, the others still apply (crates/engine/src/glyph_data.rs). A custom file whose XML is broken is ignored (tutorial \"Roll your own glyph data\", glyphsapp.com/learn, updated 2022-08-08). Glyph data, groups and filters also load from the Info folder of the system-wide Application Support folder (4.0 release notes (\"What's new in Glyphs\", updates.glyphsapp.com/Glyphs4.0-4000.html), build 3837)."
+notes = "crates/glyphdata reads custom files (GlyphData::with_custom): files later in the list win per record. The session merges the user's files (GlyphData*.xml in the Info folder of the settings folder, read once at launch by Session::load_user_info) and the files beside the document's source (read by file.open); a malformed file is skipped and reported, the others still apply (crates/engine/src/glyph_data.rs). A custom file whose XML is broken is ignored (tutorial \"Roll your own glyph data\", glyphsapp.com/learn, updated 2022-08-08). Glyph data, groups and filters also load from the Info folder of the system-wide Application Support folder (4.0 release notes (\"What's new in Glyphs\", updates.glyphsapp.com/Glyphs4.0-4000.html), build 3837)."
 guesses = [
   "A custom record replaces the built-in record of the same name as a whole: fields it leaves out are empty, not taken from the built-in record. Settled by observation.",
   "A file over a limit (16 MB, 200,000 records, 1,024 bytes per attribute value, two levels of elements) or with an entity declaration is rejected as a whole, as a file with broken XML is (note); attributes the format does not define are skipped with a warning.",
+  "The user's files are read once, when the window opens; a changed file applies at the next launch. FontCraft reads no system-wide folder.",
   "Beside a source file and in the Info folder beside it, every file named GlyphData*.xml is read, in name order, those beside the file first; at most 32 files of the user's and 32 of a document's. The reference also reads the user's Info folder and, from 4.0 build 3837, a system-wide one; the order between several files is not documented.",
 ]
 observe = [
@@ -3357,7 +3358,7 @@ milestone = "M14"
 summary = "Extra entries for the Categories and Languages sections can be defined in a Groups.plist file placed in the application's Glyphs Info folder. The file format is described in another chapter."
 ref = "Font View › Filtering Font View › Custom Categories & Languages"
 status = "handbook"
-notes = "The desktop app reads every Groups*.plist in the Info folder of its settings folder (by name, at most 32 files of 4 MB, 4,096 entries in all, 8 levels of subGroup) and hands them to the engine (Session::set_user_groups); their entries follow the built-in ones. A file that cannot be read is skipped and reported at launch."
+notes = "The desktop app reads every Groups*.plist in the Info folder of its settings folder (by name, at most 32 files of 4 MB, 4,096 entries in all, 8 levels of subGroup) and hands them to the engine (Session::load_user_info); their entries follow the built-in ones. A file that cannot be read is skipped and reported at launch."
 
 [[behavior]]
 id = "fontView.filtersDoNotAffectOrder"

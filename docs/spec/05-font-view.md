@@ -781,9 +781,9 @@ FontCraft differs. Every guess left that the reference could settle has a step i
     `crates/glyphdata/src/order.rs`, which has no script, orders by code point and puts glyphs with
     a sort name last (`group: 2`) (`glyphOrder.default`).
 24. **The user's glyph data files.** **Answered (tutorial, release notes):** the user's Info folder
-    and, from build 3837, a system-wide one are read. Code change: nothing in `crates/ui` calls
-    `Session::set_user_glyph_data` (`crates/engine/src/lib.rs`), so only files beside the document
-    apply (`glyphData.customFile`).
+    and, from build 3837, a system-wide one are read. The window reads `GlyphData*.xml` and
+    `Groups*.plist` in the `Info` folder of its settings folder at launch
+    (`Session::load_user_info`, `glyphData.customFile`). FontCraft has no system-wide folder.
 25. **Features of the release notes without a row.** The detail view between grid and list
     (build 3831), the note as a tooltip (3835), the Unicode information popover (3841), the option
     that hides sidebar counts (3852), CJK blocks in the sidebar (3845), the smart filter rules

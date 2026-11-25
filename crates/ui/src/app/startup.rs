@@ -1,6 +1,6 @@
 //! What the desktop window sets up when it opens and keeps up while it runs, beside the UI.
 //!
-//! - [`open_extensions`]: the snippets folder and the extension folders (Modules and Macros) inside the settings
+//! - [`open_extensions`]: the user's glyph data and groups files, the snippets folder and the extension folders (Modules and Macros) inside the settings
 //!   folder, the module switches, and when the session started.
 //! - [`launch`]: what the window opens with. A file named on the command line opens with its display-string tabs; a
 //!   `fontcraft://show/` URL runs `url.show`. With neither, the Start Window shows while `start.showAtLaunch` is on,
@@ -41,7 +41,7 @@ pub struct FolderPoll {
 /// Where the snippets are kept inside the settings folder.
 pub const SNIPPETS_FOLDER: &str = "snippets";
 
-/// Sets the snippets folder and the extension folders inside the settings folder `dir`, notes when the session
+/// Reads the user's glyph data and groups from the `Info` folder of the settings folder `dir`, sets the snippets folder and the extension folders inside the settings folder `dir`, notes when the session
 /// started, and reads the module switches; `safe_mode` lists the modules but runs none. The folders are read by the
 /// first poll. Every problem goes to the log, the first to the status line.
 #[cfg(not(target_arch = "wasm32"))]
@@ -51,7 +51,8 @@ pub fn open_extensions(app: &mut FontCraftApp, dir: Option<&std::path::Path>, sa
     app.session.set_snippets_dir(dir.map(|d| d.join(SNIPPETS_FOLDER)));
     let started = SystemTime::now().duration_since(UNIX_EPOCH).ok().and_then(|d| i64::try_from(d.as_secs()).ok());
     app.session.extensions_mut().started_at = started;
-    let problems = fontcraft_engine::extensions::open_folders(app.session.extensions_mut(), dir, safe_mode);
+    let mut problems = dir.map(|d| app.session.load_user_info(d)).unwrap_or_default();
+    problems.extend(fontcraft_engine::extensions::open_folders(app.session.extensions_mut(), dir, safe_mode));
     report(app, &problems);
 }
 
