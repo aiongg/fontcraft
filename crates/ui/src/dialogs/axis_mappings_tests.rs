@@ -221,6 +221,56 @@ fn arrow_keys_move_the_selected_point_while_no_field_has_focus() {
     assert!(!posted.borrow().iter().any(|m| *m == nudge(0.0, 1.0)), "a focused field keeps the arrows: {:?}", posted.borrow());
 }
 
+/// Page Down, Page Up, Home and End select the graph's points and Delete removes one, with no pointer; a focused field
+/// keeps its keys, and the points are named for assistive technology.
+#[test]
+fn the_graphs_points_are_selected_and_removed_with_the_keyboard() {
+    let point = Rc::new(RefCell::new(None));
+    let posted = Rc::new(RefCell::new(Vec::new()));
+    let (seen, at) = (Rc::clone(&posted), Rc::clone(&point));
+    let mut drag = GraphDrag::default();
+    let mut fixture = Fixture::new(move |ui| {
+        let points = vec![(30.0, 30.0), (60.0, 80.0), (120.0, 120.0)];
+        let axes = vec![("wght".into(), "Weight".into())];
+        let model = AxisModel { setting: None, axes, axis: "wght".into(), points, point: *at.borrow() };
+        let mut sent = Vec::new();
+        view(ui, &model, &mut drag, &mut sent);
+        seen.borrow_mut().extend(sent);
+    });
+    fixture.settle();
+    let edit = |params: Value| Msg::Shell(craft::ui::runtime::commands::CommandRef::with_params(EDIT, params));
+    let remove = edit(json!({"command": "axisMappings.removePoint", "params": {}}));
+    fixture.key(Key::Delete, Modifiers::NONE).settle();
+    assert!(posted.borrow().is_empty(), "nothing is selected to remove: {:?}", posted.borrow());
+    for (from, key, to) in [
+        (None, Key::PageDown, Some(0)),
+        (Some(0), Key::PageDown, Some(1)),
+        (Some(1), Key::PageUp, Some(0)),
+        (Some(0), Key::PageUp, None),
+        (Some(0), Key::End, Some(2)),
+        (Some(2), Key::Home, Some(0)),
+    ] {
+        *point.borrow_mut() = from;
+        fixture.settle();
+        posted.borrow_mut().clear();
+        fixture.key(key, Modifiers::NONE).settle();
+        let expected: Vec<Msg> = to.map(|at| edit(json!({"point": at}))).into_iter().collect();
+        assert_eq!(*posted.borrow(), expected, "{key:?} from {from:?}");
+    }
+    *point.borrow_mut() = Some(1);
+    fixture.settle();
+    posted.borrow_mut().clear();
+    fixture.key(Key::Delete, Modifiers::NONE).settle();
+    assert_eq!(*posted.borrow(), vec![remove.clone()]);
+    assert!(fixture.by_label("Point 2").is_some(), "the second point is named");
+
+    let external = fixture.by_label("External Coordinate").expect("the External Coordinate field");
+    fixture.click(&external).settle();
+    posted.borrow_mut().clear();
+    fixture.key(Key::Backspace, Modifiers::NONE).settle();
+    assert!(!posted.borrow().contains(&remove), "a focused field keeps its keys: {:?}", posted.borrow());
+}
+
 /// In the graph a click on a point selects it, a click on the line adds a point there, and a drag moves a point's
 /// external value, posted once at the release.
 #[test]

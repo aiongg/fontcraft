@@ -23,6 +23,10 @@
 //! | a click on the graph's line | `{command: "axisMappings.addPoint", params: {internal}}`: where it was clicked, on the line |
 //! | a drag of a point in the graph | `{point}` at the press; `{command: "axisMappings.setPoint", params: {index, external}}` at the release, in whole units |
 //! | an arrow key while no field or list has focus | `{command: "axisMappings.nudgePoint", params: {dInternal, dExternal}}`: Up and Down the external value, Left and Right the internal one, by 1, 10 with Shift, 100 with Cmd |
+//! | Page Down, Page Up, Home, End while no field or list has focus | `{point}`: the next, the previous, the first, the last point |
+//! | Delete or Backspace while no field or list has focus | `{command: "axisMappings.removePoint"}` |
+//!
+//! The graph's points are named children of its node for assistive technology, with their coordinates.
 //!
 //! OK and Cancel post `axisMappings.closeDialog {confirm}`. `ui.inspect` reports the dialog under `axisMappings`.
 
@@ -43,8 +47,9 @@ use craft::ui::runtime::env::{Env, Label};
 use craft::ui::table::Table;
 use craft::ui::text::NumberField;
 use craft_ext::ui::display::{PicturePointer, PointerOnPicture as _};
+use craft_ext::ui::runtime::access::{Drawn, listening, report};
 use craft_ext::ui::runtime::keys::region_claims;
-use egui::{Color32, Id, Pos2, Rect, Shape, Stroke, Ui};
+use egui::{Color32, Id, Pos2, Rect, Shape, Stroke, Ui, Vec2};
 use fontcraft_engine::fontinfo::target;
 use fontcraft_model::Font;
 use fontcraft_model::axes::{AXIS_MAPPINGS, mapping};
@@ -98,6 +103,12 @@ const LIST_ROWS: u16 = 8;
 /// How far one arrow press moves the selected point: plain, with Shift, with Cmd (with or without Shift).
 const ARROW_STEPS: [(Mods, f64); 4] =
     [(Mods::NONE, 1.0), (Mods::SHIFT, 10.0), (Mods::CMD, 100.0), (Mods { cmd: true, ctrl: false, alt: false, shift: true }, 100.0)];
+/// The keys that select another point.
+const SELECT_KEYS: [Key; 4] = [Key::PageDown, Key::PageUp, Key::Home, Key::End];
+/// The keys that remove the selected point.
+const REMOVE_KEYS: [Key; 2] = [Key::Delete, Key::Backspace];
+/// Most points assistive technology is told of.
+const MAX_ACCESS_POINTS: usize = 1_000;
 /// The arrows and the way each moves the point: across (internal), up (external).
 const ARROWS: [(Key, f64, f64); 4] = [(Key::Up, 0.0, 1.0), (Key::Down, 0.0, -1.0), (Key::Right, 1.0, 0.0), (Key::Left, -1.0, 0.0)];
 
@@ -503,9 +514,25 @@ pub fn view(ui: &mut Ui, m: &AxisModel, drag: &mut GraphDrag, sent: &mut Vec<Msg
             Picture::painter(words.graph.clone(), ThumbAspect::SQUARE, move |cx, rect| paint(&cx.painter, cx.ink(), rect, &points, point, dragged))
                 .extent(PictureSize::Thumb(ThumbSize::Large))
                 .show(ui);
+        if listening(&shown) {
+            report(&shown, shown.rect, MAX_ACCESS_POINTS, drawn_points(&words, m, shown.rect));
+        }
         graph_pointer(&shown.pointer(ui), m, drag, sent);
     });
-    arrow_keys(ui, m, sent);
+    graph_keys(ui, m, sent);
+}
+
+/// The graph's points for assistive technology: each one's number, coordinates and place.
+fn drawn_points<'m>(words: &'m AxisMappingsWords, m: &'m AxisModel, rect: Rect) -> impl Iterator<Item = Drawn> + 'm {
+    let g = Graph::new(rect, &m.points);
+    let size = rect.width() * HIT_SHARE;
+    m.points.iter().enumerate().map(move |(at, point)| Drawn {
+        key: ("point", at, 0),
+        name: format!("{} {}", words.point.as_str(), at.saturating_add(1)),
+        value: Some(format!("{}, {}", number(point.1), number(point.0))),
+        rect: Rect::from_center_size(g.at(*point), Vec2::splat(size)),
+        selected: Some(m.point == Some(at)),
+    })
 }
 
 /// The arrow chords with the move each makes: `(chord, dInternal, dExternal)`.
@@ -516,16 +543,37 @@ fn arrow_chords() -> Vec<(Chord, f64, f64)> {
         .collect()
 }
 
-/// While a point is selected, the dialog claims the arrows that no field or list holds and moves the point with them.
-fn arrow_keys(ui: &Ui, m: &AxisModel, sent: &mut Vec<Msg>) {
-    if m.point.is_none_or(|at| at >= m.points.len()) {
-        return;
+/// The point `key` selects from the selected one; `None` for another key and for an axis without points.
+fn stepped(key: Key, points: usize, selected: Option<usize>) -> Option<usize> {
+    let last = points.checked_sub(1)?;
+    match (key, selected.filter(|at| *at <= last)) {
+        (Key::PageDown, Some(at)) => Some(at.saturating_add(1).min(last)),
+        (Key::PageUp, Some(at)) => Some(at.saturating_sub(1)),
+        (Key::PageDown | Key::Home, _) => Some(0),
+        (Key::PageUp | Key::End, _) => Some(last),
+        _ => None,
     }
+}
+
+/// The dialog claims the keys of the graph that no field or list holds: Page Up, Page Down, Home and End select a
+/// point; while one is selected, the arrows move it and Delete and Backspace remove it.
+fn graph_keys(ui: &Ui, m: &AxisModel, sent: &mut Vec<Msg>) {
     let moves = arrow_chords();
-    let chords: Vec<Chord> = moves.iter().map(|(chord, _, _)| *chord).collect();
+    let mut chords: Vec<Chord> = SELECT_KEYS.iter().map(|key| Chord::new(Mods::NONE, *key)).collect();
+    let selected = m.point.filter(|at| *at < m.points.len());
+    if selected.is_some() {
+        chords.extend(moves.iter().map(|(chord, _, _)| *chord));
+        chords.extend(REMOVE_KEYS.iter().map(|key| Chord::new(Mods::NONE, *key)));
+    }
     for chord in region_claims(ui.ctx(), Id::unique("fontcraftAxisMappings.arrows"), &chords) {
         if let Some((_, across, up)) = moves.iter().find(|(c, _, _)| *c == chord) {
             sent.push(post_edit("axisMappings.nudgePoint", json!({"dInternal": across, "dExternal": up})));
+        } else if let Some(key) = SELECT_KEYS.iter().find(|key| Chord::new(Mods::NONE, **key) == chord) {
+            if let Some(at) = stepped(*key, m.points.len(), selected).filter(|at| selected != Some(*at)) {
+                sent.push(post(json!({"point": at})));
+            }
+        } else if REMOVE_KEYS.iter().any(|key| Chord::new(Mods::NONE, *key) == chord) {
+            sent.push(post_edit("axisMappings.removePoint", json!({})));
         }
     }
 }

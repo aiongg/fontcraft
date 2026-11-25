@@ -861,7 +861,7 @@ mod tests {
     }
 
     fn execute(app: &mut FontCraftApp, params: Value) -> Result<Value, String> {
-        control::dispatch(app, "engine.execute", &json!({"command": ID, "params": params})).map_err(|e| format!("{e:?}"))
+        control::dispatch(app, "engine.execute", &json!({"command": ID, "params": params})).map_err(|e| e.to_string())
     }
 
     /// The command opens the dialog on the font's pages, changes them, and writes them as a PDF file.
