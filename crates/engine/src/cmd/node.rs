@@ -548,6 +548,11 @@ fn get_info(s: &mut Session, v: &Value) -> Result<Value> {
     Ok(Value::Object(out))
 }
 
+/// Moves the handle `h` of `path` by `d` as a drag does: smooth nodes stay smooth.
+pub(super) fn move_handle(path: &mut Path, h: usize, d: Vec2, step: f64) {
+    moving::move_path(path, &BTreeSet::from([h]), d, Mode::Normal, step);
+}
+
 // ── Node types and segments ─────────────────────────────────────────────────────────────────────
 
 fn toggle_node_type(s: &mut Session, v: &Value) -> Result<Value> {

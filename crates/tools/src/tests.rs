@@ -928,6 +928,22 @@ fn alt_on_lone_nodes_moves_only_them_and_a_selected_segment_still_duplicates() {
     assert!(copy.params.get("mode").is_none());
 }
 
+/// An implied node of a quadratic segment is grabbed with its two handles; Alt on the segment elsewhere reshapes it.
+#[test]
+fn an_implied_node_drags_its_two_handles() {
+    let mut layer = Layer::new("m01", 600.0);
+    let mut end = on(200.0, 0.0);
+    end.kind = NodeKind::QCurve;
+    layer.shapes.push(Shape::Path(Path::new(false, vec![on(0.0, 0.0), off(0.0, 100.0), off(200.0, 100.0), end])));
+    let mut h = Harness::new(layer);
+    let inv = modifier_drag(&mut h, (100.0, 100.0), (120.0, 130.0), NONE);
+    assert_eq!(h.selection, points(&[(0, 1), (0, 2)]));
+    assert_eq!((inv.id.as_str(), &inv.params["points"]), ("selection.move", &json!([[0, 1], [0, 2]])));
+    h.selection = Selection::new();
+    let inv = modifier_drag(&mut h, (25.0, 75.0), (20.0, 90.0), Modifiers::ALT);
+    assert_eq!((inv.id.as_str(), &inv.params["segment"]), ("path.reshapeSegment", &json!([0, 3])));
+}
+
 #[test]
 fn alt_on_a_curve_segment_reshapes_it() {
     let mut h = Harness::new(test_layer());

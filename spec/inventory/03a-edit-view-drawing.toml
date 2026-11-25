@@ -1134,6 +1134,27 @@ observe = [
 ]
 
 [[behavior]]
+id = "nodes.impliedOnCurve"
+area = "drawing"
+milestone = "M3"
+summary = "In a quadratic segment with several off-curve nodes, the implied node halfway between two of them shows and can be grabbed: a press selects its two handles and a drag moves both, so the implied node follows the pointer. A one-handle quadratic segment keeps both its smooth ends smooth when its handle, an end or a line beside it moves."
+ref = "Edit View › Moving Selected Nodes and Paths"
+status = "inferred"
+own = true
+notes = "Built in M3.54: `Hit::Implied` (the Select tool and the context menu only), drawn as a hollow handle (`canvas/paint/nodes.rs`), `Path::implied_nodes`. The one-handle rule is `keep_both_smooth` in crates/engine/src/cmd/node/moving.rs. Deleting a node between quadratic segments refits with one quadratic segment (builds 3848 and 3826 of the release notes name adding, removing and copying points of quadratic outlines without detail); Fit Curve refuses quadratic segments with a message."
+guesses = [
+  "Grabbing the implied node moves its two handles.",
+  "Where a smooth node lies between the only handles of two segments, it slides onto the line between them, dividing it as before; where the side beyond is a curve with another handle, that handle turns and keeps its length.",
+  "Between two straight sides, an only handle stays where their lines cross; with no crossing ahead of both, it stays in place.",
+  "Fit Curve leaves quadratic segments alone and says so, since its percentages describe cubic handles.",
+]
+observe = [
+  "In a TrueType outline with a segment of three off-curve points, press and drag the place halfway between two of them, and note what is selected and what moves.",
+  "Drag the off-curve point between two smooth on-curve nodes of a TrueType circle and note whether the nodes or the next off-curve points move.",
+  "Select an off-curve point of a TrueType outline and press a Fit Curve step: note whether anything changes.",
+]
+
+[[behavior]]
 id = "move.mirrorHandleAcrossSmoothNode"
 area = "drawing"
 milestone = "M3"
@@ -1158,7 +1179,7 @@ milestone = "M3"
 summary = "Dragging a segment moves its two end nodes together with their handles. Option-dragging a curve segment instead lengthens or shortens its handles along their existing angles, leaving the nodes in place."
 ref = "Edit View › Moving Selected Nodes and Paths"
 status = "handbook"
-notes = "Documented, not yet observed. M3.19: an Alt-drag that starts on a cubic segment selected alone runs path.reshapeSegment as one interaction; the segment's point under the pointer at the press follows the pointer. An Alt-drag on a line segment copies it (duplicate.optionDrag); an Alt-drag on a segment of a larger selection copies the selection."
+notes = "Documented, not yet observed. M3.19: an Alt-drag that starts on a cubic segment selected alone runs path.reshapeSegment as one interaction; the segment's point under the pointer at the press follows the pointer. An Alt-drag on a line segment copies it (duplicate.optionDrag); an Alt-drag on a segment of a larger selection copies the selection. M3.54: a quadratic segment is reshaped too: its first and last handles keep their directions, the handles between them move freely by the smallest change, and an only handle moves freely with the handles beyond its smooth ends following."
 guesses = [
   "The two handle lengths are solved so the grabbed point of the curve lands on the pointer (a 2x2 least-squares problem; with parallel handles, the smallest change that gets nearest); observing the curve under the pointer during an Option-drag would settle it.",
   "With nearly parallel handles the solve is damped, so the lengths change smoothly and the point may stop short of the pointer instead of the handles swinging by thousands of units; observing an Option-drag on a segment with almost parallel handles would settle it.",
@@ -1179,10 +1200,10 @@ kind = "engine"
 params = "{glyph: name, layer?: id, side?, segment: [shape, node], t: number, to: [x, y]} → {changed, selection}"
 area = "drawing"
 milestone = "M3"
-summary = "Changes the lengths of a cubic segment's two handles, keeping both end nodes and each handle's direction, so that the segment's point at t lands on a given position. It is what an Option-drag on a curve segment runs."
+summary = "Changes the lengths of a curve segment's first and last handles, keeping both end nodes and each handle's direction, so that the segment's point at t lands on a given position. It is what an Option-drag on a curve segment runs."
 ref = "Edit View › Moving Selected Nodes and Paths"
 status = "handbook"
-notes = "Documented gesture (move.dragSegment), not yet observed; the construction is ours. t runs from 0.01 to 0.99. A line segment is left as it is and returns changed: false; a quadratic segment is refused. The selection afterwards is the segment's two end nodes, as the press selected them."
+notes = "Documented gesture (move.dragSegment), not yet observed; the construction is ours. t runs from 0.01 to 0.99. A line segment is left as it is and returns changed: false; a quadratic segment is reshaped as move.dragSegment says. The selection afterwards is the segment's two end nodes, as the press selected them."
 guesses = [
   "A handle that lies on its node takes the direction towards the other handle, else towards the other end node.",
 ]

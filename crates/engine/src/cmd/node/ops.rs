@@ -534,8 +534,8 @@ pub(super) fn join(a: &Path, a_end: usize, b: &Path, b_end: usize, merge: bool) 
 }
 
 /// `edit.delete` on one path: removes the on-curve nodes of `selected` and refits the segments
-/// they joined into one; a curve segment that loses a handle (its end nodes kept) becomes a
-/// line. The handle of a smooth node that has a new line on its other side turns onto it. `None`
+/// they joined into one, quadratic when they were; a curve segment that loses a handle (its end
+/// nodes kept) becomes a line. A path of off-curve nodes only loses the nodes named. The handle of a smooth node that has a new line on its other side turns onto it. `None`
 /// when the path is to be removed: every node selected, or fewer than two on-curve nodes left.
 pub(super) fn delete_points(path: &Path, selected: &BTreeSet<usize>, step: f64) -> Result<Option<Path>, String> {
     if (0..path.nodes.len()).all(|i| selected.contains(&i)) {
@@ -543,6 +543,15 @@ pub(super) fn delete_points(path: &Path, selected: &BTreeSet<usize>, step: f64) 
     }
     let segs = path.segments();
     if segs.is_empty() {
+        if path.closed && path.nodes.iter().all(|n| !n.on_curve()) {
+            let mut out = path.clone();
+            let mut i = 0;
+            out.nodes.retain(|_| {
+                i += 1;
+                !selected.contains(&(i - 1))
+            });
+            return Ok((out.nodes.len() >= 2).then_some(out));
+        }
         return Ok((!selected.iter().any(|&i| on(path, i))).then(|| path.clone()));
     }
     let ons = on_curve_order(path, &segs);
@@ -581,8 +590,12 @@ pub(super) fn delete_points(path: &Path, selected: &BTreeSet<usize>, step: f64) 
                 if pieces.iter().all(|p| matches!(p, Piece::Line(_))) {
                     (Vec::new(), NodeKind::Line)
                 } else {
+                    let quadratic = !pieces.iter().any(|p| matches!(p, Piece::Cubic(_)));
                     match refit::fit(&pieces) {
-                        Some(c) => (vec![off(c.p1, step), off(c.p2, step)], NodeKind::Curve),
+                        Some(c) => match quadratic.then(|| refit::quadratic(c)).flatten() {
+                            Some(handles) => (handles.into_iter().map(|p| off(p, step)).collect(), NodeKind::QCurve),
+                            None => (vec![off(c.p1, step), off(c.p2, step)], NodeKind::Curve),
+                        },
                         None => (Vec::new(), NodeKind::Line),
                     }
                 }

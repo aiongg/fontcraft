@@ -4,7 +4,8 @@
 //! guides. Among points the nearest wins; at equal distance a node beats an anchor and an anchor
 //! beats a handle. [`hit_test_with_corners`], for the Select tool and the context menu, also
 //! counts a corner component's fitted outline with the segments: the nearer of the two wins, the
-//! corner at equal distance. Other tools act on the outline under a corner. The tolerance is in screen points, so it feels the same at every zoom.
+//! corner at equal distance. It also finds the implied nodes of quadratic segments, behind the other
+//! points. Other tools act on the outline under a corner or an implied node. The tolerance is in screen points, so it feels the same at every zoom.
 
 use fontcraft_geom::Point;
 use serde::Serialize;
@@ -53,6 +54,12 @@ pub enum Hit {
     Attachment {
         hint: usize,
     },
+    /// An implied node of a quadratic segment, by the off-curve nodes it lies halfway between.
+    Implied {
+        shape: usize,
+        before: usize,
+        after: usize,
+    },
 }
 
 /// A hit, where it is, and whether it may be moved.
@@ -67,7 +74,7 @@ pub struct HitResult {
 }
 
 impl HitResult {
-    /// The items a click on this hit selects: a segment selects its two end nodes.
+    /// The items a click on this hit selects: a segment selects its two end nodes, an implied node its two handles.
     pub fn items(&self) -> Vec<Item> {
         match &self.hit {
             Hit::Node { shape, node } | Hit::Handle { shape, node } => vec![Item::Point(*shape, *node)],
@@ -76,6 +83,7 @@ impl HitResult {
             Hit::Component { shape } => vec![Item::Shape(*shape)],
             Hit::Guide { guide } => vec![Item::Guide(*guide)],
             Hit::Attachment { hint } => vec![Item::Hint(*hint)],
+            Hit::Implied { shape, before, after } => vec![Item::Point(*shape, *before), Item::Point(*shape, *after)],
         }
     }
 
@@ -90,12 +98,12 @@ pub fn hit_test(scene: &Scene, view: &View, pos: Point, tolerance: f64) -> Optio
     hit(scene, view, pos, tolerance, false)
 }
 
-/// [`hit_test`] that also finds corner components ([`Hit::Attachment`]).
+/// [`hit_test`] that also finds corner components ([`Hit::Attachment`]) and implied nodes ([`Hit::Implied`]).
 pub fn hit_test_with_corners(scene: &Scene, view: &View, pos: Point, tolerance: f64) -> Option<HitResult> {
     hit(scene, view, pos, tolerance, true)
 }
 
-fn hit(scene: &Scene, view: &View, pos: Point, tolerance: f64, corners: bool) -> Option<HitResult> {
+fn hit(scene: &Scene, view: &View, pos: Point, tolerance: f64, selecting: bool) -> Option<HitResult> {
     if !finite(pos) {
         return None;
     }
@@ -127,6 +135,14 @@ fn hit(scene: &Scene, view: &View, pos: Point, tolerance: f64, corners: bool) ->
                 consider(dist(p, pos), 2, HitResult { hit: Hit::Handle { shape, node }, at: p, locked });
             }
         }
+        if selecting {
+            for ((before, after), p) in path.implied_nodes() {
+                let locked = path_locked || [before, after].iter().any(|&i| path.nodes.get(i).is_none_or(|n| n.locked));
+                if finite(p) {
+                    consider(dist(p, pos), 3, HitResult { hit: Hit::Implied { shape, before, after }, at: p, locked });
+                }
+            }
+        }
     }
     for a in &scene.layer.anchors {
         let p = Point::new(a.x, a.y);
@@ -153,7 +169,7 @@ fn hit(scene: &Scene, view: &View, pos: Point, tolerance: f64, corners: bool) ->
             }
         }
     }
-    if corners
+    if selecting
         && let Some((hint, d, at)) = crate::attachment::nearest(scene, pos, tol)
         && nearest.as_ref().is_none_or(|(sd, _)| d <= *sd)
     {

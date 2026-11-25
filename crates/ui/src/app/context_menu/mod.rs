@@ -592,8 +592,12 @@ fn instructor_steps(app: &FontCraftApp, id: &str) -> Option<Vec<Msg>> {
 pub fn kinds(scene: &Scene, selection: &Selection, hit: Option<&HitResult>) -> Vec<&'static str> {
     let whole = tools::targets::selected_paths(scene, selection);
     let object = match hit.map(|h| &h.hit) {
-        Some(Hit::Node { shape, .. } | Hit::Handle { shape, .. } | Hit::Segment { shape, .. }) if whole.contains(shape) => Some(PATH),
-        Some(Hit::Node { .. } | Hit::Handle { .. }) => Some(NODE),
+        Some(Hit::Node { shape, .. } | Hit::Handle { shape, .. } | Hit::Implied { shape, .. } | Hit::Segment { shape, .. })
+            if whole.contains(shape) =>
+        {
+            Some(PATH)
+        }
+        Some(Hit::Node { .. } | Hit::Handle { .. } | Hit::Implied { .. }) => Some(NODE),
         Some(Hit::Segment { .. }) => Some(SEGMENT),
         Some(Hit::Anchor { .. }) => Some(ANCHOR),
         Some(Hit::Component { .. }) => Some(COMPONENT),

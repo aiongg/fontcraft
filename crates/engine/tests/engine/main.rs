@@ -158,6 +158,7 @@ mod plugins;
 mod preview_instances;
 mod projects;
 mod proof;
+mod quadratic_edit;
 mod realign;
 mod registry;
 mod selections;

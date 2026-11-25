@@ -213,7 +213,7 @@ struct Reshape {
 }
 
 impl Reshape {
-    /// The reshape for a press on `hit`, when it is an unlocked cubic segment.
+    /// The reshape for a press on `hit`, when it is an unlocked curve segment.
     fn press(scene: &Scene, hit: &HitResult, down: Point) -> Option<Self> {
         let Hit::Segment { shape, node, t, line: false, .. } = hit.hit else { return None };
         if hit.locked || scene.locked {
@@ -221,8 +221,12 @@ impl Reshape {
         }
         let path = scene.path(shape)?;
         let seg = path.segment_ending_at(node)?;
-        let cubic = seg.handles.len() == 2 && path.nodes.get(node).is_some_and(|n| n.kind == fontcraft_model::NodeKind::Curve);
-        if !cubic || !t.is_finite() {
+        let curve = path.nodes.get(node).is_some_and(|n| match n.kind {
+            fontcraft_model::NodeKind::Curve => seg.handles.len() == 2,
+            fontcraft_model::NodeKind::QCurve => !seg.handles.is_empty(),
+            _ => false,
+        });
+        if !curve || !t.is_finite() {
             return None;
         }
         let t = t.clamp(RESHAPE_MIN_T, 1.0 - RESHAPE_MIN_T);
@@ -343,7 +347,7 @@ impl SelectTool {
             out.push(Action::Select { selection: selection.clone() });
         }
         let grab = match hit.hit {
-            Hit::Node { .. } | Hit::Handle { .. } | Hit::Anchor { .. } => hit.at,
+            Hit::Node { .. } | Hit::Handle { .. } | Hit::Implied { .. } | Hit::Anchor { .. } => hit.at,
             _ => ev.pos,
         };
         // A knob dragged with other objects selected moves them all, and so does a guide that Shift
@@ -548,7 +552,7 @@ impl SelectTool {
                 params.insert("points".into(), json!([[shape, node]]));
                 out.push(Action::Run { invocation: Invocation::new(id, Value::Object(params)) });
             }
-            Hit::Segment { shape, .. } => out.push(Action::Select { selection: path_points(cx.scene, shape) }),
+            Hit::Segment { shape, .. } | Hit::Implied { shape, .. } => out.push(Action::Select { selection: path_points(cx.scene, shape) }),
             Hit::Component { shape } if !ev.mods.shift => {
                 out.push(Action::Run { invocation: Invocation::new("component.editBaseGlyph", json!({"component": shape})) });
             }
