@@ -154,6 +154,7 @@ mod autokern;
 mod autospace;
 mod autotrace;
 mod cid;
+mod component_instance;
 mod construction;
 mod corner;
 mod corner_helpers;
@@ -496,6 +497,7 @@ pub const COMMAND_TABLES: &[CommandTable] = &[
     power_guides::specs,
     status::specs,
     attach_cap::specs,
+    component_instance::specs,
     attach_segment::specs,
     export_profiles::specs,
     view_export::specs,

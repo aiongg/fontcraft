@@ -1232,14 +1232,24 @@ label = "Select Component Instance"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?, layer?, component: componentRef, location?: {axisTag: number}, layerName?: string}"
+params = "{glyph, layer?, component?: index (default the layer's only component), location?: {axisTag: design coordinate}, layerName?: master or layer, by name or id}"
 area = "components"
 milestone = "M13"
 summary = "Points a component at an interpolated instance of its source glyph instead of the current master: a location on the font axes or on axes private to the source glyph. Omitting both location and layerName resets it to follow the current layer. Fontra documents the same idea as variable components driven by glyph axes."
 ref = "FontLab 8 What's new › Families & variation (Select component instance; Custom glyph axes); Fontra how-to › Designing with variable components"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M9 to M13 by the M9 planning pass: a secondary-reference feature beyond the primary reference, as the M3 and M6 passes moved such rows (owner decision, docs/plans/M3.md § 7, question 3)."
+notes = "Moved from M9 to M13 by the M9 planning pass: a secondary-reference feature beyond the primary reference, as the M3 and M6 passes moved such rows (owner decision, docs/plans/M3.md § 7, question 3). Built as M6.24: the pin is the component's `masterId`, the location its user data `com.fontcraft.componentLocation`; outlines, previews of masters and exports read both (crates/model/src/pinned.rs). The location interpolates the base glyph's master layers and intermediate layers, drawn with their components. Axes private to the source glyph are the smart properties of a smart glyph, set with the component's smart values."
+guesses = [
+  "Export writes a component with a location or a pin as outlines, on every layer of the glyph, in all formats; building such a glyph in the secondary reference and reading its tables settles it.",
+  "A location is in design coordinates, leaves the axes it does not name at the layer's master, extrapolates beyond the masters, and takes precedence over a pinned layer; the secondary reference settles it.",
+  "An empty location takes only the location away and an empty layerName only the pin, since omitting both takes both away; the command is our own form of a dialog.",
+  "A smart component is drawn by its smart values, so a location on one is refused.",
+  "Anchors and automatic alignment follow the layer the component reads (its pin, else its own layer), not the location; the secondary reference settles it.",
+]
+observe = [
+  "Place a component, select an instance for it between two masters, and note where its anchors and the composite's sidebearings go.",
+]
 
 [[command]]
 id = "anchor.removeExpressions"

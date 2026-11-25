@@ -57,7 +57,11 @@ Input: the source model plus export options. Output: a list of errors and warnin
   unless the subset switch is off, as fontmake's `--no-subset` ignores them.
 - Source preparation, before the master is resolved, as both references do when they load a
   source: corner components are fitted into their paths, then smart components are drawn as
-  outlines (`fontcraft_compile::prepare_source`). A layer whose corners cannot be fitted, or a
+  outlines (`fontcraft_compile::prepare_source`). FontCraft then writes components pinned to
+  another master or layer (`masterId`) as the paths they draw, on every layer of the glyph, since
+  a composite refers to its base glyph at the same location; both references ignore the pin. The
+  two paths of a corner on an extra node become one outline before the corner is fitted; fontc
+  reads the first two numbers of such a corner's origin and fits it on that node. A layer whose corners cannot be fitted, or a
   smart component that cannot be interpolated, is written as it is, with a warning.
 - Glyphs-style pre-steps when the source enables them: erase open corners, propagate anchors;
   propagation precedes any flattening (`compile.glyphsOutlinePreSteps`). Propagation reads the

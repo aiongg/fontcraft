@@ -361,6 +361,14 @@ impl Component {
     pub fn affine(&self) -> Affine {
         self.transform.affine()
     }
+
+    /// The layer of its base glyph the component is pinned to (`master_id`): the master layer of
+    /// that master, or the layer with that id. `None` for a component that follows the layer it
+    /// is on, and for one pinned to a layer the base glyph does not have.
+    pub fn pinned_layer<'g>(&self, base: &'g Glyph) -> Option<&'g Layer> {
+        let id = self.info.master_id.as_deref()?;
+        base.layer(id).or_else(|| base.layers.iter().find(|l| l.id == id))
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

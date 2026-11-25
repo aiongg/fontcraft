@@ -390,6 +390,18 @@ impl Font {
                         if !transform.as_coeffs().iter().all(|v| v.is_finite()) {
                             return Err(bad("a component transform is not a number".into()));
                         }
+                        // A composite cannot refer to another master's drawing.
+                        if crate::pinned::is_redirected(self, c, layer)
+                            && let Ok(paths) = crate::pinned::component_paths(self, c, &master.id)
+                        {
+                            for p in paths {
+                                let contour = p.to_contour().map_err(bad)?;
+                                if !contour.elements().is_empty() {
+                                    out.contours.push(contour);
+                                }
+                            }
+                            continue;
+                        }
                         out.components.push(ResolvedComponent { base: c.glyph.clone(), transform });
                     }
                     Shape::Image(_) => {}

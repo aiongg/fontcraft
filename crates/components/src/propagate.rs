@@ -443,7 +443,7 @@ impl<'a> Run<'a> {
         for (i, &(shape, comp)) in comps.iter().enumerate() {
             let Some(base) = self.glyph(&comp.glyph) else { continue };
             let Some(base_layer) = base_layer(base, layer, comp) else { continue };
-            let master = comp.info.master_id.as_deref().unwrap_or(&layer.master);
+            let master = comp.pinned_layer(base).map_or(layer.master.as_str(), |l| l.master.as_str());
             let (smart, poles_height) = self.smart_anchors(&g.name, base, comp, master, depth)?;
             height = height.max(poles_height);
             let inherited = match smart {
@@ -628,11 +628,10 @@ fn move_through(glyph: &str, comp: &Component, index: usize, inherited: &[Effect
 }
 
 /// The layer of `base` that the component `c` on `layer` reads, for propagation and alignment
-/// alike: the master layer of the component's own master when it names one, else the layer with
+/// alike: the layer the component is pinned to ([`Component::pinned_layer`]), else the layer with
 /// the same id, else the master layer of `layer`'s master.
 pub fn base_layer<'g>(base: &'g Glyph, layer: &Layer, c: &Component) -> Option<&'g Layer> {
-    let pinned = c.info.master_id.as_deref().and_then(|m| base.layer(m));
-    pinned.or_else(|| base.layers.iter().find(|l| l.id == layer.id)).or_else(|| base.layer(&layer.master))
+    c.pinned_layer(base).or_else(|| base.layers.iter().find(|l| l.id == layer.id)).or_else(|| base.layer(&layer.master))
 }
 
 /// A layer's anchors as stored.

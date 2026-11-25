@@ -342,7 +342,8 @@ neither cannot be resized by its bounding box.
 
 - `cornerComponent.add`: select a node → context menu Add Corner Component → picker
   (`dialog.cornerPicker`) → Return.
-- Extra nodes at path intersections also accept corners (`corner.extraNodesAcceptCorners`).
+- Extra nodes at path intersections also accept corners (`corner.extraNodesAcceptCorners`). Such
+  a corner is fitted on the outline of its two paths with their overlap removed.
 - Displayed with a faint blue background; click / Shift-click to select; Delete removes
   (`corner.highlightAndSelection`).
 - Copy a selected corner and paste it onto other selected nodes (`corner.copyPasteOntoNodes`).
