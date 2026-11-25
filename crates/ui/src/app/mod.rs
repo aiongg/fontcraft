@@ -22,6 +22,8 @@ mod msg;
 mod notices;
 pub mod open;
 pub mod preview_host;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod print_host;
 pub mod sidebar;
 pub mod startup;
 pub mod user_store;
@@ -253,6 +255,11 @@ pub struct FontCraftApp {
     pub frame_hook: Option<Box<dyn preview_host::FrameHook>>,
     /// The web server for the TrueType preview page; `None` where no port can be opened.
     pub preview_host: Option<Box<dyn preview_host::PreviewHost>>,
+    /// The Print dialog (`dialogs::print`).
+    pub printing: crate::dialogs::print::PrintState,
+    /// The system's print service; `None` in tests, which print nothing.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub print_host: Option<Arc<dyn print_host::PrintHost>>,
     /// Where the user's settings are kept between runs; `None` keeps nothing (tests, the browser).
     pub user_store: Option<Box<dyn user_store::UserStore>>,
     /// The window's layout as the store has it; `None` until the store is read.
@@ -332,6 +339,9 @@ impl FontCraftApp {
             picks: Picks::default(),
             frame_hook: None,
             preview_host: None,
+            printing: Default::default(),
+            #[cfg(not(target_arch = "wasm32"))]
+            print_host: None,
             user_store: None,
             kept_layout: None,
             opener: craft_ext::platform::open::Opener::NONE,

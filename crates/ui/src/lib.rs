@@ -41,6 +41,8 @@ pub struct Options {
     pub frame_hook: Option<MakeFrameHook>,
     /// The web server for the TrueType preview page.
     pub preview_host: Option<Box<dyn app::preview_host::PreviewHost>>,
+    /// The system's print service.
+    pub print_host: Option<std::sync::Arc<dyn app::print_host::PrintHost>>,
     /// Where the user's settings are kept between runs (the settings folder).
     pub user_store: Option<Box<dyn app::user_store::UserStore>>,
     /// Opens web links and shows files in the file manager (`Opener::system()` on the desktop).
@@ -113,6 +115,7 @@ pub fn open_window(ctx: &egui::Context, options: Options) -> FontCraftApp {
     app.control.roots = options.roots;
     app.frame_hook = options.frame_hook.map(|make| make(ctx));
     app.preview_host = options.preview_host;
+    app.print_host = options.print_host;
     app.user_store = options.user_store;
     app::user_store::load(&mut app);
     app::startup::open_extensions(&mut app, options.settings_dir.as_deref(), options.safe_mode);

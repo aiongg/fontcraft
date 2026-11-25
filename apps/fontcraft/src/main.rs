@@ -15,7 +15,7 @@
 //! they change ([`user_files`]; `FONTCRAFT_SETTINGS_DIR` replaces the folder); the window's place, the snippets and the
 //! extension folders (Modules and Macros) are in it too. The engine gets the system clock for Last Changed stamps. The PDF a drawing app puts on
 //! the clipboard is read off the window's thread for a paste on the canvas ([`clipboard`]). The Extension Manager's
-//! HTTPS downloads are [`net`].
+//! HTTPS downloads are [`net`]. File › Print… prints through the system's queue ([`spooler`]).
 #![forbid(unsafe_code)]
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -30,6 +30,8 @@ mod net;
 mod preview_server;
 #[cfg(not(target_arch = "wasm32"))]
 mod settings_file;
+#[cfg(not(target_arch = "wasm32"))]
+mod spooler;
 #[cfg(not(target_arch = "wasm32"))]
 mod user_files;
 
@@ -188,6 +190,7 @@ fn desktop(options: fontcraft_ui::Options) -> fontcraft_ui::Options {
     fontcraft_ui::Options {
         frame_hook: Some(frame_hook),
         preview_host: Some(Box::new(preview_server::Host::default())),
+        print_host: Some(std::sync::Arc::new(spooler::Spooler)),
         user_store: Some(Box::new(user_files::UserFiles::in_settings_folder())),
         opener: fontcraft_ui::Opener::system(),
         clipboard_reader: Some(fontcraft_ui::app::clipboard::system_text),

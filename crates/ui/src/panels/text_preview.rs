@@ -34,9 +34,10 @@ use craft::ui::runtime::commands::CommandRef;
 use craft::ui::runtime::env::{Env, Label};
 use craft::ui::style::TypeRole;
 use craft::ui::text::TextField;
+use craft_ext::ui::runtime::access::{Drawn, listening, report};
 use craft_ext::ui::text::{FieldSelection as _, TextSelection};
 use egui::{Align2, Color32, ColorImage, FontId, Pos2, Rect, Sense, TextureOptions, Ui, pos2, vec2};
-use fontcraft_geom::{Affine, BezPath};
+use fontcraft_geom::{Affine, BezPath, Shape as _};
 use fontcraft_render::color::composite;
 use fontcraft_render::{Style, render_path};
 use serde_json::{Value, json};
@@ -50,6 +51,8 @@ use crate::shell::text_preview::{Area, BaseDirection, FIELD_LIMIT, MAX_QUERY_CHA
 const FIELD_LINES: usize = 3;
 /// The line length moves in whole steps of this many points, so resizing lays the text out again only now and then.
 const SPAN_STEP: f32 = 8.0;
+/// Most drawn glyphs assistive technology is told of.
+const MAX_ACCESS_GLYPHS: usize = 2_000;
 
 craft::ui::words! {
     /// The words of the Text Preview.
@@ -412,6 +415,9 @@ fn area(ui: &mut Ui, model: &TextPreviewModel, words: &TextPreviewWords, selecti
         for c in page.fallback.iter().filter(|c| lines.contains(&c.line)) {
             painter.text(place.screen(c.x, c.y), Align2::CENTER_CENTER, c.c, FontId::proportional(model.size as f32), fallback);
         }
+        if listening(&response) {
+            report(&response, visible, MAX_ACCESS_GLYPHS, drawn_glyphs(page, place, lines));
+        }
         context_menu(ui, model, words, selection, &response, sent);
     });
     if let Some((first, last)) = seen {
@@ -421,6 +427,17 @@ fn area(ui: &mut Ui, model: &TextPreviewModel, words: &TextPreviewWords, selecti
             report(model, wanted, sent);
         }
     }
+}
+
+/// The glyphs drawn on `lines`, for assistive technology, each at its outline; a glyph without one is left out.
+fn drawn_glyphs(page: &Page, place: Placement, lines: std::ops::Range<usize>) -> impl Iterator<Item = Drawn> + '_ {
+    let to_screen = place.affine();
+    page.glyphs.iter().enumerate().filter(move |(_, g)| lines.contains(&g.line)).filter_map(move |(at, g)| {
+        let path = page.outlines.paths.get(&g.name).filter(|path| !path.elements().is_empty())?;
+        let b = (to_screen * Affine::translate((g.x, g.y))).transform_rect_bbox(path.bounding_box());
+        let rect = Rect::from_min_max(pos2(b.x0 as f32, b.y0 as f32), pos2(b.x1 as f32, b.y1 as f32));
+        Some(Drawn { key: ("glyph", at, 0), name: g.name.to_string(), value: None, rect, selected: None })
+    })
 }
 
 /// Posts the area when it differs from what the projection read, so an area the projection cannot cover is not

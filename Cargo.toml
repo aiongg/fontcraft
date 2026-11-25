@@ -60,9 +60,6 @@ fontcraft-io-pdf = { path = "crates/io-pdf" }
 # The Craft suite's shared libraries (MIT OR Apache-2.0), pinned to one commit of craft-libs.
 # Bump the rev in its own commit, with the gate (docs/decisions/0008-shared-suite-libraries.md).
 craft-atomic = { git = "https://github.com/storytold/craft-libs", rev = "e9546e191dd62f2bc1d61eca45dbdc2f1b3c1d8e" }
-# The system print spooler (CUPS on macOS and Linux, the XPS print API on Windows), for printing
-# PDF proofs (M12.36).
-craft-print = { git = "https://github.com/storytold/craft-libs", rev = "e9546e191dd62f2bc1d61eca45dbdc2f1b3c1d8e" }
 # The craft framework through its facade (`craft::ui::…`), for `fontcraft-ui`. The egui and winit
 # `[patch.crates-io]` below must equal `craft::egui_fork::REV` at this rev.
 craft = { git = "https://github.com/storytold/craft-libs", rev = "4bd0107b9215e2903069b98debd9316e2a9238ae", default-features = false }

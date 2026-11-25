@@ -149,7 +149,7 @@ Settled by standing rules, so no package waits on them:
 - Invisible open corners are erased at export where fontmake erases them.
 - Clipboard flavours come through native crates on Windows and macOS (X.pdf3); Linux keeps the clipboard tools
   unless a crate carries custom media types.
-- Printing uses craft-ui's print panel after M14.9 (decision 0008).
+- Printing uses the suite's print panel (decision 0008; M13.67).
 - The control channel's element list uses AccessKit.
 - Webfont Only and the switch that disables automatic behaviour follow the handbook, with guesses recorded.
 - No update or crash-report service: it would be hosted.

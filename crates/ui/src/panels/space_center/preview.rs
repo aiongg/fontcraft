@@ -21,6 +21,7 @@ use craft::ui::canvas::{Canvas, ToolHost, canvas_space, tool_pass};
 use craft::ui::contract::{Bind, ShowContainer as _};
 use craft::ui::runtime::commands::CommandRef;
 use craft::ui::runtime::env::Env;
+use craft_ext::ui::runtime::access::{Drawn, listening, report};
 use egui::{Color32, FontId, Painter, Pos2, Rect, Shape, Stroke, Ui, pos2, vec2};
 use serde_json::json;
 
@@ -167,7 +168,7 @@ pub fn show(
             .document(Size::new(f64::from(content.width()), f64::from(content.height())));
         let mut reply = None;
         let tool = &mut *tool;
-        let _ = canvas.show(ui, |ui, body| {
+        let shown = canvas.show(ui, |ui, body| {
             let Some(space) = canvas_space(&Env::of(ui).view()) else { return };
             let clip = space.view.rect;
             let painter = ui.painter_at(clip);
@@ -181,6 +182,9 @@ pub fn show(
                 reply = Some(ToolHost::new().run(ui, &pass, &mut *tool));
             }
         });
+        if listening(&shown.response) {
+            report(&shown.response, shown.response.rect, MAX_BOXES, drawn_glyphs(model, tool.frame()));
+        }
         if let Some(moved) = reply.and_then(|r| r.view) {
             *view = moved;
         }
@@ -194,6 +198,25 @@ pub fn show(
             sent.push(message);
         }
     }
+}
+
+/// The preview's glyphs with a matrix column, for assistive technology: each one's name, its width and whether its
+/// column is selected.
+fn drawn_glyphs<'m>(model: &'m SpaceCenterModel, frame: &'m PreviewFrame) -> impl Iterator<Item = Drawn> + 'm {
+    frame.boxes.iter().enumerate().filter_map(|(at, b)| {
+        let column = model.columns.get(b.column)?;
+        let corner = |x: f64, y: f64| {
+            let p = frame.to_screen * Point::new(x, y);
+            pos2(p.x as f32, p.y as f32)
+        };
+        Some(Drawn {
+            key: ("glyph", at, 0),
+            name: column.glyph.to_string(),
+            value: column.width.map(|w| w.to_string()),
+            rect: Rect::from_two_pos(corner(b.left, b.top), corner(b.right, b.bottom)),
+            selected: Some(frame.selected == Some(b.column)),
+        })
+    })
 }
 
 /// The message an edit of the preview's tool posts, with the glyph and layers of its matrix column.
