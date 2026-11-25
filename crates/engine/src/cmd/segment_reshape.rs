@@ -188,7 +188,8 @@ fn solve_quadratic(p0: Point, old: &[Point], p3: Point, t: f64, to: Point, step:
     let b = after.and_then(at).map_or(p3, |q| c.midpoint(q));
     let current = a.to_vec2() * (mt * mt) + c.to_vec2() * (2.0 * s * mt) + b.to_vec2() * (s * s);
     let r = to.to_vec2() - current;
-    if !(r.hypot() > EPS) {
+    let off = r.hypot();
+    if off.is_nan() || off <= EPS {
         return Some(old.to_vec());
     }
     // How much the point moves with each handle near it.

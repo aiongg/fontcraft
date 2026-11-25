@@ -204,7 +204,7 @@ pub fn steps(menu: &GlyphMenu, action: &GlyphAction) -> Vec<Msg> {
             if let Some(layer) = menu.main_master.as_ref().filter(|_| *id != "hint.ps.clearGlyphHints") {
                 m.insert("layer".into(), json!(layer));
             }
-            vec![Msg::run(*id, Value::Object(m))]
+            vec![Msg::run(id, Value::Object(m))]
         }
     }
 }

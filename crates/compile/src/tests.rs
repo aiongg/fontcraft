@@ -1691,7 +1691,7 @@ fn vertical_kerning_is_exported_as_vkrn() {
     let mut seen = Vec::new();
     for record in scripts.script_records() {
         let lang = record.script(scripts.offset_data()).unwrap().default_lang_sys().unwrap().unwrap();
-        let has_vkrn = lang.feature_indices().iter().any(|i| features.feature_records()[usize::from(i.get())].feature_tag().to_string() == "vkrn");
+        let has_vkrn = lang.feature_indices().iter().any(|i| features.feature_records()[usize::from(i.get())].feature_tag() == "vkrn");
         seen.push((record.script_tag().to_string(), has_vkrn));
     }
     assert!(seen.iter().all(|(tag, vkrn)| *vkrn && tag != "~fc~") && seen.iter().any(|(tag, _)| tag == "latn"), "{seen:?}");

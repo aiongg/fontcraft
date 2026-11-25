@@ -179,13 +179,16 @@ struct KeptTargets {
 }
 
 /// The features area's session slot.
+/// By document id: the revision checked and the one asked about, and the answer.
+type TargetAnswers = Arc<Mutex<HashMap<u64, ((u64, u64), bool)>>>;
+
 #[derive(Default)]
 struct FeaturesSlot {
     states: HashMap<u64, Arc<FeatureState>>,
     /// The last check of every target of each document.
     targets: HashMap<u64, KeptTargets>,
     /// Whether a document's check still describes it, by document id: for (revision checked, revision asked about).
-    target_answers: Arc<Mutex<HashMap<u64, ((u64, u64), bool)>>>,
+    target_answers: TargetAnswers,
     /// The last compile done ahead of `font.features.compile`.
     ahead: Option<Arc<AheadCompile>>,
     preview_builds: PreviewBuilds,

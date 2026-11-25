@@ -84,6 +84,9 @@ enum Place {
     Location(Vec<u64>),
 }
 
+/// The place of a view with colour layers and the glyphs it was asked for.
+type ColorViewKey = (Place, Vec<String>);
+
 /// The interpolation cache of one document.
 #[derive(Default)]
 pub struct InterpCache {
@@ -113,7 +116,7 @@ pub struct InterpCache {
     /// Location views, oldest first, by the location's bits and the glyphs they were asked for.
     location_views: VecDeque<(LocationKey, Arc<Font>)>,
     /// The instance and location views with colour layers ([`Place`]), oldest first.
-    color_views: VecDeque<((Place, Vec<String>), Arc<Font>)>,
+    color_views: VecDeque<(ColorViewKey, Arc<Font>)>,
     models: ModelCache,
 }
 

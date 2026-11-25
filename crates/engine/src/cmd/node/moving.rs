@@ -262,7 +262,7 @@ fn keep_both_smooth(path: &Path, j: usize, ends: [End; 2], selected: &BTreeSet<u
         let d = offset(new, j);
         (d - offset(new, k)).hypot() > SAME || (d - offset(new, o)).hypot() > SAME
     };
-    let (straight, curved): (Vec<(usize, usize)>, Vec<(usize, usize)>) =
+    let (straight, curved): (Vec<_>, Vec<_>) =
         ends.iter().filter_map(|&(k, o)| Some((k, o?))).filter(|&(k, _)| smooth(k)).partition(|&(_, o)| on(path, o));
     // The straight sides: the end's place and the direction its handle points in.
     let line = |&(k, o): &(usize, usize)| {
@@ -272,9 +272,9 @@ fn keep_both_smooth(path: &Path, j: usize, ends: [End; 2], selected: &BTreeSet<u
     };
     let lines: Vec<(Point, Vec2)> =
         if straight.iter().any(|&(k, o)| bent(new, k, o)) { straight.iter().filter_map(line).collect() } else { Vec::new() };
-    let place = match lines.as_slice() {
-        &[(p, u)] => Some(p + u * (at(new, j) - p).dot(u).max(0.0)),
-        &[(p, u), (q, v)] => {
+    let place = match *lines.as_slice() {
+        [(p, u)] => Some(p + u * (at(new, j) - p).dot(u).max(0.0)),
+        [(p, u), (q, v)] => {
             // p + s·u = q + r·v, ahead of both ends.
             let cross = u.cross(v);
             let (s, r) = ((q - p).cross(v) / cross, (q - p).cross(u) / cross);

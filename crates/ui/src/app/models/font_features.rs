@@ -396,7 +396,7 @@ fn diagnostic_list(r: &Value, key: &str) -> Vec<(Option<EntryKey>, DiagnosticMod
     let list = r.get(key).and_then(Value::as_array).map(Vec::as_slice).unwrap_or_default();
     list.iter()
         .take(MAX_DIAGNOSTICS)
-        .filter_map(|d| {
+        .map(|d| {
             let model = DiagnosticModel {
                 id: d.get("id").and_then(Value::as_u64).unwrap_or(u64::MAX),
                 error: d.get("severity").and_then(Value::as_str) == Some("error"),
@@ -405,7 +405,7 @@ fn diagnostic_list(r: &Value, key: &str) -> Vec<(Option<EntryKey>, DiagnosticMod
                 range: byte_range(d.get("range")),
                 fixes: strings(d.get("fixes")).into_iter().take(MAX_FIXES).collect(),
             };
-            Some((d.get("entry").and_then(EntryKey::from_json), model))
+            (d.get("entry").and_then(EntryKey::from_json), model)
         })
         .collect()
 }

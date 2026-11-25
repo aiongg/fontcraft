@@ -175,8 +175,13 @@ mod tests {
 
     #[test]
     fn each_markdown_form_is_found_within_its_line() {
-        let spans =
-            |text: &str| highlight(text).into_iter().filter(|(_, f)| *f != Form::Mark).map(|(r, f)| (text[r].to_string(), f)).collect::<Vec<_>>();
+        let spans = |text: &str| {
+            highlight(text)
+                .into_iter()
+                .filter(|(_, f)| *f != Form::Mark)
+                .map(|(r, f)| (text.get(r).unwrap_or_default().to_string(), f))
+                .collect::<Vec<_>>()
+        };
         let one = |text: &str, inner: &str, form: Form| assert_eq!(spans(text), [(inner.to_string(), form)], "{text}");
         one("## Head *no*", " Head *no*", Form::Heading);
         one("é *it*", "it", Form::Italic);

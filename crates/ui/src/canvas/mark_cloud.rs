@@ -139,7 +139,7 @@ fn parts(app: &FontCraftApp, key: &Key, cache: &mut CloudCache) -> Option<Vec<Cl
         items.extend(others.take(MAX_ITEMS));
     }
     // The places of the selected anchors on each glyph, by name and layer, with the shape each shows.
-    let mut placed: HashMap<(&str, &str), Vec<([f64; 2], Arc<MarkShape>)>> = HashMap::new();
+    let mut placed: HashMap<(&str, &str), Vec<Placed>> = HashMap::new();
     let mut out = Vec::new();
     for (item, glyph, layer) in items {
         let on = placed.entry((glyph, layer)).or_insert_with(|| clouds_on(font, &data, glyph, layer, key, &master, &mut cache.shapes));
@@ -148,16 +148,11 @@ fn parts(app: &FontCraftApp, key: &Key, cache: &mut CloudCache) -> Option<Vec<Cl
     Some(out)
 }
 
+/// Where a mark goes and the shape it shows.
+type Placed = ([f64; 2], Arc<MarkShape>);
+
 /// The selected anchors that layer `layer` of `glyph` has, with the marks that attach at each.
-fn clouds_on(
-    font: &Font,
-    data: &GlyphData,
-    glyph: &str,
-    layer: &str,
-    key: &Key,
-    master: &str,
-    shapes: &mut Shapes,
-) -> Vec<([f64; 2], Arc<MarkShape>)> {
+fn clouds_on(font: &Font, data: &GlyphData, glyph: &str, layer: &str, key: &Key, master: &str, shapes: &mut Shapes) -> Vec<Placed> {
     let Ok(anchors) = effective_anchors_with(font, Some(data), glyph, layer) else { return Vec::new() };
     let mut listed: Option<Option<Vec<String>>> = None;
     let mut out = Vec::new();

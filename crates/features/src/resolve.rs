@@ -312,10 +312,10 @@ pub(crate) fn kern_pairs(req: &KernRequest, vertical: bool, budget: &mut Budget,
         gids.entry(g.name).or_insert(GlyphId16::new(id));
     }
 
+    type Side = fn(&str) -> Option<KernGroup>;
     let rtl_glyphs = if vertical { HashSet::new() } else { glyphs_with_rtl_kerning(req, budget)? };
     let groups = if vertical { vertical_groups(req) } else { derive_kern_groups(req, &rtl_glyphs) };
-    let (first_side, second_side): (fn(&str) -> Option<KernGroup>, fn(&str) -> Option<KernGroup>) =
-        if vertical { (upper_side, lower_side) } else { (first_side, second_side) };
+    let (first_side, second_side): (Side, Side) = if vertical { (upper_side, lower_side) } else { (first_side, second_side) };
     let directions: &[(Direction, bool)] =
         if vertical { &[(Direction::Vertical, false)] } else { &[(Direction::Ltr, false), (Direction::Rtl, true)] };
 

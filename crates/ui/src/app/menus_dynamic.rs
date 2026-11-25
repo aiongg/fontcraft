@@ -252,7 +252,7 @@ mod tests {
         assert_eq!(Value::Object(macro_targets(&[targets])), json!({"glyphs": ["A"], "layers": ["m01"]}));
         let only = json!({"glyphs": ["A", "B"], "layer": "m01"});
         let Value::Object(only) = only else { panic!() };
-        assert_eq!(Value::Object(macro_targets(&[only.clone()])), json!({"glyphs": ["A", "B"]}));
+        assert_eq!(Value::Object(macro_targets(std::slice::from_ref(&only))), json!({"glyphs": ["A", "B"]}));
         let more = json!({"glyphs": ["B", "C"], "layer": "m02"});
         let Value::Object(more) = more else { panic!() };
         assert_eq!(Value::Object(macro_targets(&[only, more])), json!({"glyphs": ["A", "B", "C"]}));

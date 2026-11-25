@@ -377,9 +377,11 @@ pub fn master_pairs(font: &Font, source: &Font) -> Vec<MasterPair> {
     font.masters.iter().enumerate().filter_map(pair).collect()
 }
 
-/// What the window pairs masters from: the pairs and the source's masters (id and name) for `params` of
-/// `path.assignBackground`.
-pub fn assign_masters(s: &Session, params: &Value) -> Result<(Vec<MasterPair>, Vec<(String, String)>)> {
+/// The id and name of each master of a source.
+pub type SourceMasters = Vec<(String, String)>;
+
+/// What the window pairs masters from: the pairs and the source's masters for `params` of `path.assignBackground`.
+pub fn assign_masters(s: &Session, params: &Value) -> Result<(Vec<MasterPair>, SourceMasters)> {
     let p = Params::new("path.assignBackground", params)?;
     let source = assign_source(s, &p)?;
     let masters = source.masters.iter().map(|m| (m.id.clone(), m.name.clone())).collect();

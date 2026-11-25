@@ -228,10 +228,13 @@ struct Conflict {
     entries: Vec<usize>,
 }
 
+/// What two entries may not share: the field, whether a variable font, and the value as compared.
+type NameKey = (&'static str, bool, String);
+
 /// The conflicts of each active entry. Files of one kind land in one folder, so their names may not differ in case
 /// alone; a variable font may share its PostScript name with a static one.
 fn conflicts(entries: &[Entry]) -> HashMap<usize, Vec<Conflict>> {
-    let mut taken: HashMap<(&'static str, bool, String), Vec<(usize, String)>> = HashMap::new();
+    let mut taken: HashMap<NameKey, Vec<(usize, String)>> = HashMap::new();
     for e in entries.iter().filter(|e| e.active && e.error.is_none()) {
         let folder = e.folder.as_deref().unwrap_or_default();
         let file = if folder.is_empty() { e.file_name.clone() } else { format!("{folder}/{}", e.file_name) };

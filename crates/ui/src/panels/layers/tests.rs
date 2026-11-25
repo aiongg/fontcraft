@@ -193,7 +193,7 @@ fn the_font_view_selection_shares_rows_and_changes_together() {
     // `two` has an id of its own in each glyph.
     let two = app.models.layers.all[1].id.clone();
     shell(&mut app, "layers.select", json!({"layer": two}));
-    assert_eq!(app.models.layers.selection, [two.clone()]);
+    assert_eq!(app.models.layers.selection, std::slice::from_ref(&two));
     assert!(app.view.layers.layers.is_empty(), "a click in Font View picks the row only");
     press(&mut app, "Delete Layer");
     assert_eq!((layers(&app, "A"), layers(&app, "B")), (5, 2));

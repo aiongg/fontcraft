@@ -44,7 +44,7 @@ pub fn window_commands() -> Vec<WindowCommand> {
     let numbered = numbered_keys::all();
     // The first of a numbered series is listed with the series.
     let scoped = SCOPED_KEYS.iter().filter(|(id, _)| !numbered.iter().any(|n| n.command.id == *id));
-    out.extend(scoped.map(|(id, key)| fixed((*id).to_string(), find(id).map_or(*id, |(_, c)| c.label), AREA_SECTION, *key)));
+    out.extend(scoped.map(|(id, key)| fixed((*id).to_string(), find(id).map_or(*id, |(_, c)| c.label), AREA_SECTION, key)));
     out.extend(numbered.iter().map(|n| fixed(n.command.id.clone(), &n.label, AREA_SECTION, &n.shortcut)));
     out
 }
