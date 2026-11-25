@@ -25,7 +25,7 @@
 
 use fontcraft_geom::variation::VariationModel;
 use fontcraft_hinting::settings::family_tt_zones;
-use fontcraft_hinting::{HintSettings, TtZone, autohint_prep, control_values, drop_unmeasured_zones};
+use fontcraft_hinting::{HintSettings, TtZone, autohint_prep, control_values, prepare_settings};
 use fontcraft_model::Font;
 use write_fonts::tables::cvar::{Cvar, CvtDeltas};
 
@@ -71,7 +71,7 @@ fn master_values(source: &Font, master: &str, options: &Options, win_metrics: (f
         let Some(auto) = AutoSetup::new(&settings, &mut Vec::new()) else {
             return Ok(None);
         };
-        let measured = drop_unmeasured_zones(source, &mut settings);
+        let measured = prepare_settings(source, &mut settings, &auto.options);
         if auto.options.windows_compatibility {
             let (ascent, descent) = win_metrics;
             for (name, position, size) in [("winAscent", ascent, 1.0), ("winDescent", -descent, -1.0)] {

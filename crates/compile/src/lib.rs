@@ -576,7 +576,8 @@ pub(crate) fn glyph_stages(
     let glyphs = preflight::run(std::mem::take(&mut resolved.glyphs), warnings)?;
     let glyphs = order::final_order(glyphs, resolved, warnings)?;
     let mut expansion = Expansion::new(MAX_EXPANDED_ELEMENTS);
-    components_opt::apply(font, resolved, glyphs, flavour, &options.components, &mut expansion, warnings)
+    let components = tt_hints::component_options(font, resolved, flavour, options);
+    components_opt::apply(font, resolved, glyphs, flavour, &components, &mut expansion, warnings)
 }
 
 pub(crate) fn compile_stages_with(
@@ -617,7 +618,8 @@ pub(crate) fn compile_stages_with(
     let error =
         if options.conversion_error.is_finite() && options.conversion_error > 0.0 { options.conversion_error } else { DEFAULT_CONVERSION_ERROR };
     let mut expansion = Expansion::new(MAX_EXPANDED_ELEMENTS);
-    let glyphs = components_opt::apply(font, &resolved, glyphs, flavour, &options.components, &mut expansion, &mut warnings)?;
+    let components = tt_hints::component_options(font, &resolved, flavour, options);
+    let glyphs = components_opt::apply(font, &resolved, glyphs, flavour, &components, &mut expansion, &mut warnings)?;
     let settings = outline::Settings {
         flavour,
         tolerance: upm * error,

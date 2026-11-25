@@ -61,6 +61,9 @@ pub const FN_ZONE_DISTANCE: u8 = 8;
 pub const FN_TRIPLE: u8 = 9;
 /// Functions `fpgm` defines.
 pub const FUNCTION_COUNT: u16 = 10;
+/// The stem function the autohinter adds after them ([`crate::tt_auto::autohint_fpgm`]): origin,
+/// target, stem width entry (−1: none).
+pub const FN_AUTO_STEM: u8 = 10;
 
 /// Storage set by `prep`: 1 when overshoots show at this size.
 pub const S_SHOW_OVERSHOOTS: u8 = 0;
@@ -72,7 +75,7 @@ pub const S_GDI: u8 = 2;
 const S_WIDTH: u8 = 3;
 const S_FIT: u8 = 4;
 const S_MODE: u8 = 5;
-const S_NEGATIVE: u8 = 6;
+pub(crate) const S_NEGATIVE: u8 = 6;
 // Locals of `FN_TRIPLE`.
 const S_LO2: u8 = 7;
 const S_HI2: u8 = 8;

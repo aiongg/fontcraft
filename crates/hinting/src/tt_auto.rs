@@ -31,6 +31,9 @@
 //! IUP, in eighths of a pixel ([`AutoHints::shifts`], [`shift_program`]); `nodir` points are
 //! never instructed.
 //!
+//! The Stems compile to calls of the autohinter's own stem function ([`autohint_fpgm`]), which
+//! takes the width by the stem width mode (natural, quantized or strong) of the rendering target.
+//!
 //! `prep` ([`autohint_prep`]) scales the zones so the x-height lands on the pixel grid, and
 //! switches the glyph programs off above the hinting limit. At export the `xHeight` and
 //! `capHeight` zones apply only when the font draws a letter ttfautohint measures its zones on
@@ -66,6 +69,17 @@ pub enum StemWidthMode {
     #[default]
     Quantized,
     Strong,
+}
+
+impl StemWidthMode {
+    /// The mode's number in [`S_STEM_MODE`].
+    fn number(self) -> u8 {
+        match self {
+            StemWidthMode::Natural => 0,
+            StemWidthMode::Quantized => 1,
+            StemWidthMode::Strong => 2,
+        }
+    }
 }
 
 /// The TTFAutohint options, with ttfautohint 1.8's defaults where the handbook gives none.
@@ -123,16 +137,11 @@ impl Default for TtAutohintOptions {
 }
 
 /// The options our autohinter has no use for: accepted, checked and reported as ignored.
-const IGNORED_OPTIONS: [&str; 15] = [
-    "hinting-range-min",
-    "hinting-range-max",
+const IGNORED_OPTIONS: [&str; 10] = [
     "adjust-subglyphs",
-    "composites",
     "default-script",
     "fallback-script",
     "fallback-scaling",
-    "stem-width-mode",
-    "ignore-restrictions",
     "reference",
     "reference-index",
     "family-suffix",
@@ -283,13 +292,7 @@ impl TtAutohintOptions {
                 "ignore-restrictions" => o.ignore_restrictions = true,
                 _ => {}
             }
-            let reported = if matches!(name, "pre-hinting") {
-                "adjust-subglyphs"
-            } else if name == "strong-stem-width" {
-                "stem-width-mode"
-            } else {
-                name
-            };
+            let reported = if matches!(name, "pre-hinting") { "adjust-subglyphs" } else { name };
             if IGNORED_OPTIONS.contains(&reported) && !ignored.iter().any(|i| i == reported) {
                 ignored.push(reported.to_string());
             }
@@ -307,6 +310,17 @@ impl TtAutohintOptions {
             return Err(bad("no-info and detailed-info exclude each other".into()));
         }
         Ok((o, ignored))
+    }
+
+    /// The options given that act only on an autohinted export, not on the instructions the
+    /// commands store.
+    pub fn export_only(&self) -> Vec<String> {
+        let d = Self::default();
+        [(self.stem_width_mode != d.stem_width_mode, "stem-width-mode"), (self.hint_composites, "composites")]
+            .into_iter()
+            .filter(|(on, _)| *on)
+            .map(|(_, name)| name.to_string())
+            .collect()
     }
 
     /// The options that differ from the defaults, as long options, which
@@ -394,7 +408,8 @@ pub fn snapping_exceptions(text: &str) -> Result<Vec<(u16, u16)>, String> {
 
 /// What the autohinter adds to `prep` after our own program ([`crate::font_programs`]): the
 /// zones rounded as ttfautohint rounds them, with the x-height scaling when the master has an
-/// `xHeight` zone, and the hinting limit (glyph programs off above it).
+/// `xHeight` zone, the stem width mode of the rendering target ([`S_STEM_MODE`]), and the hinting
+/// limit (glyph programs off above it).
 ///
 /// X-height scaling, as the ttfautohint manual describes it and its output on our test fonts
 /// shows: the top of the `xHeight` zone, overshoot included, is rounded to the pixel grid with a
@@ -419,7 +434,7 @@ pub fn autohint_prep(
     scale_x_height: bool,
 ) -> Result<(Vec<i16>, Vec<u8>), HintingError> {
     use std::fmt::Write;
-    let mut t = String::new();
+    let mut t = stem_mode_program(options);
     let mut cvt = Vec::new();
     let exceptions = snapping_exceptions(&options.x_height_snapping_exceptions)
         .map_err(|message| HintingError::BadParameter { name: "TTFAutohint options".into(), message })?;
@@ -429,16 +444,194 @@ pub fn autohint_prep(
     if options.hinting_limit > 0 {
         let _ = writeln!(t, "MPPEM[ ]\nPUSH {}\nGT[ ]\nIF[ ]\nPUSH 1 1\nINSTCTRL[ ]\nEIF[ ]", options.hinting_limit.min(MAX_OPTION_PPM));
     }
-    if t.is_empty() {
-        return Ok((cvt, Vec::new()));
-    }
     Ok((cvt, fontcraft_ttasm::assemble(&t)?))
+}
+
+/// The `prep` text that stores the stem width mode of the rendering target: the grayscale mode
+/// without ClearType, else the GDI or the DirectWrite ClearType mode.
+fn stem_mode_program(options: &TtAutohintOptions) -> String {
+    use crate::tt_font::S_GDI;
+    let [gray, gdi, dw] = options.stem_width_mode.map(StemWidthMode::number);
+    format!(
+        "; stem width mode\nPUSH {S_STEM_MODE} 64\nGETINFO[ ]\nPUSH 0\nGT[ ]\nIF[ ]\nPUSH {S_GDI}\nRS[ ]\nIF[ ]\nPUSH {gdi}\nELSE[ ]\nPUSH {dw}\nEIF[ ]\nELSE[ ]\nPUSH {gray}\nEIF[ ]\nWS[ ]\n"
+    )
+}
+
+/// What an autohinted build adds to `fpgm` after our own functions: [`FN_AUTO_STEM`], which puts a
+/// stem's target at its distance from the origin by the stem width mode. The distance and the
+/// standard width (the TT stem the instruction uses) are first scaled by the x-height factor.
+///
+/// The rules are fitted to the bar heights ttfautohint 1.8.4 gives synthetic fonts of one standard
+/// width, at 9 to 100 PPM and widths of 0.1 to 15 pixels; its manual describes the modes only in
+/// words. With `d` the distance and `s` the standard width, in pixels:
+///
+/// * natural: `d`.
+/// * quantized: `d` when `s` is under 5/8; else `d` raised to 7/8, then `s` (at least 3/4) within
+///   5/8 of it; else, under 3 pixels, the whole part of `d` plus 5/32 (a fraction from 5/32 to
+///   1/2) or 27/32 (from 1/2 to 27/32), other fractions kept; from 3 pixels up `d` rounded.
+/// * strong: the rounded `s` when `d` lies within 3/4 of it, else `d` rounded; at least 1.
+pub fn autohint_fpgm() -> Result<Vec<u8>, HintingError> {
+    use crate::tt_font::{FN_AUTO_STEM, S_NEGATIVE};
+    let scale = format!(
+        "PUSH {S_X_FITTED}\nRS[ ]\nPUSH {S_X_SCALED}\nRS[ ]\nNEQ[ ]\nIF[ ]\nPUSH {S_X_FITTED}\nRS[ ]\nMUL[ ]\nPUSH {S_X_SCALED}\nRS[ ]\nDIV[ ]\nEIF[ ]"
+    );
+    let std = format!("PUSH {S_STEM_STANDARD}\nRS[ ]");
+    let (strong, quantized) = (StemWidthMode::Strong.number(), StemWidthMode::Quantized.number());
+    Ok(fontcraft_ttasm::assemble(&format!(
+        "\
+; {FN_AUTO_STEM}: origin target width
+PUSH {FN_AUTO_STEM}
+FDEF[ ]
+DUP[ ]
+PUSH 0
+GTEQ[ ]
+IF[ ]
+RCVT[ ]
+ABS[ ]
+{scale}
+EIF[ ]
+PUSH {S_STEM_STANDARD}
+SWAP[ ]
+WS[ ]
+; the original distance, its sign and size
+DUP[ ]
+GC[1]
+PUSH 3
+CINDEX[ ]
+GC[1]
+SUB[ ]
+DUP[ ]
+PUSH 0
+LT[ ]
+PUSH {S_NEGATIVE}
+SWAP[ ]
+WS[ ]
+ABS[ ]
+{scale}
+PUSH {S_STEM_MODE}
+RS[ ]
+PUSH {strong}
+EQ[ ]
+IF[ ]
+DUP[ ]
+{std}
+PUSH 0
+GTEQ[ ]
+IF[ ]
+POP[ ]
+{std}
+PUSH 32
+ADD[ ]
+FLOOR[ ]
+DUP[ ]
+PUSH 3
+CINDEX[ ]
+SUB[ ]
+ABS[ ]
+PUSH 48
+GTEQ[ ]
+IF[ ]
+POP[ ]
+DUP[ ]
+EIF[ ]
+EIF[ ]
+SWAP[ ]
+POP[ ]
+PUSH 32
+ADD[ ]
+FLOOR[ ]
+PUSH 64
+MAX[ ]
+EIF[ ]
+PUSH {S_STEM_MODE}
+RS[ ]
+PUSH {quantized}
+EQ[ ]
+{std}
+PUSH 0
+LT[ ]
+{std}
+PUSH 40
+GTEQ[ ]
+OR[ ]
+AND[ ]
+IF[ ]
+PUSH 56
+MAX[ ]
+DUP[ ]
+{std}
+SUB[ ]
+ABS[ ]
+PUSH 40
+LT[ ]
+{std}
+PUSH 0
+GTEQ[ ]
+AND[ ]
+IF[ ]
+POP[ ]
+{std}
+PUSH 48
+MAX[ ]
+ELSE[ ]
+DUP[ ]
+PUSH 192
+LT[ ]
+IF[ ]
+; the whole part, then the fraction
+DUP[ ]
+FLOOR[ ]
+SWAP[ ]
+PUSH 2
+CINDEX[ ]
+SUB[ ]
+DUP[ ]
+PUSH 10
+GT[ ]
+PUSH 2
+CINDEX[ ]
+PUSH 54
+LT[ ]
+AND[ ]
+IF[ ]
+PUSH 32
+LT[ ]
+IF[ ]
+PUSH 10
+ELSE[ ]
+PUSH 54
+EIF[ ]
+EIF[ ]
+ADD[ ]
+ELSE[ ]
+PUSH 32
+ADD[ ]
+FLOOR[ ]
+EIF[ ]
+EIF[ ]
+EIF[ ]
+PUSH {S_NEGATIVE}
+RS[ ]
+IF[ ]
+NEG[ ]
+EIF[ ]
+ROLL[ ]
+SRP0[ ]
+MSIRP[0]
+ENDF[ ]
+"
+    ))?)
 }
 
 /// Storage written by [`autohint_prep`]: the top of the x-height zone at this size, unrounded,
 /// and its rounded row (26.6 pixels).
 pub const S_X_SCALED: u8 = 11;
 pub const S_X_FITTED: u8 = 12;
+/// Storage written by [`autohint_prep`]: the stem width mode of the rendering target
+/// ([`StemWidthMode::number`]).
+pub const S_STEM_MODE: u8 = 13;
+/// A local of the autohinter's stem function ([`autohint_fpgm`]).
+const S_STEM_STANDARD: u8 = 14;
 /// What the x-height zone's scaled top gets added before it is floored to a row: 5/8 of a pixel,
 /// and 13/16 from 6 PPM up to the x-height increase limit (26.6).
 const X_HEIGHT_ROUND_UP: i32 = 40;
@@ -612,6 +805,48 @@ pub fn drop_unmeasured_zones(font: &Font, settings: &mut HintSettings) -> Measur
     }
     settings.tt_zones.retain(|z| !gone.contains(&z.name));
     MeasuredZones { left_out: gone, x_height: !lower.is_empty() }
+}
+
+/// Prepares `settings` for an autohinted build: leaves out the zones without letters
+/// ([`drop_unmeasured_zones`]) and, when the master has no horizontal TT stem, adds one of the
+/// standard width ([`standard_stem`]). Every master of a variable font gets the same entries.
+pub fn prepare_settings(font: &Font, settings: &mut HintSettings, options: &TtAutohintOptions) -> MeasuredZones {
+    let measured = drop_unmeasured_zones(font, settings);
+    if !settings.tt_stems.iter().any(|s| s.horizontal && s.size.is_finite() && s.size > 0.0) {
+        let size = standard_stem(font, settings, options);
+        settings.tt_stems.push(crate::TtStem { name: "autohint standard".into(), horizontal: true, size, ..Default::default() });
+    }
+    measured
+}
+
+/// The standard horizontal stem width of a master without one, as the ttfautohint manual derives
+/// it: the width of the thinnest horizontal stem of `o`; without a drawn `o`, and for a symbol
+/// font, the fallback stem width (by default 50 units at 2048 units per em).
+fn standard_stem(font: &Font, settings: &HintSettings, options: &TtAutohintOptions) -> f64 {
+    let fallback = options.fallback_stem_width.map_or((f64::from(font.units_per_em) * 50.0 / 2048.0).round(), f64::from);
+    let fallback = if fallback.is_finite() && fallback >= 1.0 { fallback } else { 1.0 };
+    if options.symbol {
+        return fallback;
+    }
+    let measured = || -> Option<f64> {
+        let g = font.glyphs.iter().find(|g| g.unicodes.contains(&u32::from('o')))?;
+        let layer = g.layer(&settings.master)?;
+        let control = ControlInstructions::default();
+        let input = AutoGlyph {
+            glyph: &g.name,
+            layer,
+            settings,
+            zones: None,
+            stems: Some(&[]),
+            options,
+            control: &control,
+            points: None,
+            delta_column: None,
+        };
+        let (edges, _) = ps_stems(&input, &[], &mut Vec::new());
+        edges.iter().map(|(lo, hi)| (hi - lo).round()).filter(|w| *w >= 1.0 && w.is_finite()).reduce(f64::min)
+    };
+    measured().unwrap_or(fallback)
 }
 
 /// The highest point where a segment of `outline` starts or ends; `None` without segments.
@@ -1272,7 +1507,9 @@ mod tests {
             TtAutohintOptions::parse("--hinting-limit=120 -x 0 --x-height-snapping-exceptions 8-9,12 -W -t --stem-width-mode=nnn -c -H50").unwrap();
         assert_eq!((o.hinting_limit, o.increase_x_height, o.fallback_stem_width), (120, 0, Some(50)));
         assert!(o.windows_compatibility && o.ttfa_table && o.hint_composites);
-        assert_eq!(ignored, ["stem-width-mode", "composites"]);
+        assert!(ignored.is_empty(), "{ignored:?}");
+        assert_eq!(o.export_only(), ["stem-width-mode", "composites"]);
+        assert_eq!(TtAutohintOptions::parse("-p -i -l 10 -r 20 -D grek").unwrap().1, ["adjust-subglyphs", "default-script"]);
         assert_eq!(TtAutohintOptions::parse(&o.to_text()).unwrap().0, o, "{}", o.to_text());
         assert_eq!(TtAutohintOptions::default().to_text(), "");
         assert_eq!(snapping_exceptions("-").unwrap(), [(1, MAX_OPTION_PPM)]);
@@ -1455,5 +1692,35 @@ mod tests {
         }
         assert_eq!(top("C", 520.0, 12), 6.0);
         assert_eq!(top("x", 520.0, 12), 7.0);
+    }
+
+    /// The height in pixels of an E's bar on the baseline, `width` units thick, with a standard
+    /// width of 80. The font has no x-height letter, so nothing is scaled.
+    fn bar(width: f64, modes: &str, ppem: u16, target: tt::Target) -> f32 {
+        use fontcraft_model::{Node, NodeKind, Path};
+        let mut font = Font::new("Bars");
+        let n = |x, y| Node::new(x, y, NodeKind::Line);
+        let e = vec![n(50.0, 0.0), n(550.0, 0.0), n(550.0, width), n(200.0, width), n(200.0, 700.0), n(50.0, 700.0)];
+        font.glyph_mut("E").unwrap().layer_mut("m01").unwrap().shapes = vec![Shape::Path(Path::new(true, e))];
+        let options = TtAutohintOptions::parse(&format!("--symbol --fallback-stem-width=80 --stem-width-mode={modes}")).unwrap().0;
+        let y = tt::hinted_y(&tt::autohinted(&font, "E", &options), ppem, target);
+        y[2] - y[0]
+    }
+
+    #[test]
+    fn stem_widths_follow_the_mode_of_the_rendering_target_as_ttfautohints_do() {
+        let near = |got: f32, want: f32, what: &str| assert!((got - want).abs() <= 1.0 / 32.0, "{what}: {got}, not {want}");
+        // ttfautohint 1.8.4's bar heights for a standard width of 80 at 20 PPM (1.6 pixels).
+        for (width, natural, quantized, strong) in
+            [(40.0, 0.80, 0.875, 1.0), (60.0, 1.20, 1.60, 1.0), (70.0, 1.40, 1.60, 2.0), (120.0, 2.40, 2.16, 2.0), (150.0, 3.0, 3.0, 3.0)]
+        {
+            for (modes, want) in [("nnn", natural), ("qqq", quantized), ("sss", strong)] {
+                near(bar(width, modes, 20, tt::grayscale()), want, &format!("{width} units, {modes}"));
+            }
+        }
+        // Grayscale without ClearType, GDI ClearType, DirectWrite ClearType.
+        near(bar(80.0, "snn", 20, tt::mono()), 2.0, "the first letter");
+        near(bar(80.0, "nsn", 20, tt::gdi()), 2.0, "the second letter");
+        near(bar(80.0, "nns", 20, tt::grayscale()), 2.0, "the third letter");
     }
 }

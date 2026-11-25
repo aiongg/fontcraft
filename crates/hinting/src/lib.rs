@@ -67,7 +67,7 @@ pub use replay::{TouchedState, unmet_needs};
 pub use settings::{DeltaDir, Deltas, HintSettings, PsZone, TtStem, TtZone};
 pub use tt::{Direction, Rounding, StemRef, TtInstruction, TtKind, ZoneRef, set_tt_instructions, tt_instructions};
 pub use tt_auto::{
-    AutoGlyph, AutoHints, MeasuredZones, PointShift, TtAutohintOptions, autohint_glyph, autohint_prep, autohint_tt, drop_unmeasured_zones,
+    AutoGlyph, AutoHints, MeasuredZones, PointShift, TtAutohintOptions, autohint_fpgm, autohint_glyph, autohint_prep, autohint_tt, drop_unmeasured_zones, prepare_settings,
     shift_program, shifts_as_deltas,
 };
 pub use tt_font::{CvtLayout, FontPrograms, control_values, font_programs};

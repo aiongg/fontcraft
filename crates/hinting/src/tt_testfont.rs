@@ -106,7 +106,7 @@ pub fn font(programs: &FontPrograms, points: &[(i16, i16)], glyph_program: &[u8]
 pub fn autohinted(model: &fontcraft_model::Font, glyph: &str, options: &TtAutohintOptions) -> Vec<u8> {
     use fontcraft_model::Shape;
     let mut settings = crate::HintSettings::for_master(model, "m01").unwrap();
-    let measured = crate::drop_unmeasured_zones(model, &mut settings);
+    let measured = crate::prepare_settings(model, &mut settings, options);
     let layer = model.glyph(glyph).unwrap().layer("m01").unwrap();
     let Some(Shape::Path(path)) = layer.shapes.first() else { panic!("`{glyph}` has no path") };
     let points: Vec<(i16, i16)> = path.nodes.iter().map(|n| (n.x as i16, n.y as i16)).collect();
@@ -128,7 +128,9 @@ pub fn autohinted(model: &fontcraft_model::Font, glyph: &str, options: &TtAutohi
     .unwrap();
 
     let mut programs = crate::font_programs(&settings, &[], "m01").unwrap();
+    programs.fpgm.extend(crate::autohint_fpgm().unwrap());
     let functions = fontcraft_ttasm::FunctionTable::from_fpgm(&programs.fpgm).unwrap();
+    programs.limits.merge(&fontcraft_ttasm::analyse(&programs.fpgm, &functions).unwrap());
     let (cvt, prep) = crate::autohint_prep(options, &settings, &programs.layout, measured.x_height).unwrap();
     programs.limits.merge(&fontcraft_ttasm::analyse(&prep, &functions).unwrap());
     programs.cvt.extend(cvt);
@@ -144,6 +146,7 @@ pub fn autohinted(model: &fontcraft_model::Font, glyph: &str, options: &TtAutohi
         zones: None,
         stems: None,
         delta_column: None,
+        auto_stems: true,
     })
     .unwrap();
     font(&programs, &points, &program.bytes)

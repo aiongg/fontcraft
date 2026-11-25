@@ -10,6 +10,8 @@
 //! |---|---|
 //! | hints stripped, Export TrueType Hints off, or no glyph with instructions and no imported tables | no TrueType hinting |
 //! | Autohint on (the instance's Autohint parameter, else the export option) | our `cvt `, `fpgm` and `prep` with what the TTFAutohint options add, and the autohinter's program for every simple glyph ([`fontcraft_hinting::autohint_glyph`] on the layer being exported); manual instructions and imported tables are not written; with the Dehint option, no TrueType hinting |
+//! | the same with bit 1 of `fsType` set and without the Ignore Restrictions option | no TrueType hinting, with a warning |
+//! | the same with the Hint Composites option | every composite is written as contours and hinted as one outline ([`component_options`]) |
 //! | cvt Table, prep Table Assembly or fpgm Table Assembly on the master or instance | those tables as they are; manual instructions are not compiled, with a warning, since they call functions of our own `fpgm` |
 //! | otherwise | our `cvt `, `fpgm` and `prep` for the zones and stems of the master or instance being built, and a glyph program for each glyph whose main-master layer has instructions; with no such glyph, only the glyphs' own programs |
 //!
@@ -43,7 +45,8 @@ use fontcraft_ttasm::{FunctionTable, ProgramLimits, analyse, uses_font_programs}
 use read_fonts::tables::glyf::CurvePoint;
 use write_fonts::tables::glyf::{Contour, SimpleGlyph};
 
-use crate::outline::Prepared;
+use crate::components_opt::ComponentOptions;
+use crate::outline::{Flavour, Prepared};
 use crate::points::exported;
 use crate::{CompileError, Options};
 
@@ -168,6 +171,30 @@ pub(crate) fn imported(settings: &HintSettings) -> bool {
     settings.cvt.is_some() || settings.prep_assembly.is_some() || settings.fpgm_assembly.is_some()
 }
 
+/// Is autohinting a font whose `OS/2` `fsType` is `fs_type` refused? Bit 1 set is refused unless
+/// the Ignore Restrictions option is on.
+fn restricted(fs_type: u16, options: &TtAutohintOptions) -> bool {
+    fs_type & (1 << 1) != 0 && !options.ignore_restrictions
+}
+
+/// The component options of a build of `resolved`: with the Hint Composites option of an
+/// autohinted TrueType build, every composite is written as contours, so it is hinted as one
+/// outline.
+pub(crate) fn component_options(source: Option<&Font>, resolved: &Resolved, flavour: Flavour, options: &Options) -> ComponentOptions {
+    let mut out = options.components;
+    if flavour == Flavour::TrueType
+        && !out.decompose_all
+        && !options.hinting.strip
+        && let Some(settings) = source.and_then(|f| settings_for(f, resolved, &mut Vec::new()))
+        && settings.export_tt_hints
+        && autohinted(&settings, options)
+        && AutoSetup::new(&settings, &mut Vec::new()).is_some_and(|a| a.options.hint_composites)
+    {
+        out.decompose_all = true;
+    }
+    out
+}
+
 /// Does [`tt_hinting`] compile glyph programs for the font `resolved` was resolved from with
 /// `options`? The checks it makes before it looks at any glyph.
 pub(crate) fn compiles_glyph_programs(source: &Font, resolved: &Resolved, options: &Options) -> bool {
@@ -189,6 +216,7 @@ pub fn tt_hinting(
     outlines: &[Prepared],
     options: &Options,
     win_metrics: (f64, f64),
+    fs_type: u16,
     variable: bool,
     warnings: &mut Vec<String>,
 ) -> Result<Option<TtHinting>, CompileError> {
@@ -220,12 +248,16 @@ pub fn tt_hinting(
     let mut scale_x_height = false;
     let auto = if autohinted(&settings, options) {
         let Some(auto) = AutoSetup::new(&settings, warnings) else { return Ok(None) };
+        if restricted(fs_type, &auto.options) {
+            warnings.push("the TrueType autohinter was not run, since bit 1 of fsType (restricted license embedding) is set; the TTFAutohint option Ignore Restrictions lets it run".to_string());
+            return Ok(None);
+        }
         if !instructed.is_empty() {
             let list: Vec<String> = instructed.iter().filter_map(|(gid, _)| order.get(*gid).map(|g| g.name.clone())).collect();
             warnings.push(format!("Autohint is on, so the TrueType autohinter replaced the manual instructions of {}", names(&list)));
         }
         instructed = (0..order.len()).map(|gid| (gid, Vec::new())).collect();
-        scale_x_height = fontcraft_hinting::drop_unmeasured_zones(source, &mut settings).x_height;
+        scale_x_height = fontcraft_hinting::prepare_settings(source, &mut settings, &auto.options).x_height;
         if auto.options.windows_compatibility {
             // Zones at the heights Windows clips to, so extremes there land on a pixel row.
             let (ascent, descent) = win_metrics;
@@ -284,6 +316,16 @@ pub fn tt_hinting(
         }
     };
     warnings.extend(programs.warnings.iter().cloned());
+    let mut programs = programs;
+    if auto.is_some() {
+        match fontcraft_hinting::autohint_fpgm() {
+            Ok(f) => programs.fpgm.extend(f),
+            Err(e) => {
+                warnings.push(format!("the TrueType autohinter's font program cannot be built ({e}); its TrueType hints were left out"));
+                return Ok(raw_only(raw, warnings));
+            }
+        }
+    }
     let functions = match FunctionTable::from_fpgm(&programs.fpgm) {
         Ok(f) => f,
         Err(e) => {
@@ -292,8 +334,11 @@ pub fn tt_hinting(
             return Ok(raw_only(raw, warnings));
         }
     };
-    let mut programs = programs;
     if let Some(auto) = &auto {
+        match analyse(&programs.fpgm, &functions) {
+            Ok(l) => programs.limits.merge(&l),
+            Err(_) => programs.limits.uncertain = true,
+        }
         match fontcraft_hinting::autohint_prep(&auto.options, &settings, &programs.layout, scale_x_height) {
             Ok((cvt, extra)) => {
                 match analyse(&extra, &functions) {
@@ -305,6 +350,8 @@ pub fn tt_hinting(
             }
             Err(e) => warnings.push(format!("the TTFAutohint options cannot be applied to `prep` ({e}); they were left out")),
         }
+        // `maxp.maxSizeOfInstructions` counts glyph programs only.
+        programs.limits.max_size_of_instructions = 0;
     }
     let location = instance.map(|i| i.location.clone()).or_else(|| source.master(&settings.master).ok().map(|m| m.location.clone()));
     let delta_column = if variable { None } else { location.map(|l| delta_column_key(&l)) };
@@ -394,6 +441,7 @@ pub fn tt_hinting(
             zones: Some(&zones),
             stems: Some(&stems),
             delta_column: delta_column.as_deref(),
+            auto_stems: auto.is_some(),
         };
         match glyph_program(&cx) {
             Ok(p) => {

@@ -93,6 +93,10 @@ pub struct GlyphContext<'a> {
     /// The Delta column of the build, as the instructions store it (the instance's
     /// [`crate::tt::delta_column_key`], or the master's); `None`: no Delta applies.
     pub delta_column: Option<&'a str>,
+    /// The instructions are the autohinter's and `fpgm` holds its stem function
+    /// ([`crate::autohint_fpgm`]): Stem instructions with stem Auto take their width by the stem
+    /// width mode.
+    pub auto_stems: bool,
 }
 
 /// A compiled glyph program.
@@ -305,6 +309,7 @@ impl Compiler<'_, '_> {
             }
             TtKind::Stem { stem, .. } => {
                 let Some(origin) = first else { return Ok(None) };
+                let auto = self.cx.auto_stems && *stem == StemRef::Auto;
                 let stem = self.stem_for(i, stem, origin, target, d);
                 let vertical_stem = stem.and_then(|k| self.cx.settings.tt_stems.get(k)).is_some_and(|s| !s.horizontal);
                 if self.cx.settings.ignore_vertical_hints && d == Direction::Horizontal && vertical_stem {
@@ -319,7 +324,13 @@ impl Compiler<'_, '_> {
                 }
                 let (w, f) = stem.and_then(|k| self.cx.layout.stem(k)).map_or((-1, -1), |(w, f)| (i32::from(w), i32::from(f)));
                 let mode = stem_mode(t.rounding);
-                self.moved(target, d, |c| c.line(format_args!("PUSH {} {} {w} {f} {mode} {FN_STEM}\nCALL[ ]", origin.index, target.index)));
+                self.moved(target, d, |c| {
+                    if auto {
+                        c.line(format_args!("PUSH {} {} {w} {FN_AUTO_STEM}\nCALL[ ]", origin.index, target.index));
+                    } else {
+                        c.line(format_args!("PUSH {} {} {w} {f} {mode} {FN_STEM}\nCALL[ ]", origin.index, target.index));
+                    }
+                });
                 self.touched.run(t);
                 let (lo, hi) = if origin.along(d) <= target.along(d) { (origin, target) } else { (target, origin) };
                 return Ok(Some(Some(Member { lo, hi, direction: d })));

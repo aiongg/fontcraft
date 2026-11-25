@@ -565,7 +565,7 @@ pub fn assemble(
     let variable = extra.tables.iter().any(|(tag, _)| *tag == Tag::new(b"gvar"));
     let tt_hinting = match (flavour, source) {
         (Flavour::TrueType, Some(source)) => {
-            crate::tt_hints::tt_hinting(source, font, order, outlines, options, (m.win_ascent, m.win_descent), variable, warnings)?
+            crate::tt_hints::tt_hinting(source, font, order, outlines, options, (m.win_ascent, m.win_descent), info.fs_type, variable, warnings)?
         }
         _ => None,
     };

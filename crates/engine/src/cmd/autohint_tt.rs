@@ -120,6 +120,7 @@ fn hint_layers(p: &Params, font: &Font, glyphs: &[String], master: &str, setting
         Some(text) => {
             let (o, ignored) = TtAutohintOptions::parse(text).map_err(|e| p.bad(format!("the TTFAutohint options cannot be read: {e}")))?;
             out.ignored = ignored;
+            out.ignored.extend(o.export_only());
             o
         }
         None => TtAutohintOptions::default(),
