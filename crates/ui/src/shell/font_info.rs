@@ -9,7 +9,7 @@
 //! | `font.info.rows.copy`, `.cut`, `.paste`, `.delete` | act on the selected rows of the shown tab; paste asks the window for the clipboard's text and pastes it into what the tab shows |
 //!
 //! The row selection is view state: it names rows by kind, key and place among the rows of that key, and the projection
-//! marks those the shown tab has, so it stays when other masters or exports are picked.
+//! marks those the shown tab has, so it stays when other masters or exports are picked. Another document has none of it.
 //!
 //! The dialogs module (`dialogs::field_picker`, `custom_parameter_picker`, `os2_bits`, `panose`, `feature_picker`) takes the request
 //! on its next pass and opens the dialog.
@@ -125,9 +125,10 @@ impl RowKey {
     }
 }
 
-/// The selected rows, the one selected last at the end, and the scope they were selected in.
+/// The selected rows, the one selected last at the end, and the document and scope they were selected in.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct RowsView {
+    pub doc: Option<u64>,
     pub scope: Option<Scope>,
     pub rows: Vec<RowKey>,
 }
@@ -382,8 +383,9 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
             if !["set", "toggle", "add"].contains(&mode) {
                 return Err(format!("unknown mode `{mode}`: use set, toggle or add"));
             }
+            let doc = app.session.active().map(|d| d.id);
             let view = &mut app.view.font_info.rows;
-            let mut rows = if mode == "set" || view.scope != Some(scope) { Vec::new() } else { std::mem::take(&mut view.rows) };
+            let mut rows = if mode == "set" || (view.doc, view.scope) != (doc, Some(scope)) { Vec::new() } else { std::mem::take(&mut view.rows) };
             for key in given {
                 let held = rows.iter().position(|r| *r == key);
                 if let Some(at) = held {
@@ -394,7 +396,7 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
                 }
             }
             rows.truncate(MAX_SELECTED_ROWS);
-            *view = RowsView { scope: Some(scope), rows };
+            *view = RowsView { doc, scope: Some(scope), rows };
             Ok(())
         }
         COPY_ROWS | CUT_ROWS | DELETE_ROWS => {
@@ -406,11 +408,15 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
             }
             p.insert("rows".into(), json!(keys));
             let p = Value::Object(p);
-            if command.id != DELETE_ROWS {
-                app.sent.push(Msg::run("font.info.copyRows", p.clone()));
-            }
-            if command.id != COPY_ROWS {
-                app.sent.push(Msg::run("font.info.removeRows", p));
+            match command.id.as_str() {
+                COPY_ROWS => app.sent.push(Msg::run("font.info.copyRows", p)),
+                id => {
+                    // Rows that cannot be copied are not cut.
+                    if id == CUT_ROWS {
+                        app.apply_msg(Msg::run("font.info.copyRows", p.clone()))?;
+                    }
+                    app.sent.push(Msg::run("font.info.removeRows", p));
+                }
             }
             Ok(())
         }

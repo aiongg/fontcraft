@@ -578,6 +578,41 @@ fn rows_copied_from_one_export_paste_on_five() {
     assert_eq!(counts(&app), vec![0; 6]);
 }
 
+/// Cut removes no row when the copy of all of them fails, and the rows selected in one document are none of another's.
+#[test]
+fn a_cut_that_copies_nothing_keeps_the_rows_and_another_document_has_none_selected() {
+    use crate::app::models::font_info::RowMark;
+    use fontcraft_engine::model::Font;
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    let send = |app: &mut FontCraftApp, msg: Msg| {
+        app.sent.push(msg);
+        app.drain();
+        app.drain();
+    };
+    let held = |app: &FontCraftApp| app.session.font().expect("a font").info.params.0.len();
+    let file_name = || json!({ "scope": "font", "name": "fileName", "value": "Sample" });
+    send(&mut app, shell("font.info", json!({ "tab": "font" })));
+    send(&mut app, Msg::run("font.customParameters.add", file_name()));
+    send(&mut app, Msg::run("font.customParameters.add", json!({ "scope": "font", "name": "glyphOrder", "value": ["a"] })));
+    let rows = json!([{ "kind": "param", "key": "fileName" }, { "kind": "param", "key": "glyphOrder" }]);
+    send(&mut app, shell("font.info.rows.select", json!({ "scope": "font", "rows": rows })));
+    assert!(app.models.font_info.font.params.iter().all(|r| r.mark != RowMark::None));
+    // Behind the projection's back: the copy names a row the font no longer has.
+    app.session.execute("font.customParameters.remove", &json!({ "scope": "font", "name": "glyphOrder" })).expect("removed");
+    send(&mut app, shell("font.info.rows.cut", json!({})));
+    assert_eq!((held(&app), app.clipboard.out.is_none()), (1, true), "{}", app.status);
+    send(&mut app, shell("font.info.rows.cut", json!({})));
+    assert_eq!((held(&app), app.clipboard.out.is_some()), (0, true), "{}", app.status);
+
+    send(&mut app, Msg::run("edit.undo", json!({})));
+    assert!(app.models.font_info.font.params.iter().any(|r| r.mark != RowMark::None), "the row is back, still selected");
+    app.session.add_document(Font::new("Other Sans"), None).expect("a second document");
+    send(&mut app, Msg::run("font.customParameters.add", file_name()));
+    assert!(app.models.font_info.font.params.iter().all(|r| r.mark == RowMark::None));
+    send(&mut app, shell("font.info.rows.delete", json!({})));
+    assert_eq!(held(&app), 1, "no row is selected");
+}
+
 /// A parameter only the second of two selected masters holds shows with its holder; its minus acts on that master, and
 /// editing it adds it to the other. A language change over several exports is one command.
 #[test]

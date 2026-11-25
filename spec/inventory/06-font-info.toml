@@ -383,6 +383,8 @@ guesses = [
   "Paste replaces the rows with the same key in the shown font, masters or exports and appends repeatable parameters; pasting a row the target has in the reference app settles it.",
   "Cmd+Delete removes the selected rows as one undo step and leaves built-in fields, and Cut copies the rows before it removes them so; undoing after Cmd+Delete, and Cut with a row selected, in the reference app settle both.",
   "Selected rows stay selected when other masters or exports are picked, so rows copied from one are pasted or removed on others; picking another export with a row selected in the reference app settles it.",
+  "With the Masters or Exports list focused, Copy and Paste act on the selected rows while Delete and Cmd+Delete remove the selected masters or exports; selecting a row, clicking another export and pressing Cmd+Delete in the reference app settles it.",
+  "Rows selected in one document are not selected in another; selecting a row and switching to another font in the reference app settles it.",
 ]
 
 [[behavior]]

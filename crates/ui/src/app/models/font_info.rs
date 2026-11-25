@@ -57,8 +57,11 @@ impl FontInfoModel {
         }
     }
 
-    /// Marks the rows `view` selects, on the tab of the scope they were selected in.
-    fn mark_rows(&mut self, view: &RowsView) {
+    /// Marks the rows `view` selects, on the tab of the scope they were selected in, when `doc` is their document.
+    fn mark_rows(&mut self, view: &RowsView, doc: Option<u64>) {
+        if view.doc != doc {
+            return;
+        }
         let rows: Vec<&mut RowModel> = match (self.tab, view.scope) {
             (FontInfoTab::Font, Some(Scope::Font)) => self.font.fields.iter_mut().chain(&mut self.font.params).collect(),
             (FontInfoTab::Masters, Some(Scope::Master)) => self.masters_tab.name.iter_mut().chain(&mut self.masters_tab.params).collect(),
@@ -319,7 +322,7 @@ pub fn project(model: &mut Tracked<FontInfoModel>, cx: &mut ProjectCx<'_>) {
         exports,
         masters_tab: super::font_masters::project(font, &cx.view.font_info.masters),
     };
-    value.mark_rows(&cx.view.font_info.rows);
+    value.mark_rows(&cx.view.font_info.rows, cx.session.active().map(|d| d.id));
     super::set(model, value);
 }
 
