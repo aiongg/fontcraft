@@ -8,31 +8,43 @@
 //! | Writing Direction | `window.kerning {direction}`: the Edit View tab's, or one chosen here |
 //! | header press | `kerning.sortPairs` by the column; a second press reverses the order |
 //! | row press (Shift, Cmd as in lists), arrows | selects rows (`window.kerning {select}`) |
-//! | Value field | `kerning.setPair` on the current row |
-//! | double press on a left group, or F2 | renames it in place; confirming asks `dialog.renameKerningGroup` |
-//! | secondary press on a group cell | asks `dialog.renameKerningGroup` for that side's group |
+//! | Value field | one row selected: `kerning.setPair`; several: `kerning.setPairs`, a number sets them all, `+10`, `-10` or `*0.9` changes each, `=-10` sets a negative one |
+//! | double press on a value, Return | edits the value in the row (`window.kerning {edit}`); Up and Down step it by 1, 10 with Shift, 100 with Cmd+Shift; Escape cancels |
+//! | double press on a group, F2 (left groups) | renames it in place; confirming asks `dialog.renameKerningGroup` |
+//! | secondary press | the row's menu: Show All Glyphs, Rename Left or Right Group…, Make Exception, Copy, Delete, Delete from All Masters |
 //! | Delete, − button (with Option: from all masters) | `kerning.deletePairs` on the selected rows |
 //! | Copy, Paste, Select All (keys and the Edit menu, while the list has the keyboard) | `kerning.copyPairs` on the selected rows, `dialog.pasteKerningConflict` with the clipboard's text, `window.kerning {select: "all"}` |
-//! | Show All Glyphs | `kerning.showAllGlyphs` on the current row: every glyph pair it covers in the edit view |
-//! | Clean Up, Compress | `kerning.cleanUp`, `kerning.compress` on the master shown |
+//! | Actions › Show All Glyphs | `kerning.showAllGlyphs` on the current row: every glyph pair it covers in the edit view |
+//! | Actions › Clean Up, Compress | `kerning.cleanUp`, `kerning.compress` on the master shown |
+//!
+//! Group names are drawn with their `@` in one colour and glyph names in another (`appearance.color.kerningGroupText`,
+//! `appearance.color.kerningGlyphText`); a selected row draws both in the selection's colour.
 
 use std::borrow::Cow;
+use std::cell::RefCell;
 
 use craft::behavior::{ColumnKey, ColumnWidth, DisplayOrder, EditEvent, IconId, ItemSource, Selection};
 use craft::ui::buttons::{Button, IconButton};
 use craft::ui::choice::{Checkbox, Segmented};
 use craft::ui::contract::{
-    Bind, CollectionEvent, ColumnEvent, ColumnSort, ColumnSpec, Entry, Props as _, Show as _, ShowCollection as _, ShowContainer as _, Tracked,
+    Bind, CollectionEvent, ColumnEvent, ColumnSort, ColumnSpec, EditResponse, Entry, Props as _, Show as _, ShowCollection as _, ShowContainer as _,
+    Tracked, Trigger,
 };
-use craft::ui::display::{Shade, Text};
+use craft::ui::display::{Elide, Shade, Text};
+use craft::ui::fonts::FontRef;
 use craft::ui::layout_components::{Row, Stack};
 use craft::ui::list::ListRow;
+use craft::ui::menu::Menu;
 use craft::ui::pickers::Select;
+use craft::ui::primitives::DocRun;
 use craft::ui::runtime::commands::CommandRef;
 use craft::ui::runtime::env::Env;
+use craft::ui::runtime::focus::{self, FocusTarget};
+use craft::ui::style::DataColor;
 use craft::ui::table::Table;
 use craft::ui::text::{NumberField, TextField};
 use craft_ext::ui::list::{CollectionEdits as _, EditCommand};
+use craft_ext::ui::text::{ArrowSteps, StepKeys as _};
 use egui::Ui;
 use serde_json::{Map, Value, json};
 
@@ -69,7 +81,17 @@ craft::ui::words! {
         delete: "fontcraftKerningWindow.delete" = "Delete the selected pairs";
         delete_tip: "fontcraftKerningWindow.deleteTip" = "Delete the selected pairs (Option: from all masters)";
         show_all: "fontcraftKerningWindow.showAll" = "Show All Glyphs";
-        show_all_tip: "fontcraftKerningWindow.showAllTip" = "Put every glyph pair the current row covers into the edit view";
+        actions: "fontcraftKerningWindow.actions" = "Actions";
+        row_menu: "fontcraftKerningWindow.rowMenu" = "Kerning pair";
+        rename_left: "fontcraftKerningWindow.renameLeft" = "Rename Left Group…";
+        rename_right: "fontcraftKerningWindow.renameRight" = "Rename Right Group…";
+        exception: "fontcraftKerningWindow.exception" = "Make Exception";
+        copy: "fontcraftKerningWindow.copy" = "Copy";
+        delete_one: "fontcraftKerningWindow.deleteOne" = "Delete";
+        delete_all: "fontcraftKerningWindow.deleteAll" = "Delete from All Masters";
+        group_name: "fontcraftKerningWindow.groupName" = "Right group";
+        values: "fontcraftKerningWindow.values" = "Values of the Selected Pairs";
+        values_tip: "fontcraftKerningWindow.valuesTip" = "A number sets every selected pair; +10, -10 or *0.9 changes each; =-10 sets a negative value";
         clean_up: "fontcraftKerningWindow.cleanUp" = "Clean Up";
         compress: "fontcraftKerningWindow.compress" = "Compress";
         count: "fontcraftKerningWindow.count" = "pairs";
@@ -86,6 +108,9 @@ craft::ui::words! {
 
 /// The Edit commands the list takes.
 const LIST_EDITS: [EditCommand; 3] = [EditCommand::Copy, EditCommand::Paste, EditCommand::SelectAll];
+
+/// Most characters a value field takes.
+const MAX_VALUE_CHARS: usize = 32;
 
 const LEFT: ColumnKey = ColumnKey::new("left");
 const VALUE: ColumnKey = ColumnKey::new("value");
@@ -234,6 +259,13 @@ fn pair_table(ui: &mut Ui, words: &KerningWindowWords, model: &KerningWindowMode
     let mut after = before.clone();
     let rows = &model.rows;
     let source = Rows(rows);
+    let size = Env::of(ui).tokens.typography.body.size;
+    let entry = |name: &str| {
+        let [r, g, b, a] = if name.starts_with('@') { model.group_color } else { model.glyph_color };
+        let color = DataColor::new(egui::Color32::from_rgba_unmultiplied(r, g, b, a));
+        Text::spans(&[DocRun::new(name.to_string(), FontRef::proportional(), size, color)]).elide(Elide::End)
+    };
+    let edited: RefCell<Option<EditResponse<String>>> = RefCell::new(None);
     let out = Table::<usize>::new(words.pairs.clone(), columns)
         .empty(model.error.clone().map_or_else(|| words.empty.clone(), Into::into))
         .sort(sort)
@@ -246,12 +278,40 @@ fn pair_table(ui: &mut Ui, words: &KerningWindowWords, model: &KerningWindowMode
         .selection(Bind::bound(&mut after))
         .show_items(ui, &source, &mut |at, icx| {
             let Some(row) = rows.get(*at) else { return ListRow::new("") };
-            ListRow::new(row.left.clone())
+            let mut shown = ListRow::new(row.left.clone())
                 .cells(icx.cells())
-                .striped(icx.row.striped)
+                .state(icx.row.clone())
                 .cell(VALUE, format_value(row.value))
-                .cell(RIGHT, row.right.clone())
+                .cell(RIGHT, row.right.clone());
+            let editing = model.editing.filter(|(edited, _)| edited == at).map(|(_, column)| column);
+            // The text cells above size the columns; a field or a coloured name stands in their place.
+            if !icx.row.selected && !icx.row.renaming {
+                shown = shown.cell_field(LEFT, entry(&row.left), |_| {});
+                if editing != Some(Column::Right) {
+                    shown = shown.cell_field(RIGHT, entry(&row.right), |_| {});
+                }
+            }
+            let edited = &edited;
+            match editing {
+                Some(Column::Value) => {
+                    let field = TextField::new(words.pair_value.clone(), Bind::given(format_value(row.value)))
+                        .select_on_focus()
+                        .submits()
+                        .limit(MAX_VALUE_CHARS)
+                        .id_salt("fontcraftKerningWindow.cellValue");
+                    shown.cell_field(VALUE, field, move |out| *edited.borrow_mut() = Some(out))
+                }
+                Some(Column::Right) => {
+                    let field = TextField::new(words.group_name.clone(), Bind::given(row.right.trim_start_matches('@').to_string()))
+                        .select_on_focus()
+                        .submits()
+                        .id_salt("fontcraftKerningWindow.cellRight");
+                    shown.cell_field(RIGHT, field, move |out| *edited.borrow_mut() = Some(out))
+                }
+                _ => shown,
+            }
         });
+    cell_edit(ui, model, edited.take(), sent);
     if after.items != before.items || after.lead != before.lead {
         let mut picked: Vec<usize> = after.items.clone();
         // The lead goes last: it is the row the steps go from.
@@ -270,11 +330,7 @@ fn pair_table(ui: &mut Ui, words: &KerningWindowWords, model: &KerningWindowMode
     }
     for edit in out.edit_commands(ui, &LIST_EDITS) {
         match edit {
-            EditCommand::Copy if !model.selected.is_empty() => {
-                let mut p = scope(model);
-                p.insert("pairs".into(), pairs_json(model, &model.selected));
-                sent.push(Msg::run("kerning.copyPairs", Value::Object(p)));
-            }
+            EditCommand::Copy if !model.selected.is_empty() => sent.push(copy(model)),
             EditCommand::Paste => sent.push(shell("dialog.pasteKerningConflict", json!({}))),
             EditCommand::SelectAll => sent.push(shell("window.kerning", json!({ "select": "all" }))),
             _ => {}
@@ -294,14 +350,126 @@ fn pair_table(ui: &mut Ui, words: &KerningWindowWords, model: &KerningWindowMode
                     ask_rename(model, row, Column::Left, Some(rename.name.trim()), sent);
                 }
             }
-            CollectionEvent::ContextMenu(request) => {
-                let column = request.column.as_ref().and_then(ColumnKey::as_str).and_then(Column::of_id);
-                if let (Some(row), Some(column @ (Column::Left | Column::Right))) = (rows.get(request.key), column) {
-                    ask_rename(model, row, column, None, sent);
+            CollectionEvent::Activate(at) => {
+                let Some(row) = rows.get(*at) else { continue };
+                // Return edits the value; a double press edits the cell it lands on.
+                let pressed = if out.activation_clicks == 0 {
+                    Some(Column::Value)
+                } else {
+                    let pointer = ui.input(|i| i.pointer.interact_pos());
+                    let cells = out.shown.iter().find(|shown| shown.key == *at).map(|shown| shown.cells.as_slice()).unwrap_or_default();
+                    let cell = cells.iter().find(|(_, rect)| pointer.is_some_and(|p| rect.x_range().contains(p.x)));
+                    cell.and_then(|(key, _)| key.as_str()).and_then(Column::of_id)
+                };
+                if let Some(column) = pressed.filter(|c| *c == Column::Value || (*c == Column::Right && row.right.starts_with('@'))) {
+                    sent.push(shell("window.kerning", json!({ "edit": { "left": row.left, "right": row.right, "column": column.id() } })));
                 }
+            }
+            // The menu acts on the row pressed, with the other selected rows when it is one of them.
+            CollectionEvent::ContextMenu(request) if model.current != Some(request.key) => {
+                let mut picked = if model.selected.contains(&request.key) { model.selected.clone() } else { Vec::new() };
+                picked.retain(|i| *i != request.key);
+                picked.push(request.key);
+                sent.push(shell("window.kerning", json!({ "select": pairs_json(model, &picked) })));
             }
             _ => {}
         }
+    }
+    row_menu(ui, words, model, &out.response, sent);
+}
+
+/// What the cell edited in place did this pass: a new value or group name is sent, and the field closes with Return,
+/// Escape, Tab or a press elsewhere.
+fn cell_edit(ui: &Ui, model: &KerningWindowModel, out: Option<EditResponse<String>>, sent: &mut Vec<Msg>) {
+    let focused = egui::Id::unique("fontcraftKerningWindow.cellFocused");
+    let Some((at, column)) = model.editing else {
+        ui.data_mut(|d| d.remove::<String>(focused));
+        return;
+    };
+    let (Some(out), Some(row)) = (out, model.rows.get(at)) else { return };
+    let cell = format!("{}\t{}\t{}", row.left, row.right, column.id());
+    if ui.data(|d| d.get_temp::<String>(focused)).as_ref() != Some(&cell) {
+        let _ = focus::request(ui.ctx(), FocusTarget::Id(out.response.id));
+        ui.data_mut(|d| d.insert_temp(focused, cell));
+        return;
+    }
+    let committed = out.events.committed().cloned();
+    match (column, &committed) {
+        (Column::Value, Some(text)) => {
+            let typed = text.trim().parse::<f64>().ok().filter(|v| v.is_finite());
+            if let Some(v) = typed.filter(|v| *v != row.value) {
+                sent.push(set_pair(model, row, v));
+            }
+        }
+        (Column::Right, Some(text)) => ask_rename(model, row, Column::Right, Some(text.trim()), sent),
+        _ => {}
+    }
+    if column == Column::Value
+        && let Some(delta) = out.arrow_steps(ui, ArrowSteps::UNITS)
+    {
+        sent.push(set_pair(model, row, row.value + delta));
+    }
+    if committed.is_some() || out.submitted || out.escaped || out.left_by_tab.is_some() || out.response.lost_focus() {
+        sent.push(shell("window.kerning", json!({ "edit": null })));
+    }
+}
+
+fn set_pair(model: &KerningWindowModel, row: &KernRow, value: f64) -> Msg {
+    let mut p = scope(model);
+    p.insert("left".into(), json!(row.left));
+    p.insert("right".into(), json!(row.right));
+    p.insert("value".into(), json!(value));
+    Msg::run("kerning.setPair", Value::Object(p))
+}
+
+fn copy(model: &KerningWindowModel) -> Msg {
+    let mut p = scope(model);
+    p.insert("pairs".into(), pairs_json(model, &model.selected));
+    Msg::run("kerning.copyPairs", Value::Object(p))
+}
+
+/// What a typed text does to several rows, as a parameter of `kerning.setPairs`: `+10` and `-10` add, `*0.9` scales, a
+/// number or `=-10` sets.
+pub fn change_of(text: &str) -> Option<(&'static str, f64)> {
+    let text = text.trim();
+    let number = |t: &str| t.trim().parse::<f64>().ok().filter(|v| v.is_finite());
+    if let Some(rest) = text.strip_prefix('=') {
+        return Some(("value", number(rest)?));
+    }
+    if let Some(rest) = text.strip_prefix('*') {
+        return Some(("factor", number(rest)?));
+    }
+    if text.starts_with(['+', '-']) {
+        return Some(("add", number(text)?));
+    }
+    Some(("value", number(text)?))
+}
+
+/// The menu of the pressed row.
+fn row_menu(ui: &mut Ui, words: &KerningWindowWords, model: &KerningWindowModel, opener: &egui::Response, sent: &mut Vec<Msg>) {
+    let current = model.current.and_then(|i| model.rows.get(i));
+    let left = current.is_some_and(|row| row.left.starts_with('@'));
+    let right = current.is_some_and(|row| row.right.starts_with('@'));
+    let items = [
+        Entry::new("showAll", words.show_all.clone()).enabled(current.is_some()),
+        Entry::new("renameLeft", words.rename_left.clone()).enabled(left),
+        Entry::new("renameRight", words.rename_right.clone()).enabled(right),
+        Entry::new("exception", words.exception.clone()).enabled(left || right),
+        Entry::new("copy", words.copy.clone()).enabled(!model.selected.is_empty()),
+        Entry::new("delete", words.delete_one.clone()).enabled(!model.selected.is_empty()),
+        Entry::new("deleteAll", words.delete_all.clone()).enabled(!model.selected.is_empty()),
+    ];
+    let picked = Menu::context(words.row_menu.clone(), opener).id_salt("fontcraftKerningWindow.rowMenu").pick(ui, &items).picked;
+    let (Some(picked), Some(row)) = (picked, current) else { return };
+    match picked {
+        "showAll" => sent.push(shell("kerning.showAllGlyphs", pair_json(row))),
+        "renameLeft" => ask_rename(model, row, Column::Left, None, sent),
+        "renameRight" => ask_rename(model, row, Column::Right, None, sent),
+        "exception" => sent.push(shell("kerning.makeException", pair_json(row))),
+        "copy" => sent.push(copy(model)),
+        "delete" => delete(model, &model.selected, false, sent),
+        "deleteAll" => delete(model, &model.selected, true, sent),
+        _ => {}
     }
 }
 
@@ -367,28 +535,40 @@ fn footer(ui: &mut Ui, words: &KerningWindowWords, model: &KerningWindowModel, s
             let all_masters = ui.input(|i| i.modifiers.alt);
             delete(model, &model.selected, all_masters, sent);
         }
-        let value = NumberField::new(words.pair_value.clone(), Bind::given(current.map(|r| r.value))).enabled(current.is_some()).show(ui);
-        if let (Some(Some(v)), Some(row)) = (value.edit.events.committed(), current) {
-            let mut p = scope(model);
-            p.insert("left".into(), json!(row.left));
-            p.insert("right".into(), json!(row.right));
-            p.insert("value".into(), json!(v));
-            sent.push(Msg::run("kerning.setPair", Value::Object(p)));
+        if model.selected.len() > 1 {
+            let field = TextField::new(words.values.clone(), Bind::given(String::new()))
+                .placeholder(words.values.clone())
+                .tooltip(words.values_tip.clone())
+                .limit(MAX_VALUE_CHARS)
+                .id_salt("fontcraftKerningWindow.values")
+                .show(ui);
+            if let Some((key, v)) = field.events.committed().and_then(|text| change_of(text)) {
+                let mut p = scope(model);
+                p.insert("pairs".into(), pairs_json(model, &model.selected));
+                p.insert(key.into(), json!(v));
+                sent.push(Msg::run("kerning.setPairs", Value::Object(p)));
+            }
+        } else {
+            let value = NumberField::new(words.pair_value.clone(), Bind::given(current.map(|r| r.value))).enabled(current.is_some()).show(ui);
+            if let (Some(Some(v)), Some(row)) = (value.edit.events.committed(), current) {
+                sent.push(set_pair(model, row, *v));
+            }
         }
         match &model.error {
             Some(error) => Text::new(error.clone()).show(ui),
             None => Text::new(counts_text(words, model)).shade(Shade::Muted).show(ui),
         };
-        if Button::new(words.show_all.clone()).tooltip(words.show_all_tip.clone()).enabled(current.is_some()).show(ui).clicked()
-            && let Some(row) = current
-        {
-            sent.push(shell("kerning.showAllGlyphs", pair_json(row)));
-        }
-        if Button::new(words.clean_up.clone()).enabled(model.has_doc).show(ui).clicked() {
-            sent.push(Msg::run("kerning.cleanUp", Value::Object(scope(model))));
-        }
-        if Button::new(words.compress.clone()).enabled(model.has_doc).show(ui).clicked() {
-            sent.push(Msg::run("kerning.compress", Value::Object(scope(model))));
+        let more = IconButton::new(IconId::new("more")).label(words.actions.clone()).tooltip(words.actions.clone()).show(ui);
+        let items = [
+            Entry::new("showAll", words.show_all.clone()).enabled(current.is_some()),
+            Entry::new("cleanUp", words.clean_up.clone()).enabled(model.has_doc),
+            Entry::new("compress", words.compress.clone()).enabled(model.has_doc),
+        ];
+        match (Menu::new(words.actions.clone()).opened_by(&more.response, Trigger::Click).pick(ui, &items).picked, current) {
+            (Some("showAll"), Some(row)) => sent.push(shell("kerning.showAllGlyphs", pair_json(row))),
+            (Some("cleanUp"), _) => sent.push(Msg::run("kerning.cleanUp", Value::Object(scope(model)))),
+            (Some("compress"), _) => sent.push(Msg::run("kerning.compress", Value::Object(scope(model)))),
+            _ => {}
         }
     });
 }

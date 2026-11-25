@@ -66,6 +66,10 @@ pub struct Tokens {
     pub kerning_negative: Color32,
     /// Text mode's tint of a gap the kerning opens (`appearance.color.kerningPositive`).
     pub kerning_positive: Color32,
+    /// A group's name in the Kerning window (`appearance.color.kerningGroupText`).
+    pub kerning_group_text: Color32,
+    /// A glyph's name in the Kerning window (`appearance.color.kerningGlyphText`).
+    pub kerning_glyph_text: Color32,
     /// How opaque guides are drawn, from 0 to 1 (`appearance.guideOpacity`); the metric line and zone colours above
     /// already carry it.
     pub guide_opacity: f32,
@@ -130,6 +134,8 @@ impl Tokens {
         tokens.visible_layer_outline = color("otherLayersStroke", tokens.visible_layer_outline);
         tokens.kerning_negative = color("kerningNegative", tokens.kerning_negative);
         tokens.kerning_positive = color("kerningPositive", tokens.kerning_positive);
+        tokens.kerning_group_text = color("kerningGroupText", tokens.kerning_group_text);
+        tokens.kerning_glyph_text = color("kerningGlyphText", tokens.kerning_glyph_text);
         let percent = settings.get("appearance.guideOpacity").ok().and_then(|v| v.as_f64()).filter(|p| p.is_finite()).unwrap_or(100.0);
         #[allow(clippy::cast_possible_truncation)]
         let opacity = (percent.clamp(0.0, 100.0) / 100.0) as f32;
@@ -165,6 +171,8 @@ impl Tokens {
         }
         Tokens {
             canvas: Color32::from_rgb(0x1e, 0x1e, 0x1e),
+            kerning_group_text: Color32::from_rgb(0x6e, 0xa8, 0xff),
+            kerning_glyph_text: Color32::from_rgb(0xe0, 0xb4, 0x45),
             outline: Color32::from_rgb(0xe6, 0xe6, 0xe6),
             source_outline: Color32::from_rgb(0x5a, 0x5a, 0x5a),
             metric_line: Color32::from_rgb(0x4c, 0x56, 0x64),
@@ -209,6 +217,8 @@ impl Tokens {
             background_tint: Color32::from_rgba_unmultiplied(0x00, 0x00, 0x00, 0x18),
             kerning_negative: Color32::from_rgba_unmultiplied(0x8c, 0xc8, 0xf5, 0x90),
             kerning_positive: Color32::from_rgba_unmultiplied(0xf5, 0xdc, 0x46, 0xa0),
+            kerning_group_text: Color32::from_rgb(0x1c, 0x5f, 0xd0),
+            kerning_glyph_text: Color32::from_rgb(0x8f, 0x65, 0x00),
             guide_opacity: 1.0,
             outline_width: 1.5,
             source_outline_width: 1.0,

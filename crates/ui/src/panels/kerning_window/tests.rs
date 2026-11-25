@@ -21,7 +21,7 @@ use crate::app::models::kerning_window::{KernRow, KerningWindowModel};
 use crate::app::{APP, FontCraftApp, Msg};
 use crate::dialogs::kerning_audit::AuditDialog;
 use crate::dialogs::kerning_questions::{PasteConflict, RenameGroup};
-use crate::shell::kerning_window::{Audit, Finding, Question};
+use crate::shell::kerning_window::{Audit, Column, Finding, Question};
 use crate::testing::TestApp;
 
 fn shell(id: &str, params: Value) -> Msg {
@@ -320,6 +320,112 @@ fn the_minus_button_and_the_edit_commands_act_on_the_list() {
         *posted.borrow(),
         vec![Msg::run("kerning.copyPairs", copy), shell("dialog.pasteKerningConflict", json!({})), shell("window.kerning", json!({"select": "all"}))]
     );
+}
+
+/// A window over two group rows with the Value or Right cell of the first open for editing, and what it posts.
+fn editing_fixture(column: Column) -> (Fixture, Rc<RefCell<Vec<Msg>>>) {
+    let model = Tracked::new(KerningWindowModel {
+        has_doc: true,
+        master: Some("m01".into()),
+        direction: "ltr".into(),
+        rows: vec![row("@T", "@o", -80.0), row("A", "V", -100.0)],
+        total: 2,
+        selected: vec![0],
+        current: Some(0),
+        editing: Some((0, column)),
+        ..Default::default()
+    });
+    let posted = Rc::new(RefCell::new(Vec::new()));
+    let seen = Rc::clone(&posted);
+    let mut fixture = Fixture::new(move |ui| {
+        let mut sent = Vec::new();
+        show(ui, Props { model: &model, sent: &mut sent });
+        seen.borrow_mut().extend(sent);
+    });
+    fixture.room(egui::vec2(720.0, 560.0)).settle();
+    posted.borrow_mut().clear();
+    (fixture, posted)
+}
+
+/// A value typed into the row sets the pair, Shift+Up steps it, Escape sends nothing but the close; a right group's
+/// new name asks the rename question for the right side.
+#[test]
+fn cells_are_edited_in_place() {
+    let close = shell("window.kerning", json!({"edit": null}));
+    let (mut fixture, posted) = editing_fixture(Column::Value);
+    fixture.key(Key::A, Modifiers::COMMAND).type_text("-72").key(Key::Enter, Modifiers::NONE).settle();
+    let set = |v: f64| Msg::run("kerning.setPair", json!({"master": "m01", "direction": "ltr", "left": "@T", "right": "@o", "value": v}));
+    assert!(posted.borrow().contains(&set(-72.0)) && posted.borrow().contains(&close), "{:?}", posted.borrow());
+
+    let (mut fixture, posted) = editing_fixture(Column::Value);
+    fixture.key(Key::ArrowUp, Modifiers::SHIFT).settle();
+    assert!(posted.borrow().contains(&set(-70.0)), "{:?}", posted.borrow());
+
+    let (mut fixture, posted) = editing_fixture(Column::Value);
+    fixture.key(Key::A, Modifiers::COMMAND).type_text("5").key(Key::Escape, Modifiers::NONE).settle();
+    assert!(!posted.borrow().iter().any(|m| matches!(m, Msg::Run(_))), "{:?}", posted.borrow());
+    assert!(posted.borrow().contains(&close), "{:?}", posted.borrow());
+
+    let (mut fixture, posted) = editing_fixture(Column::Right);
+    fixture.key(Key::A, Modifiers::COMMAND).type_text("round").key(Key::Enter, Modifiers::NONE).settle();
+    let asked = posted.borrow().iter().find_map(|m| match m {
+        Msg::Shell(c) if c.id == "dialog.renameKerningGroup" => Some(c.params.clone()),
+        _ => None,
+    });
+    let asked = asked.expect("the rename question");
+    assert_eq!((asked["side"].clone(), asked["from"].clone(), asked["to"].clone()), (json!("right"), json!("o"), json!("round")));
+}
+
+/// With several rows selected a typed text sets or changes them all in one command.
+#[test]
+fn a_text_typed_for_several_rows_sets_or_changes_them_all() {
+    for (text, change) in
+        [("40", ("value", 40.0)), ("=-40", ("value", -40.0)), ("+10", ("add", 10.0)), ("-10", ("add", -10.0)), ("*0.9", ("factor", 0.9))]
+    {
+        assert_eq!(super::change_of(text), Some(change), "{text}");
+    }
+    assert!(super::change_of("wide").is_none() && super::change_of("*inf").is_none());
+
+    let model = Tracked::new(KerningWindowModel {
+        has_doc: true,
+        master: Some("m01".into()),
+        direction: "ltr".into(),
+        rows: vec![row("@T", "@o", -80.0), row("A", "V", -100.0)],
+        total: 2,
+        selected: vec![0, 1],
+        current: Some(1),
+        ..Default::default()
+    });
+    let posted = Rc::new(RefCell::new(Vec::new()));
+    let seen = Rc::clone(&posted);
+    let mut fixture = Fixture::new(move |ui| {
+        let mut sent = Vec::new();
+        show(ui, Props { model: &model, sent: &mut sent });
+        seen.borrow_mut().extend(sent);
+    });
+    fixture.room(egui::vec2(720.0, 560.0)).settle();
+    let field = fixture.by_label("Values of the Selected Pairs").expect("the values field");
+    fixture.click(&field).type_text("*0.9").key(Key::Enter, Modifiers::NONE).settle();
+    let pairs = json!([{"left": "@T", "right": "@o"}, {"left": "A", "right": "V"}]);
+    let expected = json!({"master": "m01", "direction": "ltr", "pairs": pairs, "factor": 0.9});
+    assert!(posted.borrow().contains(&Msg::run("kerning.setPairs", expected)), "{:?}", posted.borrow());
+}
+
+/// Make Exception stores the glyph pair Edit View shows when the row covers it, else the first members'.
+#[test]
+fn make_exception_takes_the_pair_edit_view_shows() {
+    let mut app = app_over(kerned_session(-60.0));
+    ran(&mut app, shell("window.kerning", json!({"select": [{"left": "T", "right": "@o"}]})));
+    ran(&mut app, shell("editView.setText", json!({"glyphs": ["T", "o"]})));
+    ran(&mut app, shell("editView.setCursor", json!({"index": 1})));
+    ran(&mut app, shell("kerning.makeException", json!({})));
+    assert_eq!((stored(&mut app, "T", "o"), stored(&mut app, "T", "c")), (Some(-60.0), None));
+    ran(&mut app, shell("editView.setText", json!({"glyphs": ["A", "V"]})));
+    ran(&mut app, shell("kerning.makeException", json!({})));
+    assert_eq!(stored(&mut app, "T", "c"), Some(-60.0));
+    app.sent.push(shell("kerning.makeException", json!({"left": "A", "right": "V"})));
+    app.drain();
+    assert!(app.status.contains("two glyphs"), "{}", app.status);
 }
 
 /// With Font View in front a chosen row opens a tab for the pair when none is open, else brings the last tab forward;

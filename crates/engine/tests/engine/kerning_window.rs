@@ -345,3 +345,37 @@ fn kerning_text_round_trip_on_inter_regular() {
         assert!(each.as_millis() < 10, "kerning.listPairs took {each:?}");
     }
 }
+
+/// A factor over three rows is one undo step and rounds each value; a pair that cannot change leaves all as they were.
+#[test]
+fn set_pairs_changes_every_pair_in_one_step_or_none() {
+    let mut s = session();
+    let pair = |left: &str, right: &str| json!({"left": left, "right": right});
+    let three = json!([pair("@T", "@o"), pair("T", "oacute"), pair("@A", "@V")]);
+    let value = |s: &mut Session, left: &str, right: &str| {
+        let listed = run(s, "kerning.listPairs", json!({}));
+        listed["pairs"].as_array().unwrap().iter().find(|p| p["left"] == left && p["right"] == right).map(|p| p["value"].as_f64().unwrap())
+    };
+    let reply = run(&mut s, "kerning.setPairs", json!({"pairs": three, "factor": 0.25}));
+    // -50 × 0.25 = -12.5, rounded half up.
+    let changed: Vec<(f64, f64)> =
+        reply["pairs"].as_array().unwrap().iter().map(|p| (p["previous"].as_f64().unwrap(), p["value"].as_f64().unwrap())).collect();
+    assert_eq!(changed, [(-60.0, -15.0), (-20.0, -5.0), (-50.0, -12.0)]);
+    assert_eq!(value(&mut s, "T", "oacute"), Some(-5.0));
+    run(&mut s, "edit.undo", json!({}));
+    assert_eq!((value(&mut s, "@T", "@o"), value(&mut s, "@A", "@V")), (Some(-60.0), Some(-50.0)), "one step");
+
+    for (p, word) in [
+        (json!({"pairs": [pair("@T", "@o"), pair("T", "V")], "add": 10}), "no pair T V"),
+        (json!({"pairs": [pair("@T", "@o"), pair("gone", "V")], "value": 10}), "gone"),
+        (json!({"pairs": [pair("@T", "@o")], "factor": 1e6}), "32767"),
+        (json!({"pairs": [pair("@T", "@o"), pair("@T", "@o")], "value": 1}), "twice"),
+        (json!({"pairs": [pair("@T", "@o")], "value": 1, "add": 1}), "one of"),
+    ] {
+        let e = refused(&mut s, "kerning.setPairs", p);
+        assert!(e.contains(word), "{e}");
+    }
+    let each = json!([{"left": "@T", "right": "@o", "value": -5}, {"left": "T", "right": "V", "value": 12.5}]);
+    run(&mut s, "kerning.setPairs", json!({"pairs": each}));
+    assert_eq!((value(&mut s, "@T", "@o"), value(&mut s, "T", "V")), (Some(-5.0), Some(13.0)));
+}

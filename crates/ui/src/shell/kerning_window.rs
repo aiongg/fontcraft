@@ -3,12 +3,13 @@
 //!
 //! | Command | Does |
 //! |---|---|
-//! | `window.kerning {open?, select?, direction?}` | shows or hides the Kerning window; `select` sets the selected rows, `direction` the writing direction it lists |
+//! | `window.kerning {open?, select?, direction?, edit?}` | shows or hides the Kerning window; `select` sets the selected rows, `direction` the writing direction it lists, `edit` the cell edited in place |
 //! | `kerning.filterPairs {term?, match?, kind?, side?, selectedGlyphsOnly?}` | sets the search term and options |
 //! | `kerning.resetFilter` | returns the search options to their defaults; the term stays |
 //! | `kerning.sortPairs {column, descending?}` | sorts the list by a column |
 //! | `kerning.selectNextPair`, `kerning.selectPreviousPair` | steps the selection through the listed rows |
 //! | `kerning.showAllGlyphs {left?, right?}` | puts every glyph pair the current row covers into the edit view's text |
+//! | `kerning.makeException {left?, right?}` | opens the group locks of the glyph pair the current row stands for |
 //! | `dialog.renameKerningGroup {side, from, to?, pair, master?, direction?}` | asks whether a group rename covers the font or the pair |
 //! | `dialog.pasteKerningConflict {text? \| pairs?, master?, direction?}` | pastes (neither: the clipboard's text); when a pasted pair clashes with a stored one, asks what to do |
 //! | `dialog.auditKerningExceptions {threshold?, masters?, direction?, fix?}` | runs `kerning.auditExceptions` and shows what it found |
@@ -51,7 +52,7 @@ const COMMANDS: &[UiCommand] = &[
         label: "Kerning",
         menu: &["Window"],
         shortcut: Some("Cmd+Alt+K"),
-        params: "{open?: bool (default true), select?: [{left: name|\"@group\", right: name|\"@group\"}] or \"all\", direction?: \"ltr\"|\"rtl\"|\"vertical\"|null} show or hide the Kerning window: the stored pairs of the current master (view.selectMaster) in the writing direction of the Edit View tab. direction lists another one until null follows the tab again. select sets the selected rows (\"all\": every listed row) and shows the last one in Edit View; a pair that cannot be shown stays selected and the status line says why; rows not listed are dropped. ui.inspect reports the window under kerningWindow",
+        params: "{open?: bool (default true), select?: [{left: name|\"@group\", right: name|\"@group\"}] or \"all\", direction?: \"ltr\"|\"rtl\"|\"vertical\"|null, edit?: {left, right, column: \"value\"|\"right\"}|null} show or hide the Kerning window: the stored pairs of the current master (view.selectMaster) in the writing direction of the Edit View tab. direction lists another one until null follows the tab again. select sets the selected rows (\"all\": every listed row) and shows the last one in Edit View; a pair that cannot be shown stays selected and the status line says why; rows not listed are dropped. edit opens a row's value or right group for editing in the list, null closes it. ui.inspect reports the window under kerningWindow",
     },
     UiCommand {
         id: "kerning.filterPairs",
@@ -94,6 +95,13 @@ const COMMANDS: &[UiCommand] = &[
         menu: &[],
         shortcut: None,
         params: "{left?: name|\"@group\", right?: name|\"@group\" (default: the Kerning window's current row)} put every glyph pair the row covers into the edit view's text in place of the pair at the current glyph: each group side expands to all its members in glyph order, one line per left glyph, its pairs separated by the space glyph when the font has one; at most as many items as the text holds",
+    },
+    UiCommand {
+        id: "kerning.makeException",
+        label: "Make Kerning Exception",
+        menu: &[],
+        shortcut: None,
+        params: "{left?: name|\"@group\", right?: name|\"@group\" (default: the Kerning window's current row)} store the kerning of one glyph pair the row covers as an exception (kerning.addException), in the master and direction the window lists: the pair at the edit view's cursor when the row covers it, else the first member of each group. A row of two glyphs is refused",
     },
     UiCommand {
         id: "dialog.renameKerningGroup",
@@ -300,6 +308,8 @@ pub struct KerningView {
     pub selected: Vec<String>,
     /// Select All: every row of this list is selected, whatever `selected` holds.
     pub all: Option<AllRows>,
+    /// The cell edited in place: the row by [`row_id`], and its Value or Right column.
+    pub editing: Option<(String, Column)>,
     /// The row the steps go from: the one picked last.
     pub current: Option<String>,
     /// The question asked and not yet opened.
@@ -344,6 +354,7 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
         "kerning.selectNextPair" => step(app, true),
         "kerning.selectPreviousPair" => step(app, false),
         "kerning.showAllGlyphs" => show_all(app, p),
+        "kerning.makeException" => make_exception(app, p),
         "dialog.renameKerningGroup" => rename(app, p),
         "dialog.pasteKerningConflict" => paste(app, p),
         "dialog.auditKerningExceptions" => audit(app, p),
@@ -387,6 +398,21 @@ fn window(app: &mut FontCraftApp, p: &Map<String, Value>) -> Result<(), String> 
     };
     let all = p.get("select").and_then(Value::as_str) == Some("all");
     let select = if all { None } else { pairs_arg(p, "select")? };
+    let edit = match p.get("edit") {
+        None => None,
+        Some(Value::Null) => Some(None),
+        Some(cell) => {
+            let text = |key: &str| cell.get(key).and_then(Value::as_str).ok_or("`edit` must be {left, right, column} or null");
+            let column = match Column::of_id(text("column")?) {
+                Some(column @ (Column::Value | Column::Right)) => column,
+                _ => return Err("`edit.column` must be value or right".into()),
+            };
+            Some(Some((row_id(text("left")?, text("right")?), column)))
+        }
+    };
+    if let Some(edit) = edit {
+        app.view.kerning.editing = edit;
+    }
     if let Some(direction) = direction {
         app.view.kerning.direction = direction;
         app.view.kerning.all = None;
@@ -494,21 +520,54 @@ fn side_glyphs(font: &Font, direction: Direction, position: Position, side: &str
     }
 }
 
-fn show_all(app: &mut FontCraftApp, p: &Map<String, Value>) -> Result<(), String> {
+/// The row `left` and `right` name, else the current one.
+fn row_arg(app: &FontCraftApp, p: &Map<String, Value>) -> Result<(String, String), String> {
     let side = |key: &str| match p.get(key) {
         None | Some(Value::Null) => Ok(None),
         Some(Value::String(s)) if !s.is_empty() => Ok(Some(s.clone())),
         Some(_) => Err(format!("`{key}` must be a glyph name or @group")),
     };
-    let (left, right) = match (side("left")?, side("right")?) {
-        (Some(l), Some(r)) => (l, r),
+    match (side("left")?, side("right")?) {
+        (Some(l), Some(r)) => Ok((l, r)),
         (None, None) => {
-            let current = app.view.kerning.current.clone().ok_or("select a pair in the Kerning window, or give left and right")?;
-            let (l, r) = split_id(&current);
-            (l.to_string(), r.to_string())
+            let current = app.view.kerning.current.as_ref().ok_or("select a pair in the Kerning window, or give left and right")?;
+            let (l, r) = split_id(current);
+            Ok((l.to_string(), r.to_string()))
         }
-        _ => return Err("give both `left` and `right`, or neither".into()),
+        _ => Err("give both `left` and `right`, or neither".into()),
+    }
+}
+
+fn make_exception(app: &mut FontCraftApp, p: &Map<String, Value>) -> Result<(), String> {
+    let (left, right) = row_arg(app, p)?;
+    let which = match (left.starts_with('@'), right.starts_with('@')) {
+        (true, true) => "both",
+        (true, false) => "left",
+        (false, true) => "right",
+        (false, false) => return Err("the pair already names two glyphs".into()),
     };
+    let direction = crate::app::models::kerning_window::direction(&app.view);
+    let font = app.session.font().map_err(|e| e.to_string())?;
+    let lefts = side_glyphs(font, direction, Position::First, &left)?;
+    let rights = side_glyphs(font, direction, Position::Second, &right)?;
+    let text = &app.view.text;
+    let at_cursor = text.edited_index().and_then(|i| Some((text.item_glyph(i.checked_sub(1)?)?.to_string(), text.item_glyph(i)?.to_string())));
+    let (l, r) = match at_cursor.filter(|(l, r)| lefts.contains(l) && rights.contains(r)) {
+        Some(shown) => shown,
+        None => (lefts.first().cloned().unwrap_or_default(), rights.first().cloned().unwrap_or_default()),
+    };
+    let mut params = Map::new();
+    for (key, value) in [("left", l.as_str()), ("right", r.as_str()), ("side", which), ("direction", direction.name())] {
+        params.insert(key.into(), json!(value));
+    }
+    if let Some(master) = &app.models.kerning_window.master {
+        params.insert("master".into(), json!(master));
+    }
+    app.run_command("kerning.addException", Value::Object(params)).map(|_| ())
+}
+
+fn show_all(app: &mut FontCraftApp, p: &Map<String, Value>) -> Result<(), String> {
+    let (left, right) = row_arg(app, p)?;
     let direction = crate::app::models::kerning_window::direction(&app.view);
     let font = app.session.font().map_err(|e| e.to_string())?;
     // Both sides are read before a tab comes to the front, so a refused row changes nothing.

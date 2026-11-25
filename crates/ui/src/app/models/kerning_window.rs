@@ -8,8 +8,9 @@ use fontcraft_textlayout::Direction;
 use serde_json::{Map, Value, json};
 
 use super::ProjectCx;
+use crate::canvas::tokens::Tokens;
 use crate::shell::dock::PanelId;
-use crate::shell::kerning_window::{PairSort, Search, row_id};
+use crate::shell::kerning_window::{Column, PairSort, Search, row_id};
 
 /// Most rows the window holds; a font has fewer pairs in one master than the file readers allow.
 const MAX_ROWS: usize = 2_000_000;
@@ -43,6 +44,11 @@ pub struct KerningWindowModel {
     pub selected: Vec<usize>,
     /// The row the steps go from.
     pub current: Option<usize>,
+    /// The cell being edited in place: the row and its Value or Right column.
+    pub editing: Option<(usize, Column)>,
+    /// The colours of group and glyph names.
+    pub group_color: [u8; 4],
+    pub glyph_color: [u8; 4],
     /// Why the list could not be read.
     pub error: Option<String>,
     /// The document revision and the query the rows came from: the same pair is not asked for twice.
@@ -164,5 +170,9 @@ pub fn project(model: &mut Tracked<KerningWindowModel>, cx: &mut ProjectCx<'_>) 
         kerning.selected.iter().filter_map(|id| at.get(id).copied()).collect()
     };
     next.current = kerning.current.as_ref().and_then(|id| at.get(id).copied());
+    next.editing = kerning.editing.as_ref().and_then(|(id, column)| Some((at.get(id).copied()?, *column)));
+    let tokens = Tokens::from_settings(cx.session.settings(), cx.view.system_dark);
+    next.group_color = tokens.kerning_group_text.to_srgba_unmultiplied();
+    next.glyph_color = tokens.kerning_glyph_text.to_srgba_unmultiplied();
     super::set(model, next);
 }

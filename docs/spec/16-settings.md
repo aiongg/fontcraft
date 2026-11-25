@@ -55,6 +55,8 @@ Colours: nine colours, each stored for the light and for the dark appearance
 | `canvas` | Edit View canvas |
 | `kerningNegative` | negative-kerning indicator, default light blue |
 | `kerningPositive` | positive-kerning indicator, default yellow |
+| `kerningGroupText` | group names in the Kerning window, default blue (ours) |
+| `kerningGlyphText` | glyph names in the Kerning window, default gold (ours) |
 
 `settings.resetColors` (the Standard button) restores all of them.
 
