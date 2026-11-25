@@ -1,0 +1,126 @@
+sub [$[name == "A"]] by x;	m01	sub [A] by x;
+sub [$[name == "A"]] by x;	m02	sub [A] by x;
+sub [$[name = 'a']] by x;	m01	sub [a] by x;
+sub [$[name = 'a']] by x;	m02	sub [a] by x;
+sub [$[name beginswith "a"]] by x;	m01	sub [a a.sc alpha acutecomb] by x;
+sub [$[name beginswith "a"]] by x;	m02	sub [a a.sc alpha acutecomb] by x;
+sub [$[name endswith ".sc"]] by x;	m01	sub [a.sc] by x;
+sub [$[name endswith ".sc"]] by x;	m02	sub [a.sc] by x;
+sub [$[name contains "ph"]] by x;	m01	sub [alpha Alpha] by x;
+sub [$[name contains "ph"]] by x;	m02	sub [alpha Alpha] by x;
+sub [$[name BEGINSWITH "A"]] by x;	m01	sub [A Alpha] by x;
+sub [$[name BEGINSWITH "A"]] by x;	m02	sub [A Alpha] by x;
+sub [$[name != "A"]] by x;	m01	sub [B a b a.sc alpha Alpha zero zero.tf period acutecomb star] by x;
+sub [$[name != "A"]] by x;	m02	sub [B a b a.sc alpha Alpha zero zero.tf period acutecomb star] by x;
+sub [$[name <> "B"]] by x;	m01	sub [A a b a.sc alpha Alpha zero zero.tf period acutecomb star] by x;
+sub [$[name <> "B"]] by x;	m02	sub [A a b a.sc alpha Alpha zero zero.tf period acutecomb star] by x;
+sub [$[name like "a*"]] by x;	m01	sub [a a.sc alpha acutecomb] by x;
+sub [$[name like "a*"]] by x;	m02	sub [a a.sc alpha acutecomb] by x;
+sub [$[name like "?"]] by x;	m01	sub [A B a b] by x;
+sub [$[name like "?"]] by x;	m02	sub [A B a b] by x;
+sub [$[name in {"A", "b", "star"}]] by x;	m01	sub [A b star] by x;
+sub [$[name in {"A", "b", "star"}]] by x;	m02	sub [A b star] by x;
+sub [$[category == "Letter"]] by x;	m01	sub [A B a b a.sc alpha Alpha] by x;
+sub [$[category == "Letter"]] by x;	m02	sub [A B a b a.sc alpha Alpha] by x;
+sub [$[category == "Number"]] by x;	m01	sub [zero zero.tf] by x;
+sub [$[category == "Number"]] by x;	m02	sub [zero zero.tf] by x;
+sub [$[subCategory == "Uppercase"]] by x;	m01	sub [A B Alpha] by x;
+sub [$[subCategory == "Uppercase"]] by x;	m02	sub [A B Alpha] by x;
+sub [$[script == "greek"]] by x;	m01	sub [alpha Alpha] by x;
+sub [$[script == "greek"]] by x;	m02	sub [alpha Alpha] by x;
+sub [$[case == upper]] by x;	m01	sub [A B Alpha] by x;
+sub [$[case == upper]] by x;	m02	sub [A B Alpha] by x;
+sub [$[case == lower]] by x;	m01	sub [a b alpha] by x;
+sub [$[case == lower]] by x;	m02	sub [a b alpha] by x;
+sub [$[case == smallCaps]] by x;	m01	sub [a.sc] by x;
+sub [$[case == smallCaps]] by x;	m02	sub [a.sc] by x;
+sub [$["draft" in tags]] by x;	m01	sub [A a.sc star] by x;
+sub [$["draft" in tags]] by x;	m02	sub [A a.sc star] by x;
+sub [$["ipa" in tags]] by x;	m01	sub [a b] by x;
+sub [$["ipa" in tags]] by x;	m02	sub [a b] by x;
+sub [$[NOT "draft" in tags]] by x;	m01	sub [B a b alpha Alpha zero zero.tf period acutecomb] by x;
+sub [$[NOT "draft" in tags]] by x;	m02	sub [B a b alpha Alpha zero zero.tf period acutecomb] by x;
+sub [$[note contains "done"]] by x;	m01	sub [a zero.tf] by x;
+sub [$[note contains "done"]] by x;	m02	sub [a zero.tf] by x;
+sub [$[countOfUnicodes == 0]] by x;	m01	sub [a.sc zero.tf] by x;
+sub [$[countOfUnicodes == 0]] by x;	m02	sub [a.sc zero.tf] by x;
+sub [$[countOfUnicodes > 0]] by x;	m01	sub [A B a b alpha Alpha zero period acutecomb star] by x;
+sub [$[countOfUnicodes > 0]] by x;	m02	sub [A B a b alpha Alpha zero period acutecomb star] by x;
+sub [$[countOfLayers > 2]] by x;	m01	sub [A Alpha] by x;
+sub [$[countOfLayers > 2]] by x;	m02	sub [A Alpha] by x;
+sub [$[countOfLayers >= 3]] by x;	m01	sub [A Alpha] by x;
+sub [$[countOfLayers >= 3]] by x;	m02	sub [A Alpha] by x;
+sub [$[countOfLayers => 4]] by x;	m01	!ValueError
+sub [$[countOfLayers => 4]] by x;	m02	!ValueError
+sub [$[colorIndex == 5]] by x;	m01	sub [a.sc zero.tf star] by x;
+sub [$[colorIndex == 5]] by x;	m02	sub [a.sc zero.tf star] by x;
+sub [$[colorIndex == 0]] by x;	m01	sub [A] by x;
+sub [$[colorIndex == 0]] by x;	m02	sub [A] by x;
+sub [$[unicode == "0041"]] by x;	m01	sub [A] by x;
+sub [$[unicode == "0041"]] by x;	m02	sub [A] by x;
+sub [$[leftKerningGroup == "A"]] by x;	m01	sub [A Alpha] by x;
+sub [$[leftKerningGroup == "A"]] by x;	m02	sub [A Alpha] by x;
+sub [$[export == false]] by x;	m01	!ValueError
+sub [$[export == false]] by x;	m02	!ValueError
+sub [$[locked == true]] by x;	m01	sub [b] by x;
+sub [$[locked == true]] by x;	m02	sub [b] by x;
+sub [$[category == "Letter" AND case == upper]] by x;	m01	sub [A B Alpha] by x;
+sub [$[category == "Letter" AND case == upper]] by x;	m02	sub [A B Alpha] by x;
+sub [$[case == upper OR case == smallCaps]] by x;	m01	sub [A B Alpha a.sc] by x;
+sub [$[case == upper OR case == smallCaps]] by x;	m02	sub [A B Alpha a.sc] by x;
+sub [$[script == "latin" AND case == lower AND "ipa" in tags]] by x;	m01	sub [a b] by x;
+sub [$[script == "latin" AND case == lower AND "ipa" in tags]] by x;	m02	sub [a b] by x;
+sub [$["draft" in tags OR "math" in tags]] by x;	m01	sub [A a.sc star b Alpha] by x;
+sub [$["draft" in tags OR "math" in tags]] by x;	m02	sub [A a.sc star b Alpha] by x;
+sub [$[category == "Letter" AND case == lower OR "draft" in tags]] by x;	m01	sub [A a b a.sc alpha] by x;
+sub [$[category == "Letter" AND case == lower OR "draft" in tags]] by x;	m02	sub [A a b a.sc alpha] by x;
+sub [$["draft" in tags OR category == "Number" AND name endswith ".tf"]] by x;	m01	sub [A a.sc star zero.tf] by x;
+sub [$["draft" in tags OR category == "Number" AND name endswith ".tf"]] by x;	m02	sub [A a.sc star zero.tf] by x;
+sub [$[name contains "a" && case == lower]] by x;	m01	sub [a alpha] by x;
+sub [$[name contains "a" && case == lower]] by x;	m02	sub [a alpha] by x;
+sub [$[name endswith "a" || name endswith "B"]] by x;	m01	sub [a alpha Alpha B] by x;
+sub [$[name endswith "a" || name endswith "B"]] by x;	m02	sub [a alpha Alpha B] by x;
+sub [$[NOT case == upper AND category == "Letter"]] by x;	m01	sub [a b a.sc alpha] by x;
+sub [$[NOT case == upper AND category == "Letter"]] by x;	m02	sub [a b a.sc alpha] by x;
+sub [$[countOfUnicodes between {1, 1}]] by x;	m01	sub [A B a b alpha Alpha zero period acutecomb star] by x;
+sub [$[countOfUnicodes between {1, 1}]] by x;	m02	sub [A B a b alpha Alpha zero period acutecomb star] by x;
+sub [$[colorIndex in {0, 5}]] by x;	m01	sub [A a.sc zero.tf star] by x;
+sub [$[colorIndex in {0, 5}]] by x;	m02	sub [A a.sc zero.tf star] by x;
+sub [$[name matches "a.*"]] by x;	m01	sub [a a.sc alpha Alpha acutecomb star] by x;
+sub [$[name matches "a.*"]] by x;	m02	sub [a a.sc alpha Alpha acutecomb star] by x;
+sub [$[case == upper AND NOT "draft" in tags]] by x;	m01	sub [B Alpha] by x;
+sub [$[case == upper AND NOT "draft" in tags]] by x;	m02	sub [B Alpha] by x;
+pos @Uppercase <$tracking 0 ${tracking*2} 0>;	m01	pos @Uppercase <10 0 20 0>;
+pos @Uppercase <$tracking 0 ${tracking*2} 0>;	m02	pos @Uppercase <30 0 60 0>;
+pos period <${tracking + shift} 0 ${tracking * 2 - shift} 0>;	m01	pos period <6 0 24 0>;
+pos period <${tracking + shift} 0 ${tracking * 2 - shift} 0>;	m02	pos period <36 0 54 0>;
+pos period <${(tracking + 2) * 3} 0 ${2 * tracking + 10 / 5} 0>;	m01	pos period <36 0 22 0>;
+pos period <${(tracking + 2) * 3} 0 ${2 * tracking + 10 / 5} 0>;	m02	pos period <96 0 62 0>;
+pos period <${period:width} 0 ${period:width*2} 0>;	m01	pos period <250 0 500 0>;
+pos period <${period:width} 0 ${period:width*2} 0>;	m02	pos period <290 0 580 0>;
+pos base b <anchor ${b:anchors.top_special.x} ${b:anchors.top_special.y}> mark @Top;	m01	pos base b <anchor 300 710> mark @Top;
+pos base b <anchor ${b:anchors.top_special.x} ${b:anchors.top_special.y}> mark @Top;	m02	pos base b <anchor 320 730> mark @Top;
+pos b <${b:width - tracking} 0 ${b:anchors.top_special.x / 2 + shift} 0>;	m01	pos b <590 0 146 0>;
+pos b <${b:width - tracking} 0 ${b:anchors.top_special.x / 2 + shift} 0>;	m02	pos b <610 0 166 0>;
+pos period ${shift};	m01	pos period -4;
+pos period ${shift};	m02	pos period 6;
+pos A <${A:LSB} 0 ${A:RSB*2} 0>;	m01	!ValueError
+pos A <${A:LSB} 0 ${A:RSB*2} 0>;	m02	!ValueError
+pos A <${A:anchors.top.x - A_missing} 0 0 0>;	m01	!ValueError
+pos A <${A:anchors.top.x - A_missing} 0 0 0>;	m02	!ValueError
+pos b ${b:width / 2 - b_missing};	m01	!ValueError
+pos b ${b:width / 2 - b_missing};	m02	!ValueError
+pos A ${A:LSB + A:RSB};	m01	!ValueError
+pos A ${A:LSB + A:RSB};	m02	!ValueError
+pos A ${-tracking};	m01	pos A -10;
+pos A ${-tracking};	m02	pos A -30;
+pos A ${tracking/4} ${shift/8};	m01	pos A 2 0;
+pos A ${tracking/4} ${shift/8};	m02	pos A 7 0;
+pos A ${2 + 4 * 5 / 7 - 3};	m01	pos A 1;
+pos A ${2 + 4 * 5 / 7 - 3};	m02	pos A 1;
+pos A ${(shift - tracking) * -2};	m01	pos A 28;
+pos A ${(shift - tracking) * -2};	m02	pos A 48;
+pos A $nothing;	m01	!ValueError
+pos A $nothing;	m02	!ValueError
+pos A ${A:anchors.nope.x};	m01	!ValueError
+pos A ${A:anchors.nope.x};	m02	!ValueError

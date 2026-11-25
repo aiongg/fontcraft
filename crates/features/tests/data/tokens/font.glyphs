@@ -1,0 +1,462 @@
+{
+.formatVersion = 3;
+axes = (
+{
+name = Weight;
+tag = wght;
+}
+);
+familyName = Tokens;
+fontMaster = (
+{
+axesValues = (
+100
+);
+id = m01;
+name = Regular;
+numberValues = (
+10,
+-4
+);
+},
+{
+axesValues = (
+200
+);
+id = m02;
+name = Bold;
+numberValues = (
+30,
+6
+);
+}
+);
+glyphs = (
+{
+case = upper;
+category = Letter;
+color = 0;
+glyphname = A;
+kernLeft = A;
+layers = (
+{
+anchors = (
+{
+name = bottom;
+pos = (290,0);
+},
+{
+name = top;
+pos = (290,700);
+}
+);
+layerId = m01;
+shapes = (
+{
+closed = 1;
+nodes = (
+(20,0,l),
+(560,0,l),
+(560,700,l),
+(20,700,l)
+);
+}
+);
+width = 600;
+},
+{
+anchors = (
+{
+name = bottom;
+pos = (317,0);
+},
+{
+name = top;
+pos = (317,700);
+}
+);
+layerId = m02;
+shapes = (
+{
+closed = 1;
+nodes = (
+(24,0,l),
+(610,0,l),
+(610,700,l),
+(24,700,l)
+);
+}
+);
+width = 652;
+},
+{
+anchors = (
+{
+name = bottom;
+pos = (290,0);
+},
+{
+name = top;
+pos = (290,700);
+}
+);
+associatedMasterId = m01;
+layerId = backup1;
+name = "old 1";
+shapes = (
+{
+closed = 1;
+nodes = (
+(20,0,l),
+(560,0,l),
+(560,700,l),
+(20,700,l)
+);
+}
+);
+width = 600;
+}
+);
+note = "fix apex";
+script = latin;
+subCategory = Uppercase;
+tags = (
+draft
+);
+unicode = 65;
+},
+{
+case = upper;
+category = Letter;
+glyphname = B;
+layers = (
+{
+layerId = m01;
+width = 600;
+},
+{
+layerId = m02;
+width = 620;
+}
+);
+script = latin;
+subCategory = Uppercase;
+unicode = 66;
+},
+{
+case = lower;
+category = Letter;
+glyphname = a;
+kernLeft = a;
+layers = (
+{
+layerId = m01;
+width = 600;
+},
+{
+layerId = m02;
+width = 620;
+}
+);
+note = done;
+script = latin;
+subCategory = Lowercase;
+tags = (
+ipa
+);
+unicode = 97;
+},
+{
+case = lower;
+category = Letter;
+glyphname = b;
+layers = (
+{
+anchors = (
+{
+name = top_special;
+pos = (300,710);
+}
+);
+layerId = m01;
+shapes = (
+{
+closed = 1;
+nodes = (
+(40,-10,l),
+(540,-10,l),
+(540,700,l),
+(40,700,l)
+);
+}
+);
+width = 600;
+},
+{
+anchors = (
+{
+name = top_special;
+pos = (320,730);
+}
+);
+layerId = m02;
+shapes = (
+{
+closed = 1;
+nodes = (
+(44,-12,l),
+(580,-12,l),
+(580,704,l),
+(44,704,l)
+);
+}
+);
+width = 640;
+}
+);
+locked = 1;
+script = latin;
+subCategory = Lowercase;
+tags = (
+ipa,
+math
+);
+unicode = 98;
+},
+{
+case = smallCaps;
+category = Letter;
+color = 5;
+glyphname = a.sc;
+kernLeft = a;
+layers = (
+{
+layerId = m01;
+width = 600;
+},
+{
+layerId = m02;
+width = 620;
+}
+);
+script = latin;
+subCategory = Smallcaps;
+tags = (
+draft
+);
+},
+{
+case = lower;
+category = Letter;
+glyphname = alpha;
+layers = (
+{
+layerId = m01;
+width = 600;
+},
+{
+layerId = m02;
+width = 620;
+}
+);
+script = greek;
+subCategory = Lowercase;
+unicode = 945;
+},
+{
+case = upper;
+category = Letter;
+glyphname = Alpha;
+kernLeft = A;
+layers = (
+{
+layerId = m01;
+width = 600;
+},
+{
+layerId = m02;
+width = 620;
+},
+{
+associatedMasterId = m01;
+layerId = backup1;
+name = "old 1";
+width = 600;
+},
+{
+associatedMasterId = m01;
+layerId = backup2;
+name = "old 2";
+width = 600;
+}
+);
+script = greek;
+subCategory = Uppercase;
+tags = (
+math
+);
+unicode = 913;
+},
+{
+case = noCase;
+category = Number;
+glyphname = zero;
+layers = (
+{
+layerId = m01;
+width = 600;
+},
+{
+layerId = m02;
+width = 620;
+}
+);
+script = latin;
+subCategory = "Decimal Digit";
+unicode = 48;
+},
+{
+case = noCase;
+category = Number;
+color = 5;
+glyphname = zero.tf;
+layers = (
+{
+layerId = m01;
+width = 600;
+},
+{
+layerId = m02;
+width = 620;
+}
+);
+note = "tabular done";
+script = latin;
+subCategory = "Decimal Digit";
+},
+{
+case = noCase;
+category = Punctuation;
+glyphname = period;
+layers = (
+{
+anchors = (
+{
+name = top;
+pos = (125,500);
+}
+);
+layerId = m01;
+shapes = (
+{
+closed = 1;
+nodes = (
+(50,0,l),
+(200,0,l),
+(200,100,l),
+(50,100,l)
+);
+}
+);
+width = 250;
+},
+{
+anchors = (
+{
+name = top;
+pos = (145,520);
+}
+);
+layerId = m02;
+shapes = (
+{
+closed = 1;
+nodes = (
+(60,0,l),
+(220,0,l),
+(220,120,l),
+(60,120,l)
+);
+}
+);
+width = 290;
+}
+);
+script = latin;
+subCategory = Other;
+unicode = 46;
+},
+{
+case = noCase;
+category = Mark;
+glyphname = acutecomb;
+layers = (
+{
+layerId = m01;
+width = 600;
+},
+{
+layerId = m02;
+width = 620;
+}
+);
+script = latin;
+subCategory = Nonspacing;
+unicode = 769;
+},
+{
+case = lower;
+category = Letter;
+export = 0;
+glyphname = a.alt;
+layers = (
+{
+layerId = m01;
+width = 600;
+},
+{
+layerId = m02;
+width = 620;
+}
+);
+script = latin;
+subCategory = Lowercase;
+tags = (
+draft
+);
+},
+{
+case = noCase;
+category = Symbol;
+color = 5;
+glyphname = star;
+layers = (
+{
+layerId = m01;
+width = 600;
+},
+{
+layerId = m02;
+width = 620;
+}
+);
+script = latin;
+subCategory = Other;
+tags = (
+draft
+);
+unicode = 9733;
+}
+);
+numbers = (
+{
+name = tracking;
+},
+{
+name = shift;
+}
+);
+unitsPerEm = 1000;
+versionMajor = 1;
+versionMinor = 0;
+}

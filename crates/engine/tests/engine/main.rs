@@ -155,6 +155,7 @@ mod realign;
 mod registry;
 mod selections;
 mod settings;
+mod shaping_fonts;
 mod smart;
 mod snippets;
 mod spacing_set;
