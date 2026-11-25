@@ -33,7 +33,7 @@ log.workspace = true
 # The system file pickers and the OS clipboard: native only (craft's clipboard backend does not
 # build for wasm32).
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-craft = { workspace = true, features = ["dialogs", "platform-clipboard"] }
+craft = { workspace = true, features = ["dialogs", "platform-clipboard", "print"] }
 
 [dev-dependencies]
 craft = { workspace = true, features = ["screen-testing"] }

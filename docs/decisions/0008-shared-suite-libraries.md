@@ -43,9 +43,13 @@ apart, and fixes made in one app do not reach the other.
      both stay.
    - craft-window's placement store keeps the window's place (`window.json`). The dock's layout is
      FontCraft's own file (`ui.json`), written through `fontcraft_format::write_atomic`.
-4. **Adopted with the craft framework: craft-ui** (docking, tabs, icon buttons, the widget theme)
-   **and craft-quit**, through the `craft` facade at one pin (M14.9, M14.3). **craft-print** is
-   pinned on its own for the PDF proof (M12.36).
+4. **Adopted with the craft framework: craft-ui** (docking, tabs, icon buttons, the widget theme),
+   **craft-quit** and **craft-print** (M13.67), through the `craft` facade at one pin (M14.9, M14.3).
+   craft-print gives the Print dialog its print panel (`craft::print::ui`) and, in `apps/fontcraft`
+   alone, the system's print queue; native builds only, so the wasm build never has it.
+   - On macOS and Linux it starts CUPS's `lpstat`, `lpoptions` and `lp`. Nothing the person types
+     reaches those: a job has a printer the system listed, the panel's settings and a fixed title,
+     and the pages go over a pipe.
 5. **Not planned: craft-cms.** It manages colour profiles. FontCraft's colour fonts use sRGB, as
    the font formats define, so there is nothing for it to convert.
 

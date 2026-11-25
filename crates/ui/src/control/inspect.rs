@@ -35,6 +35,7 @@ pub const INSPECT: &[Inspect] = &[
     crate::shell::tabs::inspect,
     crate::dialogs::axis_mappings::inspect,
     crate::dialogs::cross_axis::inspect,
+    crate::dialogs::print::inspect,
     crate::shell::getters::inspect,
     super::window_input::inspect,
 ];

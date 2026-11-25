@@ -87,6 +87,7 @@ pub const MODULES: &[Module] = &[
     super::bitmap_editor::MODULE,
     crate::dialogs::axis_mappings::MODULE,
     crate::dialogs::cross_axis::MODULE,
+    crate::dialogs::print::MODULE,
     super::encoding::MODULE,
     super::getters::MODULE,
 ];

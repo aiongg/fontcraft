@@ -231,11 +231,13 @@ impl<'a> Inherited<'a> {
 
 struct PageSearch {
     visited: usize,
+    /// Pages to pass before the one wanted.
+    skip: usize,
 }
 
 impl PageSearch {
-    /// The first page under `node`, with what it inherits, in document order.
-    fn first<'a>(
+    /// The wanted page when it is under `node`, with what it inherits, in document order.
+    fn page<'a>(
         &mut self,
         doc: &'a Document,
         node: &'a Dictionary,
@@ -253,11 +255,15 @@ impl PageSearch {
         let kids = node.get(b"Kids").ok().and_then(|k| deref(doc, k).ok()).and_then(|k| k.as_array().ok());
         let is_page = node.has_type(b"Page") || (kids.is_none() && node.get(b"Contents").is_ok());
         if is_page {
-            return Ok(Some((node, inherited)));
+            if self.skip == 0 {
+                return Ok(Some((node, inherited)));
+            }
+            self.skip -= 1;
+            return Ok(None);
         }
         for kid in kids.into_iter().flatten() {
             if let Some(kid) = dict(doc, kid)
-                && let Some(found) = self.first(doc, kid, inherited.clone(), depth + 1)?
+                && let Some(found) = self.page(doc, kid, inherited.clone(), depth + 1)?
             {
                 return Ok(Some(found));
             }
@@ -281,11 +287,16 @@ fn rotation(page_box: [f64; 4], rotate: i64) -> (Matrix, [f64; 4]) {
 
 /// The painted paths of the first page, in the page's shown space (its rotation applied).
 pub(crate) fn first_page_drawing(data: &[u8]) -> Result<PageDrawing, PdfError> {
+    page_drawing(data, 0)
+}
+
+/// The painted paths of page `index` (from 0), in the page's shown space (its rotation applied).
+pub(crate) fn page_drawing(data: &[u8], index: usize) -> Result<PageDrawing, PdfError> {
     let (doc, budget) = load(data)?;
     let catalog = doc.trailer.get(b"Root").ok().and_then(|r| dict(&doc, r)).ok_or(PdfError::NoPage)?;
     let root = catalog.get(b"Pages").ok().and_then(|p| dict(&doc, p)).ok_or(PdfError::NoPage)?;
-    let mut search = PageSearch { visited: 0 };
-    let (page, inherited) = search.first(&doc, root, Inherited::default(), 0)?.ok_or(PdfError::NoPage)?;
+    let mut search = PageSearch { visited: 0, skip: index };
+    let (page, inherited) = search.page(&doc, root, Inherited::default(), 0)?.ok_or(PdfError::NoPage)?;
     let page_box = inherited.crop_box.or(inherited.media_box);
     let (ctm, frame) = match page_box {
         Some(b) => {
