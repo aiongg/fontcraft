@@ -5,10 +5,12 @@
 //! | Gesture | Result |
 //! |---|---|
 //! | click an object | select it; a segment selects its two end nodes |
-//! | `Shift`+click | toggle it in the selection |
+//! | `Shift`+click | toggle it in the selection: an object that is not selected joins at the press, one that is leaves at the release |
+//! | `Shift`+drag from an object | add it to the selection and drag the selection |
 //! | click the fitted outline of a corner, cap or segment component or of a brush, `Shift`+click | select it, toggle it; a drag from it moves nothing |
 //! | drag on empty canvas | marquee: nodes, handles and anchors inside; `Shift` toggles them, `Alt` takes on-curve nodes only and components too, `Ctrl` turns the marquee |
 //! | drag an object | `selection.move` in one interaction; snapping unless `Ctrl` is held; a badge beside the pointer gives the offset (`x:… y:…`) |
+//! | drag with `Shift` held, or pressed during the drag | the drag stays horizontal or vertical, whichever is nearer (a lone handle: on the horizontal or vertical through its node), and snaps along it only |
 //! | `Alt` held at mouse-down | the drag moves a copy (`duplicate: true`) |
 //! | `Alt` held at mouse-down, with nothing to copy (lone nodes, no whole segment) | only the selected points move (`mode: pointsOnly`) |
 //! | `Ctrl+Alt` at mouse-down, or `Alt` pressed during the drag | nudge (`mode: nudge`) |
@@ -40,7 +42,7 @@ use crate::hit::{Hit, HitResult, hit_test_with_corners};
 use crate::output::{Action, Invocation, Output, Overlay, OverlayKind, offset_badge};
 use crate::scene::Scene;
 use crate::selection::{Selection, in_region, path_points};
-use crate::snap::{Moving, Snap, SnapKind, snap};
+use crate::snap::{HoldAxis, Moving, Snap, SnapKind, snap, snap_along};
 use crate::tool::{Context, Tool};
 
 /// How a drag moves points (`selection.move`'s `mode`).
@@ -85,9 +87,9 @@ struct Press {
     hit: HitResult,
     mods: Modifiers,
     selection: Selection,
-    /// A plain click on an object of a larger selection selects only that object, unless the
-    /// press becomes a drag.
-    reduce_to: Option<Selection>,
+    /// What the release selects, unless the press becomes a drag: a plain click on an object of a
+    /// larger selection selects only that object, a `Shift` click on a selected one drops it.
+    on_click: Option<Selection>,
     /// What a drag does to the pressed guide, when it moves or turns that guide alone.
     guide: Option<GuideDrag>,
 }
@@ -96,6 +98,8 @@ struct Press {
 struct Drag {
     down: Point,
     grab: Point,
+    /// The node of the lone handle being dragged.
+    handle_node: Option<Point>,
     selection: Selection,
     moving: Moving,
     alt_at_start: bool,
@@ -318,18 +322,22 @@ impl SelectTool {
         };
         let items = hit.items();
         let mut selection = cx.selection.clone();
-        if ev.mods.shift {
-            for item in items {
-                selection.toggle(item);
-            }
-            out.push(Action::Select { selection });
-            return out;
-        }
-        let mut reduce_to = None;
+        let mut on_click = None;
         if hit.selected_in(cx.selection) {
-            if selection.len() > items.len() {
-                reduce_to = Some(Selection::from_items(items));
+            if ev.mods.shift {
+                let mut without = selection.clone();
+                for item in &items {
+                    without.remove(item);
+                }
+                on_click = Some(without);
+            } else if selection.len() > items.len() {
+                on_click = Some(Selection::from_items(items));
             }
+        } else if ev.mods.shift {
+            for item in items {
+                selection.insert(item);
+            }
+            out.push(Action::Select { selection: selection.clone() });
         } else {
             selection = Selection::from_items(items);
             out.push(Action::Select { selection: selection.clone() });
@@ -338,15 +346,16 @@ impl SelectTool {
             Hit::Node { .. } | Hit::Handle { .. } | Hit::Anchor { .. } => hit.at,
             _ => ev.pos,
         };
-        // A knob dragged with other objects selected moves them all; Alt duplicates.
+        // A knob dragged with other objects selected moves them all, and so does a guide that Shift
+        // added to them; Alt duplicates.
         let guide = match hit.hit {
             Hit::Guide { guide } if !ev.mods.alt => {
                 let knob = crate::guide_drag::guide(scene, guide).is_some_and(|g| crate::guide_drag::on_knob(cx, g, ev.pos));
-                if knob && selection.len() > 1 { None } else { GuideDrag::press(cx, guide, ev.pos, hit.at) }
+                if (knob || ev.mods.shift) && selection.len() > 1 { None } else { GuideDrag::press(cx, guide, ev.pos, hit.at) }
             }
             _ => None,
         };
-        self.state = State::Pressed(Box::new(Press { down: ev.pos, grab, hit, mods: ev.mods, selection, reduce_to, guide }));
+        self.state = State::Pressed(Box::new(Press { down: ev.pos, grab, hit, mods: ev.mods, selection, on_click, guide }));
         out
     }
 
@@ -361,7 +370,7 @@ impl SelectTool {
                 }
                 if let Some(mut guide) = press.guide.take() {
                     out.push(Action::Begin { label: guide.label().into() });
-                    if let Some(inv) = guide.update(cx, ev.pos, ev.mods.ctrl) {
+                    if let Some(inv) = guide.update(cx, ev.pos, ev.mods) {
                         out.push(Action::Preview { invocation: inv });
                     }
                     self.state = State::Guide(Box::new(guide));
@@ -400,6 +409,7 @@ impl SelectTool {
                 let drag = Drag {
                     down: press.down,
                     grab: press.grab,
+                    handle_node: crate::suggestions::single_handle_node(cx.scene, &press.selection),
                     moving: Moving::from_selection(cx.scene, &press.selection),
                     selection: std::mem::take(&mut press.selection),
                     alt_at_start: mods.alt,
@@ -436,7 +446,7 @@ impl SelectTool {
                 }
             }
             State::Guide(guide) => {
-                if let Some(inv) = guide.update(cx, ev.pos, ev.mods.ctrl) {
+                if let Some(inv) = guide.update(cx, ev.pos, ev.mods) {
                     out.push(Action::Preview { invocation: inv });
                 }
             }
@@ -464,7 +474,7 @@ impl SelectTool {
                     let mut params = Selection::new().targets(cx.scene);
                     params.insert("segments".into(), json!([[shape, node]]));
                     out.push(Action::Run { invocation: Invocation::new("path.convertSegmentToCurve", Value::Object(params)) });
-                } else if let Some(selection) = press.reduce_to {
+                } else if let Some(selection) = press.on_click {
                     out.push(Action::Select { selection });
                 }
             }
@@ -502,7 +512,7 @@ impl SelectTool {
                 }
             }
             State::Guide(mut guide) => {
-                if let Some(inv) = guide.update(cx, ev.pos, ev.mods.ctrl) {
+                if let Some(inv) = guide.update(cx, ev.pos, ev.mods) {
                     out.push(Action::Preview { invocation: inv });
                 }
                 out.push(Action::Commit);
@@ -559,10 +569,18 @@ impl Drag {
         self.last_pos = pos;
         let pos = self.lever.apply(cx, pos, mods);
         let target = Point::new(self.grab.x + pos.x - self.down.x, self.grab.y + pos.y - self.down.y);
+        // A handle that keeps its angle has no axis to follow.
+        let axis = (mods.shift && !(self.handles_only && mods.alt && !mods.ctrl)).then(|| {
+            let from = self.handle_node.unwrap_or(self.grab);
+            (HoldAxis::of(from, target), from)
+        });
+        let target = axis.map_or(target, |(axis, from)| axis.hold(from, target));
         self.component_markers =
             if mods.ctrl { Vec::new() } else { crate::snap::component_markers(cx.scene, &cx.view, target, &self.moving, cx.settings.snap_distance) };
         self.snap = if mods.ctrl {
             None
+        } else if let Some((axis, _)) = axis {
+            Some(snap_along(cx.scene, &cx.view, target, axis, &self.moving, cx.settings.snap_distance))
         } else {
             let plain = snap(cx.scene, &cx.view, target, &self.moving, cx.settings.snap_distance);
             // A copy leaves the dragged points where they were.
@@ -664,7 +682,7 @@ impl Tool for SelectTool {
             }
             State::Guide(guide) => {
                 let pos = guide.last_pos;
-                if let Some(inv) = guide.update(cx, pos, mods.ctrl) {
+                if let Some(inv) = guide.update(cx, pos, mods) {
                     out.push(Action::Preview { invocation: inv });
                 }
             }

@@ -7,6 +7,7 @@
 //! | drag a power guide's knob | the same with `guide.movePowerGuide`, which moves its linked nodes too |
 //! | drag the guide elsewhere | `guide.setProperties` with a new `angle`: the guide turns about its knob, following the pointer |
 //! | drag an angle-locked guide elsewhere | it moves, as a knob drag does |
+//! | `Shift` while a guide moves | it moves only sideways or only up and down, and snaps along that axis |
 //! | double-click the knob | the guide turns by 90° (an angle-locked guide does not) |
 //! | double-click the guide elsewhere | the guide's properties dialog ([`PROPERTIES_DIALOG`]) |
 //!
@@ -17,11 +18,12 @@ use fontcraft_geom::Point;
 use fontcraft_model::{Guide, Layer};
 use serde_json::{Map, Value, json};
 
+use crate::event::Modifiers;
 use crate::geometry::{dist, finite};
 use crate::output::Invocation;
 use crate::scene::Scene;
 use crate::selection::{GuideRef, GuideScope};
-use crate::snap::{Moving, Snap, snap};
+use crate::snap::{HoldAxis, Moving, Snap, snap, snap_along};
 use crate::tool::Context;
 
 /// The dialog a double-click on a guide's line opens; the shell registers it.
@@ -160,8 +162,8 @@ impl GuideDrag {
     }
 
     /// Takes the drag to `pos` and returns the preview to run, when it differs from the last
-    /// one. `ctrl` suspends snapping.
-    pub fn update(&mut self, cx: &Context<'_>, pos: Point, ctrl: bool) -> Option<Invocation> {
+    /// one. `Ctrl` suspends snapping; `Shift` holds a move to an axis.
+    pub fn update(&mut self, cx: &Context<'_>, pos: Point, mods: Modifiers) -> Option<Invocation> {
         if !finite(pos) {
             return None;
         }
@@ -170,7 +172,9 @@ impl GuideDrag {
         let sent = match self.mode {
             Mode::Move => {
                 let to = Point::new(self.grab.x + pos.x - self.down.x, self.grab.y + pos.y - self.down.y);
-                self.snap = if ctrl { None } else { Some(snap_apart(cx, self.guide, to)) };
+                let axis = mods.shift.then(|| HoldAxis::of(self.grab, to));
+                let to = axis.map_or(to, |a| a.hold(self.grab, to));
+                self.snap = if mods.ctrl { None } else { Some(snap_apart(cx, self.guide, to, axis)) };
                 let to = self.snap.as_ref().map_or(to, |s| s.point);
                 let (x, y) = (self.knob.x + to.x - self.grab.x, self.knob.y + to.y - self.grab.y);
                 if !(x.is_finite() && y.is_finite()) {
@@ -202,11 +206,16 @@ impl GuideDrag {
     }
 }
 
-/// Snaps `p` as a node would snap, except to the guide being dragged.
-fn snap_apart(cx: &Context<'_>, r: GuideRef, p: Point) -> Snap {
+/// Snaps `p` as a node would snap, along `axis` only when there is one, except to the guide being
+/// dragged.
+fn snap_apart(cx: &Context<'_>, r: GuideRef, p: Point, axis: Option<HoldAxis>) -> Snap {
     let (moving, distance) = (Moving::default(), cx.settings.snap_distance);
+    let snap_in = |scene: &Scene<'_>| match axis {
+        Some(axis) => snap_along(scene, &cx.view, p, axis, &moving, distance),
+        None => snap(scene, &cx.view, p, &moving, distance),
+    };
     if !cx.scene.guides_shown {
-        return snap(cx.scene, &cx.view, p, &moving, distance);
+        return snap_in(cx.scene);
     }
     match r.scope {
         GuideScope::Local => {
@@ -214,7 +223,7 @@ fn snap_apart(cx: &Context<'_>, r: GuideRef, p: Point) -> Snap {
             if r.index < layer.info.guides.len() {
                 layer.info.guides.remove(r.index);
             }
-            snap(&with_parts(cx.scene, &layer, cx.scene.global_guides), &cx.view, p, &moving, distance)
+            snap_in(&with_parts(cx.scene, &layer, cx.scene.global_guides))
         }
         GuideScope::Global => {
             let mut globals = cx.scene.global_guides.to_vec();
@@ -225,7 +234,7 @@ fn snap_apart(cx: &Context<'_>, r: GuideRef, p: Point) -> Snap {
             // The indices after the dragged guide move down by one.
             without.hidden_global_guides =
                 cx.scene.hidden_global_guides.iter().filter(|&&i| i != r.index).map(|&i| if i > r.index { i - 1 } else { i }).collect();
-            snap(&without, &cx.view, p, &moving, distance)
+            snap_in(&without)
         }
     }
 }

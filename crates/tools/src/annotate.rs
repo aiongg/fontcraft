@@ -8,8 +8,8 @@
 //! |---|---|
 //! | click empty canvas (Text, Arrow, Circle, Plus, Minus) | `annotation.add` of that type at the pointer, with the command's defaults |
 //! | click empty canvas (Selection) | clear the selection (`Shift`: keep it) |
-//! | click an annotation | select it; `Shift` toggles it |
-//! | drag an annotation | `annotation.move` of the selected annotations in one interaction |
+//! | click an annotation | select it; `Shift` toggles it: a selected one leaves the selection at the release |
+//! | drag an annotation | `annotation.move` of the selected annotations in one interaction; `Shift` adds the pressed one first, and holds the drag to the nearer axis |
 //! | drag the handle of a selected annotation | `annotation.update` in one interaction: a note's box width, an arrow's angle, a circle's diameter |
 //! | `Cmd+A` | `annotation.selectAll` |
 //! | arrow keys | `annotation.move` by the font's increments (plain, `Shift`, `Cmd`) |
@@ -30,6 +30,7 @@ use crate::event::{Key, KeyEvent, Modifiers, PointerEvent, PointerKind};
 use crate::geometry::{dist, finite};
 use crate::output::{Action, Invocation, Output};
 use crate::selection::{Item, Selection};
+use crate::snap::HoldAxis;
 use crate::tool::{Context, Tool};
 use crate::view::View;
 
@@ -163,7 +164,8 @@ enum Grab {
     /// Annotation `index`; dragging moves `selection`'s annotations.
     Body {
         index: usize,
-        reduce_to: Option<Selection>,
+        /// What the release selects, unless the press became a drag.
+        on_click: Option<Selection>,
     },
     Empty,
 }
@@ -176,6 +178,37 @@ struct Press {
     selection: Selection,
     /// The drag began an interaction.
     began: bool,
+    last_pos: Point,
+}
+
+impl Press {
+    /// The preview for the pointer at `pos`, once the drag has passed the threshold.
+    fn drag(&mut self, cx: &Context<'_>, pos: Point, mods: Modifiers) -> Output {
+        self.last_pos = pos;
+        let moved = dist(cx.view.to_screen(self.down), cx.view.to_screen(pos)) >= cx.settings.drag_threshold;
+        let params = match &self.grab {
+            Grab::Handle(i) => cx.scene.layer.info.annotations.get(*i).and_then(|a| handle_params(cx, *i, a, pos)),
+            Grab::Body { .. } if !self.selection.annotations.is_empty() => {
+                let to = if mods.shift { HoldAxis::of(self.down, pos).hold(self.down, pos) } else { pos };
+                let mut m = layer_params(cx);
+                m.insert("annotations".into(), annotations_of(&self.selection));
+                m.insert("dx".into(), json!(to.x - self.down.x));
+                m.insert("dy".into(), json!(to.y - self.down.y));
+                Some(Value::Object(m))
+            }
+            _ => None,
+        };
+        let Some(params) = params.filter(|_| self.began || moved) else { return Output::handled() };
+        let (id, label) =
+            if matches!(self.grab, Grab::Handle(_)) { ("annotation.update", "Edit Annotation") } else { ("annotation.move", "Move Annotations") };
+        let mut out = Output::handled();
+        if !self.began {
+            self.began = true;
+            out.push(Action::Begin { label: label.into() });
+        }
+        out.push(Action::Preview { invocation: Invocation::new(id, params) });
+        out
+    }
 }
 
 /// One annotation sub-tool.
@@ -205,7 +238,7 @@ impl AnnotateTool {
         }
         // The last annotation is drawn on top.
         match list.iter().enumerate().rev().find(|(_, a)| hits(a, &cx.view, p, tol)) {
-            Some((index, _)) => Grab::Body { index, reduce_to: None },
+            Some((index, _)) => Grab::Body { index, on_click: None },
             None => Grab::Empty,
         }
     }
@@ -253,13 +286,20 @@ impl Tool for AnnotateTool {
                 let mut grab = Self::grab(cx, ev.pos);
                 let mut selection = cx.selection.clone();
                 let mut out = Output::handled();
-                if let Grab::Body { index, reduce_to } = &mut grab {
+                if let Grab::Body { index, on_click } = &mut grab {
                     let item = Item::Annotation(*index);
-                    if ev.mods.shift {
-                        selection.toggle(item);
-                    } else if selection.contains(&item) {
-                        // A click without a drag keeps only this one; a drag moves them all.
-                        *reduce_to = Some(Selection::from_items([item]));
+                    if selection.contains(&item) {
+                        // A click without a drag keeps only this one, or drops it with Shift; a drag
+                        // moves them all.
+                        *on_click = Some(if ev.mods.shift {
+                            let mut without = selection.clone();
+                            without.remove(&item);
+                            without
+                        } else {
+                            Selection::from_items([item])
+                        });
+                    } else if ev.mods.shift {
+                        selection.insert(item);
                     } else {
                         selection = Selection::from_items([item]);
                     }
@@ -267,44 +307,20 @@ impl Tool for AnnotateTool {
                         out.push(Action::Select { selection: selection.clone() });
                     }
                 }
-                self.press = Some(Press { down: ev.pos, grab, mods: ev.mods, selection, began: false });
+                self.press = Some(Press { down: ev.pos, grab, mods: ev.mods, selection, began: false, last_pos: ev.pos });
                 out
             }
-            PointerKind::Drag => {
-                let Some(press) = self.press.as_mut() else { return Output::default() };
-                let moved = dist(cx.view.to_screen(press.down), cx.view.to_screen(ev.pos)) >= cx.settings.drag_threshold;
-                let params = match &press.grab {
-                    Grab::Handle(i) => cx.scene.layer.info.annotations.get(*i).and_then(|a| handle_params(cx, *i, a, ev.pos)),
-                    Grab::Body { .. } if !press.mods.shift && !press.selection.annotations.is_empty() => {
-                        let mut m = layer_params(cx);
-                        m.insert("annotations".into(), annotations_of(&press.selection));
-                        m.insert("dx".into(), json!(ev.pos.x - press.down.x));
-                        m.insert("dy".into(), json!(ev.pos.y - press.down.y));
-                        Some(Value::Object(m))
-                    }
-                    _ => None,
-                };
-                let Some(params) = params.filter(|_| press.began || moved) else { return Output::handled() };
-                let (id, label) = if matches!(press.grab, Grab::Handle(_)) {
-                    ("annotation.update", "Edit Annotation")
-                } else {
-                    ("annotation.move", "Move Annotations")
-                };
-                let mut out = Output::handled();
-                if !press.began {
-                    press.began = true;
-                    out.push(Action::Begin { label: label.into() });
-                }
-                out.push(Action::Preview { invocation: Invocation::new(id, params) });
-                out
-            }
+            PointerKind::Drag => match self.press.as_mut() {
+                Some(press) => press.drag(cx, ev.pos, ev.mods),
+                None => Output::default(),
+            },
             PointerKind::Up => {
                 let Some(press) = self.press.take() else { return Output::default() };
                 if press.began {
                     return Output::with(Action::Commit);
                 }
                 match press.grab {
-                    Grab::Body { reduce_to: Some(only), .. } => Output::with(Action::Select { selection: only }),
+                    Grab::Body { on_click: Some(selection), .. } => Output::with(Action::Select { selection }),
                     Grab::Empty => match self.adds {
                         Some(kind) => {
                             let mut m = layer_params(cx);
@@ -364,6 +380,16 @@ impl Tool for AnnotateTool {
                 params.insert("dx".into(), json!(dx));
                 params.insert("dy".into(), json!(dy));
                 run("annotation.move", params)
+            }
+            _ => Output::default(),
+        }
+    }
+
+    fn modifiers(&mut self, cx: &Context<'_>, mods: Modifiers) -> Output {
+        match self.press.as_mut() {
+            Some(press) if press.began && matches!(press.grab, Grab::Body { .. }) => {
+                let pos = press.last_pos;
+                press.drag(cx, pos, mods)
             }
             _ => Output::default(),
         }

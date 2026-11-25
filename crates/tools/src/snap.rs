@@ -5,7 +5,7 @@
 //! A point that finds none of them can still line up on one axis with another node (the magnetic
 //! alignment lines). Points that move with the drag are never targets. The snap distance is in
 //! screen points; the shell passes its token value. `Ctrl` suspends snapping: the tools then do
-//! not call [`snap`].
+//! not call [`snap`]. A drag that `Shift` holds to an axis snaps along it only ([`snap_along`]).
 
 use std::collections::BTreeSet;
 
@@ -198,6 +198,128 @@ pub fn snap(scene: &Scene, view: &View, p: Point, moving: &Moving, distance: f64
         out.lines.push((q, Point::new(out.point.x, q.y)));
     }
     out
+}
+
+/// The axis a drag held with `Shift` moves along.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HoldAxis {
+    Horizontal,
+    Vertical,
+}
+
+impl HoldAxis {
+    /// The axis nearer to the way from `from` to `to`; horizontal when both are as near.
+    pub fn of(from: Point, to: Point) -> Self {
+        if (to.x - from.x).abs() >= (to.y - from.y).abs() { HoldAxis::Horizontal } else { HoldAxis::Vertical }
+    }
+
+    /// `p` moved onto the line through `from` along the axis.
+    pub fn hold(self, from: Point, p: Point) -> Point {
+        match self {
+            HoldAxis::Horizontal => Point::new(p.x, from.y),
+            HoldAxis::Vertical => Point::new(from.x, p.y),
+        }
+    }
+
+    /// The coordinates of `p` along the axis and across it.
+    fn split(self, p: Point) -> (f64, f64) {
+        match self {
+            HoldAxis::Horizontal => (p.x, p.y),
+            HoldAxis::Vertical => (p.y, p.x),
+        }
+    }
+}
+
+/// How far from the line of a held drag, in font units, a point still counts as on it.
+const ON_LINE: f64 = 1e-6;
+
+/// Snaps `p` as [`snap`] does, but only along `axis`: the coordinate across it stays. Nodes, then
+/// handles, count as targets when they lie on the line the drag keeps to; then guides where they
+/// cross it, the sidebearings (or the metric lines) and lining up with a node.
+pub fn snap_along(scene: &Scene, view: &View, p: Point, axis: HoldAxis, moving: &Moving, distance: f64) -> Snap {
+    let tol = view.units(distance);
+    if !finite(p) || !tol.is_finite() || tol <= 0.0 {
+        return Snap::none(p);
+    }
+    let (along, across) = axis.split(p);
+    let at = |v: f64| match axis {
+        HoldAxis::Horizontal => Point::new(v, p.y),
+        HoldAxis::Vertical => Point::new(p.x, v),
+    };
+    let paths = || {
+        scene.layer.shapes.iter().enumerate().filter_map(|(i, s)| match s {
+            fontcraft_model::Shape::Path(path) => Some((i, path)),
+            _ => None,
+        })
+    };
+    let background = scene.layer.info.background.as_ref().filter(|_| scene.background_shown);
+    for want_on_curve in [true, false] {
+        let mut best: Option<(f64, f64, Option<NodeRef>)> = None;
+        let mut consider = |q: Point, node: Option<NodeRef>| {
+            let (u, v) = axis.split(q);
+            let d = (u - along).abs();
+            if (v - across).abs() <= ON_LINE && d <= tol && best.is_none_or(|b| d < b.0) {
+                best = Some((d, u, node));
+            }
+        };
+        for (shape, path) in paths() {
+            for (n, node) in path.nodes.iter().enumerate() {
+                if node.on_curve() == want_on_curve && !moving.points.contains(&(shape, n)) {
+                    consider(node.point(), Some((shape, n)));
+                }
+            }
+        }
+        for c in scene.components().iter().filter(|c| !moving.shapes.contains(&c.shape)) {
+            let list = if want_on_curve { &c.nodes } else { &c.handles };
+            for q in list {
+                consider(*q, None);
+            }
+        }
+        for shape in background.iter().flat_map(|b| b.shapes.iter()) {
+            let fontcraft_model::Shape::Path(path) = shape else { continue };
+            for node in path.nodes.iter().filter(|n| n.on_curve() == want_on_curve) {
+                consider(node.point(), None);
+            }
+        }
+        if let Some((_, u, node)) = best {
+            let kind = if want_on_curve { SnapKind::Node } else { SnapKind::Handle };
+            return Snap { point: at(u), kind: Some(kind), node, marker: Some(at(u)), lines: Vec::new() };
+        }
+    }
+    if scene.guides_shown
+        && let Some(u) = nearest_value(along, crate::snap_guides::crossings(scene, p, axis).map(|q| axis.split(q).0), tol)
+    {
+        return Snap { point: at(u), kind: Some(SnapKind::Guide), node: None, marker: Some(at(u)), lines: Vec::new() };
+    }
+    let width = if scene.layer.width.is_finite() { scene.layer.width } else { 0.0 };
+    let metric = match axis {
+        HoldAxis::Horizontal => nearest_value(along, [0.0, width], tol),
+        HoldAxis::Vertical => nearest_value(along, scene.metric_lines.iter().copied(), tol),
+    };
+    if let Some(u) = metric {
+        let lines = match axis {
+            HoldAxis::Horizontal => Vec::new(),
+            HoldAxis::Vertical => vec![(Point::new(p.x.min(0.0), u), Point::new(p.x.max(width), u))],
+        };
+        return Snap { point: at(u), kind: Some(SnapKind::Metric), node: None, marker: None, lines };
+    }
+    let mut aligned: Option<(f64, Point)> = None;
+    for (shape, path) in paths() {
+        for (n, node) in path.nodes.iter().enumerate() {
+            let q = node.point();
+            let d = (axis.split(q).0 - along).abs();
+            if node.on_curve() && !moving.points.contains(&(shape, n)) && finite(q) && d <= tol && aligned.is_none_or(|b| d < b.0) {
+                aligned = Some((d, q));
+            }
+        }
+    }
+    match aligned {
+        Some((_, q)) => {
+            let to = at(axis.split(q).0);
+            Snap { point: to, kind: Some(SnapKind::Align), node: None, marker: None, lines: vec![(q, to)] }
+        }
+        None => Snap::none(p),
+    }
 }
 
 /// How far, as a multiple of the snap distance, a component's node shows as a snap marker during a drag.

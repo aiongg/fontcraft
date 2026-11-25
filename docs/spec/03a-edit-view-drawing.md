@@ -247,6 +247,8 @@ Tools: `select` (`V`), `lasso` (`V` / `Shift+V`).
   angle (`selection.slantedMarquee`).
 - Click a point or segment to select it; `Shift` toggles membership
   (`selection.shiftExtendsOrReduces`). Handles are selectable independently of their nodes.
+  A `Shift` press on an unselected object adds it and can drag the selection; on a selected one
+  the toggle waits for the release (`selection.shiftPressDrags`).
 - Double-click near a segment selects the whole path (`selection.doubleClickSelectsPath`).
 - Lasso: drag a free-form region.
 - A segment counts as selected when both end nodes are selected or one of its handles is
@@ -305,6 +307,9 @@ Nodes:
 - `Ctrl+Alt`, or `Alt` pressed after a drag has started: **nudge**. Selected nodes move and the
   neighbouring unselected handles are rescaled proportionally so adjacent curves adapt
   (`move.nudge`, `mode: nudge`).
+- `Shift` during a drag: horizontal or vertical only, whichever is nearer, for everything the drag
+  moves; a lone handle keeps to the axes through its node. Snapping works along the drag only
+  (`move.shiftConstrains`).
 
 Handles (`move.handles`, `move.mirrorHandleAcrossSmoothNode`):
 

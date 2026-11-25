@@ -781,6 +781,8 @@ gestures = [
   "Ctrl while dragging a marquee: turn the marquee to a new angle; releasing Ctrl goes back to resizing at that angle (slanted selection)",
   "click a node, handle or segment: select it",
   "Shift+click or Shift+marquee: add to or remove from the selection",
+  "Shift+drag from an object: add it to the selection and drag the selection",
+  "Shift while dragging: horizontal or vertical only (a lone handle: along the axes through its node)",
   "double-click near a segment: select the whole path",
   "double-click a node: toggle it between smooth and corner (Alt keeps the outline unchanged)",
   "Shift+double-click a node: toggle super-smooth",
@@ -855,6 +857,23 @@ milestone = "M3"
 summary = "With Shift held, clicking or marquee-selecting toggles the hit items in the existing selection rather than replacing it. Handles are selectable on their own, so Shift-clicking handles builds a non-contiguous selection."
 ref = "Edit View › Selecting Nodes and Paths"
 status = "handbook"
+
+[[behavior]]
+id = "selection.shiftPressDrags"
+area = "drawing"
+milestone = "M3"
+summary = "A press with Shift held on an object that is not selected adds it to the selection at once, and a drag from there moves the whole selection. On a selected object the press changes nothing yet: released in place it drops the object from the selection, dragged it moves the selection. Annotations behave the same with the annotation tools."
+ref = "Edit View › Selecting Nodes and Paths"
+status = "inferred"
+notes = "The handbook says only that Shift extends or reduces the selection. A segment that is only half selected joins as a whole."
+guesses = [
+  "Shift on an unselected object adds it at mouse-down, and Shift on a selected one drops it at the release, so both presses can drag.",
+  "A guide that a Shift press added to other objects moves with them; alone it turns or moves as in guides.knobAndSelection.",
+]
+observe = [
+  "Select one node, Shift-press another and drag in the same press: note whether both move.",
+  "Select two nodes, Shift-press one of them and drag: note whether both move and whether the pressed one stays selected.",
+]
 
 [[behavior]]
 id = "selection.doubleClickSelectsPath"
@@ -1020,6 +1039,24 @@ status = "handbook"
 guesses = [
   "Alt with an arrow key moves only the selected points (03a question 1).",
   "Only the handle of a smooth node next to a line turns when the node moves (nodes.tangentFollowsLine); all other handles keep their offset from their node.",
+]
+
+[[behavior]]
+id = "move.shiftConstrains"
+area = "drawing"
+milestone = "M3"
+summary = "Holding Shift while dragging the selection (nodes, handles, segments, components, anchors, guides, annotations, the placed image) keeps the drag horizontal or vertical, whichever is nearer to the pointer's way; Shift can be pressed and released during the drag. A single dragged handle goes onto the horizontal or the vertical through its node. Snapping then works along the drag only. Shift+Option on a node is the sliding aid."
+ref = "Edit View › Moving Selected Nodes and Paths"
+status = "docs"
+notes = "Users of the reference app describe the constraint for dragged nodes on the public forum (forum.glyphsapp.com topics 36658, 24347, 31911 and 35615). `snap_along` in tools/snap.rs: nodes and handles count as targets only on the held line, then guides where they cross it, sidebearings or metric lines, and lining up with a node; the suggestions are off. A drag of handles with Option keeps the angle and ignores Shift. Image: ImageDrag."
+guesses = [
+  "A single handle is held to the axes through its node, not to the axes through its place at the press.",
+  "In an italic master the vertical is upright; the italic angle adds no axis.",
+  "Only horizontal and vertical; no 45° directions, unlike the Draw tool.",
+]
+observe = [
+  "Shift-drag a node, then a lone handle, then a component: note the directions each drag allows.",
+  "In a master with an italic angle of 12°, Shift-drag a node upwards: note whether it goes straight up or along the angle.",
 ]
 
 [[behavior]]
