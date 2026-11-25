@@ -105,3 +105,26 @@ fn a_compiled_font_becomes_editable_and_collection_members_open_apart() {
     assert_eq!((opened["format"].as_str(), opened["viewOnly"].as_bool()), (Some("fontcraft"), Some(false)), "{opened}");
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+/// Save As from a package to a UFO leaves the package's other files out and says so, and they are not written by the
+/// next save either.
+#[test]
+fn a_packages_files_stay_out_of_a_ufo() {
+    let dir = fontcraft_testkit::temp_dir("package-to-ufo");
+    let (pkg, ufo) = (dir.join("Font.glyphspackage"), dir.join("Font.ufo"));
+    let mut s = Session::with_document();
+    s.execute("file.saveAs", &json!({ "path": pkg })).unwrap();
+    std::fs::write(pkg.join("notes.txt"), b"kept beside the glyphs").unwrap();
+    let mut s = Session::new();
+    s.execute("file.open", &json!({ "path": pkg })).unwrap();
+    let side = |losses: &Value| losses.as_array().unwrap().iter().any(|l| l["files"].to_string().contains("notes.txt"));
+    let report = s.execute("file.lossReport", &json!({ "format": "ufo" })).unwrap();
+    assert!(side(&report["losses"]) && side(&report["fresh"]), "{report}");
+    let refused = s.execute("file.saveAs", &json!({ "path": ufo, "strict": true })).unwrap_err().to_string();
+    assert!(refused.contains("beside the glyphs") && !ufo.exists(), "{refused}");
+    let saved = s.execute("file.saveAs", &json!({ "path": ufo })).unwrap();
+    assert!(side(&saved["losses"]) && !ufo.join("notes.txt").exists(), "{saved}");
+    let again = s.execute("file.save", &json!({})).unwrap();
+    assert!(!side(&again["losses"]) && !ufo.join("notes.txt").exists(), "{again}");
+    let _ = std::fs::remove_dir_all(&dir);
+}

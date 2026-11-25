@@ -600,11 +600,31 @@ fn losses(font: &Font, targets: &[Family]) -> Vec<Value> {
 /// Files beside another format's document (a package's UI state, feature files), which a UFO does
 /// not take.
 fn side_file_losses(font: &Font) -> Option<Value> {
-    let foreign = !matches!(font.source.format, SourceFormat::Ufo | SourceFormat::Designspace);
-    (foreign && !font.files.is_empty()).then(|| {
-        let names: Vec<&str> = font.files.0.keys().map(String::as_str).collect();
-        json!({ "family": "glyphspackage", "entries": names.len(), "what": "files beside the glyphs in the package", "files": names })
-    })
+    let foreign = !fontcraft_model::is_ufo_family(font.source.format);
+    (foreign && !font.files.is_empty()).then(|| side_files(font, "glyphspackage", "files beside the glyphs in the package"))
+}
+
+fn side_files(font: &Font, family: &str, what: &str) -> Value {
+    let names: Vec<&str> = font.files.0.keys().map(String::as_str).collect();
+    json!({ "family": family, "entries": names.len(), "what": what, "files": names })
+}
+
+/// Drops the files `font` holds beside its source when a save in `format` has no place for them: a
+/// package's in a UFO, a UFO's in a package. Returns what was dropped, as a loss. The caller then
+/// makes `font` one of `format`, after which the writer takes whatever files it holds.
+pub fn drop_foreign_files(font: &mut Font, format: SaveFormat) -> Option<Value> {
+    let from_ufo = fontcraft_model::is_ufo_family(font.source.format);
+    let loss = if format.is_ufo() && !from_ufo {
+        side_file_losses(font)
+    } else if format == SaveFormat::GlyphsPackage && from_ufo && !font.files.is_empty() {
+        Some(side_files(font, "ufo", "files beside the glyphs in the UFO"))
+    } else {
+        None
+    };
+    if loss.is_some() {
+        font.files = Default::default();
+    }
+    loss
 }
 
 /// Layers a UFO has no place for yet: alternate layers (a designspace holds them, in a font with

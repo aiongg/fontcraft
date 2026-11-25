@@ -1739,7 +1739,7 @@ pub(crate) fn write_master(font: &Font, target: &Target<'_>) -> Result<Files> {
         }
     }
     // Other files, as read. Only a UFO's: another format's side files have no place here.
-    if matches!(font.source.format, SourceFormat::Ufo | SourceFormat::Designspace) {
+    if fontcraft_model::is_ufo_family(font.source.format) {
         for (path, bytes) in &font.files.0 {
             if let Some(rel) = path.strip_prefix(target.prefix.as_str()) {
                 out.entry(rel.to_string()).or_insert_with(|| bytes.to_vec());
@@ -2013,7 +2013,7 @@ pub(crate) fn layer_losses(font: &Font, files: FilesFrom) -> Vec<String> {
     // travel, from where the writer finds them ([`FilesFrom`]); other formats are not converted.
     // `None`: the writer finds none of the master's files.
     let ufo_prefix = |master: &str| -> Option<String> {
-        if !matches!(font.source.format, SourceFormat::Ufo | SourceFormat::Designspace) {
+        if !fontcraft_model::is_ufo_family(font.source.format) {
             return None;
         }
         let file = font.masters.iter().find(|m| m.id == master).and_then(|m| m.extra.get(Family::Designspace, "filename")).and_then(Value::as_str);

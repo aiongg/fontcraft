@@ -72,17 +72,19 @@ fn report(s: &mut Session, p: &Value) -> Result<Value> {
     };
     let version = p.opt_int("version", 2, 4)?.map(|v| v as u32);
     let mut font = fontcraft_model::Font::clone(&doc.font);
-    let (version, outlines) = if export {
-        (Some(3), p.bool_or("decomposeSmartStuff", true)?)
+    let (version, dropped, outlines) = if export {
+        (Some(3), None, p.bool_or("decomposeSmartStuff", true)?)
     } else {
-        (super::file::prepare(&p, &mut font, format, version)?, super::file::smart_outlines(&p)?)
+        let (version, dropped) = super::file::prepare(&p, &mut font, format, version)?;
+        (version, dropped, super::file::smart_outlines(&p)?)
     };
     let outlines = outlines && format.is_ufo();
     let smart = if format.is_ufo() { super::format_warnings::smart_components(&font) } else { 0 };
     let (drawn, _) = super::file::smart_choice(&font, outlines);
     let written = drawn.as_ref().unwrap_or(&font);
     let losses_of = |font: &fontcraft_model::Font| if export { io::export_losses(font) } else { io::save_losses(font, format) };
-    let losses = losses_of(written);
+    let mut losses = losses_of(written);
+    losses.extend(dropped);
     let private = if format.is_ufo() { super::format_warnings::private_features(written) } else { Vec::new() };
     // What the document's file lost when it was read or written is no news on the next save.
     let in_file = doc.path.is_some() && if export { own.is_some_and(SaveFormat::is_ufo) } else { own == Some(format) };

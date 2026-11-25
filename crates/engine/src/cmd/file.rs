@@ -191,12 +191,15 @@ fn write_document(s: &mut Session, p: &Params, path: std::path::PathBuf, format:
     }
     let mut font = Font::clone(&doc.font);
     crate::assets::rebase_image_paths(&mut font, doc.path.as_deref(), &path);
-    let version = prepare(p, &mut font, format, version)?;
+    let (version, dropped) = prepare(p, &mut font, format, version)?;
     let (smart, smart_losses) = smart_choice(&font, outlines);
     if p.bool_or("strict", false)? {
-        refuse_losses(p, format.name(), &io::save_losses(smart.as_ref().unwrap_or(&font), format))?;
+        let mut losses = io::save_losses(smart.as_ref().unwrap_or(&font), format);
+        losses.extend(dropped.clone());
+        refuse_losses(p, format.name(), &losses)?;
     }
     let mut saved = io::save(smart.as_ref().unwrap_or(&font), &path, format)?;
+    saved.losses.extend(dropped);
     saved.losses.extend(smart_losses);
     let font = Arc::new(font);
     let doc = s.doc_mut()?;
@@ -225,10 +228,11 @@ fn write_document(s: &mut Session, p: &Params, path: std::path::PathBuf, format:
 
 /// Makes `font`, a copy of the document's, what a save in `format` writes: the version its format
 /// family is written in (the one asked for, else the one read, else the newest that is not a
-/// draft, 3 for both) and the format it is then read from. Returns the version. Converting
-/// between versions is not supported yet.
+/// draft, 3 for both) and the format it is then read from, without the files of its source the
+/// format has no place for. Returns the version and the loss of those files. Converting between
+/// versions is not supported yet.
 #[cfg(not(target_arch = "wasm32"))]
-pub(super) fn prepare(p: &Params, font: &mut Font, format: crate::io::SaveFormat, version: Option<u32>) -> Result<Option<u32>> {
+pub(super) fn prepare(p: &Params, font: &mut Font, format: crate::io::SaveFormat, version: Option<u32>) -> Result<(Option<u32>, Option<Value>)> {
     use crate::io::SaveFormat;
     let pick = |have: Option<u32>, range: std::ops::RangeInclusive<u32>| -> Result<u32> {
         let want = version.or(have).unwrap_or(3);
@@ -253,10 +257,12 @@ pub(super) fn prepare(p: &Params, font: &mut Font, format: crate::io::SaveFormat
             Some(v)
         }
     };
+    let mut dropped = None;
     if format != SaveFormat::Native {
+        dropped = crate::io::drop_foreign_files(font, format);
         font.source.format = format.source();
     }
-    Ok(version)
+    Ok((version, dropped))
 }
 
 /// `strict`: an error naming what a write in `format` would leave out, when it leaves anything out.
