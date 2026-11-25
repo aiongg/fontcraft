@@ -38,6 +38,9 @@ pub struct GuideBox {
 
 /// The part for the one guide the canvas selection holds; `None` without exactly one selected guide.
 pub fn guide_box(cx: &ProjectCx<'_>, tools: &Tools) -> Option<GuideBox> {
+    if cx.view.tabs.font_view_shows() {
+        return None;
+    }
     let mut guides = tools.selection.guides.iter();
     let (&r, None) = (guides.next()?, guides.next()) else { return None };
     let font = cx.session.font().ok()?;

@@ -433,12 +433,14 @@ fn change_params(st: &mut ActionsState, spec: &CommandSpec, changes: &Map<String
 pub fn scope_glyphs(app: &mut FontCraftApp, scope: GlyphScope, category: &str) -> Result<Vec<String>, String> {
     let names: Vec<String> = match scope {
         GlyphScope::Glyph => {
-            let current = app.view.glyph.clone().or_else(|| app.view.font_view.selected.first().cloned());
+            // The glyph behind Font View is not the shown one.
+            let shown = app.view.glyph.clone().filter(|_| !app.font_view_shows());
+            let current = shown.or_else(|| app.view.font_view.selected.first().cloned());
             vec![current.ok_or("no glyph is shown or selected")?]
         }
         GlyphScope::Selected => {
             if app.view.font_view.selected.is_empty() {
-                app.view.glyph.iter().cloned().collect()
+                app.view.glyph.iter().filter(|_| !app.font_view_shows()).cloned().collect()
             } else {
                 app.view.font_view.selected.clone()
             }
@@ -497,6 +499,7 @@ pub fn scope_layers(app: &FontCraftApp, scope: GlyphScope, layers: LayerScope, g
 /// The active layer: the layer the shown glyph is shown in when the scope is that glyph, else the current master.
 fn active_layer(app: &FontCraftApp, font: &Font, scope: GlyphScope, glyphs: &[String]) -> Option<String> {
     if scope == GlyphScope::Glyph
+        && !app.font_view_shows()
         && let Some(glyph) = glyphs.first().and_then(|g| font.glyph(g))
         && let Some(layer) = masters::shown_layer(font, &app.view.layers, glyph)
     {

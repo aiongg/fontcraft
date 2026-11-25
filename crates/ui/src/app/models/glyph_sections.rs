@@ -9,6 +9,7 @@ use serde_json::{Value, json};
 use super::ProjectCx;
 use super::glyph::shown_glyph;
 use crate::shell::dock::PanelId;
+use crate::shell::masters;
 
 /// Rows of metrics or stems the Measurements panel lists; a font may define 256 of each.
 pub const MAX_MEASUREMENT_ROWS: usize = 64;
@@ -19,16 +20,16 @@ fn shows(cx: &ProjectCx<'_>, panel: PanelId) -> bool {
     cx.view.workspace.layout.panel_state(&panel) != PanelState::Hidden
 }
 
-/// The layer the canvas shows for the shown glyph: the Layers panel's pick, else its layer of the current master.
+/// The layer the glyph panels show ([`masters::panel_layer`]).
 fn shown_layer(cx: &ProjectCx<'_>) -> Option<String> {
     let font = cx.session.font().ok()?;
-    crate::canvas::tools::active_layer(font, cx.view).map(|l| l.id.clone())
+    masters::panel_layer(font, cx.view).map(|l| l.id.clone())
 }
 
-/// The master of the layer the canvas shows, else the current master: the master the glyph panels show.
+/// The master the glyph panels show ([`masters::panel_master`]).
 fn shown_master(cx: &ProjectCx<'_>) -> Option<String> {
     let font = cx.session.font().ok()?;
-    crate::canvas::tools::active_master(font, cx.view).map(|m| m.id.clone())
+    masters::panel_master(font, cx.view).map(|m| m.id.clone())
 }
 
 /// Which list of related glyphs a section shows.

@@ -6,12 +6,14 @@
 use craft::ui::contract::{PlainData, Tracked};
 use fontcraft_engine::cmd::stroke::stroke_style;
 use fontcraft_engine::features::marks::contextual::anchor_context;
-use fontcraft_engine::model::{Dimension, Shape};
+use fontcraft_engine::model::{Dimension, Font, Shape};
 use fontcraft_tools::Selection;
 use serde_json::{Map, Value, json};
 
 use super::components::{self, CapBox, ComponentBox, CornerBox, SegmentBox, SmartModel};
 use super::{ProjectCx, Stamp};
+use crate::app::Msg;
+use crate::app::targets::{GlyphLayers, batch, chosen_glyphs};
 use crate::canvas::tools::{Tools, scene, targets};
 use crate::panels::widgets::{KeyState, KeyedNumber, format_number};
 use crate::shell::palette::{OriginMode, fit_curve_range_of};
@@ -21,24 +23,46 @@ use crate::shell::palette::{OriginMode, fit_curve_range_of};
 #[derive(PlainData, Clone, Debug, Default, PartialEq)]
 pub struct Targets {
     pub json: String,
+    /// The other targets, each as `json`, when the command runs once for each: several glyphs or layers are chosen.
+    pub more: Vec<String>,
 }
 
 impl Targets {
     fn of(map: Map<String, Value>) -> Targets {
-        Targets { json: Value::Object(map).to_string() }
+        Targets { json: Value::Object(map).to_string(), more: Vec::new() }
+    }
+
+    /// One set of targets per run; `None` for none.
+    fn of_each(sets: Vec<Map<String, Value>>) -> Option<Targets> {
+        let mut sets = sets.into_iter();
+        let first = sets.next()?;
+        Some(Targets { more: sets.map(|set| Value::Object(set).to_string()).collect(), ..Targets::of(first) })
     }
 
     /// The targets with the keys of `extra` added.
     pub fn with(&self, extra: Value) -> Value {
-        let mut map = match serde_json::from_str::<Value>(&self.json) {
-            Ok(Value::Object(map)) => map,
-            _ => Map::new(),
-        };
-        if let Value::Object(extra) = extra {
-            map.extend(extra);
-        }
-        Value::Object(map)
+        Value::Object(joined(&self.json, &extra))
     }
+
+    /// The message that runs `id` on the targets with the keys of `extra` added, as one undo step.
+    pub fn run(&self, id: &str, extra: Value) -> Msg {
+        match fontcraft_engine::find_command(id).filter(|_| !self.more.is_empty()) {
+            Some(spec) => Msg::Run(batch(spec, std::iter::once(&self.json).chain(&self.more).map(|set| joined(set, &extra)))),
+            None => Msg::run(id, self.with(extra)),
+        }
+    }
+}
+
+/// The JSON object text `set` with the keys of `extra` added.
+fn joined(set: &str, extra: &Value) -> Map<String, Value> {
+    let mut map = match serde_json::from_str::<Value>(set) {
+        Ok(Value::Object(map)) => map,
+        _ => Map::new(),
+    };
+    if let Value::Object(extra) = extra {
+        map.extend(extra.clone());
+    }
+    map
 }
 
 /// The edited glyph's part of the Info box: name, Unicode value, metrics and kerning groups.
@@ -163,9 +187,13 @@ pub struct TransformModel {
     pub slant: f64,
     /// The `origin` parameter every transform command gets, as JSON text.
     pub origin: String,
-    /// The targets of the transform buttons: the selection, or the whole layer when nothing is selected. `None`
-    /// without an edited glyph.
+    /// The targets of the transform buttons: the selection, or the whole layer when nothing is selected; with Font View
+    /// in front or a text selection, the whole layers of the glyphs chosen there. `None` without any.
     pub targets: Option<Targets>,
+    /// The align buttons act on objects of the canvas: they are off when several glyphs are chosen.
+    pub align: bool,
+    /// Font View is in front.
+    pub font_view: bool,
     /// The targets of the boolean buttons: the selected paths (a path counts when any of its nodes is selected), else
     /// every path.
     pub boolean: Option<Targets>,
@@ -182,8 +210,13 @@ pub struct TransformModel {
 pub struct FitCurveModel {
     pub min: f64,
     pub max: f64,
-    /// The selected curve segments; `None` when no point is selected.
+    /// The selected curve segments; with Font View in front, the nodes last selected in the edit view in each glyph
+    /// selected. `None` without any.
     pub targets: Option<Targets>,
+    /// Font View is in front.
+    pub font_view: bool,
+    /// How many of the glyphs selected in Font View have no such nodes.
+    pub skipped: usize,
     /// The mean handle length of the selected segments, in percent.
     pub percent: Option<f64>,
 }
@@ -303,8 +336,10 @@ pub fn project(models: &mut PaletteModels, cx: &mut ProjectCx<'_>, tools: &Tools
     models.seen = Some(key);
     let edit = Edit::read(cx, tools);
     let mut info = info_box(cx, edit.as_ref(), tools.toolbox.hoi_picks());
-    info.ps_hint = super::hint_canvas::ps_hint_box(cx, &tools.selection);
-    info.tt = super::hint_canvas::tt_box(cx);
+    if !cx.view.tabs.font_view_shows() {
+        info.ps_hint = super::hint_canvas::ps_hint_box(cx, &tools.selection);
+        info.tt = super::hint_canvas::tt_box(cx);
+    }
     info.kerning = info.glyph.as_ref().and_then(|_| super::info_box_kerning::kern_box(cx));
     info.guide = super::guide_box::guide_box(cx, tools);
     info.image = edit.as_ref().filter(|_| tools.image).and_then(|e| {
@@ -317,8 +352,10 @@ pub fn project(models: &mut PaletteModels, cx: &mut ProjectCx<'_>, tools: &Tools
         super::image_box::image_box(cx.session, &targets)
     });
     super::set(&mut models.info_box, info);
-    super::set(&mut models.transform, transform(cx, edit.as_ref()));
-    super::set(&mut models.fit_curve, fit_curve(cx, edit.as_ref()));
+    let transform = transform(cx, edit.as_ref());
+    super::set(&mut models.transform, transform);
+    let fit_curve = fit_curve(cx, edit.as_ref(), tools);
+    super::set(&mut models.fit_curve, fit_curve);
     super::set(&mut models.anchor_context, anchor(edit.as_ref()));
     super::set(&mut models.stroke, edit.as_ref().map(|e| e.stroke.clone()).unwrap_or_default());
     super::set(&mut models.smart, smart(cx, tools).unwrap_or_default());
@@ -352,7 +389,11 @@ const TARGETED: &[&str] = &[
 ];
 
 impl Edit {
+    /// `None` without a glyph being edited: with Font View in front, the glyph behind it is not.
     fn read(cx: &ProjectCx<'_>, tools: &Tools) -> Option<Edit> {
+        if cx.view.tabs.font_view_shows() {
+            return None;
+        }
         let font = cx.session.font().ok()?;
         let scene = scene(font, cx.session.glyph_data().ok().as_deref(), cx.view, tools.focus.as_ref())?;
         let selection = tools.selection.clone();
@@ -420,6 +461,9 @@ fn info_box(cx: &mut ProjectCx<'_>, edit: Option<&Edit>, knobs: &[fontcraft_tool
 
 /// The Smart Component controls for the selected smart components of the edited side.
 fn smart(cx: &ProjectCx<'_>, tools: &Tools) -> Option<SmartModel> {
+    if cx.view.tabs.font_view_shows() {
+        return None;
+    }
     let font = cx.session.font().ok()?;
     let scene = scene(font, cx.session.glyph_data().ok().as_deref(), cx.view, tools.focus.as_ref())?;
     let glyph = font.glyph(&scene.glyph)?;
@@ -613,15 +657,25 @@ fn transform(cx: &ProjectCx<'_>, edit: Option<&Edit>) -> TransformModel {
         OriginMode::Metrics => "metrics",
         OriginMode::Layer => "layer",
     };
-    let targets = edit.and_then(|e| e.targets("transform.scale"));
-    let boolean = edit.zip(targets.clone()).map(|(e, mut t)| {
-        t.remove("points");
-        t.remove("shapes");
-        if !e.paths.is_empty() {
-            t.insert("shapes".into(), json!(e.paths));
+    let chosen = cx.session.font().ok().map(|font| whole_layers(font, &chosen_glyphs(font, cx.view))).filter(|sets| !sets.is_empty());
+    let several = chosen.is_some();
+    let first = chosen.as_ref().and_then(|sets| sets.first()?.get("glyphs")?.get(0)?.as_str().map(str::to_string));
+    let cjk_glyph = first.or_else(|| edit.map(|e| e.glyph.clone()));
+    let (targets, boolean) = match chosen {
+        Some(sets) => (Targets::of_each(sets.clone()), Targets::of_each(sets)),
+        None => {
+            let targets = edit.and_then(|e| e.targets("transform.scale"));
+            let boolean = edit.zip(targets.clone()).map(|(e, mut t)| {
+                t.remove("points");
+                t.remove("shapes");
+                if !e.paths.is_empty() {
+                    t.insert("shapes".into(), json!(e.paths));
+                }
+                Targets::of(t)
+            });
+            (targets.map(Targets::of), boolean)
         }
-        Targets::of(t)
-    });
+    };
     TransformModel {
         mode: mode.into(),
         box_point: s.box_point.clone(),
@@ -632,22 +686,77 @@ fn transform(cx: &ProjectCx<'_>, edit: Option<&Edit>) -> TransformModel {
         rotate: s.rotate_angle,
         slant: s.slant_angle,
         origin: s.origin_param().to_string(),
-        targets: targets.map(Targets::of),
+        targets,
+        align: edit.is_some() && !several,
+        font_view: cx.view.tabs.font_view_shows(),
         boolean,
-        corners: edit.and_then(|e| e.targets("transform.mirrorHorizontal")).filter(|t| t.contains_key("corners")).map(Targets::of),
-        cjk: edit.is_some_and(|e| fontcraft_engine::cmd::transform::layer_center_origin(&*cx.session, &e.glyph)),
+        corners: edit
+            .filter(|_| !several)
+            .and_then(|e| e.targets("transform.mirrorHorizontal"))
+            .filter(|t| t.contains_key("corners"))
+            .map(Targets::of),
+        cjk: cjk_glyph.is_some_and(|glyph| fontcraft_engine::cmd::transform::layer_center_origin(&*cx.session, &glyph)),
     }
 }
 
-fn fit_curve(cx: &mut ProjectCx<'_>, edit: Option<&Edit>) -> FitCurveModel {
+/// The `glyphs` and `layer` of a transformation of whole layers, one set per layer; locked glyphs and glyphs without the
+/// layer are left out.
+fn whole_layers(font: &Font, groups: &[GlyphLayers]) -> Vec<Map<String, Value>> {
+    let mut sets = Vec::new();
+    for group in groups {
+        let has = |name: &&String| font.glyph(name).is_some_and(|g| !g.info.locked && g.layers.iter().any(|l| l.id == group.layer));
+        let glyphs: Vec<&String> = group.glyphs.iter().filter(has).collect();
+        if !glyphs.is_empty() {
+            let mut set = Map::new();
+            set.insert("glyphs".into(), json!(glyphs));
+            set.insert("layer".into(), json!(group.layer));
+            sets.push(set);
+        }
+    }
+    sets
+}
+
+/// The Fit Curve section with Font View in front: each selected glyph's remembered nodes ([`Tools::remembered`]) in its
+/// layer of the current master. A glyph that is locked, or whose layer lacks one of the nodes, is skipped.
+fn font_view_fit_curve(cx: &ProjectCx<'_>, tools: &Tools) -> (Option<Targets>, usize) {
+    let Ok(font) = cx.session.font() else { return (None, 0) };
+    let document = cx.session.active().map(|d| d.id);
+    let (mut sets, mut skipped) = (Vec::new(), 0usize);
+    for group in chosen_glyphs(font, cx.view) {
+        for name in &group.glyphs {
+            let points = font.glyph(name).filter(|g| !g.info.locked).and_then(|g| g.layers.iter().find(|l| l.id == group.layer)).and_then(|layer| {
+                let points = tools.remembered(document?, name)?;
+                let there = |&(shape, node): &(usize, usize)| matches!(layer.shapes.get(shape), Some(Shape::Path(p)) if p.nodes.len() > node);
+                points.iter().all(there).then_some(points)
+            });
+            match points {
+                Some(points) => {
+                    let mut set = Map::new();
+                    set.insert("glyph".into(), json!(name));
+                    set.insert("layer".into(), json!(group.layer));
+                    set.insert("points".into(), Value::Array(points.iter().map(|&(s, n)| json!([s, n])).collect()));
+                    sets.push(set);
+                }
+                None => skipped = skipped.saturating_add(1),
+            }
+        }
+    }
+    (Targets::of_each(sets), skipped)
+}
+
+fn fit_curve(cx: &mut ProjectCx<'_>, edit: Option<&Edit>, tools: &Tools) -> FitCurveModel {
     let [min, max] = fit_curve_range_of(cx.session, cx.view);
+    if cx.view.tabs.font_view_shows() {
+        let (targets, skipped) = font_view_fit_curve(cx, tools);
+        return FitCurveModel { min, max, targets, font_view: true, skipped, percent: None };
+    }
     let targets = edit.and_then(|e| e.targets("fitCurve.applyStep")).filter(|t| t.contains_key("points"));
     let percent = targets
         .clone()
         .and_then(|t| cx.session.query("fitCurve.getHandleLength", &Value::Object(t)).ok())
         .and_then(|r| r.get("percent").and_then(Value::as_f64))
         .filter(|p| p.is_finite());
-    FitCurveModel { min, max, targets: targets.map(Targets::of), percent }
+    FitCurveModel { min, max, targets: targets.map(Targets::of), percent, ..Default::default() }
 }
 
 fn anchor(edit: Option<&Edit>) -> AnchorContextModel {

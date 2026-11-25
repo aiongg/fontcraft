@@ -284,7 +284,7 @@ pub fn content(font: &Font, glyph: &Glyph, mode: &Mode, exact: Option<&Layer>, s
 pub fn project(cx: &ProjectCx<'_>, files: &mut ColorFiles) -> Option<ColorPicture> {
     files.follow(cx.session.active().map(|d| d.id));
     let font = cx.session.font().ok()?;
-    let glyph = crate::shell::masters::shown_glyph(font, cx.view)?;
+    let glyph = font.glyph(crate::canvas::tools::edited_glyph(font, cx.view)?)?;
     let layer = crate::shell::masters::shown_layer(font, &cx.view.layers, glyph)?;
     // The canvas is light: black text colour, Master Color rather than Master Color Dark.
     let mode = mode(font, glyph, layer, false)?;
@@ -302,7 +302,7 @@ pub type TextPlace<'a> = (&'a str, Option<&'a str>, [f64; 2]);
 pub fn text_colors(session: &fontcraft_engine::Session, view: &ViewState, files: &mut ColorFiles, glyphs: &[TextPlace<'_>]) -> Vec<PlacedColor> {
     files.follow(session.active().map(|d| d.id));
     let Ok(font) = session.font() else { return Vec::new() };
-    let Some(edited) = crate::shell::masters::shown_glyph(font, view) else { return Vec::new() };
+    let Some(edited) = crate::canvas::tools::edited_glyph(font, view).and_then(|name| font.glyph(name)) else { return Vec::new() };
     let Some(layer) = crate::shell::masters::shown_layer(font, &view.layers, edited) else { return Vec::new() };
     let Some(mode) = mode(font, edited, layer, false) else { return Vec::new() };
     let assets = session.assets();

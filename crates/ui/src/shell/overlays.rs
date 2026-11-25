@@ -214,7 +214,9 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
         }
         "annotation.selectAll" => {
             crate::canvas::tools::apply::sync(app);
-            let target = crate::canvas::tools::target(&app.session, &app.view).ok_or_else(|| args.err("no glyph is being edited"))?;
+            let target = crate::canvas::tools::target(&app.session, &app.view)
+                .filter(|_| !app.font_view_shows())
+                .ok_or_else(|| args.err("no glyph is being edited"))?;
             if let Some(glyph) = args.string("glyph")?
                 && glyph != target.glyph
             {

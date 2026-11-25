@@ -128,9 +128,33 @@ pub fn layer_master<'f>(font: &'f Font, view: &LayersView, layer: &Layer) -> Opt
     font.masters.iter().find(|m| m.id == layer.master).or_else(|| current_master(font, view))
 }
 
-/// The glyph the glyph panels show: the selected one, else the font's first.
+/// The glyph the glyph panels show and their commands act on: in the edit view the glyph the canvas draws (the shown
+/// one, else the font's first); with Font View in front its one selected glyph, and none while it has several or no
+/// glyphs selected.
 pub fn shown_glyph<'f>(font: &'f Font, view: &ViewState) -> Option<&'f Glyph> {
+    if view.tabs.font_view_shows() {
+        let [name] = view.font_view.selected.as_slice() else { return None };
+        return font.glyph(name).map(|g| &**g);
+    }
     view.glyph.as_deref().and_then(|name| font.glyph(name)).or_else(|| font.glyphs.first()).map(|g| &**g)
+}
+
+/// The layer of [`shown_glyph`] the glyph panels show and their commands act on: the one the canvas shows, or with Font
+/// View in front the glyph's layer of the current master, which its cell draws.
+pub fn panel_layer<'f>(font: &'f Font, view: &ViewState) -> Option<&'f Layer> {
+    let glyph = shown_glyph(font, view)?;
+    if view.tabs.font_view_shows() {
+        return glyph.layer(&current_master(font, &view.layers)?.id);
+    }
+    shown_layer(font, &view.layers, glyph)
+}
+
+/// The master of [`panel_layer`], else the current master.
+pub fn panel_master<'f>(font: &'f Font, view: &ViewState) -> Option<&'f Master> {
+    match panel_layer(font, view) {
+        Some(layer) => layer_master(font, &view.layers, layer),
+        None => current_master(font, &view.layers),
+    }
 }
 
 fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
@@ -186,8 +210,10 @@ fn select_layer(app: &mut FontCraftApp, params: &Value) -> Result<(), String> {
         Some(other) => return Err(format!("`extend` must be \"range\" or \"toggle\", got \"{other}\"")),
     };
     let font = app.session.font().map_err(|e| e.to_string())?;
-    let edited = shown_glyph(font, &app.view).ok_or("the font has no glyph")?.name.clone();
+    // Empty while several glyphs, or none, are selected in Font View.
+    let edited = shown_glyph(font, &app.view).map(|g| g.name.clone()).unwrap_or_default();
     let glyphs: Vec<String> = match params.get("glyphs") {
+        None | Some(Value::Null) if edited.is_empty() => return Err("no glyph is shown: give `glyphs`".into()),
         None | Some(Value::Null) => vec![edited.clone()],
         Some(Value::Array(list)) if list.len() <= MAX_GLYPHS => {
             list.iter().map(|g| g.as_str().map(str::to_string).ok_or("`glyphs` holds glyph names")).collect::<Result<_, _>>()?
@@ -209,12 +235,13 @@ fn select_layer(app: &mut FontCraftApp, params: &Value) -> Result<(), String> {
     }
     let mut next = app.view.layers.clone();
     let mut own = None;
-    let active = font.glyph(&edited).and_then(|g| shown_layer(font, &app.view.layers, g)).map(|l| l.id.clone());
+    let active = panel_layer(font, &app.view).map(|l| l.id.clone());
+    let font_view = app.view.tabs.font_view_shows();
     match extend {
         None => {
             let master = current_master(font, &app.view.layers).map(|m| m.id.clone());
             for name in &glyphs {
-                if *name == edited && next.item.is_some() {
+                if *name == edited && next.item.is_some() && !font_view {
                     own = Some(layer.clone());
                     continue;
                 }
@@ -273,7 +300,8 @@ fn select_master(app: &mut FontCraftApp, params: &Value) -> Result<(), String> {
     };
     let id = master.id.clone();
     // The edited item keeps a layer of its own while the glyph has one in the master.
-    let own = match &app.view.layers.item {
+    // With Font View in front, the text item behind it is left alone.
+    let own = match app.view.layers.item.as_ref().filter(|_| !app.view.tabs.font_view_shows()) {
         Some((glyph, _)) => Some(font.glyph(glyph).is_some_and(|g| g.layer(&id).is_some())),
         None => None,
     };
@@ -301,7 +329,10 @@ fn edit_special(app: &mut FontCraftApp, params: &Value) -> Result<(), String> {
     };
     let layer = match string(params, "layer")? {
         Some(id) => glyph.layers.iter().find(|l| l.id == id).ok_or_else(|| format!("glyph `{}` has no layer `{id}`", glyph.name))?,
-        None => shown_layer(font, &app.view.layers, glyph).ok_or_else(|| format!("glyph `{}` has no layer to edit: give `layer`", glyph.name))?,
+        None => panel_layer(font, &app.view)
+            .filter(|l| glyph.layers.iter().any(|own| own.id == l.id))
+            .or_else(|| shown_layer(font, &app.view.layers, glyph))
+            .ok_or_else(|| format!("glyph `{}` has no layer to edit: give `layer`", glyph.name))?,
     };
     if font.axes.is_empty() {
         return Err("the font has no axes; add one in Font Info › Axes first".into());

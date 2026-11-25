@@ -121,7 +121,7 @@ pub fn project(models: &mut AttributesModels, cx: &mut ProjectCx<'_>, tools: &To
 }
 
 fn attributes(cx: &ProjectCx<'_>, selection: &Selection) -> Option<AttributesModel> {
-    if cx.view.edit_background {
+    if cx.view.edit_background || cx.view.tabs.font_view_shows() {
         return None;
     }
     let font = cx.session.font().ok()?;

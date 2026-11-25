@@ -1,7 +1,8 @@
 //! Palette › Transformations: the origin (`transform.setOrigin`), mirror, scale with its lock
 //! (`transform.setScaleLock`), rotate, slant, align, and the booleans union, subtract and intersect.
 //!
-//! The buttons act on the canvas selection, or on the whole layer when nothing is selected; with corner components
+//! The buttons act on the canvas selection, or on the whole layer when nothing is selected; with Font View in front, or
+//! text selected in text mode, on the layers of the glyphs selected there, as one undo step (align does nothing there). With corner components
 //! selected the mirror buttons flip those (`corner.mirrorViaPalette`); the booleans take the
 //! selected paths, a path counting as selected when any of its nodes is. The two buttons beside a field apply its
 //! value in opposite directions. Field values go through `transform.setSettings`; each button passes them, and the
@@ -67,6 +68,8 @@ craft::ui::words! {
         intersect: "fontcraftTransform.intersect" = "Intersect";
         intersect_tip: "fontcraftTransform.intersectTip" = "Keep where the selected paths overlap the others";
         nothing: "fontcraftTransform.nothing" = "Open a glyph to transform it";
+        /// With Font View in front.
+        nothing_selected: "fontcraftTransform.nothingSelected" = "Select glyphs to transform them";
     }
 }
 
@@ -97,7 +100,7 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
     let origin: Value = serde_json::from_str(&m.origin).unwrap_or(Value::Null);
     let press = |sent: &mut Vec<Msg>, id: &str, extra: Value| {
         if let Some(t) = &m.targets {
-            sent.push(Msg::run(id, t.with(extra)));
+            sent.push(t.run(id, extra));
         }
     };
 
@@ -220,7 +223,7 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
             ("transform.alignCenterVertical", "align_edge_vcenter", &words.align_center_v),
             ("transform.alignBottom", "align_edge_bottom", &words.align_bottom),
         ] {
-            if icon(ui, name, label, enabled) {
+            if icon(ui, name, label, enabled && m.align) {
                 press(sent, id, json!({}));
             }
         }
@@ -236,13 +239,13 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
                 && enabled
                 && let Some(t) = &m.boolean
             {
-                sent.push(Msg::run(id, t.with(json!({}))));
+                sent.push(t.run(id, json!({})));
             }
         }
     });
 
     if !enabled {
-        Text::new(words.nothing.clone()).shade(Shade::Muted).show(ui);
+        Text::new(if m.font_view { words.nothing_selected.clone() } else { words.nothing.clone() }).shade(Shade::Muted).show(ui);
     }
 }
 
@@ -276,7 +279,7 @@ mod tests {
             rotate: 90.0,
             slant: 10.0,
             origin: json!({"mode": "box", "boxPoint": "center"}).to_string(),
-            targets: Some(Targets { json: json!({"glyph": "A", "layer": "m01"}).to_string() }),
+            targets: Some(Targets { json: json!({"glyph": "A", "layer": "m01"}).to_string(), ..Default::default() }),
             ..Default::default()
         });
         let posted = Rc::new(RefCell::new(Vec::new()));
@@ -311,8 +314,8 @@ mod tests {
             mode: "box".into(),
             box_point: "center".into(),
             origin: json!({"mode": "box", "boxPoint": "center"}).to_string(),
-            targets: Some(Targets { json: json!({"glyph": "A", "layer": "m01"}).to_string() }),
-            corners: Some(Targets { json: json!({"glyph": "A", "layer": "m01", "corners": [0, 2]}).to_string() }),
+            targets: Some(Targets { json: json!({"glyph": "A", "layer": "m01"}).to_string(), ..Default::default() }),
+            corners: Some(Targets { json: json!({"glyph": "A", "layer": "m01", "corners": [0, 2]}).to_string(), ..Default::default() }),
             ..Default::default()
         });
         let posted = Rc::new(RefCell::new(Vec::new()));
@@ -344,7 +347,7 @@ mod tests {
             box_point: "center".into(),
             metric: "baseline".into(),
             origin: json!({"mode": "metrics", "metric": "baseline"}).to_string(),
-            targets: Some(Targets { json: json!({"glyph": "uni4E00", "layer": "m01"}).to_string() }),
+            targets: Some(Targets { json: json!({"glyph": "uni4E00", "layer": "m01"}).to_string(), ..Default::default() }),
             cjk: true,
             ..Default::default()
         });
@@ -372,7 +375,7 @@ mod tests {
             mode: "box".into(),
             box_point: "center".into(),
             origin: json!({"mode": "box", "boxPoint": "center"}).to_string(),
-            targets: Some(Targets { json: json!({"glyph": "A", "layer": "m01"}).to_string() }),
+            targets: Some(Targets { json: json!({"glyph": "A", "layer": "m01"}).to_string(), ..Default::default() }),
             ..Default::default()
         });
         let mut fixture = Fixture::new(move |ui| {

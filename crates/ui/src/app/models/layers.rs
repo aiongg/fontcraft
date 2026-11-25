@@ -182,7 +182,7 @@ fn layers(session: &mut Session, view: &ViewState) -> Option<LayersModel> {
     let all = rows(session, &glyph);
     let font = session.font().ok()?;
     let g = font.glyph(&glyph)?;
-    let active = masters::shown_layer(font, &view.layers, g);
+    let active = masters::panel_layer(font, view);
     let active_layer = active.map(|l| l.id.clone());
     let active_master = active.map(|l| l.master.clone());
     let shown = filtered(&all, view, active_master.as_deref()).map(|r| r.id.clone()).collect();

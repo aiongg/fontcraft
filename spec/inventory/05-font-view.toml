@@ -2988,7 +2988,7 @@ milestone = "M4"
 summary = "Glyph-menu and Path-menu commands run from Font View act on every selected glyph, on the layer of the current master. Commands marked as master-wide act on all masters when Option is held."
 ref = "Font View › Batch-Processing › Batch Commands"
 status = "handbook"
-notes = "The shell fills `glyphs` from the Font View selection, and `layer` with Font View's master for commands that take one, for every command whose targets include glyphs. Option for all masters is not wired to the key yet; the ForAllMasters commands do it. In `crates/ui`, a glyph command fired from the window (menu, shortcut, context menu, ui.menu.invoke) with no glyph in the edit view and nothing selected in Font View changes nothing and puts \"<label>: select a glyph first\" in the status line, as its dialog does (`FontCraftApp::fired`); Paste of a drawing refuses the same way, and a command whose `glyphs` default to every glyph refuses too. Commands with explicit parameters (`engine.execute`, the CLI) are unaffected."
+notes = "The shell fills `glyphs` from the Font View selection, and the layer parameter with Font View's master (`layer?`, `layers?`, `master?`, where the default is the first master), for every command whose targets include glyphs (`crates/ui/src/app/targets.rs`). A command on nodes, paths or one layer refuses with \"<label>: edit a glyph first\"; the glyph of the tab behind Font View is never a target, and the glyph panels show the one selected glyph, or nothing while several or none are selected (M4.35). Option for all masters is not wired to the key yet; the ForAllMasters commands do it. In `crates/ui`, a glyph command fired from the window (menu, shortcut, context menu, ui.menu.invoke) with no glyph in the edit view and nothing selected in Font View changes nothing and puts \"<label>: select a glyph first\" in the status line, as its dialog does (`FontCraftApp::fired`); Paste of a drawing refuses the same way, and a command whose `glyphs` default to every glyph refuses too. Commands with explicit parameters (`engine.execute`, the CLI) are unaffected."
 guesses = [
   "With no glyph shown and nothing selected, a glyph command refuses with a status message instead of acting on the font's first glyph or on every glyph; whether the reference greys such menu items out would settle it.",
 ]
@@ -3184,7 +3184,9 @@ milestone = "M4"
 summary = "Palette (Cmd+Alt+P) sections work from Font View: Fit Curve and Transformations act on all selected glyphs, and plug-in sections may too. For node-level controls (Fit Curve, for one), each glyph contributes the node selection it last had in Edit View."
 ref = "Font View › Batch-Processing › Palette"
 status = "handbook"
+notes = "M4.35 (`app/models/palette.rs`): with Font View in front Transformations (mirror, scale, rotate, slant, the booleans) change the selected glyphs' whole layers of the current master, and Fit Curve each selected glyph's nodes last selected in Edit View in this session (`Tools::remembered`, at most 4096 glyphs), as one undo step; the panel counts the glyphs it skips. Locked glyphs are left out. With nothing selected both are greyed out with the reason. Dimensions shows the notepad of the first selected glyph's script. Module sections take the selection as plugin.runFilter does."
 guesses = [
+  "Align in the Palette is off in Font View, since it lines up the objects of one layer.",
   "Fit Curve applies each glyph's remembered node indices to its layer of Font View's master; glyphs never edited, or whose nodes are gone, are skipped; the run is one undo step. Settled by observation.",
 ]
 observe = [

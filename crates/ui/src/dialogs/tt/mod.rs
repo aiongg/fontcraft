@@ -135,13 +135,9 @@ fn shell(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
     }
 }
 
-/// The glyph the glyph panels show: the selected one, else the font's first.
+/// The name of the glyph the glyph panels show.
 fn shown_glyph(app: &FontCraftApp) -> Option<String> {
-    let font = app.session.font().ok()?;
-    match &app.view.glyph {
-        Some(name) if font.glyphs.get(name).is_some() => Some(name.clone()),
-        _ => font.glyphs.first().map(|g| g.name.clone()),
-    }
+    crate::shell::masters::shown_glyph(app.session.font().ok()?, &app.view).map(|g| g.name.clone())
 }
 
 /// Opens what was asked for, refreshes the open dialogs and posts what they queued.

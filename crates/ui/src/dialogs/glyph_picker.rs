@@ -182,15 +182,24 @@ pub struct PickerState {
     pub error: Option<String>,
     /// What the results were searched for.
     searched: Option<(Purpose, String, Stamp)>,
+    /// The targets of each glyph, when the pick goes into several (Font View's selection, the text selection); `targets`
+    /// is empty then.
+    each: Vec<Map<String, Value>>,
 }
 
 impl PickerState {
     /// The command a pick of the highlighted result runs.
     pub fn pick(&self) -> Result<Msg, String> {
         let name = self.selected.clone().ok_or("no result is highlighted")?;
-        let mut params = self.targets.clone();
-        params.insert(self.purpose.key().into(), json!(name));
-        Ok(Msg::run(self.purpose.command(), Value::Object(params)))
+        let pick = |targets: &Map<String, Value>| {
+            let mut params = targets.clone();
+            params.insert(self.purpose.key().into(), json!(name));
+            params
+        };
+        if let Some(spec) = fontcraft_engine::find_command(self.purpose.command()).filter(|_| !self.each.is_empty()) {
+            return Ok(Msg::Run(crate::app::targets::batch(spec, self.each.iter().map(pick))));
+        }
+        Ok(Msg::run(self.purpose.command(), Value::Object(pick(&self.targets))))
     }
 }
 
@@ -254,7 +263,9 @@ fn search(app: &mut FontCraftApp, purpose: Purpose, query: &str) -> (Vec<Found>,
 /// The targets of `purpose` from `p`, else from the canvas selection.
 fn targets(app: &FontCraftApp, p: &Value, purpose: Purpose) -> Result<Map<String, Value>, String> {
     let font = app.session.font().map_err(|e| e.to_string())?;
-    let shown = scene(font, app.session.glyph_data().ok().as_deref(), &app.view, app.tools.focus.as_ref());
+    // The glyph behind Font View is not being edited.
+    let edit_view = !app.font_view_shows();
+    let shown = if edit_view { scene(font, app.session.glyph_data().ok().as_deref(), &app.view, app.tools.focus.as_ref()) } else { None };
     let glyph = match string(p, "glyph")? {
         Some(g) => g.to_string(),
         None => shown.as_ref().map(|s| s.glyph.clone()).ok_or("no glyph is being edited: give `glyph`")?,
@@ -351,6 +362,26 @@ fn targets(app: &FontCraftApp, p: &Value, purpose: Purpose) -> Result<Map<String
     Ok(m)
 }
 
+/// A picker opened for `purpose` with the parameters `p`: on every glyph of Font View's selection or of the text
+/// selection when it adds components and `p` names no glyph, else on one ([`targets`]).
+fn open(app: &FontCraftApp, p: &Value, purpose: Purpose) -> Result<PickerState, String> {
+    let adds = matches!(purpose, Purpose::AddComponent | Purpose::AddComponentAllMasters);
+    let names_glyph = ["glyph", "layer"].iter().any(|k| p.get(*k).is_some_and(|v| !v.is_null()));
+    if adds && !names_glyph {
+        let font = app.session.font().map_err(|e| e.to_string())?;
+        let groups = crate::app::targets::chosen_glyphs(font, &app.view);
+        if app.font_view_shows() && groups.is_empty() {
+            return Err(crate::app::select_glyph_first(purpose.command()));
+        }
+        if !groups.is_empty() {
+            let batch = crate::app::targets::on_glyphs(CommandRef::new(purpose.command()), &groups);
+            let each = crate::app::targets::target_sets(&batch, purpose.command());
+            return Ok(PickerState { purpose, each, ..PickerState::default() });
+        }
+    }
+    Ok(PickerState { purpose, targets: targets(app, p, purpose)?, ..PickerState::default() })
+}
+
 /// The selected hints of `layer` that `is` accepts, in selection order.
 fn selected_kind(
     layer: &fontcraft_engine::model::Layer,
@@ -392,7 +423,7 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
         Some(st) if given.is_none_or(|g| g == st.purpose) && !has_targets(p) => st,
         _ => {
             let purpose = given.unwrap_or_default();
-            PickerState { purpose, targets: targets(app, p, purpose)?, ..PickerState::default() }
+            open(app, p, purpose)?
         }
     };
     if let Some(q) = string(p, "query")? {
@@ -434,9 +465,8 @@ pub fn fired(app: &mut FontCraftApp, id: &str, params: &Value) -> bool {
     if params.get(purpose.key()).is_some_and(|v| !v.is_null()) {
         return false;
     }
-    match targets(app, params, purpose) {
-        Ok(targets) => {
-            let mut st = PickerState { purpose, targets, ..PickerState::default() };
+    match open(app, params, purpose) {
+        Ok(mut st) => {
             refresh(app, &mut st);
             app.view.components.picker = Some(st);
         }

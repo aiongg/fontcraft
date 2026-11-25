@@ -1,6 +1,7 @@
 //! Palette › Fit Curve: the two range fields (`fitCurve.setRange`), minus, the eight step buttons
 //! (`fitCurve.applyStep`), plus, and balance, all on the curve segments of the canvas selection. A line under the
-//! steps shows the selected handles' mean length (`fitCurve.getHandleLength`).
+//! steps shows the selected handles' mean length (`fitCurve.getHandleLength`). With Font View in front they act on the
+//! glyphs selected there, each with the nodes last selected in it in Edit View, as one undo step.
 
 use craft::ui::buttons::Button;
 use craft::ui::contract::{Props as _, Show as _, ShowContainer as _, Tracked};
@@ -28,6 +29,10 @@ craft::ui::words! {
         /// Before the selected handles' mean length.
         current: "fontcraftFitCurve.current" = "Handles";
         hint: "fontcraftFitCurve.hint" = "Select curve segments";
+        /// With Font View in front.
+        font_view_hint: "fontcraftFitCurve.fontViewHint" = "Select glyphs whose nodes you selected in Edit View";
+        /// Before how many selected glyphs a step leaves out.
+        skipped: "fontcraftFitCurve.skipped" = "Glyphs skipped, no nodes selected";
         /// The balance button's face.
         balance_face: "fontcraftFitCurve.balanceFace" = "=";
         /// The decrease button's face.
@@ -61,7 +66,7 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
     let enabled = m.targets.is_some();
     let run = |sent: &mut Vec<Msg>, id: &str, extra: Value| {
         if let Some(t) = &m.targets {
-            sent.push(Msg::run(id, t.with(extra)));
+            sent.push(t.run(id, extra));
         }
     };
     let range = json!({"min": m.min, "max": m.max});
@@ -95,9 +100,12 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
             Text::new(format!("{} {}%", words.current.as_str(), format_number(p))).shade(Shade::Muted).show(ui);
         }
         None if !enabled => {
-            Text::new(words.hint.clone()).shade(Shade::Muted).show(ui);
+            Text::new(if m.font_view { words.font_view_hint.clone() } else { words.hint.clone() }).shade(Shade::Muted).show(ui);
         }
         None => {}
+    }
+    if enabled && m.skipped > 0 {
+        Text::new(format!("{}: {}", words.skipped.as_str(), m.skipped)).shade(Shade::Muted).show(ui);
     }
 }
 
@@ -126,8 +134,9 @@ mod tests {
         let model = Tracked::new(FitCurveModel {
             min: 48.0,
             max: 76.0,
-            targets: Some(Targets { json: json!({"glyph": "o", "layer": "m01", "points": [[0, 1]]}).to_string() }),
+            targets: Some(Targets { json: json!({"glyph": "o", "layer": "m01", "points": [[0, 1]]}).to_string(), ..Default::default() }),
             percent: Some(55.0),
+            ..Default::default()
         });
         let posted = Rc::new(RefCell::new(Vec::new()));
         let seen = Rc::clone(&posted);

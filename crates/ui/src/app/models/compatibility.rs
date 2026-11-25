@@ -100,9 +100,8 @@ pub fn project(model: &mut Tracked<CompatibilityModel>, cx: &mut ProjectCx<'_>) 
 }
 
 fn compute(cx: &ProjectCx<'_>) -> Option<CompatibilityModel> {
-    let name = super::glyph::shown_glyph(cx)?;
     let font = cx.session.font().ok()?;
-    let glyph = font.glyph(&name)?;
+    let glyph = font.glyph(crate::canvas::tools::edited_glyph(font, cx.view)?)?;
     let current = crate::shell::masters::shown_layer(font, &cx.view.layers, glyph)?;
     Some(model_of(font, glyph, current))
 }
