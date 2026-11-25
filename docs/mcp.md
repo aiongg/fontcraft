@@ -262,7 +262,8 @@ Notifications go out before the reply to the request that caused them; at most 1
 
 ## Progress and cancellation
 
-On stdio, a request with `_meta: {progressToken}` (a number or a string of at most 256 bytes) gets
+A request with `_meta: {progressToken}` (a number or a string of at most 256 bytes) gets, on stdio
+and over HTTP when the client accepts a stream,
 `notifications/progress {progressToken, progress, total, message}` while it runs: `progress` and
 `total` count units of work (`total` can grow as more work is found), and `message` names the last
 one, at most 200 characters. At most one is sent every 100 ms and 1,000 for a request. These
@@ -326,7 +327,7 @@ claude mcp add --transport http fontcraft http://127.0.0.1:7986/mcp
 
 | Request | Answer |
 |---|---|
-| `POST /mcp`, one JSON-RPC request | `200` with `application/json`; `text/event-stream` instead when there are notifications (log messages, changed resources) and `Accept` lists the stream type (the notifications, then the reply). Progress is not sent |
+| `POST /mcp`, one JSON-RPC request | `200` with `application/json`; `text/event-stream` instead when there are notifications (log messages, changed resources, progress) and `Accept` lists the stream type (the notifications, then the reply). Progress goes out while the request runs, as a chunked body (to an HTTP/1.0 client, as one the end of the connection ends) |
 | `POST /mcp`, a notification or a client response | `202`, no body |
 | `POST /mcp` with `initialize` | as a request, plus an `Mcp-Session-Id` header. Every later request sends it back |
 | `DELETE /mcp` with `Mcp-Session-Id` | `200`; the session ends |

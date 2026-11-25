@@ -3,8 +3,9 @@
 //!
 //! One endpoint, [`ENDPOINT`], takes `POST` (one JSON-RPC message per request) and `DELETE` (ends
 //! a session). Replies are `application/json`, or `text/event-stream` when there are notifications
-//! for the client (log messages, changed resources) and it accepts a stream. `GET` is refused with 405: the server never
-//! starts a stream of its own.
+//! for the client (log messages, changed resources, progress) and it accepts a stream. Progress goes out while the
+//! request runs: the first of it begins the reply, and the rest follows as events up to the reply itself. `GET` is
+//! refused with 405: the server never starts a stream of its own.
 //!
 //! Threads: one accepts connections, one per connection reads and checks requests, and the thread
 //! that called [`serve`] owns the [`Server`] and answers the requests one at a time, as the stdio
@@ -20,6 +21,7 @@
 use std::collections::HashMap;
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::net::{IpAddr, Shutdown, TcpListener, TcpStream};
+use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, PoisonError, mpsc};
 use std::time::{Duration, Instant};
@@ -108,7 +110,7 @@ pub fn serve(server: Server, listener: TcpListener, limits: Limits) -> io::Resul
     for job in inbox {
         let response = if job.token.is_cancelled() { cancelled(&job.request) } else { dispatcher.answer(&job) };
         // The connection may have gone while the request ran; nothing waits for the reply then.
-        let _ = job.reply.send(response);
+        let _ = job.reply.send(Part::Reply(response));
     }
     Ok(())
 }
@@ -157,7 +159,13 @@ struct Job {
     request: Request,
     /// Cancels the request.
     token: Arc<Token>,
-    reply: mpsc::Sender<Response>,
+    reply: mpsc::Sender<Part>,
+}
+
+/// What the thread that owns the [`Server`] sends back for a request: notifications while it runs, then its reply.
+enum Part {
+    Event(String),
+    Reply(Response),
 }
 
 /// The message of a `POST`, when its body is one.
@@ -222,7 +230,8 @@ fn serve_connection(stream: TcpStream, shared: &Shared, jobs: &mpsc::Sender<Job>
                 return;
             }
         };
-        let close = request.close;
+        let (close, chunked) = (request.close, request.chunked);
+        let mut stream = EventStream { to: reader.get_ref(), chunked, state: Streaming::Not };
         let response = match check(&request, shared) {
             Err(refusal) => refusal,
             Ok(()) => {
@@ -240,14 +249,25 @@ fn serve_connection(stream: TcpStream, shared: &Shared, jobs: &mpsc::Sender<Job>
                         if jobs.send(Job { request, token: Arc::clone(&token), reply }).is_err() {
                             Response::refuse(503, "the server is shutting down")
                         } else {
-                            answer.recv().unwrap_or_else(|_| Response::refuse(500, "the request was lost inside the server"))
+                            loop {
+                                match answer.recv() {
+                                    Ok(Part::Event(message)) => stream.event(&message),
+                                    Ok(Part::Reply(response)) => break response,
+                                    Err(_) => break Response::refuse(500, "the request was lost inside the server"),
+                                }
+                            }
                         }
                     })
                 }
             }
         };
         let close = close || response.close || opened.elapsed() >= limits.connection_time;
-        if write_response(reader.get_ref(), &response, close).is_err() {
+        let (close, written) = match stream.state {
+            Streaming::Not => (close, write_response(reader.get_ref(), &response, close).is_ok()),
+            // The end of the connection ends a stream that is not chunked.
+            _ => (close || !chunked, stream.finish(&response)),
+        };
+        if !written {
             return;
         }
         if close {
@@ -288,6 +308,8 @@ struct Request {
     body: Vec<u8>,
     /// The peer asked to close after this request (or speaks HTTP/1.0).
     close: bool,
+    /// The peer reads chunked bodies (it speaks HTTP/1.1).
+    chunked: bool,
 }
 
 impl Request {
@@ -494,7 +516,7 @@ fn read_request(reader: &mut BufReader<TcpStream>, limits: &Limits) -> Result<Re
     }
 
     let path = target.split_once('?').map_or(target, |(p, _)| p).to_string();
-    Ok(Request { method: method.to_string(), path, headers, body, close })
+    Ok(Request { method: method.to_string(), path, headers, body, close, chunked: !http10 })
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -615,7 +637,7 @@ impl Dispatcher {
         if request.method == "DELETE" {
             return self.end_session(request);
         }
-        self.post(request, &job.token)
+        self.post(request, &job.token, &job.reply)
     }
 
     fn end_session(&mut self, request: &Request) -> Response {
@@ -628,7 +650,7 @@ impl Dispatcher {
         }
     }
 
-    fn post(&mut self, request: &Request, token: &Arc<Token>) -> Response {
+    fn post(&mut self, request: &Request, token: &Arc<Token>, events: &mpsc::Sender<Part>) -> Response {
         let Ok(text) = std::str::from_utf8(&request.body) else {
             return Response::rpc(400, &error(&Value::Null, PARSE_ERROR, "the request is not valid UTF-8"));
         };
@@ -662,7 +684,15 @@ impl Dispatcher {
         self.server.client = session.as_ref().and_then(|id| self.sessions.get_mut(id)).map(|s| std::mem::take(&mut s.client)).unwrap_or_default();
         self.server.token = Some(Arc::clone(token));
         let streams = accepts_stream(request);
+        self.server.notify = (streams && !initialize).then(|| {
+            let events = events.clone();
+            let notify: Rc<dyn Fn(&Value)> = Rc::new(move |notification: &Value| {
+                let _ = events.send(Part::Event(notification.to_string()));
+            });
+            notify
+        });
         let reply = self.server.handle(&message);
+        self.server.notify = None;
         let notifications = self.server.take_notifications();
         let client = std::mem::take(&mut self.server.client);
         if let Some(s) = session.as_ref().and_then(|id| self.sessions.get_mut(id)) {
@@ -681,11 +711,9 @@ impl Dispatcher {
             let reply_line = reply.to_string();
             let mut body = String::new();
             for line in notifications.iter().map(String::as_str).chain(std::iter::once(reply_line.as_str())) {
-                body.push_str("event: message\ndata: ");
-                body.push_str(line);
-                body.push_str("\n\n");
+                body.push_str(&event(line));
             }
-            Response { status: 200, headers: vec![("Content-Type", "text/event-stream".into())], body: body.into_bytes(), close: false }
+            Response { status: 200, headers: vec![("Content-Type", EVENT_STREAM.into())], body: body.into_bytes(), close: false }
         } else {
             Response::rpc(200, &reply)
         };
@@ -779,6 +807,81 @@ fn reason(status: u16) -> &'static str {
         503 => "Service Unavailable",
         505 => "HTTP Version Not Supported",
         _ => "",
+    }
+}
+
+const EVENT_STREAM: &str = "text/event-stream";
+
+/// A server-sent event of one message, which is one line.
+fn event(message: &str) -> String {
+    format!("event: message\ndata: {message}\n\n")
+}
+
+/// Where a streamed reply stands.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Streaming {
+    /// Nothing was sent: the reply can be an ordinary one.
+    Not,
+    Open,
+    /// The peer has gone, or takes nothing: the rest is dropped. The request goes on, as the protocol asks.
+    Lost,
+}
+
+/// The reply of a request that sends events while it runs.
+struct EventStream<'a> {
+    to: &'a TcpStream,
+    chunked: bool,
+    state: Streaming,
+}
+
+impl EventStream<'_> {
+    /// Sends one message, after the head of the reply when it is the first.
+    fn event(&mut self, message: &str) {
+        let head = match self.state {
+            Streaming::Lost => return,
+            Streaming::Open => "",
+            Streaming::Not if self.chunked => {
+                "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\nCache-Control: no-store\r\n\r\n"
+            }
+            Streaming::Not => "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n",
+        };
+        let sent = self.write(head.as_bytes()).and_then(|()| self.chunk(event(message).as_bytes()));
+        self.state = if sent.is_ok() { Streaming::Open } else { Streaming::Lost };
+    }
+
+    /// Sends the reply as the last events. False when the peer did not take it.
+    fn finish(&mut self, response: &Response) -> bool {
+        if self.state == Streaming::Lost {
+            return false;
+        }
+        let events = response.headers.iter().any(|(name, value)| *name == "Content-Type" && value == EVENT_STREAM);
+        let sent = if events {
+            self.chunk(&response.body)
+        } else if response.body.is_empty() {
+            Ok(())
+        } else {
+            self.chunk(event(&String::from_utf8_lossy(&response.body)).as_bytes())
+        };
+        sent.and_then(|()| if self.chunked { self.write(b"0\r\n\r\n") } else { Ok(()) }).is_ok()
+    }
+
+    fn chunk(&mut self, bytes: &[u8]) -> io::Result<()> {
+        if !self.chunked {
+            return self.write(bytes);
+        }
+        // An empty chunk would end the body.
+        if bytes.is_empty() {
+            return Ok(());
+        }
+        self.write(format!("{:x}\r\n", bytes.len()).as_bytes())?;
+        self.write(bytes)?;
+        self.write(b"\r\n")
+    }
+
+    fn write(&mut self, bytes: &[u8]) -> io::Result<()> {
+        let mut to = self.to;
+        to.write_all(bytes)?;
+        to.flush()
     }
 }
 
