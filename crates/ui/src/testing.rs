@@ -101,6 +101,9 @@ impl TestApp {
     /// Sends `method` with `params` and returns the reply, `{id, ok, result | error}`. Window input the request
     /// queued has run when this returns, and the frame after it too, so its effects are drained.
     pub fn call(&mut self, method: &str, params: Value) -> Value {
+        for _ in 0..crate::control::frames_before(&self.app, method, &params) {
+            self.frame();
+        }
         let reply = crate::control::handle(&mut self.app, &json!({"id": 1, "method": method, "params": params}));
         let host = WindowHost::of(&self.frames.ctx);
         if !host.injected_idle() {

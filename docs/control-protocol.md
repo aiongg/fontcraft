@@ -92,10 +92,13 @@ is checked for.
 | `ui.dialog.text` | `{text}` | types into the dialog field that has the keyboard, as `ui.text` does: `{field}`, false when none has it |
 | `ui.click` | `{id}` | presses a control of the open dialog: `ok`, `cancel`, a third button by its id (`replace`, `decompose`), a tab by its dialog id (shows that tab), an action by its id (runs it: `{action, command, text, result}`; `text` also goes to the system clipboard), or a field by its key (a checkbox or lock toggles; a number field takes the keyboard, its text selected, for `ui.text` and `ui.key`; a folder field opens the folder chooser, or without one takes the keyboard) |
 | `ui.click` | `{x, y, button?, count?, mods?}` | a mouse click at a window point; see [Window input](#window-input) |
+| `ui.click` | `{element, button?, count?, mods?}` | a mouse click in the middle of what shows of an element; see [Elements](#elements) |
+| `ui.elements` | `{prefix?, role?, window?, offset?, limit?}` | the elements of the windows: `{elements, total, truncated}`; see [Elements](#elements) |
 | `ui.drag` | `{x, y, toX, toY, steps?, count?, button?, mods?}` | press, move in steps, release; see [Window input](#window-input) |
 | `ui.move` | `{x, y}` | the pointer moves to a window point (hover) |
 | `ui.wheel` | `{x, y, dy?, dx?, unit?, mods?}` | a wheel turn over a window point |
 | `ui.set` | `{key: bool, …}` | turns view switches on or off with their menu commands; see [View switches](#view-switches) |
+| `ui.set` | `{element, value}` | sets an element; see [Elements](#elements) |
 | `ui.resize` | `{width, height}` | the window's inner size in points, width 640 to 16,384 and height 400 to 16,384, at the next frame. A size larger than the monitor, or than the graphics device can draw (8,192 points at most), is clamped; `{width, height, clamped}` has the size asked of the window |
 | `ui.focus` | | brings the window to the front with the keyboard, at the next frame; `{focus: true}` |
 | `ui.contextMenu.list` | `{x?, y?, space?}` | the open canvas context menu: `{open, glyph, screen, at, hit, sections: [{context, items: [{command, label, enabled, disabled_reason?, checked?, alternate?, choices?: [{value, label, checked}]}]}]}`; `{open: false}` when none is. With `x` and `y` it first opens the menu there, as a right-click does (`space` as in `ui.pointer`, default `font`); that is refused while a tool is dragging or a dialog is open |
@@ -229,8 +232,52 @@ all requests. A request that breaks a limit, or does not fit in the queue, is re
 before any of its events is queued; retry once the waiting input has drained. Counts must be
 non-negative integers; `0` acts as `1`.
 
-`ui.click {id}` presses a dialog control (below); give `id` or `x` and `y`, not both (`id: null`
-counts as no `id`).
+`ui.click {id}` presses a dialog control (below) and `ui.click {element}` an element; give one of
+`id`, `element`, or `x` and `y` (`null` counts as not given).
+
+### Elements
+
+`ui.elements` lists what the windows show, panel fields included, from the accessibility tree: the
+main window's elements first, then those of the panels floating in OS windows of their own, each
+window in reading order. Elements hidden from assistive technology are left out, such as those
+behind a modal dialog, and so are nameless containers.
+
+`prefix` lists only the elements whose label starts with it, `role` only those of one role (both
+in any case), `window` only those of one window (`main` or an id `ui.inspect` lists). `total`
+counts what matches; `offset` (default 0) and `limit` (default 500, at most 2,000) pick the part
+listed. At most 20,000 elements are read of a window; `truncated` says that there are more. Labels
+and values are cut at 500 characters.
+
+| Key | Value |
+|---|---|
+| `id` | the element's id, 16 hexadecimal digits: the same from frame to frame while it shows |
+| `window` | `main`, or the OS window's id |
+| `role` | such as `button`, `textInput`, `spinButton`, `checkBox`, `tab`, `label` |
+| `label` | its name; `""` when it has none |
+| `value` | its text or number, when it has one |
+| `in` | the label of the nearest labelled element around it |
+| `rect` | `[x0, y0, x1, y1]` in main-window points; `null` while its window has not reported where it is |
+| `visible` | whether part of it shows: `false` when it is scrolled or clipped away |
+| `enabled`, `focused`, `selected`, `expanded` | its states; the last three only where they apply |
+| `toggled` | `true`, `false` or `"mixed"`, for what can be on or off |
+| `set` | what `ui.set` takes for it: `"bool"` or `"text"`; absent when it cannot be set |
+
+`ui.click {element}` clicks the middle of the part that shows, and `ui.set {element, value}` sets
+the element through the window's input, as a person does:
+
+- `set: "bool"`: `value` is `true` or `false`; the element is clicked unless it is there already
+  (`{changed: false}`). A radio button is turned off by choosing another one.
+- `set: "text"`: `value` is a text of at most 4,096 characters or a number. The field is clicked,
+  its text selected and replaced, and Tab commits it. Line breaks are taken by multi-line fields
+  only; other control characters are refused.
+
+An element that is disabled, read-only or out of view is refused. What covers an element at that
+point takes the click, as it takes the mouse's. The replies are those of
+[Window input](#window-input), with `changed: true` for a change; read the new value with
+`ui.elements`.
+
+A request that reads elements is answered after three frames, so it sees what the requests before
+it changed. A hidden or minimized window draws no frames: the request fails after 10 seconds.
 
 ### View switches
 
@@ -472,7 +519,6 @@ The names and shapes follow the sibling apps so their agents' habits carry over.
 
 | Method | Params | Milestone |
 |---|---|---|
-| `ui.click` beyond dialogs | `{element}` press any control by its id in the accessibility tree | M13 |
 | `app.open` / `app.save` / `app.export` / `app.quit` | `{path}` … through the host (file dialogs, the browser's download) | M1 |
 
 Check drawing with `ui.screenshot` on the running app, or with a headless frame test

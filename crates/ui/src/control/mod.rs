@@ -12,11 +12,13 @@
 //! - The desktop app listens with [`Control::listen`] (`server.rs`). Requests are answered on the UI thread between
 //!   frames ([`logic`]); window input (`ui.click`, `ui.drag`, `ui.move`, `ui.wheel`) is replied to once the frames
 //!   have carried it, `ui.screenshot` once the window is captured, and `ui.wait` once its frames have passed or the
-//!   window is idle ([`after_ui`]).
+//!   window is idle ([`after_ui`]). A request that reads the windows' elements (`elements::reads`) is answered once
+//!   the frames after it have been drawn.
 
 mod app;
 mod context_menu;
 mod dialogs;
+mod elements;
 mod engine;
 pub mod events;
 mod inspect;
@@ -57,6 +59,7 @@ pub const MODULES: &[&[(&str, Method)]] = &[
     app::METHODS,
     context_menu::METHODS,
     dialogs::METHODS,
+    elements::METHODS,
     engine::METHODS,
     events::METHODS,
     inspect::METHODS,
@@ -134,6 +137,8 @@ enum Answer {
     /// A `ui.wait`: the reply goes out once the frames have passed or the window is idle. Only the listener reads it.
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     Wait(wait::Wait),
+    /// A request that reads the windows' elements: it runs ([`run`]) once [`elements::FRAMES`] frames have been drawn.
+    Elements,
 }
 
 /// Answers one request now. Never panics: a bug becomes an error reply and the app keeps running. A screenshot
@@ -149,6 +154,8 @@ pub fn handle(app: &mut FontCraftApp, request: &Value) -> Value {
         #[cfg(not(target_arch = "wasm32"))]
         Answer::Screenshot(_) => reply(Err("ui.screenshot: this app has no window to capture (ui.render draws glyphs without one)".into())),
         Answer::Wait(_) => reply(Err("ui.wait: this app answers each request at once and draws no frames to wait for".into())),
+        // The host draws its own frames between requests: what they showed is what there is.
+        Answer::Elements => reply(run(app, method, &params)),
     };
     with_id(answered, &id)
 }
@@ -190,18 +197,48 @@ fn answer(app: &mut FontCraftApp, method: &str, params: &Value) -> Answer {
                 Err(e) => Answer::Reply(Err(e)),
             };
         }
-        let outside = app.session.export_outside();
-        app.session.set_export_outside(false);
-        let result = guard::catch_panic(|| dispatch(app, method, params));
-        app.session.set_export_outside(outside);
-        if app.control.queued > 0 {
-            app.control.input = Input::InFlight;
+        if elements::reads(method, params)
+            && let Some(ctx) = &app.window
+        {
+            elements::activate(ctx);
+            return Answer::Elements;
         }
-        Answer::Reply(match result {
-            Ok(result) => result,
-            Err(panic) => Err(format!("internal error (please report it): `{method}` failed unexpectedly: {panic}")),
-        })
+        Answer::Reply(run_confined(app, method, params))
     })
+}
+
+/// Frames a host that draws its own draws before [`handle`] answers a request: none, or enough for the windows'
+/// elements to be read.
+pub(crate) fn frames_before(app: &FontCraftApp, method: &str, params: &Value) -> u64 {
+    match &app.window {
+        Some(ctx) if elements::reads(method, params) => {
+            elements::activate(ctx);
+            elements::FRAMES
+        }
+        _ => 0,
+    }
+}
+
+/// Runs a request [`answer`] put off, with the automation roots in force.
+fn run(app: &mut FontCraftApp, method: &str, params: &Value) -> Result<Value, String> {
+    app.control.queued = 0;
+    let roots = app.control.roots.clone();
+    file_access::confine(roots.as_ref(), || run_confined(app, method, params))
+}
+
+/// Runs `method`, exporting inside the destination it names.
+fn run_confined(app: &mut FontCraftApp, method: &str, params: &Value) -> Result<Value, String> {
+    let outside = app.session.export_outside();
+    app.session.set_export_outside(false);
+    let result = guard::catch_panic(|| dispatch(app, method, params));
+    app.session.set_export_outside(outside);
+    if app.control.queued > 0 {
+        app.control.input = Input::InFlight;
+    }
+    match result {
+        Ok(result) => result,
+        Err(panic) => Err(format!("internal error (please report it): `{method}` failed unexpectedly: {panic}")),
+    }
 }
 
 /// Runs the method `name`.

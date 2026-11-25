@@ -8,7 +8,8 @@
 //!
 //! UI thread: [`ControlChannel`] hands over the requests between frames ([`logic`]); window input replies wait until
 //! the passes have carried the input, screenshots go through the channel's capture queue, and `ui.wait` replies are
-//! parked until their frames have passed or the window is idle ([`after_ui`]).
+//! parked until their frames have passed or the window is idle ([`after_ui`]). A request that reads the windows'
+//! elements is parked until its frames have been drawn, and runs before the next one ([`logic`]).
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
@@ -25,7 +26,7 @@ use egui::ViewportId;
 use serde_json::{Value, json};
 
 use super::wait::{self, Wait};
-use super::{Answer, Input, answer, reply, screenshot};
+use super::{Answer, Input, answer, elements, reply, screenshot};
 use crate::app::FontCraftApp;
 
 /// Longest request line accepted.
@@ -36,6 +37,8 @@ const MAX_CONNECTIONS: usize = 16;
 const IDLE_TIMEOUT: Duration = Duration::from_secs(300);
 /// Most requests answered before one frame, so a busy client cannot keep the window from painting.
 const FRAME_REQUESTS: usize = 64;
+/// How long a request that reads the windows' elements waits for frames, which a hidden window does not draw.
+const ELEMENTS_TIMEOUT: Duration = Duration::from_secs(10);
 /// The input cancelled error, for replies whose input the window host withdrew.
 const INPUT_CANCELLED: &str = "input cancelled: the window dropped the queued input";
 
@@ -48,6 +51,9 @@ pub struct Server {
     after_input: Vec<(Sender<Value>, Value)>,
     /// `ui.wait` replies waiting for frames or for the window to go idle.
     waits: Vec<Waiting>,
+    /// Requests that read the windows' elements, waiting for frames, oldest first: when each arrived and the frames
+    /// drawn since.
+    elements: Vec<(ControlRequest, Instant, u64)>,
     next_token: u64,
     stop: Arc<AtomicBool>,
 }
@@ -107,17 +113,25 @@ impl Server {
                 }
             }
         })?;
-        Ok(Server { addr, channel: ControlChannel::new(requests), after_input: Vec::new(), waits: Vec::new(), next_token: 0, stop })
+        Ok(Server {
+            addr,
+            channel: ControlChannel::new(requests),
+            after_input: Vec::new(),
+            waits: Vec::new(),
+            elements: Vec::new(),
+            next_token: 0,
+            stop,
+        })
     }
 
     /// Whether replies wait on frames.
     pub fn waiting(&self) -> bool {
-        !self.after_input.is_empty() || self.channel.waiting() > 0 || !self.waits.is_empty()
+        !self.after_input.is_empty() || self.channel.waiting() > 0 || !self.waits.is_empty() || !self.elements.is_empty()
     }
 
     /// Whether nothing but `ui.wait` replies waits on frames.
     fn others_idle(&self) -> bool {
-        self.after_input.is_empty() && self.channel.waiting() == 0
+        self.after_input.is_empty() && self.channel.waiting() == 0 && self.elements.is_empty()
     }
 }
 
@@ -171,6 +185,7 @@ pub fn logic(app: &mut FontCraftApp, ctx: &egui::Context) {
     server.channel.captures.note_windows(&host, None);
     let finished = server.channel.captures.drain(motion::now(), None);
     screenshot::finish(finished, pixels_per_point(&host));
+    answer_elements(app, &mut server);
     let mut answered = 0;
     while answered < FRAME_REQUESTS
         && let Some(request) = server.channel.next_request()
@@ -178,14 +193,9 @@ pub fn logic(app: &mut FontCraftApp, ctx: &egui::Context) {
         answered += 1;
         match answer(app, &request.method, &request.params) {
             Answer::Reply(result) => {
-                if result.is_ok() && app.control.queued > 0 {
-                    if let Ok(value) = result {
-                        server.after_input.push((request.reply.clone(), reply(Ok(value))));
-                    }
-                } else {
-                    server.channel.settle(request, Reply::from_result(result), None, 0.0);
-                }
+                settle(&mut server, request, result, app.control.queued);
             }
+            Answer::Elements => server.elements.push((request, motion::now(), 0)),
             Answer::Screenshot(path) => {
                 server.next_token = server.next_token.wrapping_add(1);
                 let settle = settle_ms(ctx.global_style().animation_time);
@@ -200,6 +210,36 @@ pub fn logic(app: &mut FontCraftApp, ctx: &egui::Context) {
         ctx.request_repaint();
     }
     app.control.server = Some(server);
+}
+
+/// Sends a request's reply: now, or once the window input it queued has run.
+fn settle(server: &mut Server, request: ControlRequest, result: Result<Value, String>, queued: usize) {
+    match result {
+        Ok(value) if queued > 0 => server.after_input.push((request.reply.clone(), reply(Ok(value)))),
+        result => server.channel.settle(request, Reply::from_result(result), None, 0.0),
+    }
+}
+
+/// Runs the requests that read the windows' elements and whose frames have been drawn. One at a time: the input a
+/// click or a change queues runs before the next one looks for its element.
+fn answer_elements(app: &mut FontCraftApp, server: &mut Server) {
+    while let Some((_, since, frames)) = server.elements.first() {
+        if *frames < elements::FRAMES && motion::now().saturating_duration_since(*since) < ELEMENTS_TIMEOUT {
+            return;
+        }
+        if !server.after_input.is_empty() {
+            return;
+        }
+        let drawn = *frames >= elements::FRAMES;
+        let (request, ..) = server.elements.remove(0);
+        app.control.queued = 0;
+        let result = if drawn {
+            super::run(app, &request.method, &request.params)
+        } else {
+            Err(format!("{}: the window draws no frames (it is hidden or minimized)", request.method))
+        };
+        settle(server, request, result, app.control.queued);
+    }
 }
 
 /// The end of a UI pass: screenshots due are issued, and replies waiting on window input go out once it has run.
@@ -220,6 +260,9 @@ pub fn after_ui(app: &mut FontCraftApp, ctx: &egui::Context) {
                 let _ = to.send(value);
             }
         }
+    }
+    for (_, _, frames) in &mut server.elements {
+        *frames = frames.saturating_add(1);
     }
     if !server.waits.is_empty() {
         let idle = input_idle && host.injected_idle() && server.others_idle();
