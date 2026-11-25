@@ -8,10 +8,14 @@
 //! A menu row is greyed out when its engine command's `enabled` refuses or the selection gives it nothing to act on,
 //! and an on/off switch's row shows a check mark while the switch is on (`menu_states`).
 
+use std::sync::Arc;
+
+use craft::keymap::keymap::Overrides;
 use craft::menu::{ItemKind, MenuBar, Row};
 use craft::ui::runtime::commands::{AppCatalog, Binding, CommandDef, CommandInput, CommandKind, CommandRef, CommandState, Scope};
 use fontcraft_engine::Session;
 use fontcraft_engine::cmd::CommandSpec;
+use fontcraft_engine::shortcuts::Custom;
 use serde_json::Value;
 
 use crate::shell::commands::{self as shell_commands, UiCommand};
@@ -55,6 +59,11 @@ pub struct Catalog {
     app: Option<AppCatalog>,
     /// The catalog with each command's enabled state, rebuilt when the engine moves.
     input: CommandInput,
+    /// The user's own shortcuts, as the settings had them last, and as the keymap takes them.
+    custom: Custom,
+    overrides: Arc<Overrides>,
+    /// The settings revision they were read at.
+    shortcuts_at: Option<u64>,
     /// The menu bar with each row's enabled state.
     pub menu: MenuBar,
     /// Why the catalog could not be built.
@@ -95,6 +104,9 @@ impl Catalog {
         Catalog {
             app,
             input,
+            custom: Custom::default(),
+            overrides: Arc::default(),
+            shortcuts_at: None,
             menu: menu(|_| true, &MenuStates::default(), &[], &[]),
             error,
             generation,
@@ -124,12 +136,44 @@ impl Catalog {
         let specs = fontcraft_engine::cmd::command_specs();
         let enabled: Vec<bool> = specs.iter().map(|spec| (spec.enabled)(session).is_ok()).collect();
         let mut input = self.app.clone().map_or_else(CommandInput::new, |app| CommandInput::new().catalog(app));
+        input = input.overrides(Arc::clone(&self.overrides));
         for (spec, on) in specs.iter().zip(&enabled) {
             input = input.state(CommandRef::new(spec.id), CommandState::new().enabled(*on));
         }
         self.input = input;
         self.enabled = enabled;
         self.rebuild_menu();
+    }
+
+    /// The user's own shortcuts.
+    pub fn custom(&self) -> &Custom {
+        &self.custom
+    }
+
+    /// The settings revision the shortcuts were read at.
+    pub fn shortcuts_at(&self) -> Option<u64> {
+        self.shortcuts_at
+    }
+
+    /// Has the shortcuts read again: the settings were replaced and may carry the revision of the ones before.
+    pub fn reread_shortcuts(&mut self) {
+        self.shortcuts_at = None;
+    }
+
+    /// Takes the user's own shortcuts, read at the settings revision `at`; the keymap changes only when they did.
+    pub fn set_custom(&mut self, at: u64, custom: Custom) {
+        self.shortcuts_at = Some(at);
+        if self.custom == custom {
+            return;
+        }
+        self.overrides = Arc::new(super::shortcuts::overrides(&custom));
+        self.custom = custom;
+        self.input = self.input.clone().overrides(Arc::clone(&self.overrides));
+    }
+
+    /// The shortcut of the command `id` now, its own or the user's; `default` is the built-in one.
+    pub fn shortcut(&self, id: &str, default: Option<&str>) -> Option<String> {
+        self.custom.shortcut(id, default)
     }
 
     /// Puts the extensions' rows at the end of their menus. `key` names what they show; the rows are made and the

@@ -11,6 +11,7 @@
 use craft::keymap::{Key as WindowKey, Mods};
 use craft::ui::runtime::commands::{Binding, CommandRef};
 use egui::ViewportId;
+use fontcraft_engine::shortcuts::Custom;
 use fontcraft_geom::Point;
 use fontcraft_tools::{Key, KeyEvent, Modifiers, PointerEvent, PointerKind, TOOLS};
 use serde_json::{Value, json};
@@ -108,16 +109,17 @@ fn chord_text(name: &str, mods: Modifiers) -> String {
     text
 }
 
-/// The engine or shell command whose shortcut is `chord` and works while Font View shows (`font_view`) with `tool`
+/// The engine or shell command whose shortcut (the user's own, else its built-in one) is `chord` and works while Font View shows (`font_view`) with `tool`
 /// current (`catalog::shortcut_works`), then the numbered shortcuts with their parameters.
-fn shortcut_command(chord: &Binding, font_view: bool, tool: &str) -> Option<CommandRef> {
+fn shortcut_command(chord: &Binding, custom: &Custom, font_view: bool, tool: &str) -> Option<CommandRef> {
     let engine = fontcraft_engine::cmd::command_specs()
         .iter()
         .filter(|spec| crate::app::catalog::shortcut_works(spec.id, font_view, tool))
-        .filter_map(|spec| Some((spec.id, spec.shortcut?)));
-    let shell = crate::shell::commands::MODULES.iter().flat_map(|m| m.commands.iter()).filter_map(|c| Some((c.id, c.shortcut?)));
+        .filter_map(|spec| Some((spec.id, custom.shortcut(spec.id, spec.shortcut)?)));
+    let shell =
+        crate::shell::commands::MODULES.iter().flat_map(|m| m.commands.iter()).filter_map(|c| Some((c.id, custom.shortcut(c.id, c.shortcut)?)));
     let matches = |text: &str| Binding::parse(text).ok().as_ref() == Some(chord);
-    if let Some((id, _)) = engine.chain(shell).find(|(_, text)| matches(text)) {
+    if let Some((id, _)) = engine.chain(shell).find(|(_, text)| matches(text.as_str())) {
         return Some(CommandRef::new(id));
     }
     crate::shell::numbered_keys::all().into_iter().find(|key| matches(&key.shortcut)).map(|key| key.command)
@@ -188,8 +190,10 @@ fn key(app: &mut FontCraftApp, params: &Value) -> Result<Value, String> {
         {
             handled = true;
             errors.extend(errs);
-        } else if let Some(fired) =
-            Binding::parse(&chord_text(name, mods)).ok().as_ref().and_then(|chord| shortcut_command(chord, font_view, app.view.tool))
+        } else if let Some(fired) = Binding::parse(&chord_text(name, mods))
+            .ok()
+            .as_ref()
+            .and_then(|chord| shortcut_command(chord, app.catalog.custom(), font_view, app.view.tool))
         {
             handled = true;
             command = Some(fired.id.clone());

@@ -25,6 +25,7 @@ pub mod open;
 pub mod preview_host;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod print_host;
+pub mod shortcuts;
 pub mod sidebar;
 pub mod startup;
 pub mod user_store;
@@ -315,6 +316,7 @@ impl FontCraftApp {
     /// control channel turns that off for its requests.
     pub fn new(mut session: Session, host: Arc<Host>) -> FontCraftApp {
         session.set_export_outside(true);
+        session.set_window_commands(shortcuts::window_commands());
         let mut app = FontCraftApp {
             session,
             host,
@@ -584,6 +586,7 @@ impl FontCraftApp {
         crate::canvas::reference_font::refresh(self);
         crate::canvas::images::cells::refresh(self);
         crate::canvas::images::cells::space_center(self);
+        shortcuts::refresh(self);
         let engine = Stamp::of(&self.session, 0);
         if self.enabled_at != Some(engine) {
             self.enabled_at = Some(engine);

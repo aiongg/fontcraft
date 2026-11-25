@@ -39,6 +39,7 @@ pub(crate) mod linked;
 pub mod log;
 pub mod macros;
 pub mod project;
+pub mod shortcuts;
 pub mod slots;
 pub mod spacing_state;
 
@@ -298,6 +299,8 @@ pub struct Session {
     projects: project::Projects,
     /// External Preview while the app serves it (`cmd::sharing`).
     sharing: cmd::sharing::SharingState,
+    /// The window's commands that can have a keyboard shortcut ([`shortcuts`]).
+    window_commands: Vec<shortcuts::WindowCommand>,
     /// Creating a session installs the command tables.
     _tables: TablesInstalled,
 }
@@ -559,6 +562,16 @@ impl Session {
     /// For the app that serves External Preview, and for the sharing commands.
     pub fn sharing_mut(&mut self) -> &mut cmd::sharing::SharingState {
         &mut self.sharing
+    }
+
+    /// The window's commands and fixed keys, which the shortcut commands list with the engine's.
+    pub fn window_commands(&self) -> &[shortcuts::WindowCommand] {
+        &self.window_commands
+    }
+
+    /// Hands over the window's commands and fixed keys; a window calls this once, when it starts.
+    pub fn set_window_commands(&mut self, commands: Vec<shortcuts::WindowCommand>) {
+        self.window_commands = commands;
     }
 
     /// The user's settings, for the app (loading) and for the commands that own reserved ids.

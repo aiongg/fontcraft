@@ -76,6 +76,7 @@ pub fn load(app: &mut FontCraftApp) {
     // View state kept in the settings.
     app.view.extensions.reporters = crate::shell::extensions::stored_reporters(&app.session);
     // Loaded settings may carry the same revision as the defaults: the projection reads them again.
+    app.catalog.reread_shortcuts();
     app.view_changed();
     app.project();
 }

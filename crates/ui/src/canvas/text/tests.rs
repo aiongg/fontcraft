@@ -165,7 +165,7 @@ fn alt_arrows_move_by_word_and_cmd_up_down_to_the_ends_of_the_text() {
     let cmd = Modifiers { cmd: true, ..Modifiers::NONE };
     let cmd_shift = Modifiers { cmd: true, shift: true, ..Modifiers::NONE };
     for (k, m) in [(Key::Left, alt), (Key::Right, alt_shift), (Key::Up, cmd), (Key::Down, cmd_shift)] {
-        assert_eq!(super::input::text_mode_command(k, m), None, "{k:?} {m:?} is no text-mode shortcut");
+        assert_eq!(super::input::text_mode_command(&Default::default(), k, m), None, "{k:?} {m:?} is no text-mode shortcut");
     }
     let mut app = text_app();
     try_post(&mut app, Msg::View(ViewMsg::SelectTool(super::TEXT_TOOL))).unwrap();
@@ -447,7 +447,7 @@ fn a_kerning_key_in_text_mode_kerns_the_pair_at_the_cursor() {
     shell(&mut app, "editView.toggleTextMode", json!({"mode": "text"}));
     shell(&mut app, "editView.setCursor", json!({"index": 1}));
     let mods = Modifiers { ctrl: true, alt: true, ..Modifiers::NONE };
-    assert_eq!(super::input::text_mode_command(Key::Left, mods), Some("kerning.increaseLeft"));
+    assert_eq!(super::input::text_mode_command(&Default::default(), Key::Left, mods), Some("kerning.increaseLeft"));
     let revision = |app: &FontCraftApp| app.session.active().unwrap().revision;
     let before = revision(&app);
     key(&mut app, Key::Left, mods);

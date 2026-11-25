@@ -1239,6 +1239,7 @@ milestone = "M14"
 summary = "The user's shortcut overrides: a map from action (command id) to a key combination or to none. Actions without an entry use their built-in shortcut."
 ref = "Settings › Shortcuts"
 status = "handbook"
+notes = "FontCraft (M14.22): stored as shortcuts.custom in the settings file, a list of {command, shortcut} with an empty shortcut for none. Written by settings.setShortcut, settings.removeShortcut and settings.resetShortcut. An entry that cannot be read is left out with a notice; one for a command the build does not have is kept."
 
 [[command]]
 id = "settings.recordShortcut"
@@ -1267,12 +1268,33 @@ ref = "Settings › Shortcuts"
 status = "handbook"
 
 [[command]]
+id = "settings.setShortcut"
+label = "Set Shortcut"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{command: id, shortcut: string, replace?: bool} → {command, shortcut, set, conflicts: [{command, label, fixed?}], system?}"
+area = "ui-chrome"
+milestone = "M14"
+summary = "Gives a command a keyboard shortcut in place of its own, in Mac notation. When another command that can get the same press has it, or the operating system keeps it, nothing changes and the reply names them; with replace true it is taken from those commands. Two commands that work in different places (Font View and Edit View, two tools, a panel) may share one."
+ref = "Settings › Shortcuts"
+status = "inferred"
+own = true
+guesses = [
+  "A combination that is taken is offered to be taken over instead of refused or shared; no source says what the reference does.",
+  "A command has one shortcut, as the settings' list shows one per action.",
+]
+observe = [
+  "Record a shortcut another action has: note what the window says and which of the two keeps it.",
+]
+
+[[command]]
 id = "settings.removeShortcut"
 label = "Remove Shortcut"
 menu = []
 shortcut = ""
-kind = "ui"
-params = "{command: id}"
+kind = "engine"
+params = "{command: id} → {command, shortcut: null}"
 area = "ui-chrome"
 milestone = "M14"
 summary = "Clears the shortcut of an action so that no key combination triggers it (cross icon)."
@@ -1284,11 +1306,11 @@ id = "settings.resetShortcut"
 label = "Reset Shortcut"
 menu = []
 shortcut = ""
-kind = "ui"
-params = "{command?: id}"
+kind = "engine"
+params = "{command?: id, replace?: bool} → {reset: [id], conflicts: [{command, label, fixed?}]}"
 area = "ui-chrome"
 milestone = "M14"
-summary = "Drops the user's override for one action, or for all when no id is given, restoring built-in shortcuts. Not described in the source; proposed because Customized filtering implies a way back."
+summary = "Drops the user's override for one action, or for all when no id is given, restoring built-in shortcuts. Not described in the source; proposed because Customized filtering implies a way back. When the user gave the built-in shortcut to another command, the reset of one command changes nothing and names that command, unless replace is true."
 ref = "Settings › Shortcuts"
 status = "inferred"
 
@@ -1324,10 +1346,16 @@ label = "List Shortcuts"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{scope?: \"all\"|\"customized\"|\"menu\"|\"commands\"}"
+params = "{scope?: \"all\"|\"customized\"|\"menu\"|\"commands\", search?: string} → {shortcuts: [{command, label, section, default, shortcut, customized, fixed?, when?, system?}], problems: [string]}"
 area = "ui-chrome"
 milestone = "M14"
-summary = "Read-only query returning each action with its section, default shortcut and current shortcut. Proposed for agents; equals the content of the list."
+summary = "Read-only query returning each action with its section, default shortcut and current shortcut. Proposed for agents; equals the content of the list. The window's commands are listed with the engine's while it runs; the tools' letters, the keys one area takes and the numbered keys are listed as fixed. system says what the operating system does with a combination (macOS's Mission Control keys, for one)."
+guesses = [
+  "commands lists what the open document allows now; the source says only that it shows actions within the current selection.",
+]
+observe = [
+  "In the Shortcuts settings, choose Commands with nothing selected, then with a node selected in a glyph: note what the list shows each time.",
+]
 ref = "Settings › Shortcuts"
 status = "inferred"
 
@@ -1338,6 +1366,7 @@ milestone = "M14"
 summary = "A shortcut is at least one modifier (Command, Option, Control, Shift) plus one ordinary key, which may be a letter, a digit, Return or Escape."
 ref = "Settings › Shortcuts"
 status = "handbook"
+notes = "A custom shortcut needs a modifier; the built-in keys without one (the tools' letters, the keys of one area) stay as they are."
 
 [[behavior]]
 id = "shortcuts.keySymbolDisplay"
@@ -1384,6 +1413,6 @@ notes = "FontCraft: a macro is run by script.run with its name, and the shortcut
 id = "shortcuts.oneRegistry"
 area = "ui-chrome"
 milestone = "M14"
-summary = "FontCraft derives the action list from the command registry: every command with a label is listed under its menu or noun prefix, and the stored override map is keyed by command id."
+summary = "FontCraft derives the action list from the command registry: every command with a label is listed under its menu or noun prefix, and the stored override map is keyed by command id. The engine and the window read the overrides in one place, so keys, menus, tooltips, the command palette and the control channel agree."
 ref = "Settings › Shortcuts"
 status = "inferred"

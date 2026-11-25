@@ -5,7 +5,9 @@
 use std::sync::Arc;
 
 use craft::ui::runtime::commands::CommandRef;
+use fontcraft_engine::cmd::CommandSpec;
 use fontcraft_engine::command_specs;
+use fontcraft_engine::shortcuts::Custom;
 use fontcraft_textlayout::{Item, KerningMode, Layout};
 use fontcraft_tools::{Key, KeyEvent, Modifiers, PointerEvent, PointerKind};
 use serde_json::{Value, json};
@@ -157,7 +159,7 @@ fn key(app: &mut FontCraftApp, ev: KeyEvent) -> Result<(), String> {
             };
             shell(app, id, json!({}))
         }
-        Key::Left | Key::Right | Key::Up | Key::Down => match text_mode_command(ev.key, m) {
+        Key::Left | Key::Right | Key::Up | Key::Down => match text_mode_command(app.catalog.custom(), ev.key, m) {
             Some(id) => shortcut(app, id),
             None if plain => move_cursor(app, ev.key, m.shift),
             None if m.alt && !m.cmd && !m.ctrl => move_by_word(app, ev.key, m.shift),
@@ -168,9 +170,10 @@ fn key(app: &mut FontCraftApp, ev: KeyEvent) -> Result<(), String> {
     }
 }
 
-/// The engine command whose text-mode shortcut is `key` with `mods`.
-pub fn text_mode_command(key: Key, mods: Modifiers) -> Option<&'static str> {
-    command_specs().iter().filter(|c| c.when == Some(TEXT_MODE)).find(|c| c.shortcut.and_then(parse_shortcut) == Some((key, mods))).map(|c| c.id)
+/// The engine command whose text-mode shortcut (the user's own, else its built-in one) is `key` with `mods`.
+pub fn text_mode_command(custom: &Custom, key: Key, mods: Modifiers) -> Option<&'static str> {
+    let shortcut = |c: &CommandSpec| custom.shortcut(c.id, c.shortcut).as_deref().and_then(parse_shortcut);
+    command_specs().iter().filter(|c| c.when == Some(TEXT_MODE)).find(|c| shortcut(c) == Some((key, mods))).map(|c| c.id)
 }
 
 /// A shortcut such as `Cmd+Ctrl+Shift+Left` as a key of the tools and its modifiers.
