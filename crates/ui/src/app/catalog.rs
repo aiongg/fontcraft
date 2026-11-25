@@ -145,6 +145,14 @@ impl Catalog {
         self.rebuild_menu();
     }
 
+    /// The commands the open document and the selection allow now.
+    pub fn allowed(&self) -> std::collections::BTreeSet<String> {
+        let specs = fontcraft_engine::cmd::command_specs().iter().enumerate();
+        let engine = specs.filter(|(at, spec)| self.enabled.get(*at).copied().unwrap_or(true) && !self.greyed.iter().any(|(id, _)| *id == spec.id));
+        let shell = shell_commands::MODULES.iter().flat_map(|m| m.commands.iter()).map(|c| c.id.to_string());
+        engine.map(|(_, spec)| spec.id.to_string()).chain(shell).collect()
+    }
+
     /// The user's own shortcuts.
     pub fn custom(&self) -> &Custom {
         &self.custom
@@ -284,7 +292,8 @@ pub fn chosen_tool(own: &'static str, command: &CommandRef) -> Result<&'static s
     }
 }
 
-fn definitions() -> Vec<CommandDef> {
+/// The definitions the keymap knows: commands, numbered keys and tools.
+pub(crate) fn definitions() -> Vec<CommandDef> {
     let mut defs = Vec::new();
     for spec in fontcraft_engine::cmd::command_specs() {
         defs.push(engine_def(spec));

@@ -5,12 +5,15 @@
 use serde_json::{Map, Value, json};
 
 use super::*;
+use crate::EngineError;
 use crate::params::Params;
 use crate::settings::Reserved;
 use crate::shortcuts::{Chord, Custom, MAX_CUSTOM, meet, system};
 
 /// Longest search text, in characters.
 const MAX_SEARCH_CHARS: usize = 128;
+/// Largest file of shortcuts read, in bytes.
+const MAX_FILE_BYTES: usize = 1 << 20;
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
@@ -50,6 +53,24 @@ pub fn specs() -> Vec<CommandSpec> {
             always,
             reset
         ),
+        cmd!(
+            "settings.importShortcuts",
+            "Import Shortcuts",
+            [],
+            None,
+            "{path?: a file settings.exportShortcuts wrote, shortcuts?: [{command, shortcut: string in Mac notation, or \"\" for none}] (exactly one of the two)} replace every keyboard shortcut of the user's own by this set. Entries that cannot be read, that the system keeps, or that a fixed key has are left out and named; one for a command this build does not have is kept → {imported, problems: [string]}",
+            always,
+            import
+        ).files(const { &[FileParam::read("path")] }),
+        cmd!(
+            "settings.exportShortcuts",
+            "Export Shortcuts",
+            [],
+            None,
+            "{path: string} write the keyboard shortcuts of the user's own as a JSON file → {path, exported}",
+            always,
+            export
+        ).files(const { &[FileParam::write("path")] }).writes_files(),
     ]
 }
 
@@ -285,6 +306,73 @@ fn reset(s: &mut Session, v: &Value) -> Result<Value> {
     Ok(json!({ "reset": [id], "conflicts": conflicts }))
 }
 
+/// What the exported file holds under its one key.
+const FILE_KEY: &str = "shortcuts";
+
+#[cfg(not(target_arch = "wasm32"))]
+fn read_set(path: &str) -> Result<Value> {
+    let bytes = crate::io::read_file(std::path::Path::new(path))?;
+    if bytes.len() > MAX_FILE_BYTES {
+        return Err(EngineError::Io(format!("{path} is {} bytes long; at most {MAX_FILE_BYTES} are read", bytes.len())));
+    }
+    let file: Value = serde_json::from_slice(&bytes).map_err(|e| EngineError::Io(format!("{path} is no file of shortcuts: {e}")))?;
+    file.get(FILE_KEY).filter(|v| v.is_array()).cloned().ok_or_else(|| EngineError::Io(format!("{path} is no file of shortcuts")))
+}
+
+#[cfg(target_arch = "wasm32")]
+fn read_set(_: &str) -> Result<Value> {
+    Err(EngineError::Unsupported("reading a file by path in the browser; give `shortcuts`".into()))
+}
+
+fn import(s: &mut Session, v: &Value) -> Result<Value> {
+    let p = Params::new("settings.importShortcuts", v)?;
+    let given = v.get("shortcuts").filter(|list| !list.is_null());
+    let list = match (p.opt_str("path")?, given) {
+        (Some(path), None) => read_set(path)?,
+        (None, Some(list)) if list.is_array() => list.clone(),
+        (None, Some(_)) => return Err(p.bad("`shortcuts` is a list of {command, shortcut}")),
+        _ => return Err(p.bad("give either `path` or `shortcuts`")),
+    };
+    let read = Custom::read(&list);
+    let mut problems = read.problems().to_vec();
+    let actions = actions(s);
+    let mut custom = Custom::default();
+    for (id, chord) in read.iter() {
+        let known = actions.iter().find(|a| a.id == id && !a.fixed);
+        if let Some(chord) = chord {
+            let fixed = known.is_some_and(|a| holders(&actions, a, &chord, &read).iter().any(|h| h.fixed));
+            let blocked = system(&chord).is_some_and(|found| found.blocked);
+            if fixed || blocked {
+                let why = if fixed { "a fixed key has it" } else { "the system keeps it" };
+                problems.push(format!("{id}: {} is left out: {why}", chord.text()));
+                continue;
+            }
+        }
+        // The built-in shortcut, or none where there is none, is no override.
+        let built_in = known.map(|a| a.default.as_deref().and_then(|text| Chord::parse(text).ok()));
+        if built_in != Some(chord) {
+            custom.set(id, chord);
+        }
+    }
+    store(s, &custom, &p)?;
+    Ok(json!({ "imported": custom.len(), "problems": problems }))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn export(s: &mut Session, v: &Value) -> Result<Value> {
+    let p = Params::new("settings.exportShortcuts", v)?;
+    let path = p.str("path")?;
+    let custom = Custom::of(s.settings());
+    let text = serde_json::to_string_pretty(&json!({ FILE_KEY: custom.to_value() })).map_err(|e| p.bad(e.to_string()))?;
+    fontcraft_format::write_atomic(std::path::Path::new(path), text.as_bytes())?;
+    Ok(json!({ "path": path, "exported": custom.len() }))
+}
+
+#[cfg(target_arch = "wasm32")]
+fn export(_: &mut Session, _: &Value) -> Result<Value> {
+    Err(EngineError::Unsupported("writing a file by path in the browser; settings.listShortcuts lists them".into()))
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
@@ -327,5 +415,23 @@ mod tests {
             assert!(s.execute("settings.setShortcut", &bad).is_err());
         }
         assert!(s.execute("settings.set", &json!({"id": "shortcuts.custom", "value": []})).is_err(), "only these commands write it");
+
+        // A set written to a file comes back whole; a hostile file changes nothing.
+        let path = std::env::temp_dir().join(format!("fontcraft-shortcuts-{}.json", std::process::id()));
+        let text = path.to_string_lossy().into_owned();
+        assert_eq!(run(&mut s, "settings.exportShortcuts", json!({"path": text}))["exported"], 1);
+        run(&mut s, "settings.resetShortcut", json!({}));
+        assert_eq!(run(&mut s, "settings.importShortcuts", json!({"path": text}))["imported"], 1);
+        assert_eq!(shown(&mut s, "edit.undo")["shortcut"], Value::Null);
+        std::fs::write(&path, "{\"shortcuts\": 7}").unwrap();
+        assert!(s.execute("settings.importShortcuts", &json!({"path": text})).is_err());
+        assert_eq!(shown(&mut s, "edit.undo")["shortcut"], Value::Null);
+        let _ = std::fs::remove_file(&path);
+        let r = run(
+            &mut s,
+            "settings.importShortcuts",
+            json!({"shortcuts": [{"command": "edit.redo", "shortcut": blocked}, {"command": "edit.undo", "shortcut": "Cmd+Z"}]}),
+        );
+        assert_eq!((&r["imported"], r["problems"].as_array().unwrap().len()), (&json!(0), 1), "a built-in shortcut is no override: {r}");
     }
 }

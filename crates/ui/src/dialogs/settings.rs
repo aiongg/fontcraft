@@ -43,7 +43,7 @@ craft::ui::words! {
         done: "fontcraftSettings.done" = "Done";
         close: "fontcraftSettings.close" = "Close";
         keep_names: "fontcraftSettings.keepNames" = "Keep Glyph Names from Imported Files";
-        keep_names_note: "fontcraftSettings.keepNamesNote" = "Not used yet: opened files keep their glyph names either way.";
+        keep_names_note: "fontcraftSettings.keepNamesNote" = "Off, the glyphs of an opened UFO, designspace or compiled font get nice names.";
         no_alignment: "fontcraftSettings.noAlignment" = "Disable Automatic Alignment for Imported Files";
         no_alignment_note: "fontcraftSettings.noAlignmentNote" = "Components of an opened font stay where the file places them.";
         no_localization: "fontcraftSettings.noLocalization" = "Disable Localization";
@@ -115,6 +115,8 @@ pub struct SettingsModel {
     /// The Extensions section: the Extension Manager's Indexes tab.
     pub indexes: IndexesModel,
     pub appearance: AppearanceModel,
+    /// How many commands have a shortcut of the user's own.
+    pub shortcuts: usize,
 }
 
 impl SettingsModel {
@@ -140,6 +142,7 @@ impl SettingsModel {
             },
             indexes: extension_manager::indexes_model(app),
             appearance: AppearanceModel::of(app),
+            shortcuts: app.catalog.custom().len(),
         }
     }
 }
@@ -165,6 +168,7 @@ pub fn body(ui: &mut Ui, model: &SettingsModel, new_index: &mut String, sent: &m
         "appearance" => settings_appearance::section(ui, &model.appearance, sent),
         "sampleStrings" => sample_strings(ui, model, sent, &words),
         "sharing" => sharing_section(ui, &model.sharing, sent, &words),
+        "shortcuts" => super::settings_shortcuts::section(ui, model.shortcuts, sent),
         "addons" => {
             extension_indexes::show(ui, &model.indexes, new_index, sent);
             if Button::new(words.open_manager.clone()).show(ui).clicked() {

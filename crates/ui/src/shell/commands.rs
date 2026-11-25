@@ -60,6 +60,7 @@ pub const MODULES: &[Module] = &[
     super::start::MODULE,
     super::images::MODULE,
     super::settings::MODULE,
+    crate::dialogs::settings_shortcuts::MODULE,
     super::url::MODULE,
     super::table_viewer::MODULE,
     super::compare_fonts::MODULE,

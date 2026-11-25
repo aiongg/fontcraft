@@ -1227,6 +1227,7 @@ milestone = "M14"
 summary = "Section for viewing and recording keyboard shortcuts of actions."
 ref = "Settings › Shortcuts"
 status = "handbook"
+notes = "FontCraft (M14.23): the section says how many commands have a shortcut of the user's own and has Edit Shortcuts…, Reset All, Import… and Export…; the list itself is the Keyboard Shortcuts dialog (settings.editShortcuts). The framework's dialog has no body that a window of ours could hold."
 
 [[setting]]
 id = "shortcuts.custom"
@@ -1253,6 +1254,7 @@ milestone = "M14"
 summary = "Assigns a key combination to an action. In the UI: click Record shortcut on the selected action, then press the keys. Headless: pass the combination in Mac notation."
 ref = "Settings › Shortcuts"
 status = "handbook"
+notes = "Done in the Keyboard Shortcuts dialog (M14.23), by a click on a shortcut or on the empty place of a command without one; headless, settings.setShortcut."
 
 [[command]]
 id = "settings.cancelShortcutRecording"
@@ -1266,6 +1268,7 @@ milestone = "M14"
 summary = "Leaves recording mode without changing the action's shortcut (curved-arrow icon)."
 ref = "Settings › Shortcuts"
 status = "handbook"
+notes = "Escape, or a click elsewhere, in the Keyboard Shortcuts dialog (M14.23)."
 
 [[command]]
 id = "settings.setShortcut"
@@ -1287,6 +1290,51 @@ guesses = [
 observe = [
   "Record a shortcut another action has: note what the window says and which of the two keeps it.",
 ]
+
+[[command]]
+id = "settings.editShortcuts"
+label = "Edit Shortcuts…"
+menu = []
+shortcut = ""
+kind = "ui"
+params = "{open?: bool, command?: id}"
+area = "ui-chrome"
+milestone = "M14"
+summary = "Opens the Keyboard Shortcuts dialog from Settings › Shortcuts, on a command when one is named: the list of commands with search, the recorder, removing and resetting a shortcut, and the question about a combination another command has. Every edit is live; Cancel takes the edits back."
+ref = "Settings › Shortcuts"
+status = "inferred"
+own = true
+guesses = [
+  "The list is a dialog of its own that the section opens, where the reference shows it in the Settings window.",
+]
+
+[[command]]
+id = "settings.importShortcuts"
+label = "Import Shortcuts"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{path?: string, shortcuts?: [{command, shortcut}]} → {imported, problems: [string]}"
+area = "ui-chrome"
+milestone = "M14"
+summary = "Replaces the user's shortcuts by a set, from a file settings.exportShortcuts wrote or given inline. Entries that cannot be read, that the system keeps, or that a fixed key has are left out and named. The Keyboard Shortcuts dialog hands its edits over with it."
+ref = "FontCraft design"
+status = "inferred"
+own = true
+
+[[command]]
+id = "settings.exportShortcuts"
+label = "Export Shortcuts"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{path: string} → {path, exported}"
+area = "ui-chrome"
+milestone = "M14"
+summary = "Writes the user's shortcuts as a JSON file, {shortcuts: [{command, shortcut}]}."
+ref = "FontCraft design"
+status = "inferred"
+own = true
 
 [[command]]
 id = "settings.removeShortcut"
@@ -1383,6 +1431,7 @@ milestone = "M14"
 summary = "Four mutually exclusive scope buttons sit above the list: All, Customized, Menu, Commands. The source describes Commands only as actions within the current selection, which is unclear."
 ref = "Settings › Shortcuts"
 status = "handbook"
+notes = "In the Keyboard Shortcuts dialog (M14.23) the Show list holds All, each menu, Tools, All Menus and Commands, and the filter holds All, with a shortcut, Changed (the reference's Customized) and Conflicts. Commands lists what the open document and the selection allowed when the dialog opened."
 
 [[behavior]]
 id = "shortcuts.sections"
@@ -1391,6 +1440,7 @@ milestone = "M14"
 summary = "Actions are listed in titled groups; each group can be folded with its chevron."
 ref = "Settings › Shortcuts"
 status = "handbook"
+notes = "In the Keyboard Shortcuts dialog (M14.23) the sections are entries of the Show list, one per menu and area, instead of groups that fold."
 
 [[behavior]]
 id = "shortcuts.search"
@@ -1399,6 +1449,7 @@ milestone = "M14"
 summary = "Typing in the search field filters the list to matching actions within the active scope."
 ref = "Settings › Shortcuts"
 status = "handbook"
+notes = "The dialog's search field (M14.23)."
 
 [[behavior]]
 id = "shortcuts.scriptsAreActions"
