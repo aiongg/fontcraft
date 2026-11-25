@@ -474,6 +474,35 @@ fn decomposing_one_corner_keeps_the_other_on_its_node() {
     assert_eq!(points(&all.shapes), points(&both));
 }
 
+/// Decomposing a corner keeps the cap, segment and brush hints of its path on the nodes they sat on.
+#[test]
+fn decomposing_a_corner_keeps_attachments_on_their_nodes() {
+    use crate::attach::{Attachment, CapHint, SegmentHint, attachment};
+    let mut font = Font::new("Attached");
+    add_glyph(&mut font, "_corner.one", &[], &["o:(0,50,l),(-50,50,l),(-50,0,l),(25,0,l)"]);
+    add_glyph(&mut font, "I", &[], &["c:(0,0,l),(400,0,l),(400,500,l),(0,500,l)"]);
+    let attached = [
+        Attachment::Cap(CapHint::new("_cap.one", 0, 1)),
+        Attachment::Segment(SegmentHint::new("_segment.one", 0, 2)),
+        Attachment::Brush(SegmentHint::new("_brush.one", 0, 3)),
+    ];
+    let mut hints = vec![CornerHint::new("_corner.one", 0, 0).to_hint()];
+    hints.extend(attached.iter().map(Attachment::to_hint));
+    set_hints(&mut font, "I", hints);
+    let layer = font.glyph("I").unwrap().layer("m01").unwrap();
+    // Where each attachment's node lies: the hints count a closed path's start node last.
+    let places = |layer: &Layer| -> Vec<(f64, f64)> {
+        let Shape::Path(p) = &layer.shapes[0] else { panic!() };
+        let origins = layer.info.hints.iter().filter_map(|h| attachment(h).unwrap()).map(|a| a.origin().1);
+        origins.map(|n| &p.nodes[(n + 1) % p.nodes.len()]).map(|n| (n.x, n.y)).collect()
+    };
+    let decomposed = decompose_corners(&font, layer, &[0]).unwrap();
+    assert_ne!(decomposed.shapes, layer.shapes);
+    assert_eq!(decomposed.info.hints.len(), 3);
+    assert_eq!(places(layer), [(400.0, 500.0), (0.0, 500.0), (0.0, 0.0)]);
+    assert_eq!(places(&decomposed), places(layer));
+}
+
 /// An intermediate layer at 150 % width: a 125 % scale draws the outline halfway between the
 /// master layer and that layer, and a height scale still stretches.
 #[test]

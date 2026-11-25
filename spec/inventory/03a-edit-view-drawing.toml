@@ -2877,16 +2877,20 @@ ref = "Edit View › Local & Global Guides"
 status = "handbook"
 guesses = [
   "Left keeps the guide's x, right moves it with the width, and both keeps its fraction of the width (03a question 27).",
-  "The guide's x is stored as an absolute position, and the command that changes the width moves it in the same undo step.",
+  "A local guide's x is kept as an absolute position, and the command that changes the width moves it in the same undo step; the reference's file format counts it from the right sidebearing instead (see the notes).",
+  "What the x of a both-referenced guide counts from: half the width by the format's name for it (`center`), but the 296 local `center` guides of Inter's source have x values that lie inside their glyphs only when read as absolute, beside others thousands of units away, so the file data settles nothing.",
+  "A global guide is drawn and snapped at its stored x in every glyph until X.fix106's findings are built: right-referenced at the glyph's width plus x, both-referenced at a rule still to be observed.",
   "A left sidebearing change moves every local guide with the outline, whatever its reference; the reference applies to the rest of a width change.",
   "A both-referenced guide in a glyph of width zero moves by half the change.",
   "Locked guides follow the width too: the lock guards against editing the guide, not against its layer's metrics.",
   "Scaling the units per em keeps every reference without moving guides further, since positions and widths scale together.",
 ]
-notes = "Documented, not yet observed. FontCraft (M3.42): `fontcraft_model::guide_follow::follow_width` moves a layer's local guides, foreground and background, and runs in the same edit as every command that writes a width with the contents left in place: the right sidebearing, width and nudge commands, metrics keys, Auto Space and its value setters, Transform Metrics, automatic alignment, the import of metrics, copying metrics from a glyph set, the stem filters and derived glyphs, and colour layers following the master width. Global guides do not follow yet: they are drawn and snapped at their stored x in every glyph."
+notes = "Documented, not yet observed. FontCraft (M3.42): `fontcraft_model::guide_follow::follow_width` moves a layer's local guides, foreground and background, and runs in the same edit as every command that writes a width with the contents left in place: the right sidebearing, width and nudge commands, metrics keys, Auto Space and its value setters, Transform Metrics, automatic alignment, the import of metrics, copying metrics from a glyph set, the stem filters and derived glyphs, and colour layers following the master width. Global guides do not follow yet: they are drawn and snapped at their stored x in every glyph. Found in X.fix106, in the file format documentation and sample of the reference's public SDK (Apache-2.0): the key is `orientation` (`left`, `center` or `right`) from version 3 on, renamed from version 2's `alignment`; a right-referenced guide's `pos` counts from the right sidebearing, for local and global guides alike (the sample's A, 459 wide, has one at x -74, its master two at -25 and -34). FontCraft departs from both: `fontcraft_model::guide_follow` reads and writes `alignment` in every version and leaves a file's `orientation` unused, so such a guide is drawn and kept at its stored x as if left-referenced."
 observe = [
   "Change the width of a glyph with a right-referenced local guide and with a both-referenced one: note where each guide goes, and whether one undo puts the width and the guides back.",
   "Do the same with a right-referenced global guide: note whether it is drawn at a distance from the right edge of each glyph.",
+  "In a glyph 600 wide, place a vertical local guide at x 500, choose the arrow pointing left and right from a bar in the Info box, and note the x the Info box then shows; save as a version 3 file and read the guide's `pos` and `orientation`; then set the width to 800 and note where the guide is drawn.",
+  "In a glyph 600 wide, place a vertical global guide at x 500, choose the right arrow, and note the x the Info box shows and where the guide is drawn in a glyph 300 wide.",
 ]
 
 [[behavior]]

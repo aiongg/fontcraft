@@ -1,14 +1,15 @@
-//! The Bitmap Glyph Editor's pixel canvas: its view and its pointer tool. Its state lives in
+//! The Bitmap Glyph Editor's pixel canvas: its view and its pointer tools. Its state lives in
 //! `FontCraftApp::bitmap_canvas` and reaches the panel through the dock, as the Space Center preview's does.
 //!
 //! Painting hands the tool the frame it drew (`PixelFrame`): where the glyph's pixels lie on screen. The tool turns
 //! the pointer into strike pixels from the glyph origin and reports presses, drags and releases as
-//! [`BitmapInput`]s, which the panel posts for `shell::bitmap_editor::input`.
+//! [`BitmapInput`]s, which the panel posts for `shell::bitmap_editor::input`. While the Magnify tool is picked a press is
+//! a step of the pixel size instead; the Hand tool is craft's.
 
 use craft::behavior::kurbo::{Affine, Point};
-use craft::behavior::{CancelReason, CanvasView, PointerButton};
+use craft::behavior::{CancelReason, CanvasView, Cursor, CursorIcon, PointerButton};
 use craft::keymap::Mods;
-use craft::ui::canvas::{CanvasTool, ToolAction, ToolClaims, ToolContext, ToolKey, ToolPath, ToolPointer};
+use craft::ui::canvas::{CanvasTool, HandTool, NavigationOptions, ToolAction, ToolClaims, ToolContext, ToolKey, ToolPath, ToolPointer};
 use craft::ui::primitives::Draw;
 use egui::{Pos2, Rect};
 
@@ -61,13 +62,25 @@ pub struct BitmapCanvas {
     /// mirror the canvas folds in.
     pub view: CanvasView,
     pub tool: PixelTool,
+    pub hand: HandTool,
     /// The document size the view was last centred on; a new size centres it again.
     pub centred: Option<(u32, u32)>,
+    /// The pixel position the next pixel size puts in the middle of the view.
+    pub focus: Option<[f64; 2]>,
+    /// Where the context menu hangs while it is open.
+    pub menu_at: Option<Pos2>,
 }
 
 impl Default for BitmapCanvas {
     fn default() -> Self {
-        BitmapCanvas { view: CanvasView::new(Rect::NOTHING, Point::ZERO, 1.0), tool: PixelTool::default(), centred: None }
+        BitmapCanvas {
+            view: CanvasView::new(Rect::NOTHING, Point::ZERO, 1.0),
+            tool: PixelTool::default(),
+            hand: HandTool::new(NavigationOptions::default()),
+            centred: None,
+            focus: None,
+            menu_at: None,
+        }
     }
 }
 
@@ -76,13 +89,26 @@ impl Default for BitmapCanvas {
 pub struct PixelTool {
     frame: Option<PixelFrame>,
     pressed: bool,
+    /// A press steps the pixel size instead of drawing.
+    magnify: bool,
     inputs: Vec<BitmapInput>,
+    zooms: Vec<([f64; 2], bool)>,
 }
 
 impl PixelTool {
     /// The frame of the coming pass, before the host runs the tool.
     pub fn set_frame(&mut self, frame: Option<PixelFrame>) {
         self.frame = frame;
+    }
+
+    /// Whether a press steps the pixel size instead of drawing.
+    pub fn set_magnify(&mut self, on: bool) {
+        self.magnify = on;
+    }
+
+    /// The Magnify presses since the last call: the pixel position, and whether the step is down (Alt was held).
+    pub fn take_zooms(&mut self) -> Vec<([f64; 2], bool)> {
+        std::mem::take(&mut self.zooms)
     }
 
     /// The frame of the last pass.
@@ -105,6 +131,12 @@ impl PixelTool {
 impl CanvasTool for PixelTool {
     fn press(&mut self, pointer: &ToolPointer, _cx: &mut ToolContext<'_>) -> ToolAction {
         let Some(at) = self.frame.and_then(|f| f.to_pixels(pointer.pos)) else { return ToolAction::Done };
+        if self.magnify {
+            if self.zooms.len() < MAX_INPUTS {
+                self.zooms.push((at, pointer.mods.alt));
+            }
+            return ToolAction::Claimed;
+        }
         self.pressed = true;
         self.push(BitmapInput::Press { at, alt: pointer.mods.alt });
         ToolAction::Claimed
@@ -142,6 +174,14 @@ impl CanvasTool for PixelTool {
 
     fn paint(&self, _draw: &Draw<'_>, _cx: &ToolContext<'_>) {
         // The panel paints the pixels and the stroke shows through the preview of the font.
+    }
+
+    fn cursor(&self, cx: &ToolContext<'_>) -> Cursor {
+        Cursor::System(match (self.magnify, cx.mods.alt) {
+            (false, _) => CursorIcon::Default,
+            (true, false) => CursorIcon::ZoomIn,
+            (true, true) => CursorIcon::ZoomOut,
+        })
     }
 
     fn takes(&self, button: PointerButton, _mods: Mods) -> bool {

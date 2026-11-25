@@ -19,7 +19,7 @@ mod autohint_report;
 mod autohint_tt;
 mod axes;
 mod background;
-mod bitmap_edit;
+pub mod bitmap_edit;
 mod bitmap_strikes;
 mod clipboard;
 mod clipboard_scale;

@@ -752,9 +752,12 @@ Rules (our design where the handbook is silent):
   master, so a glyph lock does not block them.
 - An angle-locked guide refuses a new angle unless the same call sets `angleLocked: false`. A drag
   that rotates goes through `guide.setProperties`, so the lock holds whatever tool calls it.
-- The sidebearing reference is the guide's `alignment` key in `.glyphs` data: absent for left,
-  `right`, or `center` for both. Commands that change a glyph's width do not yet move guides that
-  follow the right side or both sides.
+- The sidebearing reference is the guide's `orientation` key in `.glyphs` data from version 3 on
+  (`alignment` in version 2): absent for left, `right`, or `center` for both. A right-referenced
+  guide's position counts from the right sidebearing, local and global alike, in the public SDK's
+  sample file; what `center` counts from is not documented. FontCraft keeps the reference as
+  `alignment` in every version and positions as absolute, and moves local guides with the width
+  (`guides.sidebearingReference` lists the departures).
 - A global guide's `filter` is kept as predicate text. Showing a global guide only on the glyphs
   its filter selects waits for the Smart Filter rules (M4).
 
