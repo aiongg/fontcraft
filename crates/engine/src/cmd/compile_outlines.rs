@@ -183,18 +183,18 @@ impl OutputRequest {
         Ok(out)
     }
 
-    /// Refuses what does not go with the rest of the request: `variable` (variable formats are
-    /// asked for) and `collection`.
+    /// Refuses what does not go with the rest of the request: `variable` (variable or interpolatable
+    /// formats are asked for) and `collection`.
     pub(super) fn check(&self, variable: bool, collection: bool) -> Result<()> {
         let rewrites = self.rewrites();
         if variable && rewrites {
             return Err(EngineError::Unsupported(
-                "`postFormat`, `excludeTables` and `tables` with a variable format: they rewrite static fonts; build the variable fonts in a separate command".into(),
+                "`postFormat`, `excludeTables` and `tables` with a variable or interpolatable format: they rewrite static fonts; build the other fonts in a separate command".into(),
             ));
         }
         if variable && self.no_compatibility_check {
             return Err(EngineError::Unsupported(
-                "`checkCompatibility: false` with a variable format: a variable font cannot be built from incompatible glyphs".into(),
+                "`checkCompatibility: false` with a variable or interpolatable format: such fonts cannot be built from incompatible glyphs".into(),
             ));
         }
         if collection && rewrites {

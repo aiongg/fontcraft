@@ -32,6 +32,7 @@ mod compile_cid;
 mod compile_export;
 mod compile_features;
 mod compile_layout;
+mod compile_masters;
 mod compile_outlines;
 mod compile_project;
 mod compile_select;

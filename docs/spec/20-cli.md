@@ -243,7 +243,7 @@ Each section gives the usage line, behaviour the options alone do not convey, an
 
 ### `compile`
 
-Compiles sources into binary fonts: static TTF or OTF per instance or master and variable TTF (gvar) or CFF2, each plain or wrapped as WOFF or WOFF2; later, static CFF2 and interpolatable masters (M2.9). Sources are a native project, a .glyphs file or package, a designspace or a UFO; later also a bare outline font (CFF, CFF2, TrueType, Type 1) that receives the remaining OpenType tables from a feature file and name data. Without --format a source with one master yields a static TTF and one with several masters and an axis a variable TTF.
+Compiles sources into binary fonts: static TTF or OTF per instance or master and variable TTF (gvar) or CFF2, each plain or wrapped as WOFF or WOFF2, static CFF2, and interpolatable masters. Sources are a native project, a .glyphs file or package, a designspace or a UFO; later also a bare outline font (CFF, CFF2, TrueType, Type 1) that receives the remaining OpenType tables from a feature file and name data. Without --format a source with one master yields a static TTF and one with several masters and an axis a variable TTF.
 
 ```
 fontcraft-cli compile SOURCE... [--format FMT]... [--container plain|woff|woff2]... [-o PATH | --output-dir DIR] [options]

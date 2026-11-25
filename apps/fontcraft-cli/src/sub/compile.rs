@@ -39,7 +39,9 @@ const USAGE: &str = "\
       Compile each SOURCE to fonts, once per format and container (default plain). --format
       (repeatable, comma-separated): ttf and otf build static fonts with TrueType or CFF outlines;
       variable and variable-cff2 build variable fonts with glyf and gvar or with CFF2 outlines;
-      otf-cff2, ttf-interpolatable and otf-interpolatable are not built yet. --variable is
+      otf-cff2 builds otf with the outlines in a CFF2 table (not together with otf);
+      ttf-interpolatable and otf-interpolatable build one font per master, with the same points
+      in every glyph, plus a sparse font per location of intermediate layers. --variable is
       --format variable. Without --format a SOURCE with several masters and an axis builds a
       variable TTF, unless --instances, --masters-as-instances, --collection,
       --interpolate-binary-layout, --cbdt, --subset, --dsig, --pass-through-tables or a project
