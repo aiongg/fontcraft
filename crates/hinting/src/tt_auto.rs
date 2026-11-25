@@ -33,8 +33,9 @@
 //!
 //! `prep` ([`autohint_prep`]) scales the zones so the x-height lands on the pixel grid, and
 //! switches the glyph programs off above the hinting limit. At export the `xHeight` and
-//! `capHeight` zones apply only when the font draws one of the letters ttfautohint measures them
-//! on ([`drop_unmeasured_zones`]).
+//! `capHeight` zones apply only when the font draws a letter ttfautohint measures its zones on
+//! and the zone holds that letter's top, or is named after the letter's own height
+//! ([`drop_unmeasured_zones`]); the x-height scaling needs a lower-case one.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
@@ -400,8 +401,9 @@ pub fn snapping_exceptions(text: &str) -> Result<Vec<(u16, u16)>, String> {
 /// preference for rounding up (up from 3/8 of a pixel above a row; from 3/16 at 6 PPM up to the
 /// x-height increase limit), and every zone is then placed at its position scaled by the same
 /// factor, rounded to the nearest row. Horizontal stems scale by that factor too. At the sizes of
-/// the x-height snapping exceptions, and at every size without an `xHeight` zone, the factor is
-/// 1, so the zones are only rounded. Zone and stem
+/// the x-height snapping exceptions, and at every size without an `xHeight` zone or with
+/// `scale_x_height` off ([`MeasuredZones::x_height`]), the factor is 1, so the zones are only
+/// rounded. Zone and stem
 /// deltas of our own `prep` are kept: each fitted entry moves by the difference between the
 /// scaled row and the row our program gave it. Zones aligned to another zone keep their rounded
 /// distance to it; zones in an alignment cycle, and those aligned to one, stay as our program
@@ -410,13 +412,18 @@ pub fn snapping_exceptions(text: &str) -> Result<Vec<(u16, u16)>, String> {
 /// Returns the `cvt ` entries to append after `layout`'s (the top of the `xHeight` zone, so the
 /// rasterizer scales it as it scales the zones) and the program to append to `prep`. Storage:
 /// [`S_X_SCALED`] and [`S_X_FITTED`], after the font programs' own.
-pub fn autohint_prep(options: &TtAutohintOptions, settings: &HintSettings, layout: &crate::CvtLayout) -> Result<(Vec<i16>, Vec<u8>), HintingError> {
+pub fn autohint_prep(
+    options: &TtAutohintOptions,
+    settings: &HintSettings,
+    layout: &crate::CvtLayout,
+    scale_x_height: bool,
+) -> Result<(Vec<i16>, Vec<u8>), HintingError> {
     use std::fmt::Write;
     let mut t = String::new();
     let mut cvt = Vec::new();
     let exceptions = snapping_exceptions(&options.x_height_snapping_exceptions)
         .map_err(|message| HintingError::BadParameter { name: "TTFAutohint options".into(), message })?;
-    let (top, scaling) = x_height_scaling(options, settings, layout, &exceptions);
+    let (top, scaling) = x_height_scaling(options, settings, layout, &exceptions, scale_x_height);
     cvt.extend(top);
     t.push_str(&scaling);
     if options.hinting_limit > 0 {
@@ -437,14 +444,15 @@ pub const S_X_FITTED: u8 = 12;
 const X_HEIGHT_ROUND_UP: i32 = 40;
 const X_HEIGHT_INCREASE_ROUND_UP: i32 = 52;
 
-/// The `cvt ` entry and the `prep` text of the x-height scaling ([`autohint_prep`]). Without a
-/// usable `xHeight` zone, or room in `cvt ` for the entry, the factor is 1: the zones are only
-/// rounded to the nearest row.
+/// The `cvt ` entry and the `prep` text of the x-height scaling ([`autohint_prep`]). With
+/// `scale_x_height` off, and without a usable `xHeight` zone or room in `cvt ` for the entry, the
+/// factor is 1: the zones are only rounded to the nearest row.
 fn x_height_scaling(
     options: &TtAutohintOptions,
     settings: &HintSettings,
     layout: &crate::CvtLayout,
     exceptions: &[(u16, u16)],
+    scale_x_height: bool,
 ) -> (Option<i16>, String) {
     use crate::tt_font::{FN_ROUND, MAX_ZONE_THRESHOLD_PX};
     use std::fmt::Write;
@@ -454,7 +462,7 @@ fn x_height_scaling(
     // A zone at or below the baseline cannot scale the others.
     let top = zones
         .iter()
-        .find(|z| z.name == "xHeight" && z.align.is_none() && z.size >= 0.0)
+        .find(|z| scale_x_height && z.name == "xHeight" && z.align.is_none() && z.size >= 0.0)
         .filter(|x| word(x.position).is_some())
         .and_then(|x| word(x.position + x.size))
         .and_then(|v| i16::try_from(v).ok())
@@ -568,25 +576,54 @@ fn x_height_scaling(
 const X_HEIGHT_LETTERS: [char; 8] = ['u', 'v', 'x', 'z', 'o', 'e', 's', 'c'];
 const CAP_HEIGHT_LETTERS: [char; 8] = ['T', 'H', 'E', 'Z', 'O', 'C', 'Q', 'S'];
 
+/// What [`drop_unmeasured_zones`] found.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct MeasuredZones {
+    /// The zones left out.
+    pub left_out: Vec<String>,
+    /// The font draws a letter of the x-height zone, so its zones scale with the x-height
+    /// ([`autohint_prep`]).
+    pub x_height: bool,
+}
+
 /// Leaves out of `settings` the zones the autohinter has no letters for, as ttfautohint, which
-/// measures its zones on those letters, finds none: the `xHeight` zone (and so the x-height
-/// scaling) when no glyph for u, v, x, z, o, e, s or c has an outline on the master, the
-/// `capHeight` zone when none for T, H, E, Z, O, C, Q or S has. Returns the names left out.
-pub fn drop_unmeasured_zones(font: &Font, settings: &mut HintSettings) -> Vec<String> {
-    let drawn = |letters: &[char]| {
-        font.glyphs.iter().any(|g| {
-            g.unicodes.iter().any(|u| char::from_u32(*u).is_some_and(|c| letters.contains(&c)))
-                && g.layer(&settings.master).is_some_and(|l| !l.shapes.is_empty())
-        })
+/// measures its zones on those letters, finds none: the `xHeight` zone when no glyph for u, v, x,
+/// z, o, e, s or c has an outline on the master, the `capHeight` zone when none for T, H, E, Z, O,
+/// C, Q or S has. A zone that holds the top of a letter of the other list stays, since ttfautohint
+/// measures a zone at that height (a font whose capitals are as tall as its x-height).
+pub fn drop_unmeasured_zones(font: &Font, settings: &mut HintSettings) -> MeasuredZones {
+    let tops = |letters: &[char]| -> Vec<f64> {
+        font.glyphs
+            .iter()
+            .filter(|g| g.unicodes.iter().any(|u| char::from_u32(*u).is_some_and(|c| letters.contains(&c))))
+            .filter(|g| g.layer(&settings.master).is_some_and(|l| !l.shapes.is_empty()))
+            .map(|g| font.outline_of(g, &settings.master).ok().and_then(|o| outline_top(&o)).unwrap_or(f64::NAN))
+            .collect()
     };
+    let (lower, upper) = (tops(&X_HEIGHT_LETTERS), tops(&CAP_HEIGHT_LETTERS));
+    let fuzz = if settings.tt_blue_fuzz.is_finite() { settings.tt_blue_fuzz.max(0.0) } else { 0.0 };
     let mut gone = Vec::new();
-    for (name, letters) in [("xHeight", &X_HEIGHT_LETTERS), ("capHeight", &CAP_HEIGHT_LETTERS)] {
-        if settings.tt_zones.iter().any(|z| z.name == name) && !drawn(letters) {
+    for (name, own, other) in [("xHeight", &lower, &upper), ("capHeight", &upper, &lower)] {
+        let Some(z) = settings.tt_zones.iter().find(|z| z.name == name) else { continue };
+        let (lo, hi) = (z.position.min(z.position + z.size) - fuzz, z.position.max(z.position + z.size) + fuzz);
+        if own.is_empty() && !other.iter().any(|y| *y >= lo && *y <= hi) {
             gone.push(name.to_string());
         }
     }
     settings.tt_zones.retain(|z| !gone.contains(&z.name));
-    gone
+    MeasuredZones { left_out: gone, x_height: !lower.is_empty() }
+}
+
+/// The highest point where a segment of `outline` starts or ends; `None` without segments.
+fn outline_top(outline: &BezPath) -> Option<f64> {
+    outline
+        .elements()
+        .iter()
+        .filter_map(|el| match *el {
+            PathEl::MoveTo(p) | PathEl::LineTo(p) | PathEl::QuadTo(_, p) | PathEl::CurveTo(_, _, p) => Some(p.y),
+            PathEl::ClosePath => None,
+        })
+        .reduce(f64::max)
 }
 
 /// One glyph layer to autohint.
@@ -1227,6 +1264,7 @@ pub fn shifts_as_deltas(shifts: &[PointShift], column: Option<&str>, warnings: &
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tt_testfont as tt;
 
     #[test]
     fn options_read_long_and_short_forms_and_report_the_ignored_ones() {
@@ -1363,28 +1401,59 @@ mod tests {
     fn x_height_scaling_needs_an_x_height_zone_and_a_cvt_entry_for_its_top() {
         let (font, settings) = slab_and_wedge();
         let layout = crate::CvtLayout::new(&settings, &[]).unwrap();
-        let (cvt, prep) = autohint_prep(&TtAutohintOptions::default(), &settings, &layout).unwrap();
+        let (cvt, prep) = autohint_prep(&TtAutohintOptions::default(), &settings, &layout, true).unwrap();
         assert_eq!(cvt, [516], "the new font's x-height 500 with its overshoot of 16");
         assert!(!prep.is_empty());
         let mut flat = settings.clone();
         flat.tt_zones.retain(|z| z.name != "xHeight");
         let layout = crate::CvtLayout::new(&flat, &[]).unwrap();
-        let (cvt, _) = autohint_prep(&TtAutohintOptions::default(), &flat, &layout).unwrap();
+        let (cvt, _) = autohint_prep(&TtAutohintOptions::default(), &flat, &layout, true).unwrap();
         assert!(cvt.is_empty());
         let _ = font;
     }
 
+    /// A font whose only letter is `name`, a box `height` units tall.
+    fn one_letter(name: &str, height: f64) -> Font {
+        let mut font = Font::new("Letters");
+        font.glyph_mut(name).unwrap().layer_mut("m01").unwrap().shapes.push(Shape::Path(fontcraft_model::Path::rect(0.0, 0.0, 400.0, height)));
+        font
+    }
+
     #[test]
     fn zones_without_their_letters_are_left_out() {
-        let mut font = Font::new("Letters");
+        let font = Font::new("Letters");
         let mut settings = HintSettings::for_master(&font, "m01").unwrap();
         let before = settings.tt_zones.len();
         // A new font's letters have no outlines yet.
-        assert_eq!(drop_unmeasured_zones(&font, &mut settings), ["xHeight", "capHeight"]);
+        let measured = drop_unmeasured_zones(&font, &mut settings);
+        assert_eq!((measured.left_out, measured.x_height), (vec!["xHeight".to_string(), "capHeight".to_string()], false));
         assert_eq!(settings.tt_zones.len(), before - 2);
-        font.glyph_mut("e").unwrap().layer_mut("m01").unwrap().shapes.push(Shape::Path(fontcraft_model::Path::rect(0.0, 0.0, 400.0, 500.0)));
+
+        let font = one_letter("e", 500.0);
         let mut settings = HintSettings::for_master(&font, "m01").unwrap();
-        assert_eq!(drop_unmeasured_zones(&font, &mut settings), ["capHeight"]);
+        let measured = drop_unmeasured_zones(&font, &mut settings);
+        assert_eq!((measured.left_out, measured.x_height), (vec!["capHeight".to_string()], true));
         assert!(settings.tt_zones.iter().any(|z| z.name == "xHeight"));
+    }
+
+    #[test]
+    fn a_capital_as_tall_as_the_x_height_is_snapped_without_x_height_scaling() {
+        // ttfautohint measures its capital zone on C here: 4.5 px goes up to 5 at 9 PPM, and at
+        // 12 PPM 6.24 px (a height of 520) stays on 6, where the x-height would go up to 7.
+        let top = |name: &str, height: f64, ppem: u16| {
+            let mut font = one_letter(name, height);
+            for v in &mut std::sync::Arc::make_mut(&mut font.masters)[0].metric_values {
+                if v.pos == 500.0 {
+                    v.pos = height;
+                }
+            }
+            let built = tt::autohinted(&font, name, &TtAutohintOptions::default());
+            tt::hinted_y(&built, ppem, tt::grayscale()).into_iter().fold(0.0f32, f32::max)
+        };
+        for (ppem, row) in [(9, 5.0), (10, 5.0), (11, 6.0), (13, 7.0), (29, 15.0)] {
+            assert_eq!(top("C", 500.0, ppem), row, "{ppem} PPM");
+        }
+        assert_eq!(top("C", 520.0, 12), 6.0);
+        assert_eq!(top("x", 520.0, 12), 7.0);
     }
 }

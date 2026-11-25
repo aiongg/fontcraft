@@ -217,6 +217,7 @@ pub fn tt_hinting(
     }
 
     let mut raw = Imported::default();
+    let mut scale_x_height = false;
     let auto = if autohinted(&settings, options) {
         let Some(auto) = AutoSetup::new(&settings, warnings) else { return Ok(None) };
         if !instructed.is_empty() {
@@ -224,7 +225,7 @@ pub fn tt_hinting(
             warnings.push(format!("Autohint is on, so the TrueType autohinter replaced the manual instructions of {}", names(&list)));
         }
         instructed = (0..order.len()).map(|gid| (gid, Vec::new())).collect();
-        fontcraft_hinting::drop_unmeasured_zones(source, &mut settings);
+        scale_x_height = fontcraft_hinting::drop_unmeasured_zones(source, &mut settings).x_height;
         if auto.options.windows_compatibility {
             // Zones at the heights Windows clips to, so extremes there land on a pixel row.
             let (ascent, descent) = win_metrics;
@@ -293,7 +294,7 @@ pub fn tt_hinting(
     };
     let mut programs = programs;
     if let Some(auto) = &auto {
-        match fontcraft_hinting::autohint_prep(&auto.options, &settings, &programs.layout) {
+        match fontcraft_hinting::autohint_prep(&auto.options, &settings, &programs.layout, scale_x_height) {
             Ok((cvt, extra)) => {
                 match analyse(&extra, &functions) {
                     Ok(l) => programs.limits.merge(&l),

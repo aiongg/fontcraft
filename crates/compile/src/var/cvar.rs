@@ -71,7 +71,7 @@ fn master_values(source: &Font, master: &str, options: &Options, win_metrics: (f
         let Some(auto) = AutoSetup::new(&settings, &mut Vec::new()) else {
             return Ok(None);
         };
-        drop_unmeasured_zones(source, &mut settings);
+        let measured = drop_unmeasured_zones(source, &mut settings);
         if auto.options.windows_compatibility {
             let (ascent, descent) = win_metrics;
             for (name, position, size) in [("winAscent", ascent, 1.0), ("winDescent", -descent, -1.0)] {
@@ -82,7 +82,7 @@ fn master_values(source: &Font, master: &str, options: &Options, win_metrics: (f
         }
         let family = family_tt_zones(source).map_err(|e| e.to_string())?;
         let (layout, mut values) = control_values(&settings, &family).map_err(|e| e.to_string())?;
-        let (extra, _) = autohint_prep(&auto.options, &settings, &layout).map_err(|e| e.to_string())?;
+        let (extra, _) = autohint_prep(&auto.options, &settings, &layout, measured.x_height).map_err(|e| e.to_string())?;
         values.extend(extra);
         let mut layout = names(&settings, &family);
         layout.insert(0, "autohinter".into());

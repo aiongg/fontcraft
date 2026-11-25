@@ -229,6 +229,10 @@ the fonts can be checked with other readers (fontTools' `TTFont(...).ensureDecom
     has neither table, so `--build N` writes random fonts of each with fontTools.
   - `crates/tables/crosscheck/optimize.py`: the `optimize` steps (`gvar` IUP, implied on-curve points, variation
     store, `GPOS` compaction, `COLR` layer reuse) against the same work done by fontTools.
+  - `crates/hinting/crosscheck/tt_autohint.py`: the TrueType autohinter against ttfautohint over the corpus, each
+    distinct font once, both hinted by FreeType at 9 to 30 PPM: zone extremes on their pixel row, x-height and
+    cap-height rows, bar heights and font size; `--runs` repeats it with TTFAutohint options. Its Python needs
+    ttfautohint-py, freetype-py and fonttools (the docstring has the commands).
   - `crates/io-ufo/crosscheck/color_layers.py`: a UFO's colour layer list, palettes and layer glyphs against
     glyphsLib's UFOs, and their round trip through FontCraft.
 - **Glyph database.** `cargo xtask glyphdata --check` (outside the gate; needs
