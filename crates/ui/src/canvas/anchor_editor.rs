@@ -47,6 +47,8 @@ pub enum Problem {
 /// The anchor name being typed.
 #[derive(Clone, Debug, PartialEq)]
 pub struct AnchorEdit {
+    /// The document the anchor is in.
+    pub doc: Option<u64>,
     pub glyph: String,
     pub layer: String,
     pub side: LayerSide,
@@ -118,6 +120,7 @@ fn open(app: &mut FontCraftApp, name: &str) -> Result<(), String> {
         return Err(format!("the edited layer has no anchor `{}`", quoted(name)));
     }
     app.overlays.anchor = Some(AnchorEdit {
+        doc: app.session.active().map(|d| d.id),
         glyph: target.glyph,
         layer: target.layer,
         side: target.side,
@@ -142,19 +145,28 @@ pub fn after_add(app: &mut FontCraftApp, result: &Value) {
     }
 }
 
-/// Finishes the edit whose field closed, and drops one whose anchor, glyph, layer or side is no longer edited. Runs in
-/// `drain`, after the messages.
-pub fn finish(app: &mut FontCraftApp) {
-    let Some(edit) = app.overlays.anchor.as_ref() else { return };
+/// Is the anchor of `edit` there, in the document, glyph, layer and side being edited?
+fn there(app: &FontCraftApp, edit: &AnchorEdit) -> bool {
     let here = super::tools::target(&app.session, &app.view).is_some_and(|t| t.glyph == edit.glyph && t.layer == edit.layer && t.side == edit.side);
-    let there = here && !super::text::text_mode(&app.view) && anchor(app, (&edit.glyph, &edit.layer, edit.side), &edit.anchor).is_some();
-    if !there {
+    app.session.active().map(|d| d.id) == edit.doc
+        && here
+        && !super::text::text_mode(&app.view)
+        && anchor(app, (&edit.glyph, &edit.layer, edit.side), &edit.anchor).is_some()
+}
+
+/// Drops an edit whose anchor is no longer there. Runs in `drain`, after the messages.
+pub fn drop_stale(app: &mut FontCraftApp) {
+    if app.overlays.anchor.as_ref().is_some_and(|edit| !there(app, edit)) {
         app.overlays.anchor = None;
-        return;
     }
-    let Some(commit) = edit.done else { return };
+}
+
+/// Finishes the edit whose field closed. Runs in `drain`, before the messages: a click outside can also change what is
+/// edited, and its name goes to the anchor it was typed for.
+pub fn finish(app: &mut FontCraftApp) {
+    let Some(commit) = app.overlays.anchor.as_ref().and_then(|edit| edit.done) else { return };
     let Some(mut edit) = app.overlays.anchor.take() else { return };
-    if !commit || edit.text.trim() == edit.anchor {
+    if !commit || edit.text.trim() == edit.anchor || !there(app, &edit) {
         return;
     }
     if let Err(problem) = rename(app, &edit) {
@@ -180,11 +192,25 @@ fn rename(app: &mut FontCraftApp, edit: &AnchorEdit) -> Result<(), Problem> {
     app.run_command("anchor.rename", edit.params(&[("anchor", json!(edit.anchor)), ("name", json!(name))])).map_err(Problem::Other)?;
     // The name is good. Nothing else was edited since the add: the add and the rename become one add under the name.
     if let Some(added) = added.filter(|_| edit.added_at.is_some() && edit.added_at == revision) {
-        for _ in 0..2 {
-            app.run_command("edit.undo", json!({})).map_err(Problem::Other)?;
-        }
         let place = [("name", json!(name)), ("x", json!(added.x)), ("y", json!(added.y))];
-        app.run_command("anchor.add", edit.params(&place)).map_err(Problem::Other)?;
+        let mut undone = 0usize;
+        let mut result = Ok(());
+        while result.is_ok() && undone < 2 {
+            result = app.run_command("edit.undo", json!({})).map(drop);
+            undone += usize::from(result.is_ok());
+        }
+        if result.is_ok() {
+            result = app.run_command("anchor.add", edit.params(&place)).map(drop);
+        }
+        // The add and the rename stay two steps.
+        if let Err(error) = result {
+            for _ in 0..undone {
+                if app.run_command("edit.redo", json!({})).is_err() {
+                    break;
+                }
+            }
+            app.status = error;
+        }
     }
     Ok(())
 }
@@ -237,6 +263,7 @@ mod tests {
     use craft::behavior::CanvasView;
     use craft::behavior::kurbo::Point;
     use craft::host::Host;
+    use craft::ui::runtime::commands::CommandRef;
     use egui::{Pos2, Rect, vec2};
     use fontcraft_engine::Session;
     use serde_json::{Value, json};
@@ -272,6 +299,11 @@ mod tests {
         app.drain();
     }
 
+    fn shell(app: &mut FontCraftApp, id: &str, params: Value) {
+        app.sent.push(Msg::Shell(CommandRef::with_params(id, params)));
+        app.drain();
+    }
+
     fn add_at(app: &mut FontCraftApp, x: f64, y: f64) {
         call(app, "ui.contextMenu.list", json!({"x": x, "y": y}));
         call(app, "ui.contextMenu.invoke", json!({"command": "anchor.add"}));
@@ -301,6 +333,58 @@ mod tests {
         type_name(&mut app, "bottom", false);
         assert!(app.overlays.anchor.is_none());
         assert_eq!(names(&app), ["top", "new anchor"], "Escape keeps the name");
+    }
+
+    /// The window's menu, which posts its choice, opens the field too.
+    #[test]
+    fn the_windows_add_anchor_opens_the_name_field() {
+        let mut app = app();
+        shell(&mut app, "contextMenu.open", json!({"x": 300, "y": 500, "space": "font"}));
+        shell(&mut app, "contextMenu.invoke", json!({"command": "anchor.add"}));
+        assert_eq!(app.overlays.anchor.as_ref().map(|e| e.text.as_str()), Some("new anchor"), "{}", app.status);
+        type_name(&mut app, "top", true);
+        assert_eq!(names(&app), ["top"]);
+    }
+
+    /// A click outside that also changes what is edited commits the name to the glyph and the document it was typed in;
+    /// an open field closes when another document comes to the front.
+    #[test]
+    fn a_name_goes_to_the_glyph_and_document_it_was_typed_in() {
+        let mut app = app();
+        let anchors = |app: &FontCraftApp, doc: usize| -> Vec<String> {
+            let font = &app.session.documents()[doc].font;
+            font.glyph("A").unwrap().layer(&font.masters[0].id).unwrap().anchors.iter().map(|a| a.name.clone()).collect()
+        };
+        let open = |app: &mut FontCraftApp, name: &str| {
+            app.sent.extend([Msg::View(ViewMsg::SelectGlyph("A".into())), Msg::View(ViewMsg::SelectTool("select"))]);
+            app.drain();
+            shell(app, "anchor.editName", json!({ "anchor": name }));
+            assert!(app.overlays.anchor.is_some(), "{}", app.status);
+        };
+        let commit_with = |app: &mut FontCraftApp, name: &str, click: Msg| {
+            let edit = app.overlays.anchor.as_mut().unwrap();
+            edit.text = name.into();
+            edit.done = Some(true);
+            app.sent.push(click);
+            app.drain();
+            assert!(app.overlays.anchor.is_none());
+        };
+        app.run_now(Msg::run("anchor.add", json!({"glyph": "A", "name": "top", "x": 300, "y": 500})), false).unwrap();
+        open(&mut app, "top");
+        commit_with(&mut app, "ogonek", Msg::View(ViewMsg::SelectGlyph("B".into())));
+        assert_eq!(anchors(&app, 0), ["ogonek"]);
+
+        app.run_now(Msg::run("file.new", json!({})), false).unwrap();
+        app.run_now(Msg::run("anchor.add", json!({"glyph": "A", "name": "ogonek", "x": 300, "y": 500})), false).unwrap();
+        app.run_now(Msg::run("document.activate", json!({"index": 0})), false).unwrap();
+        open(&mut app, "ogonek");
+        commit_with(&mut app, "exit", Msg::run("document.activate", json!({"index": 1})));
+        assert_eq!((anchors(&app, 0), anchors(&app, 1)), (vec!["exit".to_string()], vec!["ogonek".to_string()]));
+
+        open(&mut app, "ogonek");
+        app.sent.push(Msg::run("document.activate", json!({"index": 0})));
+        app.drain();
+        assert!(app.overlays.anchor.is_none());
     }
 
     /// A double-click, Return with the anchor selected alone, and the Info box name the anchor; Return with a node selected

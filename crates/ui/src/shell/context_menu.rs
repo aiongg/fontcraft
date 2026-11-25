@@ -93,7 +93,7 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
         "contextMenu.invoke" => {
             let id = p.get("command").and_then(Value::as_str).ok_or("`command` is required")?;
             let value = p.get("value").and_then(Value::as_str);
-            menus::invoke_choice(app, id, value, |app, msg| app.apply_msg(msg).map(|()| Value::Null)).map(drop)
+            menus::invoke_choice(app, id, value, FontCraftApp::apply_msg_reply).map(drop)
         }
         "contextMenu.close" => {
             app.context_menus = menus::ContextMenus::default();
