@@ -32,7 +32,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 
 ## Counts
 
-**1673 rows to check: 3053 guesses and 1192 observe steps.**
+**1678 rows to check: 3059 guesses and 1192 observe steps.**
 
 | Group | Place | Rows |
 |---|---|---|
@@ -48,7 +48,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Built milestones (M0 to M6) | Files: open, import, export | 58 |
 | Built milestones (M0 to M6) | Settings and the window | 18 |
 | Built milestones (M0 to M6) | Elsewhere | 6 |
-| **Later milestones (after M6)** | all | **1071** |
+| **Later milestones (after M6)** | all | **1076** |
 | Later milestones (after M6) | Edit View: drawing, guides, layers and the Palette | 91 |
 | Later milestones (after M6) | Edit View: text mode and preview | 32 |
 | Later milestones (after M6) | Components and anchors | 51 |
@@ -56,7 +56,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 | Later milestones (after M6) | Spacing and metrics keys | 13 |
 | Later milestones (after M6) | Kerning and the Kerning window | 15 |
 | Later milestones (after M6) | Font View | 23 |
-| Later milestones (after M6) | Font Info and features | 338 |
+| Later milestones (after M6) | Font Info and features | 343 |
 | Later milestones (after M6) | Interpolation | 107 |
 | Later milestones (after M6) | Hinting | 115 |
 | Later milestones (after M6) | Colour fonts | 84 |
@@ -2279,7 +2279,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
 - [ ] `audit.toggleMarkers` (M3, inferred, live): Show Audit Markers
   - Guess: Markers are on when the app starts; the default is ours.
 
-## Later milestones (after M6) (1071)
+## Later milestones (after M6) (1076)
 
 ### Edit View: drawing, guides, layers and the Palette (91)
 
@@ -3277,7 +3277,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: A new status takes the next code after the highest one, the name Status n and a grey colour, and ticking Default on one status unticks the others; the reference's panel would settle both.
   - Observe: In the reference app, open Font › Status definitions, add a status, and note its starting code, name and colour.
 
-### Font Info and features (338)
+### Font Info and features (343)
 
 - [ ] `fontInfo.rows.selection` (behavior, M7, handbook): Clicking a row selects it and Cmd+click builds a selection of several…
   - Guess: The label is what a click selects by: a click in the field edits its value; clicking the parts of a row in the reference app settles where it selects.
@@ -3478,6 +3478,16 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Setting the note replaces it whole in one undo step; editing the Notes tab in the running app would settle how undo groups typing.
 - [ ] `font.info.masters.select` (M7, inferred, live): Select Masters
   - Guess: Our own command for scripts; an empty list selects the first master, since the Masters tab always edits at least one. Clicking in the reference app's list until nothing is selected settles whether it allows an empty selection.
+- [ ] `font.info.rows.select` (M7, inferred, live): Select Font Info Rows
+  - Guess: A call without `mode` replaces the selection; clicking a second row without a modifier in the reference app settles that a click does too.
+- [ ] `font.info.rows.copy` (M7, inferred, live): Copy Font Info Rows
+  - Guess: Selected rows of the tabs that are not shown stay out of the copy; selecting rows on two tabs and copying on one of them in the reference app settles it.
+- [ ] `font.info.rows.cut` (M7, inferred, live): Cut Font Info Rows
+  - Guess: Nothing is removed when the rows cannot be copied, and one undo step restores every row cut; cutting two rows and undoing once in the reference app settles it.
+- [ ] `font.info.rows.paste` (M7, inferred, live): Paste Font Info Rows
+  - Guess: A paste acts on every master or export the tab shows as selected; pasting with two exports selected in the reference app settles it.
+- [ ] `font.info.rows.delete` (M7, inferred, live): Delete Font Info Rows
+  - Guess: Delete removes the selected rows from every master or export the tab shows and leaves built-in fields; pressing Cmd+Delete with a field and a parameter selected in the reference app settles it.
 - [ ] `fontInfo` (panel, M7, handbook): Font Info
   - Guess: Font Info opens on the tab it last showed for that document, and on the Font tab the first time; opening it twice in the reference app settles it.
   - Guess: One Font Info window shows the active document, and switching documents shows the other document's information in it; opening Font Info in two documents of the reference app settles whether each keeps a window of its own.
@@ -5822,7 +5832,7 @@ To add a check, append a step to the row's `observe` list: what to do, and what 
   - Guess: Settings… is the last item of the Edit menu on every platform, because FontCraft draws its own menu bar and has no application menu; the reference puts it in the application menu on macOS.
   - Guess: The window reopens on the section last shown; the handbook does not say which section it opens on.
 - [ ] `settings.resetShortcut` (M14, inferred, live): Reset Shortcut
-  - Open (our design, not confirmed): Drops the user's override for one action, or for all when no id is given, restoring built-in shortcuts. Not described in the source; proposed because Customized filtering implies a way back. When the user gave the built-in shortcut to another command, the reset of one command changes nothing and names that command, unless replace is true.
+  - Guess: A reset that would take the built-in shortcut back from the command the user gave it to changes nothing until the user confirms; giving a command another one's built-in shortcut and resetting the first in the reference app settles it.
 - [ ] `settings.listShortcuts` (M14, inferred, live): List Shortcuts
   - Guess: commands lists what the open document allows now; the source says only that it shows actions within the current selection.
   - Observe: In the Shortcuts settings, choose Commands with nothing selected, then with a node selected in a glyph: note what the list shows each time.

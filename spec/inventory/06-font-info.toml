@@ -3404,6 +3404,9 @@ summary = "Selects rows of the Font Info tab of a scope, as clicks on their labe
 ref = "Font Info"
 status = "inferred"
 notes = "Our own command, so a script or agent can do what clicks and the Edit commands do on rows (`fontInfo.rows.selection`). M7.31."
+guesses = [
+  "A call without `mode` replaces the selection; clicking a second row without a modifier in the reference app settles that a click does too.",
+]
 
 [[command]]
 id = "font.info.rows.copy"
@@ -3418,6 +3421,9 @@ summary = "Copies the selected rows of the shown Font Info tab to the clipboard.
 ref = "Font Info"
 status = "inferred"
 notes = "Our own command, so a script or agent can do what clicks and the Edit commands do on rows (`fontInfo.rows.selection`). M7.31."
+guesses = [
+  "Selected rows of the tabs that are not shown stay out of the copy; selecting rows on two tabs and copying on one of them in the reference app settles it.",
+]
 
 [[command]]
 id = "font.info.rows.cut"
@@ -3432,6 +3438,9 @@ summary = "Copies the selected rows of the shown tab and removes them from every
 ref = "Font Info"
 status = "inferred"
 notes = "Our own command, so a script or agent can do what clicks and the Edit commands do on rows (`fontInfo.rows.selection`). M7.31."
+guesses = [
+  "Nothing is removed when the rows cannot be copied, and one undo step restores every row cut; cutting two rows and undoing once in the reference app settles it.",
+]
 
 [[command]]
 id = "font.info.rows.paste"
@@ -3446,6 +3455,9 @@ summary = "Pastes the rows on the clipboard into the font, masters or exports th
 ref = "Font Info"
 status = "inferred"
 notes = "Our own command, so a script or agent can do what clicks and the Edit commands do on rows (`fontInfo.rows.selection`). M7.31."
+guesses = [
+  "A paste acts on every master or export the tab shows as selected; pasting with two exports selected in the reference app settles it.",
+]
 
 [[command]]
 id = "font.info.rows.delete"
@@ -3460,6 +3472,9 @@ summary = "Removes the selected rows of the shown tab from every master or expor
 ref = "Font Info"
 status = "inferred"
 notes = "Our own command, so a script or agent can do what clicks and the Edit commands do on rows (`fontInfo.rows.selection`). M7.31."
+guesses = [
+  "Delete removes the selected rows from every master or export the tab shows and leaves built-in fields; pressing Cmd+Delete with a field and a parameter selected in the reference app settles it.",
+]
 
 [[panel]]
 id = "fontInfo.addMetric"

@@ -679,11 +679,11 @@ _Updated: 2026-11-25: round C (the packages of the third planning pass and the f
   running window. Conventions for writing it are in `docs/ui.md`. UI.49 (on `w-UI.49`, not yet built) removes
   `crates/ui-egui`, its desktop app and the vendored egui-winit 0.36, and points `cargo xtask parity` at the
   window's shell commands.
-- 1,040 of the 1,069 inventory commands exist (`docs/parity.md`). Per milestone: M0 to M12 are all live; M13 198 of 205,
-  M14 9 of 27, the fidelity pass 0 of 4. The inventory has 3,831 rows. Feature parity is about 38% (ROADMAP.md › Parity
+- 1,087 of the 1,113 inventory commands exist (`docs/parity.md`). Per milestone: M0 to M12 are all live; M13 203 of 210,
+  M14 20 of 35, the fidelity pass 0 of 4. The inventory has 3,901 rows. Feature parity is about 38% (ROADMAP.md › Parity
   estimate; 38.4, was 37.2), graded on the egui window and on engine and CLI behaviour; the window's parts are not
-  regraded yet. 3,420 guesses on 1,742 rows are listed in `docs/guesses.md`; `docs/observe.md` lists 1,618 rows. CLI option coverage: 672 of
-  770 reference options present (`docs/cli-options.md`).
+  regraded yet. 3,610 guesses on 1,824 rows are listed in `docs/guesses.md`; `docs/observe.md` lists 1,678 rows. CLI option coverage: 709 of
+  753 reference options present, 55 more refused with a reason (`docs/cli-options.md`).
 - Packages built (done of total, counted from commit subjects; the totals include the depth packages that carry a
   new number): M6 21 of 26, M7 21 of 24, M8 27 of 36, M9 30 of 40, M10 35 of 42, M11 20 of 22, M12 77 of 87, M13 66
   of 83; 297 of 360 in all. Depth packages (`docs/plans/depth.md`): 87 of 167 (wave 1 and 63 writers of waves 2 to

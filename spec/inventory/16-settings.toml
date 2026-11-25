@@ -1438,6 +1438,9 @@ milestone = "M14"
 summary = "Drops the user's override for one action, or for all when no id is given, restoring built-in shortcuts. Not described in the source; proposed because Customized filtering implies a way back. When the user gave the built-in shortcut to another command, the reset of one command changes nothing and names that command, unless replace is true."
 ref = "Settings › Shortcuts"
 status = "inferred"
+guesses = [
+  "A reset that would take the built-in shortcut back from the command the user gave it to changes nothing until the user confirms; giving a command another one's built-in shortcut and resetting the first in the reference app settles it.",
+]
 
 [[command]]
 id = "settings.filterShortcuts"
