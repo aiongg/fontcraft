@@ -13,6 +13,9 @@
 //! | [`code_editor`] | the Features tab's code field and its diagnostics |
 //! | [`masters_tab`] | Masters: the master list and the selected masters' sections |
 //!
+//! Each tab scrolls in its own pane under the tab strip; the Masters and Exports tabs scroll their list and their
+//! fields apart.
+//!
 //! A tab click posts `font.info.selectTab`; every edit posts an engine command.
 
 pub mod code_editor;
@@ -46,6 +49,7 @@ use serde_json::json;
 
 use crate::app::Msg;
 use crate::app::models::font_info::FontInfoModel;
+use crate::panels::widgets::scrolling;
 use crate::shell::font_info::FontInfoTab;
 
 craft::ui::words! {
@@ -120,9 +124,9 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
             sent.push(Msg::Shell(CommandRef::with_params("font.info.selectTab", json!({ "tab": tab.name() }))));
         }
         match model.tab {
-            FontInfoTab::Font => font_tab::view(ui, model, sent),
-            FontInfoTab::Other => other_tab::view(ui, &model.other, sent),
-            FontInfoTab::Notes => notes_tab::view(ui, &model.note, sent),
+            FontInfoTab::Font => scrolling(ui, |ui| font_tab::view(ui, model, sent)),
+            FontInfoTab::Other => scrolling(ui, |ui| other_tab::view(ui, &model.other, sent)),
+            FontInfoTab::Notes => scrolling(ui, |ui| notes_tab::view(ui, &model.note, sent)),
             FontInfoTab::Exports => exports_tab::view(ui, &model.exports, &model.masters, sent),
             FontInfoTab::Features => features_tab::view(ui, &model.features, sent),
             FontInfoTab::Masters => masters_tab::view(ui, &model.masters_tab, &model.masters, sent),

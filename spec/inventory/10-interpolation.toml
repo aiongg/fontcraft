@@ -38,7 +38,9 @@ milestone = "M9"
 summary = "Changes the axis order. Order matters because intermediate-layer coordinates and alternate-layer ranges are shown and stored in axis order, so the command must permute those lists too. Not described in the chapter."
 ref = "Interpolation › Setting up Axes"
 status = "inferred"
+notes = "M7.30: the Font tab lists the axes in order above their fields when there are several; dragging a row reorders them."
 guesses = [
+  "The axes reorder in a list of their own above the axes' fields; reordering axes in the reference app's Font Info settles where it happens.",
   "Reordering permutes every master, instance, virtual master and special-layer coordinate list with the axes, so no location changes; settle by dragging axes in the reference app's Font Info, if it allows it.",
   "The entries of Axis Location, Virtual Master and Axis Mappings are put in the new axis order too; settle by reordering axes in a font with those parameters in the reference app and saving.",
   "`order` takes axis indexes as well as tags, so a font with two axes of one tag can be reordered; Font Info sends indexes. A tag two axes share is refused.",

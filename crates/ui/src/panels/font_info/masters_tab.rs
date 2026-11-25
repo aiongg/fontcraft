@@ -3,9 +3,9 @@
 //! | Control | Posts |
 //! |---|---|
 //! | a master: click, Cmd-click, Shift-click | `font.info.masters.select` |
-//! | drag a master | `font.master.reorder` |
+//! | drag masters | `font.master.reorder` with every dragged one |
 //! | plus menu: Add Master, Add Other Font…, Duplicate Selected | `font.master.add`, the Add Other Font dialog, `font.master.duplicate` |
-//! | minus | `font.master.remove` on the selected masters (not all of them) |
+//! | minus, or Delete, Backspace or Cmd+Delete on the list | `font.master.remove` on the selected masters (not all of them) |
 //! | Master Name | `font.info.set` through the shared rows |
 //! | Icon | the icon picker dialog (`font.master.setIcon`) |
 //! | Axes Coordinates: one number field per axis | `font.master.setAxisLocation` with a location list that sets that axis alone |
@@ -22,6 +22,9 @@
 //! | a number's value | `font.master.setNumber` |
 //! | a number's minus | `font.numbers.remove` |
 //!
+//! The list and the fields scroll apart, so the list stays while the fields move. The reply of a run that adds or moves
+//! masters selects them (`shell::font_info::after_run`).
+//!
 //! Every edit goes to all selected masters; a field whose masters differ shows mixed.
 
 use std::borrow::Cow;
@@ -29,7 +32,9 @@ use std::borrow::Cow;
 use craft::behavior::{EditEvent, GesturePhase, IconId, Mixed, Selection, keyed};
 use craft::ui::buttons::IconButton;
 use craft::ui::buttons::toggle_button::ToggleButton;
-use craft::ui::contract::{Bind, CollectionEvent, Entry, Props as _, ReorderRule, Show as _, ShowCollection as _, ShowContainer as _, Trigger};
+use craft::ui::contract::{
+    Bind, CollectionEvent, Entry, Props as _, ReorderRule, Scroll, Show as _, ShowCollection as _, ShowContainer as _, Trigger,
+};
 use craft::ui::display::{Shade, Text};
 use craft::ui::form::Field;
 use craft::ui::layout_components::{Row, Stack};
@@ -40,6 +45,7 @@ use craft::ui::runtime::commands::CommandRef;
 use craft::ui::runtime::env::{Env, Label};
 use craft::ui::sections::Section;
 use craft::ui::text::{NumberField, TextField};
+use craft_ext::ui::list::{CollectionEdits as _, EditCommand};
 use egui::Ui;
 use serde_json::{Value, json};
 
@@ -136,8 +142,14 @@ pub fn view(ui: &mut Ui, model: &MastersTabModel, masters: &[(String, String)], 
         return;
     }
     Row::new().show(ui, |ui, _| {
-        Stack::new().id_salt("fontcraftMasters.list").show(ui, |ui, _| master_list(ui, model, &words, sent));
-        Stack::new().id_salt("fontcraftMasters.fields").fill_width().show(ui, |ui, _| {
+        let mut buttons = Vec::new();
+        Stack::new()
+            .id_salt("fontcraftMasters.list")
+            .scroll(Scroll::vertical())
+            .footer(|ui, _| list_buttons(ui, model, &words, &mut buttons))
+            .show(ui, |ui, _| master_list(ui, model, &words, sent));
+        sent.append(&mut buttons);
+        Stack::new().id_salt("fontcraftMasters.fields").scroll(Scroll::vertical()).fill().show(ui, |ui, _| {
             let target = model.target();
             let sel = &model.selected;
             let mut posted = Vec::new();
@@ -184,7 +196,12 @@ pub fn view(ui: &mut Ui, model: &MastersTabModel, masters: &[(String, String)], 
     });
 }
 
-/// The list with its plus menu and minus button.
+/// The message that removes the selected masters; none while every master is selected.
+fn remove_selected(model: &MastersTabModel) -> Option<Msg> {
+    (model.selected.len() < model.masters.len()).then(|| Msg::run("font.master.remove", json!({ "masters": model.selected })))
+}
+
+/// The list: selects, drags and removes masters.
 fn master_list(ui: &mut Ui, model: &MastersTabModel, words: &MastersWords, sent: &mut Vec<Msg>) {
     let items = &model.masters;
     let lead = model.selected.first().copied();
@@ -196,6 +213,7 @@ fn master_list(ui: &mut Ui, model: &MastersTabModel, words: &MastersWords, sent:
         .header(false)
         .natural_height(true)
         .reorder(ReorderRule::new())
+        .deletable(true)
         .selection(Bind::bound(&mut after))
         .show_items(ui, &source, &mut |at, icx| {
             let Some(m) = items.get(*at) else { return ListRow::new(Label::Empty) };
@@ -210,16 +228,23 @@ fn master_list(ui: &mut Ui, model: &MastersTabModel, words: &MastersWords, sent:
         sent.push(Msg::Shell(select_masters(&picked)));
     }
     for event in &out.events {
-        if let CollectionEvent::Reorder(edit) = event
-            && let Some(moved) = done(edit)
-            && moved.keys.len() == 1
-            && moved.to != moved.key
-        {
-            sent.push(Msg::run("font.master.reorder", json!({ "master": moved.key, "toIndex": moved.to })));
-            sent.push(Msg::Shell(select_masters(&[moved.to])));
+        match event {
+            CollectionEvent::Reorder(edit) => {
+                if let Some(moved) = done(edit) {
+                    sent.push(Msg::run("font.master.reorder", json!({ "masters": moved.keys, "toIndex": moved.to })));
+                }
+            }
+            CollectionEvent::Delete(_) => sent.extend(remove_selected(model)),
+            _ => {}
         }
     }
-    let count = items.len();
+    if out.edit_commands(ui, &[EditCommand::Delete]).contains(&EditCommand::Delete) {
+        sent.extend(remove_selected(model));
+    }
+}
+
+/// The plus menu and the minus button under the list.
+fn list_buttons(ui: &mut Ui, model: &MastersTabModel, words: &MastersWords, sent: &mut Vec<Msg>) {
     Row::new().show(ui, |ui, _| {
         let plus = IconButton::new(IconId::new("plus")).label(words.add.clone()).tooltip(words.add.clone()).show(ui);
         let entries = [
@@ -228,19 +253,15 @@ fn master_list(ui: &mut Ui, model: &MastersTabModel, words: &MastersWords, sent:
             Entry::new(Plus::Duplicate, words.duplicate.clone()),
         ];
         match Menu::new(words.add.clone()).opened_by(&plus.response, Trigger::Click).pick(ui, &entries).picked {
-            Some(Plus::Add) => {
-                sent.push(Msg::run("font.master.add", json!({})));
-                sent.push(Msg::Shell(select_masters(&[count])));
-            }
+            Some(Plus::Add) => sent.push(Msg::run("font.master.add", json!({}))),
             Some(Plus::OtherFont) => sent.push(open_dialog("fontInfo.addOtherFont", json!({}))),
             Some(Plus::Duplicate) => sent.push(Msg::run("font.master.duplicate", json!({ "masters": model.selected }))),
             None => {}
         }
-        let removable = model.selected.len() < count;
-        let minus = IconButton::new(IconId::new("minus")).label(words.remove.clone()).tooltip(words.remove.clone()).enabled(removable);
-        if minus.show(ui).clicked() && removable {
-            sent.push(Msg::run("font.master.remove", json!({ "masters": model.selected })));
-            sent.push(Msg::Shell(select_masters(&[])));
+        let remove = remove_selected(model);
+        let minus = IconButton::new(IconId::new("minus")).label(words.remove.clone()).tooltip(words.remove.clone()).enabled(remove.is_some());
+        if minus.show(ui).clicked() {
+            sent.extend(remove);
         }
     });
 }
@@ -369,6 +390,9 @@ mod tests {
     use crate::app::models::layers::MasterIcon;
     use crate::shell::font_info_masters::select_masters;
 
+    /// Tall enough that every section shows without scrolling.
+    const ROOM: egui::Vec2 = egui::vec2(1100.0, 1200.0);
+
     fn model() -> MastersTabModel {
         let item = |name: &str| MasterItem { name: name.into(), icon: MasterIcon::Builtin { weight: 1, width: 2 } };
         MastersTabModel {
@@ -393,7 +417,7 @@ mod tests {
             view(ui, &model, &[], &mut sent);
             seen.borrow_mut().extend(sent);
         });
-        fixture.settle();
+        fixture.room(ROOM).settle();
         let weight = fixture.by_label("Weight").expect("the Weight coordinate");
         fixture.click(&weight).type_text("120").key(Key::Enter, Modifiers::NONE).settle();
         assert_eq!(
@@ -420,7 +444,7 @@ mod tests {
             view(ui, &model, &[], &mut sent);
             seen.borrow_mut().extend(sent);
         });
-        fixture.settle();
+        fixture.room(ROOM).settle();
         let plus = fixture.by_label("Add a number value").expect("the Number Values plus");
         fixture.click(&plus).settle();
         assert!(posted.borrow().contains(&Msg::run("font.numbers.add", json!({}))), "{:?}", posted.borrow());

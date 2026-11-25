@@ -427,7 +427,7 @@ milestone = "M7"
 summary = "First tab of Font Info: metadata shared by every exported font file, the design axes, and the font-level custom parameters."
 ref = "Font Info › Font"
 status = "handbook"
-notes = "Documented, not yet observed. The Axes rows act through font.axes.add, .set, .remove and .reorder; the name's disclosure menu lists font.axes.listPredefined (M9.27). M7 plan § 4: M7.16 (`crates/ui/src/panels/font_info/font_tab.rs`)."
+notes = "Documented, not yet observed. The Axes rows act through font.axes.add, .set, .remove and .reorder; the name's disclosure menu lists font.axes.listPredefined (M9.27). M7 plan § 4: M7.16 (`crates/ui/src/panels/font_info/font_tab.rs`). M7.30: the tab scrolls, and the axes reorder by drag in a list above their fields."
 guesses = [
   "The double-arrow button opens a prompt under the field that asks for the new units per em, starting at the current value, with Scale and Cancel buttons; clicking the button in the reference app settles the prompt's form.",
   "The minor version shows three digits, and its stepper is a plus and a minus button after the field; the reference app's Version field settles the look.",
@@ -1035,9 +1035,9 @@ milestone = "M7"
 summary = "Second tab of Font Info: the list of masters on the left and the properties of the selected master or masters on the right."
 ref = "Font Info › Masters"
 status = "handbook"
-notes = "Documented, not yet observed. Axes Coordinates act through font.master.setAxisLocation on every selected master (M9.27); Number Values (font.numbers.*) are M8's and read-only until then. Add Other Font is shown disabled until its dialog exists (M9). M7 plan § 4: M7.17 (`crates/ui/src/panels/font_info/masters_tab.rs`)."
+notes = "Documented, not yet observed. Axes Coordinates act through font.master.setAxisLocation on every selected master (M9.27); Number Values act through font.numbers.*, Add Other Font opens its dialog. M7 plan § 4: M7.17 (`crates/ui/src/panels/font_info/masters_tab.rs`). M7.30: the list stays while the fields scroll, several selected masters drag together, and what a command adds or moves becomes the selection."
 guesses = [
-  "A master made with Add Master becomes the selection, and a dragged master stays selected at its new place; the list's selection in the reference app after each action settles it.",
+  "Masters made with Add Master, Duplicate Selected, Add Other Font or Instance as Master become the selection, and dragged masters stay selected at their new place; the list's selection in the reference app after each action settles it.",
   "The minus button is disabled while every master is selected, because a font keeps at least one master; whether the reference app disables it or refuses with a message settles it.",
   "The General section has the name and icon only, without a plus button, because masters take no added General fields; the masters tab of the reference app settles it.",
 ]
@@ -1196,13 +1196,16 @@ label = "Reorder Masters"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{master: id|name|index, toIndex: integer}"
+params = "{masters: [id|name|index] or master: id|name|index, toIndex: integer}"
 area = "interpolation"
 milestone = "M7"
 summary = "Moves a master to another position in the list, as dragging it in the sidebar does. Order matters: the first master supplies glyph-level hinting information unless a Get Hints From Master parameter names another."
 ref = "Font Info › Masters › Managing Masters"
 status = "handbook"
-notes = "Documented, not yet observed. M7 plan § 4: M7.5."
+notes = "Documented, not yet observed. M7 plan § 4: M7.5. M7.30: several masters move together in list order, as one undo step; `toIndex` counts the masters that stay."
+guesses = [
+  "Dragging one of several selected masters moves all of them, next to each other in list order; dragging two selected masters in the reference app settles it.",
+]
 
 [[command]]
 id = "font.master.setIcon"
@@ -1804,7 +1807,7 @@ milestone = "M7"
 summary = "Third tab of Font Info: the list of fonts that File > Export produces, static instances and variable font settings, with the properties of the selected entries."
 ref = "Font Info › Exports"
 status = "handbook"
-notes = "Documented, not yet observed. The preview control comes from the Instance Preview parameter's description. Add Instance for Each Master, Instance as Master, Add Variable Font Setting are M9's rows; until M9 those menu items are disabled. Axes Coordinates act through font.instance.setAxisLocation on every selected entry (M9.27). M7 plan § 4: M7.18."
+notes = "Documented, not yet observed. The preview control comes from the Instance Preview parameter's description. Add Instance for Each Master, Instance as Master, Add Variable Font Setting run their M9 commands. Axes Coordinates act through font.instance.setAxisLocation on every selected entry (M9.27). M7 plan § 4: M7.18. M7.30: the list stays while the fields scroll."
 guesses = [
   "Active, Style Name, Weight Class, Width Class, the Axes Coordinates and Style Linking sit under the General heading, above the added fields; the Exports tab of the reference app settles the order.",
   "A variable font setting shows Active, its name and its custom parameters, without classes, axes or style linking; selecting a variable font setting in the reference app settles it.",
@@ -1897,7 +1900,7 @@ milestone = "M9"
 summary = "Adds one static instance per master, each named after its master and placed at the master's axis coordinates (a Thin master at weight 100 yields a Thin instance at weight 100). Whether existing instances at those locations are skipped is not stated."
 ref = "Font Info › Exports"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. M7.30: the added instances become the selection."
 guesses = [
   "Every chosen master gets an instance even when one already sits at its location, with no weight or width class of its own; settle by running the command twice on F1 in the reference app.",
 ]
@@ -1917,7 +1920,7 @@ milestone = "M9"
 summary = "Creates a new master from the interpolated outlines and metrics of the selected instance and adds it to the Masters tab. Instances on either side then interpolate against the new master, and the source instance uses it directly."
 ref = "Font Info › Exports"
 status = "handbook"
-notes = "Documented, not yet observed. The new master holds what the instance exports: outlines, widths, metrics, stems, numbers and kerning, interpolated as static export interpolates them."
+notes = "Documented, not yet observed. The new master holds what the instance exports: outlines, widths, metrics, stems, numbers and kerning, interpolated as static export interpolates them. M7.30: the new master becomes the Masters tab's selection."
 guesses = [
   "The new master goes to the end of the master list; settle with F1 in the reference app.",
   "An instance on a master's location is refused, since two masters at one location cannot interpolate; settle by trying it in the reference app.",
@@ -1965,13 +1968,16 @@ label = "Reorder Exports"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{instance: id|name|index, toIndex: integer}"
+params = "{instances: [id|name|index] or instance: id|name|index, toIndex: integer}"
 area = "font-info"
 milestone = "M7"
 summary = "Moves an export entry within the list, as dragging does. The order is organisational only and has no effect on exported files."
 ref = "Font Info › Exports"
 status = "handbook"
-notes = "Documented, not yet observed. M7 plan § 4: M7.7."
+notes = "Documented, not yet observed. M7 plan § 4: M7.7. M7.30: several entries move together in list order, as one undo step; `toIndex` counts the entries that stay."
+guesses = [
+  "Dragging one of several selected entries moves all of them, next to each other in list order; dragging two selected entries in the reference app settles it.",
+]
 
 [[command]]
 id = "font.instance.setActive"
@@ -2227,10 +2233,10 @@ milestone = "M7"
 summary = "In the export list Cmd+click toggles single entries and Shift+click selects a range; the selection is what the minus button and the Instance as Master entry act on."
 ref = "Font Info › Exports"
 status = "handbook"
-notes = "Documented, not yet observed. M7 plan § 4: M7.18."
+notes = "Documented, not yet observed. M7 plan § 4: M7.18. M7.30: several selected entries drag together, what a command adds or moves becomes the selection (`shell::font_info::after_run`), and Delete, Backspace or Cmd+Delete on the focused list run the minus."
 guesses = [
   "With nothing selected the tab acts on the first entry, and Cmd-click on the only selected entry leaves the first entry shown; the reference app settles what an empty selection shows.",
-  "Dropping a dragged entry onto another moves it to that entry's place, and the moved entry becomes the selection; dragging in the reference app settles it.",
+  "Dropping a dragged entry onto another moves it to that entry's place, and the moved entries become the selection; dragging in the reference app settles it.",
 ]
 
 [[behavior]]

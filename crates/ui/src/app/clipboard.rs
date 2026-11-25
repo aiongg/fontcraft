@@ -56,6 +56,9 @@ const CUT: &str = "edit.cut";
 const PASTE: &str = "edit.paste";
 const PASTE_SPECIAL: &str = "edit.pasteSpecial";
 const SELECT_ALL: &str = "edit.selectAll";
+/// The commands whose shortcut is Cmd+Delete.
+const REMOVE_GLYPH: &str = "glyph.removeGlyph";
+const REMOVE_FIELD: &str = "font.info.removeField";
 /// The `format` the engine writes into copied glyphs (`edit.copy` with `glyphs`).
 const GLYPHS_FORMAT: &str = "fontcraft-glyphs";
 /// The `format` of copied corner components (`edit.copy` with `corners`).
@@ -167,9 +170,11 @@ pub fn fired(app: &mut FontCraftApp, command: CommandRef) -> Option<CommandRef> 
     }
 }
 
-/// The edit command a fired Edit menu command stands for.
-fn edit_command(id: &str) -> Option<EditCommand> {
+/// The edit command a fired command stands for while a list holds the keyboard focus: the Edit menu's, and with
+/// `by_key` the two commands Cmd+Delete fires.
+fn edit_command(id: &str, by_key: bool) -> Option<EditCommand> {
     match id {
+        REMOVE_GLYPH | REMOVE_FIELD if by_key => Some(EditCommand::Delete),
         COPY => Some(EditCommand::Copy),
         CUT => Some(EditCommand::Cut),
         PASTE => Some(EditCommand::Paste),
@@ -179,10 +184,11 @@ fn edit_command(id: &str) -> Option<EditCommand> {
 }
 
 /// Hands an Edit command the person fired with no parameters to the list that holds the keyboard focus and takes it
-/// (the Features sidebar and the Project panel's instance list take Copy and Paste); `true` when the list took it, and
-/// the document is left alone.
-pub fn to_focused_list(app: &FontCraftApp, command: &CommandRef) -> bool {
-    let Some(edit) = edit_command(&command.id) else { return false };
+/// (the Features sidebar and the Project panel's instance list take Copy and Paste, the Masters and Exports lists of
+/// Font Info take Cmd+Delete); `true` when the list took it, and the document is left alone. `by_key`: a key fired it,
+/// so a click on Glyph › Remove Glyph never reaches a list.
+pub fn to_focused_list(app: &FontCraftApp, command: &CommandRef, by_key: bool) -> bool {
+    let Some(edit) = edit_command(&command.id, by_key) else { return false };
     is_empty(&command.params) && app.window.as_ref().is_some_and(|ctx| deliver(ctx, edit))
 }
 

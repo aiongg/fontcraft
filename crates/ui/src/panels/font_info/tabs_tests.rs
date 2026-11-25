@@ -442,6 +442,100 @@ fn exports_model() -> FontInfoModel {
     FontInfoModel { open: true, tab: FontInfoTab::Exports, exports, ..FontInfoModel::default() }
 }
 
+/// Two selected entries dragged past the third move together in one command.
+#[test]
+fn selected_exports_drag_together() {
+    let mut model = exports_model();
+    model.exports.entries.push(ExportEntry { name: "Black".into(), active: true, variable: false });
+    model.exports.selected = vec![0, 1];
+    let (mut fixture, posted) = panel(model);
+    let first = fixture.by_label("Regular").expect("the first entry");
+    let last = fixture.by_label("Black").expect("the last entry");
+    let below = egui::pos2(last.center().x, last.rect.bottom() - last.rect.height() / 4.0);
+    fixture.drag(&first, below - first.center()).settle();
+    let want = Msg::run("font.instance.reorder", json!({ "instances": [0, 1], "toIndex": 1 }));
+    assert!(posted.borrow().contains(&want), "{:?}", posted.borrow());
+}
+
+/// An axis dragged above another in the axis list posts the new order.
+#[test]
+fn axes_reorder_by_drag() {
+    use crate::app::models::font_info::AxisModel;
+    let mut model = FontInfoModel { open: true, ..FontInfoModel::default() };
+    let axis = |name: &str, tag: &str| AxisModel { name: name.into(), tag: tag.into(), ..AxisModel::default() };
+    model.font.axes = vec![axis("Weight", "wght"), axis("Width", "wdth")];
+    let (mut fixture, posted) = panel(model);
+    let first = fixture.by_label("Weight (wght)").expect("the first axis");
+    let last = fixture.by_label("Width (wdth)").expect("the last axis");
+    let above = egui::pos2(first.center().x, first.rect.top() + first.rect.height() / 4.0);
+    fixture.drag(&last, above - last.center()).settle();
+    assert!(posted.borrow().contains(&Msg::run("font.axes.reorder", json!({ "order": [1, 0] }))), "{:?}", posted.borrow());
+}
+
+/// At the panel's default size the Masters tab's fields scroll to their last section while the list stays, and Delete
+/// on the focused list posts the removal the minus posts.
+#[test]
+fn the_masters_tab_scrolls_its_fields_under_a_list_that_stays() {
+    use craft::ui::testing::pointer;
+
+    use crate::app::models::font_masters::{MasterItem, MastersTabModel, MetricItem};
+    use crate::app::models::layers::MasterIcon;
+    let item = |name: &str| MasterItem { name: name.into(), icon: MasterIcon::Builtin { weight: 1, width: 2 } };
+    let metric = |n: usize| MetricItem { label: format!("Metric {n}"), position: Some(0.0), zone: Some(0.0), ..MetricItem::default() };
+    let masters_tab = MastersTabModel {
+        masters: vec![item("Light"), item("Bold")],
+        selected: vec![1],
+        metrics: (0..24).map(metric).collect(),
+        ..MastersTabModel::default()
+    };
+    let (mut fixture, posted) = panel(FontInfoModel { open: true, tab: FontInfoTab::Masters, masters_tab, ..FontInfoModel::default() });
+    fixture.room(egui::vec2(780.0, 560.0)).settle();
+    let before = fixture.by_label("Light").expect("the list's first entry").rect;
+    let over = fixture.by_label("Metric 3").map_or(egui::pos2(500.0, 300.0), |t| t.rect.center());
+    fixture.frame(vec![pointer::moved(over)]).frame(vec![pointer::wheel(-5000.0)]).settle();
+    let plus = fixture.by_label("Add a number value").expect("the last section's plus").rect;
+    let shown = fixture.shown();
+    assert!(plus.bottom() <= shown.bottom() && plus.top() >= shown.top(), "the last plus at {plus:?}, the room {shown:?}");
+    assert!(plus.right() <= 780.0, "the fields fit the panel's width: {plus:?}");
+    let light = fixture.by_label("Light").expect("the list's first entry");
+    assert_eq!(light.rect, before, "the list stays");
+    posted.borrow_mut().clear();
+    let bold = fixture.by_label("Bold").expect("the selected entry");
+    fixture.click(&bold).key(Key::Delete, Modifiers::NONE).settle();
+    assert!(posted.borrow().contains(&Msg::run("font.master.remove", json!({ "masters": [1] }))), "{:?}", posted.borrow());
+}
+
+/// The masters and exports a run adds or moves become the selection, so the next edit goes to them and not to their
+/// originals.
+#[test]
+fn added_and_moved_entries_are_selected() {
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    let run = |app: &mut FontCraftApp, id: &str, params: Value| {
+        app.sent.push(Msg::run(id, params));
+        app.drain();
+    };
+    app.sent.push(shell("font.info", json!({ "tab": "masters" })));
+    run(&mut app, "font.master.add", json!({ "name": "Bold" }));
+    let count = app.session.font().expect("a font").masters.len();
+    assert_eq!(app.models.font_info.masters_tab.selected, vec![count - 1], "the added master");
+    run(&mut app, "font.master.duplicate", json!({ "masters": [0, count - 1] }));
+    let copies = app.models.font_info.masters_tab.selected.clone();
+    assert_eq!(copies, vec![1, count + 1], "the copies, each after its original");
+    run(&mut app, "font.master.reorder", json!({ "masters": copies, "toIndex": 0 }));
+    assert_eq!(app.models.font_info.masters_tab.selected, vec![0, 1], "the moved masters");
+    run(&mut app, "font.master.remove", json!({ "masters": [0, 1] }));
+    assert_eq!(app.models.font_info.masters_tab.selected, vec![0], "the first master after a removal");
+
+    app.sent.push(shell("font.info.selectTab", json!({ "tab": "exports" })));
+    run(&mut app, "font.instance.add", json!({}));
+    let had = app.session.font().expect("a font").instances.len();
+    run(&mut app, "font.instance.addForEachMaster", json!({}));
+    let added: Vec<usize> = (had..app.session.font().expect("a font").instances.len()).collect();
+    assert_eq!(app.models.font_info.exports.selected, added);
+    run(&mut app, "font.instance.addVariableFontSetting", json!({}));
+    assert_eq!(app.models.font_info.exports.selected, vec![had + added.len()]);
+}
+
 /// Cmd-click adds an entry to the selection; Active, Style Name, an axis coordinate, Bold and minus post their
 /// commands on the selected entries.
 #[test]

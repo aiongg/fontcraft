@@ -187,6 +187,52 @@ pub fn open_params(dialog: &InfoDialog) -> Value {
     Value::Object(p)
 }
 
+/// The place in a list a run left entries at: what it added or moved, from its reply. `None` for a command that adds
+/// and moves none; empty for one that removes entries.
+enum Placed {
+    Masters(Vec<usize>),
+    Exports(Vec<usize>),
+}
+
+fn placed(id: &str, reply: &Value) -> Option<Placed> {
+    let index = |v: &Value| v.as_u64().and_then(|i| usize::try_from(i).ok());
+    let one = |v: Option<&Value>| v.and_then(|v| v.get("index")).and_then(index).map(|i| vec![i]);
+    let list = |key: &str| -> Option<Vec<usize>> {
+        let entries = reply.get(key)?.as_array()?;
+        Some(entries.iter().take(MAX_TARGETS).filter_map(|e| e.get("index").and_then(index)).collect())
+    };
+    let moved = || -> Option<Vec<usize>> { Some(reply.get("indices")?.as_array()?.iter().take(MAX_TARGETS).filter_map(index).collect()) };
+    Some(match id {
+        "font.master.add" | "font.instance.toMaster" => Placed::Masters(one(reply.get("master"))?),
+        "font.master.duplicate" | "font.master.addFromOtherFont" => Placed::Masters(list("masters")?),
+        "font.master.reorder" => Placed::Masters(moved()?),
+        "font.master.remove" => Placed::Masters(Vec::new()),
+        "font.instance.add" | "font.instance.addVariableFontSetting" => Placed::Exports(one(Some(reply))?),
+        "font.instance.addForEachMaster" => Placed::Exports(list("instances")?),
+        "font.instance.reorder" => Placed::Exports(moved()?),
+        "font.instance.remove" => Placed::Exports(Vec::new()),
+        _ => return None,
+    })
+}
+
+/// After a run of `id` the person asked for: the masters or exports it added or moved become the selection of their
+/// tab's list, so what is typed next goes to them. A removal leaves nothing selected, which shows the first entry.
+pub fn after_run(app: &mut FontCraftApp, id: &str, reply: &Value) {
+    match placed(id, reply) {
+        Some(Placed::Masters(mut selected)) => {
+            selected.sort_unstable();
+            selected.dedup();
+            app.view.font_info.masters.selected = selected;
+        }
+        Some(Placed::Exports(mut selected)) => {
+            selected.sort_unstable();
+            selected.dedup();
+            app.view.font_info.exports.selected = selected;
+        }
+        None => {}
+    }
+}
+
 fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
     app.session.font().map_err(|e| e.to_string())?;
     let params = &command.params;

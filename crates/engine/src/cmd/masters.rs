@@ -118,7 +118,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Reorder Masters",
             [],
             None,
-            "{master: id|name|index, toIndex: integer} move a master to another place in the list → {master: id, index}",
+            "{masters: [id|name|index] or master: id|name|index, toIndex: integer} move masters to another place in the list as one undo step; they end up next to each other in list order, the first of them at position toIndex, counted among the masters that stay → {master: id, masters: [id], index, indices}",
             has_doc,
             reorder
         ),
@@ -153,13 +153,6 @@ fn targets(p: &Params, font: &Font, single_key: Option<&str>) -> Result<Vec<usiz
     }
     let refs = target::parse_list(raw).map_err(|e| p.bad(e.to_string()))?;
     target::masters(font, &refs).map_err(|e| p.bad(e.to_string()))
-}
-
-/// The one master `key` names.
-fn one_target(p: &Params, font: &Font, key: &str) -> Result<usize> {
-    let raw = p.get(key).ok_or_else(|| p.bad(format!("`{key}` is required")))?;
-    let r = target::parse(raw).map_err(|e| p.bad(e.to_string()))?;
-    target::master(font, &r).map_err(|e| p.bad(e.to_string()))
 }
 
 fn master_at<'f>(p: &Params, font: &'f Font, i: usize) -> Result<&'f Master> {
@@ -735,18 +728,49 @@ fn naming_params(font: &Font, gone: &[&Master]) -> Vec<String> {
 fn reorder(s: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("font.master.reorder", p)?;
     let font = s.font()?;
-    let from = one_target(&p, font, "master")?;
-    let last = font.masters.len().saturating_sub(1);
-    let to = p.opt_int("toIndex", 0, i64::try_from(last).unwrap_or(i64::MAX))?.ok_or_else(|| p.bad("`toIndex` is required"))?;
-    let to = usize::try_from(to).map_err(|_| p.bad("`toIndex` must not be negative"))?;
-    let id = master_at(&p, font, from)?.id.clone();
-    s.edit("Reorder Masters", |font| {
-        let masters = Arc::make_mut(&mut font.masters);
-        if from < masters.len() && to < masters.len() {
-            let m = masters.remove(from);
-            masters.insert(to, m);
-        }
-        Ok(())
-    })?;
-    Ok(json!({"master": id, "index": to}))
+    let moved = targets(&p, font, Some("master"))?;
+    let order = moved_order(&p, font.masters.len(), moved)?;
+    let ids: Vec<String> = order.moved.iter().filter_map(|i| font.masters.get(*i)).map(|m| m.id.clone()).collect();
+    if order.changes() {
+        s.edit("Reorder Masters", |font| {
+            font.masters = Arc::new(order.order.iter().filter_map(|i| font.masters.get(*i).cloned()).collect());
+            Ok(())
+        })?;
+    }
+    Ok(json!({"master": ids.first(), "masters": ids, "index": order.to, "indices": order.indices()}))
+}
+
+/// A list of `len` entries with the entries `moved` taken out and put back, next to each other, at `to`.
+pub(super) struct MovedOrder {
+    /// The moved entries, in list order.
+    pub moved: Vec<usize>,
+    /// Where the first of them lands.
+    pub to: usize,
+    /// The old index of each entry, in the new order.
+    pub order: Vec<usize>,
+}
+
+impl MovedOrder {
+    pub fn changes(&self) -> bool {
+        self.order.iter().enumerate().any(|(at, old)| at != *old)
+    }
+
+    /// The new indices of the moved entries.
+    pub fn indices(&self) -> Vec<usize> {
+        (self.to..self.to.saturating_add(self.moved.len())).collect()
+    }
+}
+
+/// The order the `toIndex` of `p` asks for: the position of the first moved entry, counted among the entries that stay.
+pub(super) fn moved_order(p: &Params, len: usize, mut moved: Vec<usize>) -> Result<MovedOrder> {
+    moved.sort_unstable();
+    moved.dedup();
+    let mut order: Vec<usize> = (0..len).filter(|i| moved.binary_search(i).is_err()).collect();
+    let last = i64::try_from(order.len()).unwrap_or(i64::MAX);
+    let to = p.opt_int("toIndex", 0, last)?.ok_or_else(|| p.bad("`toIndex` is required"))?;
+    let to = usize::try_from(to).map_err(|_| p.bad("`toIndex` must not be negative"))?.min(order.len());
+    let tail = order.split_off(to);
+    order.extend(moved.iter().copied());
+    order.extend(tail);
+    Ok(MovedOrder { moved, to, order })
 }
