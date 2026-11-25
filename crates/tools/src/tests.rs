@@ -517,6 +517,8 @@ fn edit_view_keys_run_their_commands() {
     assert_eq!(runs(&out)[0].params["points"], json!([[1, 0], [1, 1]]));
     let out = h.key(&mut tools, Key::Delete, Modifiers::SHIFT);
     assert_eq!(runs(&out)[0].id, "path.deleteAndBreak");
+    let out = h.key(&mut tools, Key::Delete, Modifiers { shift: true, ..Modifiers::ALT });
+    assert_eq!(runs(&out)[0].id, "path.deleteAndBreakInAllMasters");
     let out = h.key(&mut tools, Key::Tab, NONE);
     assert_eq!(runs(&out)[0].id, "selection.selectNext");
     let out = h.key(&mut tools, Key::Tab, Modifiers::SHIFT);

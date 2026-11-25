@@ -2,7 +2,7 @@
 //! returns the new path (or paths), or a message saying why it cannot; none panics on a
 //! malformed list. Points an operation creates or moves are rounded to the grid step it is given.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use fontcraft_geom::{Piece, Point, Segment, Vec2, round_point};
 use fontcraft_model::{Node, NodeKind, Path};
@@ -366,18 +366,14 @@ pub(in crate::cmd) fn keep_tangents(path: &mut Path, old: &[Point], step: f64, s
     }
 }
 
-/// `path.toggleNodeType` on one path: switches each on-curve node of `nodes` to `to` (or to the
-/// other type). A node turning smooth gets handles on straight sides and its handles lined up,
+/// `path.toggleNodeType` on one path: gives each on-curve node of `types` its type there, smooth or
+/// corner. A node turning smooth gets handles on straight sides and its handles lined up,
 /// unless `keep_outline`; `quadratic` as for [`curves_from_lines`]. Returns the new path and the new index of every old node.
-pub(super) fn toggle(path: &Path, nodes: &BTreeSet<usize>, to: Option<bool>, keep_outline: bool, step: f64, quadratic: bool) -> (Path, Vec<usize>) {
+pub(super) fn toggle(path: &Path, types: &BTreeMap<usize, bool>, keep_outline: bool, step: f64, quadratic: bool) -> (Path, Vec<usize>) {
     let mut out = path.clone();
     let mut smoothed = Vec::new();
-    for &i in nodes {
+    for (&i, &smooth) in types {
         let Some(n) = out.nodes.get_mut(i).filter(|n| n.on_curve()) else { continue };
-        let smooth = to.unwrap_or(!n.smooth);
-        if smooth == n.smooth {
-            continue;
-        }
         n.smooth = smooth;
         if smooth {
             smoothed.push(i);
@@ -491,9 +487,9 @@ pub(super) fn coincide(a: Point, b: Point, step: f64) -> bool {
     a.distance(b) <= step.max(0.0) / 2.0 + 1e-6
 }
 
-/// Closes an open path. When its two ends coincide they become one node; otherwise a straight
+/// Closes an open path. With `merge` its two ends become one node, the first; otherwise a straight
 /// segment joins them.
-pub(super) fn close(path: &Path, step: f64) -> Result<Path, String> {
+pub(super) fn close(path: &Path, merge: bool) -> Result<Path, String> {
     if path.closed {
         return Err("it is already closed".into());
     }
@@ -503,7 +499,7 @@ pub(super) fn close(path: &Path, step: f64) -> Result<Path, String> {
     let mut out = path.clone();
     out.closed = true;
     let (Some(first), Some(last)) = (path.nodes.first(), path.nodes.last()) else { return Err(malformed()) };
-    if coincide(first.point(), last.point(), step) {
+    if merge {
         let kind = last.kind;
         out.nodes.pop();
         if let Some(f) = out.nodes.first_mut() {
@@ -517,13 +513,11 @@ pub(super) fn close(path: &Path, step: f64) -> Result<Path, String> {
 
 /// Joins two open paths at the open ends `a_end` of `a` and `b_end` of `b` (each the first or
 /// the last node). `a` keeps its direction where it can. Returns the joined path and the
-/// indices in it of the joined nodes (one when the ends coincide and become one node).
-pub(super) fn join(a: &Path, a_end: usize, b: &Path, b_end: usize, step: f64) -> Result<(Path, Vec<usize>), String> {
+/// indices in it of the joined nodes (one with `merge`, which makes the ends one node).
+pub(super) fn join(a: &Path, a_end: usize, b: &Path, b_end: usize, merge: bool) -> Result<(Path, Vec<usize>), String> {
     let a = if a_end == 0 && a.nodes.len() > 1 { reversed(a)? } else { a.clone() };
     let b = if b_end + 1 == b.nodes.len() && b.nodes.len() > 1 { reversed(b)? } else { b.clone() };
-    let (Some(a_last), Some(b_first)) = (a.nodes.last(), b.nodes.first()) else { return Err(malformed()) };
-    let at = a.nodes.len() - 1;
-    let merge = coincide(a_last.point(), b_first.point(), step);
+    let Some(at) = a.nodes.len().checked_sub(1) else { return Err(malformed()) };
     let mut out = a.clone();
     let mut rest = b.nodes.into_iter();
     let joined = if merge {

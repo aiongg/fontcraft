@@ -32,6 +32,7 @@ use serde_json::{Value, json};
 
 use super::common::{Outcome, each_layer, grid, in_range, scope};
 use super::corner_helpers::handles_of;
+use super::node::{Plan, undo_label, with_matched};
 use super::*;
 use crate::EngineError;
 use crate::interp_cache::InterpCache;
@@ -424,21 +425,31 @@ fn place(shapes: &mut Vec<Shape>, input: &Input, paths: Vec<(usize, Path)>) -> V
 /// paths in `shapes`. `Ok(None)` when no path takes part; nothing changes when the job fails.
 fn apply(
     shapes: &mut Vec<Shape>,
-    mut input: Input,
+    input: Input,
     limit: Duration,
     job: impl FnOnce(Vec<po::Contour>) -> std::result::Result<Done, PathOpError> + Send + 'static,
 ) -> Op<Option<Picked>> {
+    Ok(apply_with(shapes, input, limit, |contours| Ok((job(contours)?, ())))?.map(|(picked, ())| picked))
+}
+
+/// [`apply`] of a job that has more to say than its contours.
+fn apply_with<T: Send + 'static>(
+    shapes: &mut Vec<Shape>,
+    mut input: Input,
+    limit: Duration,
+    job: impl FnOnce(Vec<po::Contour>) -> std::result::Result<(Done, T), PathOpError> + Send + 'static,
+) -> Op<Option<(Picked, T)>> {
     if input.contours.is_empty() {
         return Ok(None);
     }
     let contours = std::mem::take(&mut input.contours);
-    let done = run_with_time_limit(limit, move || job(contours)).map_err(|e| e.to_string())?.map_err(|e| e.to_string())?;
+    let (done, more) = run_with_time_limit(limit, move || job(contours)).map_err(|e| e.to_string())?.map_err(|e| e.to_string())?;
     let paths = to_paths(&input, &done)?;
     let index = place(shapes, &input, paths);
     let points = done.selection.iter().filter_map(|&(r, k)| index.get(r).map(|&s| (s, k))).collect();
     let mut made = index;
     made.sort_unstable();
-    Ok(Some(Picked { points, shapes: made }))
+    Ok(Some((Picked { points, shapes: made }, more)))
 }
 
 // ── Targets ─────────────────────────────────────────────────────────────────────────────────────
@@ -958,7 +969,33 @@ fn corner_overlap(p: &Params, font: &Font, master: &Master) -> Result<Vec2> {
 }
 
 fn open_corner(s: &mut Session, v: &Value) -> Result<Value> {
-    let p = Params::new("path.openCorner", v)?;
+    open_corner_as(s, v, "path.openCorner")
+}
+
+/// The corners to open, by path.
+type Corners = BTreeMap<usize, BTreeSet<usize>>;
+
+/// Opens `corners` among `shapes`. Returns what to select and the corners that opened.
+fn open_corners_in(shapes: &mut Vec<Shape>, corners: &Corners, overlap: Vec2, step: f64) -> Op<Option<(Picked, Corners)>> {
+    let input = Input::new(shapes, |i| corners.contains_key(&i));
+    let slots = input.slots.clone();
+    let lists: Vec<Vec<usize>> = slots.iter().map(|s| corners.get(s).map(|n| n.iter().copied().collect()).unwrap_or_default()).collect();
+    let done = apply_with(shapes, input, TIME_LIMIT, move |contours| {
+        let mut done = Done { contours: Vec::new(), selection: Vec::new() };
+        let mut open = Vec::new();
+        for (i, (c, nodes)) in contours.iter().zip(&lists).enumerate() {
+            let opened = po::open_corners(c, nodes, overlap, step)?;
+            done.selection.extend(opened.nodes.iter().map(|&n| (i, n)));
+            done.contours.push((Some(i), opened.contour));
+            open.push(opened.corners);
+        }
+        Ok((done, open))
+    })?;
+    Ok(done.map(|(picked, open)| (picked, slots.into_iter().zip(open.into_iter().map(|list| list.into_iter().collect())).collect())))
+}
+
+pub(super) fn open_corner_as(s: &mut Session, v: &Value, command: &'static str) -> Result<Value> {
+    let p = Params::new(command, v)?;
     let t = one_glyph(&p)?;
     takes_only(&p, &t, &["points", "segments"])?;
     let font = s.font()?;
@@ -967,7 +1004,7 @@ fn open_corner(s: &mut Session, v: &Value) -> Result<Value> {
     let (overlap, corners) = {
         let r = t.resolve(font)?;
         let overlap = corner_overlap(&p, font, r.master)?;
-        let mut corners: BTreeMap<usize, BTreeSet<usize>> = BTreeMap::new();
+        let mut corners = Corners::new();
         for &(shape, node) in &t.points {
             if r.parts.path(shape).is_some_and(|path| path.nodes.get(node).is_some_and(Node::on_curve)) {
                 corners.entry(shape).or_default().insert(node);
@@ -984,29 +1021,31 @@ fn open_corner(s: &mut Session, v: &Value) -> Result<Value> {
     if corners.values().all(BTreeSet::is_empty) {
         return Err(p.bad("give corner nodes in `points`, or segments in `segments`"));
     }
-    let picked = s.edit("Open Corner", |font| {
-        t.edit_layer(font, |l| {
-            let shapes = l.parts_mut(t.side).shapes;
-            let input = Input::new(shapes, |i| corners.contains_key(&i));
-            let lists: Vec<Vec<usize>> =
-                input.slots.iter().map(|s| corners.get(s).map(|n| n.iter().copied().collect()).unwrap_or_default()).collect();
-            apply(shapes, input, TIME_LIMIT, move |contours| {
-                let mut done = Done { contours: Vec::new(), selection: Vec::new() };
-                for (i, (c, nodes)) in contours.iter().zip(&lists).enumerate() {
-                    let opened = po::open_corners(c, nodes, overlap, step)?;
-                    done.selection.extend(opened.nodes.iter().map(|&n| (i, n)));
-                    done.contours.push((Some(i), opened.contour));
-                }
-                Ok(done)
-            })
-            .map_err(|m| p.bad(m))
-        })
+    let plan = Plan::of(font, &p, &t)?;
+    let mut overlaps: HashMap<String, Vec2> = HashMap::new();
+    for l in plan.as_ref().map(|plan| plan.layers(font)).unwrap_or_default() {
+        overlaps.insert(l.id.clone(), corner_overlap(&p, font, font.master(&l.master)?)?);
+    }
+    let picked = s.edit(&undo_label(&p, "Open Corner"), |font| {
+        let opened = t.edit_layer(font, |l| open_corners_in(l.parts_mut(t.side).shapes, &corners, overlap, step).map_err(|m| p.bad(m)))?;
+        let Some((picked, opened)) = opened else { return Ok(None) };
+        if let Some(plan) = &plan {
+            plan.apply(font, &p, |id, parts| {
+                let overlap = overlaps.get(id).copied().unwrap_or(overlap);
+                open_corners_in(parts.shapes, &opened, overlap, step).map(|_| ())
+            })?;
+        }
+        Ok(Some(picked))
     })?;
-    Ok(json!({ "selection": selection_json(&p, &t, &layer, picked) }))
+    Ok(with_matched(json!({ "selection": selection_json(&p, &t, &layer, picked) }), plan))
 }
 
 fn reconnect_nodes(s: &mut Session, v: &Value) -> Result<Value> {
-    let p = Params::new("path.reconnectNodes", v)?;
+    reconnect_nodes_as(s, v, "path.reconnectNodes")
+}
+
+pub(super) fn reconnect_nodes_as(s: &mut Session, v: &Value, command: &'static str) -> Result<Value> {
+    let p = Params::new(command, v)?;
     let t = one_glyph(&p)?;
     takes_only(&p, &t, &["points"])?;
     if t.points.is_empty() {
@@ -1015,8 +1054,9 @@ fn reconnect_nodes(s: &mut Session, v: &Value) -> Result<Value> {
     let font = s.font()?;
     let step = grid(font);
     let layer = t.layer_id(font)?;
-    let picked = s.edit("Reconnect Nodes", |font| {
-        t.edit_layer(font, |l| {
+    let plan = Plan::of(font, &p, &t)?;
+    let picked = s.edit(&undo_label(&p, "Reconnect Nodes"), |font| {
+        let done = t.edit_layer(font, |l| {
             let shapes = l.parts_mut(t.side).shapes;
             let input = Input::new(shapes, |_| true);
             let at: HashMap<usize, usize> = input.slots.iter().enumerate().map(|(c, &s)| (s, c)).collect();
@@ -1025,10 +1065,23 @@ fn reconnect_nodes(s: &mut Session, v: &Value) -> Result<Value> {
                 .iter()
                 .map(|&(shape, node)| at.get(&shape).map(|&c| (c, node)).ok_or_else(|| p.bad(format!("point [{shape}, {node}] is not on a path"))))
                 .collect::<Result<Vec<_>>>()?;
-            apply(shapes, input, TIME_LIMIT, move |c| Ok(Done::rewired(po::reconnect_nodes(&c, &nodes, step)?))).map_err(|m| p.bad(m))
-        })
+            apply_with(shapes, input, TIME_LIMIT, move |c| {
+                let (rewired, pairs) = po::reconnect_nodes_paired(&c, &nodes, step)?;
+                Ok((Done::rewired(rewired), pairs))
+            })
+            .map_err(|m| p.bad(m))
+        })?;
+        let Some((picked, pairs)) = done else { return Ok(None) };
+        if let Some(plan) = &plan {
+            plan.apply(font, &p, |_, parts| {
+                let pairs = pairs.clone();
+                let input = Input::new(parts.shapes, |_| true);
+                apply(parts.shapes, input, TIME_LIMIT, move |c| Ok(Done::rewired(po::reconnect_pairs(&c, &pairs, step)?))).map(|_| ())
+            })?;
+        }
+        Ok(Some(picked))
     })?;
-    Ok(json!({ "selection": selection_json(&p, &t, &layer, picked) }))
+    Ok(with_matched(json!({ "selection": selection_json(&p, &t, &layer, picked) }), plan))
 }
 
 /// A point parameter `[x, y]`, within the coordinate range.
@@ -1044,7 +1097,11 @@ fn point(p: &Params, key: &str) -> Result<Point> {
 }
 
 fn cut_with_line(s: &mut Session, v: &Value) -> Result<Value> {
-    let p = Params::new("path.cutWithLine", v)?;
+    cut_with_line_as(s, v, "path.cutWithLine")
+}
+
+pub(super) fn cut_with_line_as(s: &mut Session, v: &Value, command: &'static str) -> Result<Value> {
+    let p = Params::new(command, v)?;
     let t = one_glyph(&p)?;
     takes_only(&p, &t, &["shapes"])?;
     let (from, to) = (point(&p, "from")?, point(&p, "to")?);
@@ -1054,23 +1111,38 @@ fn cut_with_line(s: &mut Session, v: &Value) -> Result<Value> {
     let font = s.font()?;
     let step = grid(font);
     let layer = t.layer_id(font)?;
-    let picked = s.edit("Cut with Line", |font| {
-        t.edit_layer(font, |l| {
+    let plan = Plan::of(font, &p, &t)?;
+    let picked = s.edit(&undo_label(&p, "Cut with Line"), |font| {
+        let done = t.edit_layer(font, |l| {
             if t.side == LayerSide::Background && l.info.background.is_none() {
                 return Ok(None);
             }
             let shapes = l.parts_mut(t.side).shapes;
             let chosen = chosen_paths(Some(&t), shapes).map_err(|m| p.bad(m))?;
             let input = Input::new(shapes, |i| chosen.as_ref().is_none_or(|c| c.contains(&i)));
-            apply(shapes, input, TIME_LIMIT, move |c| Ok(Done::rewired(po::cut_with_line(&c, from, to, step)?))).map_err(|m| p.bad(m))
-        })
+            apply_with(shapes, input, TIME_LIMIT, move |c| {
+                let cuts = po::find_cuts(&c, from, to)?;
+                Ok((Done::rewired(po::cut_at(&c, &cuts, step)?), cuts))
+            })
+            .map_err(|m| p.bad(m))
+        })?;
+        let Some((picked, cuts)) = done else { return Ok(None) };
+        if let Some(plan) = &plan {
+            plan.apply(font, &p, |_, parts| {
+                let cuts = cuts.clone();
+                let chosen = chosen_paths(Some(&t), parts.shapes)?;
+                let input = Input::new(parts.shapes, |i| chosen.as_ref().is_none_or(|c| c.contains(&i)));
+                apply(parts.shapes, input, TIME_LIMIT, move |c| Ok(Done::rewired(po::cut_at(&c, &cuts, step)?))).map(|_| ())
+            })?;
+        }
+        Ok(Some(picked))
     })?;
     // The new nodes, or nothing when the line crossed no path.
     let picked = picked.map(|mut picked| {
         picked.shapes.clear();
         picked
     });
-    Ok(json!({ "selection": selection_json(&p, &t, &layer, picked) }))
+    Ok(with_matched(json!({ "selection": selection_json(&p, &t, &layer, picked) }), plan))
 }
 
 // ── Cubic and quadratic ─────────────────────────────────────────────────────────────────────────

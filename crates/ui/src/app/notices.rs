@@ -2,7 +2,7 @@
 //!
 //! | Reply | Notice |
 //! |---|---|
-//! | `glyph.matchMasters`, `glyph.relocateStartPoints`, the edits that take `matchLayers`: `skipped` | the label, then each skipped glyph with its reason |
+//! | `glyph.matchMasters`, `glyph.relocateStartPoints`, the edits that take `matchLayers`, the commands "in All Masters": `skipped` | the label, then each skipped glyph with its reason |
 //! | `color.generateDarkPalette`: `palette`, `name` | the new palette's number and name |
 //! | any command: `formatWarnings` (what a UFO, UFOZ or designspace save would lose), else the command's own `warnings` | the first warning, and how many follow |
 //!
@@ -30,7 +30,7 @@ const REPORTS_SKIPPED: [&str; 2] = ["glyph.matchMasters", "glyph.relocateStartPo
 
 /// The notice for `reply` of command `id`, or `None` when it has nothing to say.
 pub fn notice(id: &str, reply: &Value) -> Option<String> {
-    if REPORTS_SKIPPED.contains(&id) || crate::shell::compatibility::MATCHED.contains(&id) {
+    if REPORTS_SKIPPED.contains(&id) || id.ends_with("InAllMasters") || crate::shell::compatibility::MATCHED.contains(&id) {
         return skipped(id, reply).or_else(|| format_warning(reply));
     }
     if id == "color.generateDarkPalette" {
@@ -106,6 +106,8 @@ mod tests {
         let reply = json!({"glyphs": ["A"], "skipped": [{"glyph": "B", "layer": "m2", "reason": "paths differ"}]});
         assert_eq!(notice("glyph.matchMasters", &reply).as_deref(), Some("Match Masters: skipped B (paths differ)"));
         assert_eq!(notice("glyph.relocateStartPoints", &json!({"glyphs": ["A"], "skipped": []})), None);
+        let reply = json!({"selection": {}, "matched": [], "skipped": [{"glyph": "A", "layer": "m2", "reason": "Bold: paths differ"}]});
+        assert_eq!(notice("path.insertNodeInAllMasters", &reply).as_deref(), Some("Insert Node in All Masters: skipped A (Bold: paths differ)"));
         assert_eq!(notice("color.generateDarkPalette", &json!({"palette": 1, "name": "Dark"})).as_deref(), Some("Added dark palette 1: Dark"));
         assert_eq!(
             notice("glyph.newGlyph", &json!({"name": "a", "warnings": ["UFO drops x", "UFO drops y"]})).as_deref(),

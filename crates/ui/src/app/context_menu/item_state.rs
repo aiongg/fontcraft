@@ -77,13 +77,18 @@ fn open_end(path: &Path, node: usize) -> bool {
     !path.closed && path.nodes.len() > 1 && (node == 0 || node + 1 == path.nodes.len())
 }
 
+/// The one-layer command of a command "in All Masters"; any other command itself.
+pub fn one_layer(id: &str) -> &str {
+    id.strip_suffix("InAllMasters").unwrap_or(id)
+}
+
 /// Whether the item shows at all.
 pub fn visible(scene: &Scene, selection: &Selection, id: &str) -> bool {
     let paths = target_paths(scene, selection);
     let all_locked = !paths.is_empty() && paths.iter().all(|p| p.info.locked);
     let guides: Vec<_> = selection.guides.iter().filter_map(|&r| guide_drag::guide(scene, r).map(|g| (r, g))).collect();
     let guides_locked = !guides.is_empty() && guides.iter().all(|(_, g)| g.locked);
-    match id {
+    match one_layer(id) {
         "path.lockPath" => !all_locked,
         "path.unlockPath" => all_locked,
         "guide.unlock" => guides_locked,
@@ -116,7 +121,7 @@ pub fn visible(scene: &Scene, selection: &Selection, id: &str) -> bool {
 
 /// Whether the item can run on what is selected; the reason when it cannot.
 pub fn ready(scene: &Scene, selection: &Selection, id: &str) -> Result<(), String> {
-    match id {
+    match one_layer(id) {
         "path.connectNodes" => {
             let ends = selection.on_curve_points(scene);
             let both_open = ends.iter().all(|&(s, n)| scene.path(s).is_some_and(|p| open_end(p, n)));

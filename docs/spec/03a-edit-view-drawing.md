@@ -458,7 +458,7 @@ carries a message. The anchor and component cases are M6.
   selected segments are copied. Works for anchors and guides too. Copy/paste is the alternative.
 - `edit.delete` (`Delete`): removes selected nodes while keeping the path closed, refitting the
   neighbouring handles to approximate the old segment. Also removes anchors and free pen points.
-- `edit.deleteInAllMasters` (`Alt+Delete`): the same in every master.
+- `edit.deleteInAllMasters` (`Alt+Delete`): the same in every master ("In all masters" below).
 - `path.deleteAndBreak` (`Shift+Delete`): removes the node **and** both adjoining segments,
   opening the path. With whole segments selected, only those segments go.
 - `path.deleteAndBreakInAllMasters` (`Alt+Shift+Delete`).
@@ -467,6 +467,27 @@ Construction details (our design): `edit.delete` removes a path left with fewer 
 nodes. `path.deleteAndBreak` removes only the segment between two neighbouring selected nodes (or
 a segment named in `segments`); a selected node with no selected neighbour goes with both its
 segments. What is left becomes open paths, in the place of the original.
+
+### In all masters
+
+The node commands have a form that acts on every compatible layer of the glyph (release notes of
+the reference app, builds 3806 to 4002): Delete, Delete and Break, Insert Node, Convert Segment to
+Curve, Toggle Node Type, Make Node First, Connect Nodes, Close Open Paths, Open Corner, Reconnect
+Nodes, Align Selection, Cut with Line. The ids end in `InAllMasters`. Holding Option changes the
+menu or context menu row to the form; `Alt+Delete`, `Alt+Shift+Delete`, `Alt+Shift`-click on a
+segment with the Draw tool and `Alt` at the end of a Knife drag run it directly.
+
+- The layers are the master, intermediate and alternate layers whose shapes and node types (on the
+  edited side) equal the edited layer's; a layer is compatible when it has the same paths with the
+  same node types, and the same components. Backup layers take no part.
+- The addresses are the edited layer's. One undo step holds the whole edit.
+- A master or intermediate layer that differs is left alone and named in the status line; one
+  without any shape is left alone silently.
+- What depends on the drawing is settled on the edited layer: the `t` of an inserted node and of a
+  cut, the new type of each toggled node, the corners that open, how nodes pair up, Align
+  Selection's axis. Two open ends become one node only where they meet on every layer.
+- Where the edit would still leave a layer incompatible, or a layer refuses it, nothing changes
+  and the message names the layer.
 
 ## 12. Opening, closing and cutting paths
 

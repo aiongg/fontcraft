@@ -16,6 +16,7 @@ pub const ALTERNATES: &[(&str, &str)] = &[
     ("path.correctPathDirection", "path.correctPathDirectionForAllMasters"),
     ("path.reverseContours", "path.reverseContoursForAllMasters"),
     ("path.roundCoordinates", "path.roundCoordinatesForAllMasters"),
+    ("path.alignSelection", "path.alignSelectionInAllMasters"),
     ("path.removeOverlap", "path.removeOverlapForAllMasters"),
     ("glyph.setAnchors", "glyph.setAnchorsForAllMasters"),
     ("glyph.resetAnchors", "glyph.resetAnchorsForAllMasters"),

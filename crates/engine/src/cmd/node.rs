@@ -4,10 +4,11 @@
 //!
 //! Every command names its targets (decision 0004), refuses a locked glyph, rounds the points it
 //! creates or moves to the font's grid (points it does not touch keep their coordinates), and
-//! returns the `selection` afterwards. The "in All Masters" forms apply the same addresses to every
-//! master layer of the glyph; a layer whose shapes or node types differ from the edited layer's
-//! is left alone and listed in `skipped`.
+//! returns the `selection` afterwards. The "in All Masters" forms ([`masters`]) apply the same
+//! addresses to every layer of the glyph that interpolates with the edited one; a layer whose
+//! shapes or node types differ is left alone and listed in `skipped`.
 
+mod masters;
 mod matching;
 mod moving;
 mod ops;
@@ -20,7 +21,7 @@ use fontcraft_geom::{Point, Rect, Shape as _, Vec2, round_point};
 use fontcraft_model::{Font, Layer, LayerParts, LayerPartsMut, LayerSide, MAX_COORDINATE, Node, NodeKind, Path, Shape};
 use serde_json::{Map, Value, json};
 
-use self::matching::Plan;
+pub(super) use self::matching::{Plan, undo_label};
 use self::moving::Mode;
 pub(super) use self::ops::keep_tangents;
 use super::common::grid;
@@ -29,7 +30,7 @@ use crate::params::{GuideScope, Params, ResolvedTargets, TargetKind as K, Target
 
 pub fn specs() -> Vec<CommandSpec> {
     const ALL: &[K] = &[K::Layer, K::Points, K::Segments, K::Shapes, K::Anchors, K::Guides, K::Annotations];
-    vec![
+    let mut specs = vec![
         cmd!(
             "selection.move",
             "Move",
@@ -110,9 +111,9 @@ pub fn specs() -> Vec<CommandSpec> {
             "Delete in All Masters",
             [],
             Some("Alt+Delete"),
-            "{glyph: name, layer?: id (whose addresses are given; default the first master's), side?, points?: [[shape, node]], shapes?: [index]} edit.delete in that layer and in every master layer of the glyph, by the same addresses; a layer whose shapes or nodes differ is left alone → {selection, skipped: [{layer, reason}]}",
+            "{glyph: name, layer?: id (whose addresses are given; default the first master's), side?, points?: [[shape, node]], shapes?: [index]} edit.delete in that layer and, by the same addresses, in every master, intermediate and alternate layer of the glyph with the same shapes and node types; a master or intermediate layer that differs is left alone and listed in `skipped`, and an edit one of them cannot take is refused → {selection, matched: [{glyph, layer}], skipped: [{glyph, layer, reason}]}",
             has_doc,
-            delete_in_all_masters
+            masters::delete
         )
         .targets(&[K::Layer, K::Points, K::Shapes])
         .when("editView"),
@@ -132,9 +133,9 @@ pub fn specs() -> Vec<CommandSpec> {
             "Delete and Break in All Masters",
             [],
             Some("Alt+Shift+Delete"),
-            "{glyph: name, layer?: id (whose addresses are given), side?, points?: [[shape, node]], segments?: [[shape, node]]} path.deleteAndBreak in that layer and in every master layer, by the same addresses; a layer whose shapes or nodes differ is left alone → {selection, skipped: [{layer, reason}]}",
+            "{glyph: name, layer?: id (whose addresses are given; default the first master's), side?, points?: [[shape, node]], segments?: [[shape, node]]} path.deleteAndBreak in that layer and, by the same addresses, in every master, intermediate and alternate layer of the glyph with the same shapes and node types; a master or intermediate layer that differs is left alone and listed in `skipped`, and an edit one of them cannot take is refused → {selection, matched: [{glyph, layer}], skipped: [{glyph, layer, reason}]}",
             has_doc,
-            delete_and_break_in_all_masters
+            masters::delete_and_break
         )
         .targets(&[K::Layer, K::Points, K::Segments])
         .when("editView"),
@@ -245,7 +246,9 @@ pub fn specs() -> Vec<CommandSpec> {
             add_ellipse
         )
         .targets(&[K::Layer]),
-    ]
+    ];
+    specs.extend(masters::specs());
+    specs
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────────────────────────
@@ -310,8 +313,8 @@ fn none_selected(t: &Targets) -> Targets {
     out
 }
 
-/// `reply` with the layers `matchLayers` matched and skipped, when it was given.
-fn with_matched(mut reply: Value, plan: Option<Plan>) -> Value {
+/// `reply` with the layers the edit matched and skipped, when it was made on several.
+pub(super) fn with_matched(mut reply: Value, plan: Option<Plan>) -> Value {
     if let Some(plan) = plan {
         Plan::report(vec![plan], &mut reply);
     }
@@ -332,8 +335,8 @@ fn is_open_end(path: &Path, n: usize) -> bool {
     !path.closed && (n == 0 || n + 1 == path.nodes.len()) && ops::on(path, n)
 }
 
-/// What a layer's shapes are, for matching layers in the "in All Masters" forms: each path's
-/// closedness and node types, each component's base glyph.
+/// What a layer's shapes are, for matching layers: each path's closedness and node types, each
+/// component's base glyph.
 #[derive(PartialEq)]
 enum Sig {
     Path(bool, Vec<NodeKind>),
@@ -351,33 +354,6 @@ fn signature(parts: LayerParts) -> Vec<Sig> {
             Shape::Image(_) | Shape::Raw(_) => Sig::Other,
         })
         .collect()
-}
-
-/// Runs `f` on the addressed side of the layer `t` names and of every master layer of its glyph
-/// that has the same shapes. Returns the layers left alone.
-fn in_all_masters(font: &mut Font, t: &Targets, mut f: impl FnMut(&mut LayerPartsMut) -> Result<()>) -> Result<Vec<Value>> {
-    let (source, sig) = {
-        let r = t.resolve(font)?;
-        crate::check_unlocked(r.glyph)?;
-        (r.layer.id.clone(), signature(r.parts))
-    };
-    let mut g = font.glyph_mut(&t.glyph)?;
-    let mut skipped = Vec::new();
-    for layer in g.layers.iter_mut() {
-        if layer.id != source && layer.id != layer.master {
-            continue;
-        }
-        if layer.parts(t.side).shapes.is_empty() {
-            continue;
-        }
-        if signature(layer.parts(t.side)) != sig {
-            skipped.push(json!({"layer": layer.id, "reason": "its shapes or node types differ from the edited layer's"}));
-            continue;
-        }
-        let mut parts = layer.parts_mut(t.side);
-        f(&mut parts)?;
-    }
-    Ok(skipped)
 }
 
 // ── Moving ──────────────────────────────────────────────────────────────────────────────────────
@@ -597,32 +573,51 @@ fn toggle(s: &mut Session, v: &Value, command: &'static str, keep_outline: bool)
     }
     let step = grid(s.font()?);
     let quadratic = draws_quadratic(s.font()?, &t)?;
-    let points = s.edit("Toggle Node Type", |font| {
-        t.edit_layer(font, |layer| {
+    let plan = Plan::of(s.font()?, &p, &t)?;
+    let label = undo_label(&p, "Toggle Node Type");
+    let points = s.edit(&label, |font| {
+        // The new type of each node that changes, by shape.
+        let mut types: BTreeMap<usize, BTreeMap<usize, bool>> = BTreeMap::new();
+        let points = t.edit_layer(font, |layer| {
             let mut parts = layer.parts_mut(t.side);
             let mut out = Vec::new();
             let mut any = false;
             for (shape, set) in group(&t.points) {
                 let Some(path) = parts.path_mut(shape) else { continue };
-                let nodes: BTreeSet<usize> = set.iter().copied().filter(|&i| ops::on(path, i)).collect();
-                if nodes.is_empty() {
-                    out.extend(set.iter().map(|&i| (shape, i)));
-                    continue;
-                }
-                any = true;
-                let (new, map) = ops::toggle(path, &nodes, to, keep, step, quadratic);
-                *path = new;
+                let on = |i: usize| path.nodes.get(i).filter(|n| n.on_curve());
+                any |= set.iter().any(|&i| on(i).is_some());
+                let new: BTreeMap<usize, bool> = set
+                    .iter()
+                    .filter_map(|&i| {
+                        let smooth = on(i)?.smooth;
+                        let wanted = to.unwrap_or(!smooth);
+                        (wanted != smooth).then_some((i, wanted))
+                    })
+                    .collect();
+                let (changed, map) = ops::toggle(path, &new, keep, step, quadratic);
+                *path = changed;
                 out.extend(set.iter().filter_map(|&i| map.get(i).map(|&k| (shape, k))));
+                types.insert(shape, new);
             }
             if !any {
                 return Err(p.bad("none of `points` is an on-curve node"));
             }
             Ok(out)
-        })
+        })?;
+        if let Some(plan) = &plan {
+            plan.apply(font, &p, |_, parts| {
+                for (&shape, new) in &types {
+                    let path = matching::path_at(parts, shape)?;
+                    *path = ops::toggle(path, new, keep, step, quadratic).0;
+                }
+                Ok(())
+            })?;
+        }
+        Ok(points)
     })?;
     let mut sel = t.clone();
     sel.points = points;
-    Ok(json!({ "selection": sel.to_json() }))
+    Ok(with_matched(json!({ "selection": sel.to_json() }), plan))
 }
 
 /// Whether new curves on the layer `t` names are quadratic: as its own curves, else as the font's.
@@ -632,7 +627,11 @@ fn draws_quadratic(font: &Font, t: &Targets) -> Result<bool> {
 }
 
 fn convert_segment_to_curve(s: &mut Session, v: &Value) -> Result<Value> {
-    let p = Params::new("path.convertSegmentToCurve", v)?;
+    curve_segments(s, v, "path.convertSegmentToCurve")
+}
+
+fn curve_segments(s: &mut Session, v: &Value, command: &'static str) -> Result<Value> {
+    let p = Params::new(command, v)?;
     let t = Targets::parse(&p)?;
     if t.segments.is_empty() {
         return Err(p.bad("give `segments`: the straight segments to curve"));
@@ -640,11 +639,14 @@ fn convert_segment_to_curve(s: &mut Session, v: &Value) -> Result<Value> {
     let orthogonal = p.bool_or("orthogonal", false)?;
     let step = grid(s.font()?);
     let quadratic = draws_quadratic(s.font()?, &t)?;
-    let segments = s.edit("Convert to Curve", |font| {
-        t.edit_layer(font, |layer| {
+    let plan = Plan::of(s.font()?, &p, &t)?;
+    let label = undo_label(&p, "Convert to Curve");
+    let segments = s.edit(&label, |font| {
+        // The straight segments, by shape.
+        let mut straight: BTreeMap<usize, BTreeSet<usize>> = BTreeMap::new();
+        let segments = t.edit_layer(font, |layer| {
             let mut parts = layer.parts_mut(t.side);
             let mut out = Vec::new();
-            let mut any = false;
             for (shape, ends) in group(&t.segments) {
                 let Some(path) = parts.path_mut(shape) else { continue };
                 let lines: BTreeSet<usize> = path.segments().iter().filter(|g| g.is_line() && ends.contains(&g.end)).map(|g| g.end).collect();
@@ -652,24 +654,38 @@ fn convert_segment_to_curve(s: &mut Session, v: &Value) -> Result<Value> {
                     out.extend(ends.iter().map(|&e| (shape, e)));
                     continue;
                 }
-                any = true;
                 let (new, map) = ops::curves_from_lines(path, &lines, step, quadratic, orthogonal);
                 *path = new;
                 out.extend(ends.iter().filter_map(|&e| map.get(e).map(|&k| (shape, k))));
+                straight.insert(shape, lines);
             }
-            if !any {
+            if straight.is_empty() {
                 return Err(p.bad("none of `segments` is a straight segment"));
             }
             Ok(out)
-        })
+        })?;
+        if let Some(plan) = &plan {
+            plan.apply(font, &p, |_, parts| {
+                for (&shape, lines) in &straight {
+                    let path = matching::path_at(parts, shape)?;
+                    *path = ops::curves_from_lines(path, lines, step, quadratic, orthogonal).0;
+                }
+                Ok(())
+            })?;
+        }
+        Ok(segments)
     })?;
     let mut sel = t.clone();
     sel.segments = segments;
-    Ok(json!({ "selection": sel.to_json() }))
+    Ok(with_matched(json!({ "selection": sel.to_json() }), plan))
 }
 
 fn insert_node(s: &mut Session, v: &Value) -> Result<Value> {
-    let p = Params::new("path.insertNode", v)?;
+    split_segment(s, v, "path.insertNode")
+}
+
+fn split_segment(s: &mut Session, v: &Value, command: &'static str) -> Result<Value> {
+    let p = Params::new(command, v)?;
     let t = Targets::parse(&p)?;
     let &[(shape, end)] = t.segments.as_slice() else {
         return Err(p.bad("give one `segment`: [shape, node], the node that ends it"));
@@ -708,7 +724,7 @@ fn insert_node(s: &mut Session, v: &Value) -> Result<Value> {
         (at, grid(font))
     };
     let plan = Plan::of(s.font()?, &p, &t)?;
-    let index = s.edit("Insert Node", |font| {
+    let index = s.edit(&undo_label(&p, "Insert Node"), |font| {
         let index = t.edit_layer(font, |layer| {
             let mut parts = layer.parts_mut(t.side);
             let path = parts.path_mut(shape).ok_or_else(|| p.bad("`segment` does not resolve"))?;
@@ -717,7 +733,7 @@ fn insert_node(s: &mut Session, v: &Value) -> Result<Value> {
             Ok(index)
         })?;
         if let Some(plan) = &plan {
-            plan.apply(font, &p, |parts| {
+            plan.apply(font, &p, |_, parts| {
                 let path = matching::path_at(parts, shape)?;
                 *path = ops::insert_node(path, end, at, step)?.0;
                 Ok(())
@@ -761,7 +777,11 @@ fn delete_in(parts: &mut LayerPartsMut, t: &Targets, step: f64) -> std::result::
 }
 
 fn delete(s: &mut Session, v: &Value) -> Result<Value> {
-    let p = Params::new("edit.delete", v)?;
+    remove_targets(s, v, "edit.delete")
+}
+
+fn remove_targets(s: &mut Session, v: &Value, command: &'static str) -> Result<Value> {
+    let p = Params::new(command, v)?;
     let t = Targets::parse(&p)?;
     if !t.segments.is_empty() {
         return Err(p.bad("takes `points`, not `segments`: name a segment's handles to straighten it"));
@@ -776,7 +796,7 @@ fn delete(s: &mut Session, v: &Value) -> Result<Value> {
     }
     let step = grid(s.font()?);
     let plan = if t.points.is_empty() && t.shapes.is_empty() { None } else { Plan::of(s.font()?, &p, &t)? };
-    s.edit("Delete", |font| {
+    s.edit(&undo_label(&p, "Delete"), |font| {
         let master = t.resolve(font)?.master.id.clone();
         t.edit_layer(font, |layer| {
             if image {
@@ -795,7 +815,7 @@ fn delete(s: &mut Session, v: &Value) -> Result<Value> {
             let mut outline = none_selected(&t);
             outline.points.clone_from(&t.points);
             outline.shapes.clone_from(&t.shapes);
-            plan.apply(font, &p, |parts| delete_in(parts, &outline, step))?;
+            plan.apply(font, &p, |_, parts| delete_in(parts, &outline, step))?;
         }
         let global: BTreeSet<usize> = t.guides.iter().filter(|g| g.scope == GuideScope::Global).map(|g| g.index).collect();
         if !global.is_empty()
@@ -818,20 +838,6 @@ fn hint_list(p: &Params) -> Result<BTreeSet<usize>> {
     list.iter()
         .map(|v| v.as_u64().and_then(|i| usize::try_from(i).ok()).ok_or_else(|| p.bad(format!("`hints` must hold hint indices, found {v}"))))
         .collect()
-}
-
-fn delete_in_all_masters(s: &mut Session, v: &Value) -> Result<Value> {
-    let p = Params::new("edit.deleteInAllMasters", v)?;
-    let t = Targets::parse(&p)?;
-    if !(t.segments.is_empty() && t.anchors.is_empty() && t.guides.is_empty() && t.annotations.is_empty()) {
-        return Err(p.bad("takes only `points` and `shapes`"));
-    }
-    if t.points.is_empty() && t.shapes.is_empty() {
-        return Err(p.bad("give what to delete: `points` or `shapes`"));
-    }
-    let step = grid(s.font()?);
-    let skipped = s.edit("Delete in All Masters", |font| in_all_masters(font, &t, |parts| delete_in(parts, &t, step).map_err(|m| p.bad(m))))?;
-    Ok(json!({ "selection": none_selected(&t).to_json(), "skipped": skipped }))
 }
 
 /// `path.deleteAndBreak` on one side of a layer. Returns whether anything changed.
@@ -875,67 +881,107 @@ fn check_breakable(s: &Session, p: &Params, t: &Targets) -> Result<()> {
 }
 
 fn delete_and_break(s: &mut Session, v: &Value) -> Result<Value> {
-    let p = Params::new("path.deleteAndBreak", v)?;
-    let t = Targets::parse(&p)?;
-    check_breakable(s, &p, &t)?;
-    s.edit("Delete and Break", |font| t.edit_layer(font, |layer| Ok(break_in(&mut layer.parts_mut(t.side), &t))))?;
-    Ok(json!({ "selection": none_selected(&t).to_json() }))
+    break_at(s, v, "path.deleteAndBreak")
 }
 
-fn delete_and_break_in_all_masters(s: &mut Session, v: &Value) -> Result<Value> {
-    let p = Params::new("path.deleteAndBreakInAllMasters", v)?;
+fn break_at(s: &mut Session, v: &Value, command: &'static str) -> Result<Value> {
+    let p = Params::new(command, v)?;
     let t = Targets::parse(&p)?;
     check_breakable(s, &p, &t)?;
-    let skipped = s.edit("Delete and Break in All Masters", |font| {
-        in_all_masters(font, &t, |parts| {
-            break_in(parts, &t);
-            Ok(())
-        })
+    let plan = Plan::of(s.font()?, &p, &t)?;
+    s.edit(&undo_label(&p, "Delete and Break"), |font| {
+        t.edit_layer(font, |layer| Ok(break_in(&mut layer.parts_mut(t.side), &t)))?;
+        match &plan {
+            Some(plan) => plan.apply(font, &p, |_, parts| {
+                break_in(parts, &t);
+                Ok(())
+            }),
+            None => Ok(()),
+        }
     })?;
-    Ok(json!({ "selection": none_selected(&t).to_json(), "skipped": skipped }))
+    Ok(with_matched(json!({ "selection": none_selected(&t).to_json() }), plan))
 }
 
 // ── Opening, closing, start nodes, direction ────────────────────────────────────────────────────
 
+/// Two open ends of paths to join, the one on the lower shape first.
+#[derive(Clone, Copy)]
+struct Ends {
+    a: (usize, usize),
+    b: (usize, usize),
+}
+
+impl Ends {
+    /// The paths with the two ends, which may be the same one.
+    fn paths<'s>(&self, shapes: &'s [Shape]) -> std::result::Result<(&'s Path, &'s Path), String> {
+        let end = |(sh, n): (usize, usize)| match shapes.get(sh) {
+            Some(Shape::Path(path)) if is_open_end(path, n) => Ok(path),
+            _ => Err(format!("[{sh}, {n}] is not an open end of a path")),
+        };
+        Ok((end(self.a)?, end(self.b)?))
+    }
+
+    /// Whether the two ends lie on each other.
+    fn meet(&self, shapes: &[Shape], step: f64) -> bool {
+        let Ok((pa, pb)) = self.paths(shapes) else { return false };
+        match (ops::point(pa, self.a.1), ops::point(pb, self.b.1)) {
+            (Some(a), Some(b)) => ops::coincide(a, b, step),
+            _ => false,
+        }
+    }
+
+    /// Joins the ends, into one node with `merge`. Returns the joined nodes.
+    fn join(&self, shapes: &mut Vec<Shape>, merge: bool) -> std::result::Result<Vec<(usize, usize)>, String> {
+        let Ends { a, b } = *self;
+        let (pa, pb) = self.paths(shapes)?;
+        if a.0 == b.0 {
+            let closed = ops::close(pa, merge).map_err(|m| format!("path {}: {m}", a.0))?;
+            let last = closed.nodes.len().saturating_sub(1);
+            if let Some(slot) = shapes.get_mut(a.0) {
+                *slot = Shape::Path(closed);
+            }
+            return Ok(if merge { vec![(a.0, 0)] } else { vec![(a.0, last), (a.0, 0)] });
+        }
+        let (path, at) = ops::join(pa, a.1, pb, b.1, merge)?;
+        if let Some(slot) = shapes.get_mut(a.0) {
+            *slot = Shape::Path(path);
+        }
+        if b.0 < shapes.len() {
+            shapes.remove(b.0);
+        }
+        Ok(at.into_iter().map(|n| (a.0, n)).collect())
+    }
+}
+
 fn connect_nodes(s: &mut Session, v: &Value) -> Result<Value> {
-    let p = Params::new("path.connectNodes", v)?;
+    connect(s, v, "path.connectNodes")
+}
+
+fn connect(s: &mut Session, v: &Value, command: &'static str) -> Result<Value> {
+    let p = Params::new(command, v)?;
     let t = Targets::parse(&p)?;
     let &[first, second] = t.points.as_slice() else {
         return Err(p.bad("give two open ends in `points`"));
     };
-    let (a, b) = if first.0 <= second.0 { (first, second) } else { (second, first) };
-    let step = grid(s.font()?);
-    let joined = s.edit("Connect Nodes", |font| {
-        t.edit_layer(font, |layer| {
-            let parts = layer.parts_mut(t.side);
-            let end = |(sh, n): (usize, usize)| match parts.shapes.get(sh) {
-                Some(Shape::Path(path)) if is_open_end(path, n) => Ok(path.clone()),
-                _ => Err(p.bad(format!("[{sh}, {n}] is not an open end of a path"))),
-            };
-            let (pa, pb) = (end(a)?, end(b)?);
-            if a.0 == b.0 {
-                let closed = ops::close(&pa, step).map_err(|m| p.bad(format!("path {}: {m}", a.0)))?;
-                let last = closed.nodes.len().saturating_sub(1);
-                let merged = closed.nodes.len() < pa.nodes.len();
-                if let Some(slot) = parts.shapes.get_mut(a.0) {
-                    *slot = Shape::Path(closed);
-                }
-                Ok(if merged { vec![(a.0, 0)] } else { vec![(a.0, last), (a.0, 0)] })
-            } else {
-                let (path, at) = ops::join(&pa, a.1, &pb, b.1, step).map_err(|m| p.bad(m))?;
-                if let Some(slot) = parts.shapes.get_mut(a.0) {
-                    *slot = Shape::Path(path);
-                }
-                if b.0 < parts.shapes.len() {
-                    parts.shapes.remove(b.0);
-                }
-                Ok(at.into_iter().map(|n| (a.0, n)).collect())
-            }
-        })
+    let ends = if first.0 <= second.0 { Ends { a: first, b: second } } else { Ends { a: second, b: first } };
+    let font = s.font()?;
+    let step = grid(font);
+    let plan = Plan::of(font, &p, &t)?;
+    // Ends that lie on each other on some of the layers only are joined by a segment on all.
+    let merge = {
+        let r = t.resolve(font)?;
+        ends.meet(r.parts.shapes, step) && plan.as_ref().is_none_or(|plan| plan.layers(font).iter().all(|l| ends.meet(l.parts(t.side).shapes, step)))
+    };
+    let joined = s.edit(&undo_label(&p, "Connect Nodes"), |font| {
+        let joined = t.edit_layer(font, |layer| ends.join(layer.parts_mut(t.side).shapes, merge).map_err(|m| p.bad(m)))?;
+        if let Some(plan) = &plan {
+            plan.apply(font, &p, |_, parts| ends.join(parts.shapes, merge).map(|_| ()))?;
+        }
+        Ok(joined)
     })?;
     let mut sel = none_selected(&t);
     sel.points = joined;
-    Ok(json!({ "selection": sel.to_json() }))
+    Ok(with_matched(json!({ "selection": sel.to_json() }), plan))
 }
 
 /// The shapes `t` names directly or through its points.
@@ -944,39 +990,67 @@ fn named_shapes(t: &Targets) -> BTreeSet<usize> {
 }
 
 fn close_open_paths(s: &mut Session, v: &Value) -> Result<Value> {
-    let p = Params::new("path.closeOpenPaths", v)?;
+    close_paths(s, v, "path.closeOpenPaths")
+}
+
+/// Whether the path at `shape` is open and its ends lie on each other; `None` when it cannot be closed.
+fn closing_merges(shapes: &[Shape], shape: usize, step: f64) -> Option<bool> {
+    let Some(Shape::Path(path)) = shapes.get(shape) else { return None };
+    let (first, last) = (path.nodes.first()?, path.nodes.last()?);
+    let closable = !path.closed && path.nodes.iter().filter(|n| n.on_curve()).count() >= 2;
+    closable.then(|| ops::coincide(first.point(), last.point(), step))
+}
+
+fn close_paths(s: &mut Session, v: &Value, command: &'static str) -> Result<Value> {
+    let p = Params::new(command, v)?;
     let t = Targets::parse(&p)?;
     let shapes = named_shapes(&t);
     if shapes.is_empty() {
         return Err(p.bad("give the paths to close in `shapes` (or `points` on them)"));
     }
-    let step = grid(s.font()?);
-    let closed = s.edit("Close Path", |font| {
-        t.edit_layer(font, |layer| {
-            let parts = layer.parts_mut(t.side);
-            let mut closed = Vec::new();
-            for &sh in &shapes {
-                if let Some(Shape::Path(path)) = parts.shapes.get_mut(sh)
-                    && !path.closed
-                    && path.nodes.iter().filter(|n| n.on_curve()).count() >= 2
-                {
-                    *path = ops::close(path, step).map_err(|m| p.bad(format!("path {sh}: {m}")))?;
-                    closed.push(sh);
-                }
+    let font = s.font()?;
+    let step = grid(font);
+    let plan = Plan::of(font, &p, &t)?;
+    // The paths to close, and whether their ends become one node: where they lie on each other on every layer.
+    let merges: BTreeMap<usize, bool> = {
+        let r = t.resolve(font)?;
+        let others = plan.as_ref().map(|plan| plan.layers(font)).unwrap_or_default();
+        let merges = |sh: usize| {
+            let here = closing_merges(r.parts.shapes, sh, step)?;
+            Some((sh, here && others.iter().all(|l| closing_merges(l.parts(t.side).shapes, sh, step) == Some(true))))
+        };
+        shapes.iter().filter_map(|&sh| merges(sh)).collect()
+    };
+    if merges.is_empty() {
+        return Err(p.bad("none of the paths is open"));
+    }
+    let close = |shapes: &mut [Shape]| -> std::result::Result<(), String> {
+        for (&sh, &merge) in &merges {
+            match shapes.get_mut(sh) {
+                Some(Shape::Path(path)) => *path = ops::close(path, merge).map_err(|m| format!("path {sh}: {m}"))?,
+                _ => return Err(format!("shape {sh} is not a path")),
             }
-            if closed.is_empty() {
-                return Err(p.bad("none of the paths is open"));
-            }
-            Ok(closed)
-        })
+        }
+        Ok(())
+    };
+    s.edit(&undo_label(&p, "Close Path"), |font| {
+        t.edit_layer(font, |layer| close(layer.parts_mut(t.side).shapes).map_err(|m| p.bad(m)))?;
+        match &plan {
+            Some(plan) => plan.apply(font, &p, |_, parts| close(parts.shapes)),
+            None => Ok(()),
+        }
     })?;
     let mut sel = none_selected(&t);
-    sel.shapes = closed;
-    Ok(json!({ "selection": sel.to_json() }))
+    sel.shapes = merges.keys().copied().collect();
+    Ok(with_matched(json!({ "selection": sel.to_json() }), plan))
 }
 
 fn make_node_first(s: &mut Session, v: &Value) -> Result<Value> {
-    let p = Params::new("path.makeNodeFirst", v)?;
+    start_at(s, v, "path.makeNodeFirst")
+}
+
+fn start_at(s: &mut Session, v: &Value, command: &'static str) -> Result<Value> {
+    let p = Params::new(command, v)?;
     let mut t = Targets::parse(&p)?;
     if let Some(pt) = pair_param(&p, "point")?
         && !t.points.contains(&pt)
@@ -987,7 +1061,7 @@ fn make_node_first(s: &mut Session, v: &Value) -> Result<Value> {
         return Err(p.bad("give one `point`: [shape, node]"));
     };
     let plan = Plan::of(s.font()?, &p, &t)?;
-    s.edit("Make Node First", |font| {
+    s.edit(&undo_label(&p, "Make Node First"), |font| {
         t.edit_layer(font, |layer| {
             let mut parts = layer.parts_mut(t.side);
             let path = parts.path_mut(shape).ok_or_else(|| p.bad("`point` is not on a path"))?;
@@ -1001,7 +1075,7 @@ fn make_node_first(s: &mut Session, v: &Value) -> Result<Value> {
             Ok(())
         })?;
         match &plan {
-            Some(plan) => plan.apply(font, &p, |parts| {
+            Some(plan) => plan.apply(font, &p, |_, parts| {
                 let path = matching::path_at(parts, shape)?;
                 if node >= path.nodes.len() {
                     return Err(format!("path {shape} has no node {node}"));
@@ -1092,7 +1166,7 @@ fn reverse_contours(s: &mut Session, v: &Value) -> Result<Value> {
             count += reversed;
             if let Some(plan) = plan {
                 if reversed > 0 {
-                    plan.apply(font, &p, |parts| reverse_in(parts, &t.shapes).map(|_| ()))?;
+                    plan.apply(font, &p, |_, parts| reverse_in(parts, &t.shapes).map(|_| ()))?;
                 }
                 plans.push(plan);
             }

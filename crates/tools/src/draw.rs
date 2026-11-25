@@ -13,7 +13,7 @@
 //! | click an open end of another path | while drawing: join the two paths; otherwise: continue that path from that end |
 //! | click a node, not drawing | open a closed path there (two coincident ends); split an open path there |
 //! | click a segment | a node there, as on empty canvas (the clicked path is left alone) |
-//! | `Shift`+click a segment | `path.insertNode` at the extremum or inflection nearest to the click |
+//! | `Shift`+click a segment | `path.insertNode` at the extremum or inflection nearest to the click; with `Alt` in all masters |
 //! | `Backspace` (the end node selected, or nothing) | `edit.delete` of the last node; the drawing goes on from the one before |
 //! | `Escape`, another tool | end the path |
 //!
@@ -589,7 +589,7 @@ impl DrawTool {
 
         if ev.mods.shift
             && let Some(HitResult { hit: Hit::Segment { shape, node, .. }, .. }) = &hit
-            && let Some(invocation) = insert_at_extreme(scene, &base, *shape, *node, ev.pos)
+            && let Some(invocation) = insert_at_extreme(scene, &base, *shape, *node, ev.pos, ev.mods.alt)
         {
             self.gesture = Gesture::Click(invocation);
             return out;
@@ -747,9 +747,9 @@ impl DrawTool {
     }
 }
 
-/// `path.insertNode` at the extremum or inflection of the segment `[shape, node]` nearest to
-/// `pos`; `None` when the segment has neither inside it.
-fn insert_at_extreme(scene: &Scene, base: &Map<String, Value>, shape: usize, node: usize, pos: Point) -> Option<Invocation> {
+/// `path.insertNode` (with `all`, in all masters) at the extremum or inflection of the segment
+/// `[shape, node]` nearest to `pos`; `None` when the segment has neither inside it.
+fn insert_at_extreme(scene: &Scene, base: &Map<String, Value>, shape: usize, node: usize, pos: Point, all: bool) -> Option<Invocation> {
     let seg = scene.path(shape)?.segment_ending_at(node)?;
     let (_, t) = seg
         .extremes()
@@ -758,7 +758,8 @@ fn insert_at_extreme(scene: &Scene, base: &Map<String, Value>, shape: usize, nod
         .filter(|t| *t > END_T && *t < 1.0 - END_T)
         .filter_map(|t| Some((seg.eval(t)?.distance(pos), t)))
         .min_by(|a, b| a.0.total_cmp(&b.0))?;
-    Some(Invocation::new("path.insertNode", params(base, json!({"segment": [shape, node], "t": t}))))
+    let id = if all { "path.insertNodeInAllMasters" } else { "path.insertNode" };
+    Some(Invocation::new(id, params(base, json!({"segment": [shape, node], "t": t}))))
 }
 
 /// Opens the path `shape` at its on-curve node `node`: a closed path becomes an open one that

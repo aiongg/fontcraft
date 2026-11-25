@@ -396,15 +396,15 @@ fn default_anchors(s: &mut Session, p: &Params, label: &str, reset: bool, all_ma
 /// Path › Align Selection when the selection is one anchor with one or two points (the anchor
 /// goes above the point, or between the two, along the italic angle) or one component with one
 /// node (the component's origin point goes onto the node). `None` for any other selection.
-pub(super) fn align_special(s: &mut Session, p: &Params, t: &Targets) -> Result<Option<Value>> {
+pub(super) fn align_special(font: &mut Font, p: &Params, t: &Targets) -> Result<Option<Value>> {
     if !(t.segments.is_empty() && t.guides.is_empty() && t.annotations.is_empty()) {
         return Ok(None);
     }
     match (t.anchors.as_slice(), t.shapes.as_slice(), t.points.len()) {
-        ([anchor], [], 1 | 2) => align_anchor(s, p, t, anchor).map(Some),
+        ([anchor], [], 1 | 2) => align_anchor(font, p, t, anchor).map(Some),
         ([], [shape], 1) => {
-            let is_component = matches!(t.resolve(s.font()?)?.parts.shapes.get(*shape), Some(Shape::Component(_)));
-            if is_component { align_component(s, p, t, *shape).map(Some) } else { Ok(None) }
+            let is_component = matches!(t.resolve(font)?.parts.shapes.get(*shape), Some(Shape::Component(_)));
+            if is_component { align_component(font, p, t, *shape).map(Some) } else { Ok(None) }
         }
         _ => Ok(None),
     }
@@ -412,8 +412,7 @@ pub(super) fn align_special(s: &mut Session, p: &Params, t: &Targets) -> Result<
 
 /// The anchor moves horizontally onto the line through the point (or the two points' midpoint)
 /// at the master's italic angle; the points stay.
-fn align_anchor(s: &mut Session, p: &Params, t: &Targets, name: &str) -> Result<Value> {
-    let font = s.font()?;
+fn align_anchor(font: &mut Font, p: &Params, t: &Targets, name: &str) -> Result<Value> {
     let step = grid(font);
     let r = t.resolve(font)?;
     let (_, a) = r.parts.anchor(name).ok_or_else(|| p.bad(format!("`anchors`: the layer has no anchor `{name}`")))?;
@@ -431,25 +430,18 @@ fn align_anchor(s: &mut Session, p: &Params, t: &Targets, name: &str) -> Result<
     }
     let moved = usize::from(x != a.x);
     if moved > 0 {
-        s.edit("Align Selection", |font| {
-            t.edit_layer(font, |l| {
-                let a = l
-                    .parts_mut(t.side)
-                    .anchors
-                    .iter_mut()
-                    .find(|a| a.name == name)
-                    .ok_or_else(|| p.bad(format!("the layer has no anchor `{name}`")))?;
-                a.x = x;
-                Ok(())
-            })
+        t.edit_layer(font, |l| {
+            let a =
+                l.parts_mut(t.side).anchors.iter_mut().find(|a| a.name == name).ok_or_else(|| p.bad(format!("the layer has no anchor `{name}`")))?;
+            a.x = x;
+            Ok(())
         })?;
     }
     Ok(json!({"glyph": t.glyph, "moved": moved, "anchor": name, "x": x}))
 }
 
 /// The component at `shape` moves so its origin point lands on the selected node; the node stays.
-fn align_component(s: &mut Session, p: &Params, t: &Targets, shape: usize) -> Result<Value> {
-    let font = s.font()?;
+fn align_component(font: &mut Font, p: &Params, t: &Targets, shape: usize) -> Result<Value> {
     let step = grid(font);
     let r = t.resolve(font)?;
     let Some(Shape::Component(c)) = r.parts.shapes.get(shape) else {
@@ -478,7 +470,7 @@ fn align_component(s: &mut Session, p: &Params, t: &Targets, shape: usize) -> Re
         return Ok(json!({"glyph": t.glyph, "moved": 0, "component": shape, "origin": [origin.x, origin.y]}));
     }
     let sel = Selection { shapes: BTreeSet::from([shape]), ..Selection::default() };
-    s.edit("Align Selection", |font| t.edit_layer(font, |l| apply(p, l, t.side, &sel, Affine::translate(d), step)))?;
+    t.edit_layer(font, |l| apply(p, l, t.side, &sel, Affine::translate(d), step))?;
     Ok(json!({"glyph": t.glyph, "moved": 1, "component": shape, "origin": [to.x, to.y]}))
 }
 
