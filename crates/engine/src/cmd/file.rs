@@ -66,7 +66,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Open Recovered Document",
             [],
             None,
-            "{path: string, original?: string, title?: string} open the copy of unsaved work at path as a document with unsaved changes. original is the file it was opened from or last saved to: Save goes there, and is refused until it is forced, since the file may hold something else by now. When original is open already, the copy opens without a file. The copy itself stays until the app removes it → {title, path, glyphs, document}",
+            "{path: string, original?: string, title?: string} open the copy of unsaved work at path as a document with unsaved changes. original is the file it was opened from or last saved to: Save goes there, and is refused until it is forced, since the file may hold something else by now; what another program changes in it after that is told from the file as it is now. When original is open already, the copy opens without a file. The copy itself stays until the app removes it → {title, path, glyphs, document, warnings}",
             always,
             open_recovered
         ).files(const { &[FileParam::read("path"), FileParam::write("original")] }),
@@ -166,8 +166,10 @@ fn write_document(s: &mut Session, p: &Params, path: std::path::PathBuf, format:
     // Another program may have changed the file since it was read or last written here.
     if doc.path.as_deref() == Some(path.as_path()) && !p.bool_or("force", false)? {
         let now = io::document_stamp(&path, &doc.font);
-        if now.is_some() && now != doc.stamp {
-            return Err(p.bad(format!("{} changed on disk since it was opened; save elsewhere, or pass force: true to overwrite", path.display())));
+        if now.is_some() && (doc.recovered || now != doc.stamp) {
+            let why = if doc.recovered { " or holds something else than this recovered document" } else { "" };
+            let what = format!("{} changed on disk since it was opened{why}", path.display());
+            return Err(p.bad(format!("{what}; save elsewhere, or pass force: true to overwrite")));
         }
     }
     let mut font = Font::clone(&doc.font);
@@ -210,6 +212,7 @@ fn write_document(s: &mut Session, p: &Params, path: std::path::PathBuf, format:
     doc.font = font.clone();
     doc.saved = font;
     doc.stamp = io::document_stamp(&path, &doc.font);
+    doc.recovered = false;
     // Undo steps carry their own folder (`HistoryEntry::path`). The starting font of a running
     // batch or interaction becomes an undo step under the new folder, so it is rewritten here.
     let rebase = |font: &mut Arc<Font>| *font = crate::assets::rebased(Arc::clone(font), old_path.as_deref(), Some(&path));
@@ -378,10 +381,24 @@ fn open_recovered(s: &mut Session, p: &Value) -> Result<Value> {
     let bytes = crate::io::read_file(&copy)?;
     let font = fontcraft_format::load(&bytes)?;
     let free = original.filter(|path| super::shared::find_open(s, path).is_none());
-    s.push_recovered(font, free, title.filter(|t| !t.trim().is_empty()));
+    // Stamped before it is read, so a change made meanwhile shows. A file that cannot be read here is not compared with.
+    let base = free.as_deref().and_then(|path| {
+        let stamp = crate::io::document_stamp(path, &font)?;
+        Some((super::external_changes::read_disk(s, path).ok()?, stamp))
+    });
+    let mut warnings = Vec::new();
+    let glyph_data = match &free {
+        Some(path) if crate::file_access::check_read(path).is_ok() => crate::glyph_data::source_files(path, &mut warnings),
+        _ => Vec::new(),
+    };
+    s.push_recovered(font, free, base, title.filter(|t| !t.trim().is_empty()));
+    if !glyph_data.is_empty() {
+        let files: Vec<(&str, &[u8])> = glyph_data.iter().map(|(n, b)| (n.as_str(), b.as_slice())).collect();
+        warnings.extend(s.set_source_glyph_data(&files)?);
+    }
     let doc = s.doc()?;
     Ok(json!({
-        "title": doc.title, "path": doc.path.as_ref().map(|p| p.to_string_lossy()), "glyphs": doc.font.glyphs.len(), "document": doc.id,
+        "title": doc.title, "path": doc.path.as_ref().map(|p| p.to_string_lossy()), "glyphs": doc.font.glyphs.len(), "document": doc.id, "warnings": warnings,
     }))
 }
 

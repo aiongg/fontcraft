@@ -72,8 +72,9 @@ pub struct DiskChange {
 }
 
 /// The open documents whose files changed on disk since they were last read or written here, by
-/// their stamps alone (no file is read). A document whose file is gone is not listed. The web
-/// app has no files: nothing is listed there.
+/// their stamps alone (no file is read). A document whose file is gone is not listed, nor is one whose file was never
+/// read or written here (recovered work whose file could not be read): there is nothing to compare with. The web app
+/// has no files: nothing is listed there.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn changed_on_disk(s: &Session) -> Vec<DiskChange> {
     s.documents()
@@ -81,8 +82,15 @@ pub fn changed_on_disk(s: &Session) -> Vec<DiskChange> {
         .enumerate()
         .filter_map(|(index, d)| {
             let path = d.path.as_deref()?;
+            let read = d.stamp.as_ref()?;
             let now = crate::io::document_stamp(path, &d.font);
-            (now.is_some() && now != d.stamp).then(|| DiskChange { doc: d.id, index, title: d.title.clone(), modified: d.modified(), stamp: now })
+            (now.is_some() && now.as_ref() != Some(read)).then(|| DiskChange {
+                doc: d.id,
+                index,
+                title: d.title.clone(),
+                modified: d.modified(),
+                stamp: now,
+            })
         })
         .collect()
 }
@@ -104,6 +112,10 @@ fn review(s: &mut Session, v: &Value) -> Result<Value> {
     let i = target(s, &p)?;
     let doc = s.documents().get(i).ok_or(EngineError::NoDocument)?;
     let path = doc.path.clone().ok_or_else(|| p.bad(format!("{} has no file on disk: save it first", doc.title)))?;
+    // Without a font the file was read into, every item of the file would count as changed by it.
+    if doc.stamp.is_none() && crate::io::document_stamp(&path, &doc.font).is_some() {
+        return Err(p.bad(format!("{} was not read here: save elsewhere, or pass force: true to file.save", path.display())));
+    }
     // Taken before the read: a change made while reading shows on the next check.
     let stamp = crate::io::document_stamp(&path, &doc.font);
     let disk = read_disk(s, &path)?;
@@ -130,13 +142,16 @@ fn review(s: &mut Session, v: &Value) -> Result<Value> {
     let merged = diff.is_empty() || (accept.is_some() && rejected == 0);
     if merged && let Some(doc) = s.docs_mut().get_mut(i) {
         doc.stamp = stamp;
-        doc.saved = if doc.font.same_as(&disk) { doc.font.clone() } else { Arc::new(disk.clone()) };
+        let same = doc.font.same_as(&disk);
+        doc.saved = if same { doc.font.clone() } else { Arc::new(disk.clone()) };
+        doc.recovered &= !same;
     }
+    let asks = !merged || s.documents().get(i).is_some_and(|d| d.recovered);
     let mut out = json!({
         "index": i, "title": title, "path": path.to_string_lossy(), "modified": was_modified, "changed": !diff.is_empty(),
         "glyphs": diff.glyphs.iter().map(|g| g.to_json(&cur, &disk)).collect::<Vec<_>>(),
         "parts": diff.parts.iter().map(|part| json!({ "part": part, "conflict": diff.part_conflicts.contains(part) })).collect::<Vec<_>>(),
-        "saveNeedsForce": !merged,
+        "saveNeedsForce": asks,
     });
     if let Some(o) = out.as_object_mut() {
         if accept.is_some() {
@@ -179,7 +194,7 @@ fn target(s: &Session, p: &Params) -> Result<usize> {
 
 /// The file as `file.open` would give it now.
 #[cfg(not(target_arch = "wasm32"))]
-fn read_disk(s: &Session, path: &std::path::Path) -> Result<Font> {
+pub(super) fn read_disk(s: &Session, path: &std::path::Path) -> Result<Font> {
     crate::file_access::check_read(path).map_err(EngineError::Io)?;
     let (font, mut warnings) = crate::io::open(path, None)?;
     let font = crate::linked::resolve(&font, Some(path), &mut warnings)?.unwrap_or(font);

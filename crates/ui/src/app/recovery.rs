@@ -34,6 +34,9 @@ pub const MAX_DOCUMENTS: usize = 32;
 /// The command that reports and answers.
 pub const RECOVER: &str = "app.recoverDocuments";
 
+/// The revision of a copy that has to be written again; no document has it.
+const NONE: u64 = u64::MAX;
+
 /// A snapshot of a document for the host to write.
 #[derive(Clone, Debug)]
 pub struct Snapshot {
@@ -59,21 +62,33 @@ pub struct Leftover {
     pub age: Duration,
 }
 
+/// What went wrong with the copies.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Problem {
+    /// The first failure.
+    pub text: String,
+    /// The documents whose copy was not written.
+    pub documents: Vec<u64>,
+}
+
 /// Where the desktop app keeps the copies. Every call returns at once but [`finish`](Self::finish); the writing happens
 /// on another thread, in the order of the calls.
 pub trait RecoveryHost: Send {
     /// The copies of runs that are gone, newest first.
     fn leftovers(&mut self) -> Vec<Leftover>;
+    /// The leftover `key` is being asked about.
+    fn offered(&mut self, key: &str);
     /// Writes a copy of a document, in place of its last one.
     fn write(&mut self, snapshot: Snapshot);
     /// Removes a document's copy: it was saved or closed.
     fn discard(&mut self, document: u64);
-    /// The document was recovered from the leftover `key`: its copies replace that one.
+    /// The document was recovered from the leftover `key`: its copies replace that one, unless another run took it
+    /// meanwhile.
     fn adopt(&mut self, document: u64, key: &str);
     /// Removes a leftover.
     fn remove(&mut self, key: &str);
-    /// The first failure since the last call.
-    fn problem(&mut self) -> Option<String>;
+    /// What went wrong since the last call.
+    fn problem(&mut self) -> Option<Problem>;
     /// The window closes and the user has answered for every document: waits until what was asked is done.
     fn finish(&mut self);
 }
@@ -95,8 +110,8 @@ pub struct Recovery {
     /// When each changed document without a copy was first seen changed, in seconds.
     changed: BTreeMap<u64, f64>,
     focused: bool,
-    /// A failed write was reported.
-    reported: bool,
+    /// The time of the last failure, in seconds. While failures follow one another only the first is reported.
+    failed: Option<f64>,
     /// The copies still to ask about.
     pub pending: Vec<Leftover>,
     /// The copy the open dialog asks about: its answer is for that one, whatever was answered meanwhile.
@@ -166,11 +181,19 @@ fn tick_at(app: &mut FontCraftApp, now: f64, focused: bool) -> Option<Duration> 
         recovery.copied.insert(doc.id, Copied { revision: doc.revision, at: now });
         recovery.changed.remove(&doc.id);
     }
-    if let Some(problem) = host.problem()
-        && !std::mem::replace(&mut recovery.reported, true)
-    {
-        log::warn!("recovery copies: {problem}");
-        app.status = format!("Unsaved work could not be copied for recovery: {problem}");
+    if let Some(problem) = host.problem() {
+        // Written again after the interval.
+        for id in problem.documents {
+            if let Some(copied) = recovery.copied.get_mut(&id) {
+                *copied = Copied { revision: NONE, at: now };
+                next = Some(next.map_or(INTERVAL, |n| n.min(INTERVAL)));
+            }
+        }
+        let quiet = 3.0 * INTERVAL.as_secs_f64();
+        if recovery.failed.replace(now).is_none_or(|at| !(0.0..=quiet).contains(&(now - at))) {
+            log::warn!("recovery copies: {}", problem.text);
+            app.status = format!("Unsaved work could not be copied for recovery: {}", problem.text);
+        }
     }
     next
 }
@@ -178,7 +201,8 @@ fn tick_at(app: &mut FontCraftApp, now: f64, focused: bool) -> Option<Duration> 
 /// The window closes and every document was saved or left unsaved on purpose: no copy of this run stays.
 pub fn finish(app: &mut FontCraftApp) {
     let recovery = &mut app.recovery;
-    let Some(host) = recovery.host.as_mut() else { return };
+    // Taken: a frame after this one copies nothing.
+    let Some(mut host) = recovery.host.take() else { return };
     for id in std::mem::take(&mut recovery.copied).into_keys() {
         host.discard(id);
     }
@@ -225,14 +249,16 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
 fn recover(app: &mut FontCraftApp, leftover: &Leftover) -> Result<(), String> {
     let mut given = json!({"path": leftover.path.to_string_lossy(), "title": leftover.title});
     if let (Some(original), Some(map)) = (&leftover.original, given.as_object_mut()) {
-        map.insert("original".into(), json!(original.to_string_lossy()));
+        // A name that is not text would name another file.
+        if let Some(original) = original.to_str() {
+            map.insert("original".into(), json!(original));
+        }
     }
     let reply = app.run_command("file.openRecovered", given)?;
-    let revision = app.session.active().map_or(0, |d| d.revision);
     if let (Some(id), Some(host)) = (reply.get("document").and_then(Value::as_u64), app.recovery.host.as_mut()) {
         host.adopt(id, &leftover.key);
-        // The copy holds this revision; the next one is due after a change.
-        app.recovery.copied.insert(id, Copied { revision, at: 0.0 });
+        // Written at once, so the copy names this run and no other window offers it.
+        app.recovery.copied.insert(id, Copied { revision: NONE, at: f64::NEG_INFINITY });
     }
     app.status = format!("Recovered `{}`: it is not saved yet", leftover.title);
     app.view.start.open = false;
@@ -259,6 +285,9 @@ pub fn run_dialog(host: &mut DialogHost, app: &mut FontCraftApp) {
     }
     if let Some(first) = app.recovery.pending.first() {
         app.recovery.asked = Some(first.key.clone());
+        if let Some(copies) = app.recovery.host.as_mut() {
+            copies.offered(&first.key);
+        }
         host.open(RecoveryDialog::new(RecoveredDocument::new(first.key.clone(), first.title.clone(), first.age)));
     }
 }
@@ -275,7 +304,7 @@ mod tests {
     struct Log {
         calls: Vec<String>,
         leftovers: Vec<Leftover>,
-        problem: Option<String>,
+        problem: Option<Problem>,
     }
 
     struct Fake(Arc<Mutex<Log>>);
@@ -290,6 +319,9 @@ mod tests {
         fn leftovers(&mut self) -> Vec<Leftover> {
             self.0.lock().unwrap().leftovers.clone()
         }
+        fn offered(&mut self, key: &str) {
+            self.call(format!("offered {key}"));
+        }
         fn write(&mut self, snapshot: Snapshot) {
             self.call(format!("write {}", snapshot.document));
         }
@@ -302,7 +334,7 @@ mod tests {
         fn remove(&mut self, key: &str) {
             self.call(format!("remove {key}"));
         }
-        fn problem(&mut self) -> Option<String> {
+        fn problem(&mut self) -> Option<Problem> {
             self.0.lock().unwrap().problem.take()
         }
         fn finish(&mut self) {
@@ -352,19 +384,30 @@ mod tests {
         calls(&log);
         finish(&mut t.app);
         assert_eq!(calls(&log), [format!("discard {id}"), "finish".into()]);
+        tick_at(&mut t.app, 2000.0, false);
+        assert!(calls(&log).is_empty(), "nothing is copied once the window closes");
     }
 
     #[test]
-    fn a_failed_copy_is_reported_once() {
+    fn a_failed_copy_is_reported_once_and_written_again() {
         let mut t = TestApp::new();
         let log = Arc::new(Mutex::new(Log::default()));
         start(&mut t.app, Some(Box::new(Fake(Arc::clone(&log)))));
-        for _ in 0..2 {
-            log.lock().unwrap().problem = Some("the disk is full".into());
+        let id = t.app.session.active().unwrap().id;
+        t.ok("engine.execute", json!({"command": "glyph.newGlyph", "params": {"name": "recoverA"}}));
+        t.app.recovery.changed.clear();
+        tick_at(&mut t.app, 1000.0, true);
+        tick_at(&mut t.app, 1031.0, true);
+        calls(&log);
+        for (now, shown) in [(1032.0, true), (1063.0, false), (2000.0, true)] {
+            log.lock().unwrap().problem = Some(Problem { text: "the disk is full".into(), documents: vec![id] });
             t.app.status.clear();
-            tick_at(&mut t.app, 0.0, true);
+            let next = tick_at(&mut t.app, now, true);
+            assert_eq!((!t.app.status.is_empty(), next), (shown, Some(INTERVAL)), "{now}");
         }
-        assert_eq!(t.app.status, "", "only the first failure is reported");
+        calls(&log);
+        tick_at(&mut t.app, 2031.0, true);
+        assert_eq!(calls(&log), [format!("write {id}")], "the unsaved work has no copy yet");
     }
 
     /// The copy of an earlier run opens as a document with unsaved changes; saving over its file asks first. A hostile
@@ -395,12 +438,25 @@ mod tests {
         let mut t = TestApp::new();
         start(&mut t.app, Some(Box::new(Fake(Arc::clone(&log)))));
         t.frames(2);
+        assert!(calls(&log).contains(&"offered a".to_string()));
         t.ok("engine.execute", json!({"command": RECOVER, "params": {"answer": "recover"}}));
+        t.frame();
         let doc = t.app.session.active().unwrap();
         assert!(doc.modified(), "unsaved");
         assert_eq!((doc.title.as_str(), doc.path.as_deref(), doc.font.family_name.as_str()), ("Work", Some(original.as_path()), "Recovered"));
         let id = doc.id;
-        assert!(calls(&log).contains(&format!("adopt {id} a")));
+        let done = calls(&log);
+        let at = |call: String| done.iter().position(|c| *c == call).unwrap_or_else(|| panic!("{call}: {done:?}"));
+        assert!(at(format!("adopt {id} a")) < at(format!("write {id}")), "the copy is this run's at once");
+        // The window gets the focus back: the file is as it was when the work was recovered.
+        t.frame_with(vec![egui::Event::WindowFocused(false)]);
+        t.frame_with(vec![egui::Event::WindowFocused(true)]);
+        t.frames(2);
+        assert!(!t.app.view.extensions.external.open, "the file's old state is not offered over the recovered work");
+        assert!(fontcraft_engine::cmd::external_changes::changed_on_disk(&t.app.session).is_empty());
+        let review = t.ok("engine.execute", json!({"command": "file.reviewExternalChanges", "params": {}}));
+        assert_eq!((review["changed"].as_bool(), review["saveNeedsForce"].as_bool()), (Some(false), Some(true)), "{review}");
+        assert_eq!(t.app.session.font().unwrap().family_name, "Recovered");
         let error = t.error("engine.execute", json!({"command": "file.save", "params": {}}));
         assert!(error.contains("changed on disk"), "{error}");
         assert_eq!(std::fs::read(&original).unwrap(), before, "the user's file is untouched");

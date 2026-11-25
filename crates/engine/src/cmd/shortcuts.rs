@@ -13,6 +13,7 @@ use crate::shortcuts::{Chord, Custom, MAX_CUSTOM, meet, system};
 /// Longest search text, in characters.
 const MAX_SEARCH_CHARS: usize = 128;
 /// Largest file of shortcuts read, in bytes.
+#[cfg(not(target_arch = "wasm32"))]
 const MAX_FILE_BYTES: usize = 1 << 20;
 
 pub fn specs() -> Vec<CommandSpec> {
@@ -307,6 +308,7 @@ fn reset(s: &mut Session, v: &Value) -> Result<Value> {
 }
 
 /// What the exported file holds under its one key.
+#[cfg(not(target_arch = "wasm32"))]
 const FILE_KEY: &str = "shortcuts";
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -340,12 +342,19 @@ fn import(s: &mut Session, v: &Value) -> Result<Value> {
     for (id, chord) in read.iter() {
         let known = actions.iter().find(|a| a.id == id && !a.fixed);
         if let Some(chord) = chord {
-            let fixed = known.is_some_and(|a| holders(&actions, a, &chord, &read).iter().any(|h| h.fixed));
+            let held = known.map(|a| holders(&actions, a, &chord, &read)).unwrap_or_default();
+            let fixed = held.iter().any(|h| h.fixed);
             let blocked = system(&chord).is_some_and(|found| found.blocked);
             if fixed || blocked {
                 let why = if fixed { "a fixed key has it" } else { "the system keeps it" };
                 problems.push(format!("{id}: {} is left out: {why}", chord.text()));
                 continue;
+            }
+            // Two commands of the set that share a shortcut are named once.
+            let shared: Vec<&str> =
+                held.iter().map(|h| h.id.as_str()).filter(|other| !(*other < id && read.iter().any(|(id, _)| id == *other))).collect();
+            if !shared.is_empty() {
+                problems.push(format!("{id}: {} is also the shortcut of {}", chord.text(), shared.join(", ")));
             }
         }
         // The built-in shortcut, or none where there is none, is no override.
@@ -433,5 +442,8 @@ mod tests {
             json!({"shortcuts": [{"command": "edit.redo", "shortcut": blocked}, {"command": "edit.undo", "shortcut": "Cmd+Z"}]}),
         );
         assert_eq!((&r["imported"], r["problems"].as_array().unwrap().len()), (&json!(0), 1), "a built-in shortcut is no override: {r}");
+        let set = json!([{"command": "edit.redo", "shortcut": "Cmd+Alt+Shift+Y"}, {"command": "edit.undo", "shortcut": "Cmd+Alt+Shift+Y"}]);
+        let r = run(&mut s, "settings.importShortcuts", json!({ "shortcuts": set }));
+        assert_eq!((&r["imported"], r["problems"].as_array().unwrap().len()), (&json!(2), 1), "a shared shortcut is named once: {r}");
     }
 }

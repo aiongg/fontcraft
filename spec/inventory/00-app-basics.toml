@@ -309,11 +309,11 @@ kind = "ui"
 params = "{key?: string, answer?: \"recover\" | \"discard\" | \"later\"} → {pending: [{key, title, original, ageSeconds}]}"
 area = "ui-chrome"
 milestone = "M14"
-summary = "Copies of documents with unsaved changes are kept in a recovery folder of the app's own while they are open: at most every 30 seconds, and when the window loses the focus. Saving or closing a document, or closing the window after answering for it, removes its copy. After a run that ended any other way, the next start asks about each copy it left, with the time it was written: Recover opens it as a document with unsaved changes, Discard removes it, Escape keeps it for the next start. No copy is ever written into the user's own file, and a recovered document's Save asks before it replaces that file. A copy that cannot be written is reported once and stops nothing."
+summary = "Copies of documents with unsaved changes are kept in a recovery folder of the app's own while they are open: at most every 30 seconds, and when the window loses the focus. Saving or closing a document, or closing the window after answering for it, removes its copy. After a run that ended any other way, the next start asks about each copy it left, with the time it was written: Recover opens it as a document with unsaved changes, Discard removes it, Escape keeps it for the next start. No copy is ever written into the user's own file, and a recovered document's Save asks before it replaces that file. A copy that cannot be written is reported once, tried again every 30 seconds and stops nothing."
 ref = "FontCraft design, following the sibling apps"
 status = "inferred"
 own = true
-notes = "FontCraft (M14.24): crates/ui/src/app/recovery.rs decides, apps/fontcraft/src/recovery.rs writes on a thread of its own, through the framework's recovery store, whose lock per run keeps two windows apart. At most 32 documents, 2 GB and 14 days. Projects have no copies, and the browser build keeps none."
+notes = "FontCraft (M14.24): crates/ui/src/app/recovery.rs decides, apps/fontcraft/src/recovery.rs writes on a thread of its own, through the framework's recovery store, whose lock per run keeps two windows apart. At most 32 documents and 2 GB; a copy first asked about more than 14 days ago and not written since is removed, one never asked about is kept. Only plain files of the app's own names are offered, removed or written. Projects have no copies, and the browser build keeps none."
 guesses = [
   "The interval of 30 seconds, the limits and the folder (the platform's state folder) are ours; the reference leaves recovery to the system's versioned documents.",
   "Each copy is asked about in a question of its own with its age, rather than in one list.",
@@ -328,10 +328,10 @@ label = "Open Recovered Document"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{path: string, original?: string, title?: string} → {title, path, glyphs, document}"
+params = "{path: string, original?: string, title?: string} → {title, path, glyphs, document, warnings}"
 area = "import-export"
 milestone = "M14"
-summary = "Opens a copy of unsaved work as a document with unsaved changes. Save goes to the file the work came from, and is refused until it is forced, since that file may hold something else by now. When that file is open already, the copy opens without a file."
+summary = "Opens a copy of unsaved work as a document with unsaved changes. Save goes to the file the work came from, and is refused until it is forced, since that file may hold something else by now. The file as it is when the work is recovered is what later changes on disk are told from; one that cannot be read then is compared with nothing. Glyph data beside it is read, as when it is opened. When that file is open already, the copy opens without a file."
 ref = "FontCraft design"
 status = "inferred"
 own = true

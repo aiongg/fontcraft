@@ -188,8 +188,8 @@ pub struct ShortcutsEditor {
     keymap: Option<Keymap>,
     state: DialogState,
     outbox: Vec<Msg>,
-    /// An edit was posted and the settings have not answered it yet.
-    waiting: bool,
+    /// The set posted last, while the settings have not answered it.
+    posted: Option<Value>,
     close: bool,
 }
 
@@ -199,12 +199,12 @@ impl ShortcutsEditor {
         if let Some(id) = command {
             state.select(&CommandRef::new(id));
         }
-        ShortcutsEditor { id: dialog_id("fontcraft.shortcuts"), stored, keymap: None, state, outbox: Vec::new(), waiting: false, close: false }
+        ShortcutsEditor { id: dialog_id("fontcraft.shortcuts"), stored, keymap: None, state, outbox: Vec::new(), posted: None, close: false }
     }
 
     /// Takes what the settings hold. An edit the engine changed or refused shows as the settings have it.
     fn take_stored(&mut self, stored: Overrides) {
-        let answered = std::mem::take(&mut self.waiting);
+        let answered = self.posted.take().is_some();
         if !answered && stored == self.stored {
             return;
         }
@@ -218,15 +218,16 @@ impl ShortcutsEditor {
 }
 
 impl StackDialog for ShortcutsEditor {
-    type Result = ();
+    /// The edits not handed to the app yet: the pass that closes the dialog may have made one, and so does Cancel.
+    type Result = Vec<Msg>;
 
     fn id(&self) -> DialogId {
         self.id
     }
 
-    fn show(&mut self, ui: &mut Ui, _: &DialogStack) -> Option<DialogResult<()>> {
+    fn show(&mut self, ui: &mut Ui, _: &DialogStack) -> Option<DialogResult<Vec<Msg>>> {
         if self.close {
-            return Some(DialogResult::Cancel);
+            return Some(DialogResult::Ok(std::mem::take(&mut self.outbox)));
         }
         let platform = craft::keymap::egui::platform(ui.ctx());
         let stored = &self.stored;
@@ -234,17 +235,24 @@ impl StackDialog for ShortcutsEditor {
         // Made per pass: the host's dialogs are `Send`, and the options hold a closure that is not.
         let options = options();
         let shown = ShortcutsDialog::new(keymap).options(&options).show(ui, &mut self.state);
-        if matches!(shown.outcome, Some(Outcome::Changed | Outcome::Ok)) && as_list(keymap.overrides()) != as_list(&self.stored) {
-            self.outbox.push(Msg::run(IMPORT, json!({ "shortcuts": as_list(keymap.overrides()) })));
-            self.waiting = true;
+        // A Cancel reports Changed on the pass after it, when it put edits back.
+        if matches!(shown.outcome, Some(Outcome::Changed | Outcome::Ok)) {
+            let list = as_list(keymap.overrides());
+            if list != self.posted.clone().unwrap_or_else(|| as_list(&self.stored)) {
+                self.outbox.push(Msg::run(IMPORT, json!({ "shortcuts": list })));
+                self.posted = Some(list);
+            }
         }
-        (!self.state.is_open()).then_some(DialogResult::Cancel)
+        (!self.state.is_open()).then(|| DialogResult::Ok(std::mem::take(&mut self.outbox)))
     }
 }
 
 /// Opens the dialog while the app asks for it, posts its edits, and closes it when the app closed it.
 pub fn run(host: &mut DialogHost, app: &mut FontCraftApp) {
-    if host.take::<ShortcutsEditor>().is_some() {
+    if let Some(result) = host.take::<ShortcutsEditor>() {
+        if let DialogResult::Ok(mut edits) = result {
+            app.sent.append(&mut edits);
+        }
         app.view.settings.shortcuts = ShortcutsState::default();
         return;
     }
@@ -318,6 +326,29 @@ mod tests {
         let custom = t.app.catalog.custom();
         assert_eq!(custom.shortcut("view.newTab", None).as_deref(), Some("Cmd+Alt+Shift+Y"), "closing it from outside undoes nothing");
         assert!(t.error("engine.execute", json!({"command": EDIT, "params": {"command": "no.such"}})).contains("no.such"));
+    }
+
+    /// Cancel puts the set back as it was when the dialog opened, in the settings too: the edits went there as they were
+    /// made.
+    #[test]
+    fn cancel_restores_the_settings() {
+        let mut t = TestApp::new();
+        t.ok("engine.execute", json!({"command": EDIT, "params": {}}));
+        t.frames(3);
+        // The dialog takes over what the settings hold, as it does for an edit of its own.
+        t.ok("engine.execute", json!({"command": "settings.setShortcut", "params": {"command": "view.newTab", "shortcut": "Cmd+Alt+Shift+Y"}}));
+        t.frames(3);
+        let shortcut = |t: &TestApp| t.app.catalog.custom().shortcut("view.newTab", None);
+        assert_eq!(shortcut(&t).as_deref(), Some("Cmd+Alt+Shift+Y"));
+        // The search field may take the first Escape.
+        for _ in 0..3 {
+            if t.app.view.settings.shortcuts.open {
+                t.call("ui.key", json!({"key": "Escape"}));
+                t.frames(3);
+            }
+        }
+        assert!(!t.app.view.settings.shortcuts.open);
+        assert_eq!(shortcut(&t), None, "what was cancelled is not kept");
     }
 
     /// Tools, numbered keys and queries are not listed; a key without a modifier and the system's are refused; the set

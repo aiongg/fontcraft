@@ -2,8 +2,7 @@
 //!
 //! The app decides when a copy is written and where; this module says what it holds ([`encode`]: the document in the
 //! native format, whatever it was opened from) and `file.openRecovered` opens one. A recovered document carries the
-//! file it came from but no stamp of it, so saving over that file asks first, as it does for a file something else
-//! changed.
+//! file it came from; saving over that file asks first, as it does for a file something else changed.
 
 use fontcraft_model::Font;
 

@@ -233,6 +233,9 @@ pub struct DocState {
     /// change made by something else in between.
     #[cfg(not(target_arch = "wasm32"))]
     pub stamp: Option<io::Stamp>,
+    /// Recovered from a copy and not saved yet: its file may hold work the copy does not, so a save over it asks.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) recovered: bool,
     /// The command areas' state for this document ([`slots`]).
     pub(crate) exts: slots::DocExts,
     /// The glyph data files beside the source, merged with the user's.
@@ -415,20 +418,26 @@ impl Session {
             revision: 0,
             #[cfg(not(target_arch = "wasm32"))]
             stamp,
+            #[cfg(not(target_arch = "wasm32"))]
+            recovered: false,
             exts: slots::DocExts::default(),
             glyph_data: glyph_data::CustomData::default(),
         });
         self.active = Some(self.docs.len() - 1);
     }
 
-    /// Opens `font` as unsaved work recovered from a copy: it counts as changed, and it has no stamp of the file
-    /// `path` it came from, so a save over that file is refused until it is forced.
+    /// Opens `font` as unsaved work recovered from a copy: it counts as changed, and a save over the file `path` it came
+    /// from is refused until it is forced. `original` is that file as it is now, with its stamp: what another program
+    /// changes is told from it. Without one the document has no stamp, and the file is compared with nothing.
     #[cfg(not(target_arch = "wasm32"))]
-    pub(crate) fn push_recovered(&mut self, font: Font, path: Option<PathBuf>, title: Option<String>) {
+    pub(crate) fn push_recovered(&mut self, font: Font, path: Option<PathBuf>, original: Option<(Font, io::Stamp)>, title: Option<String>) {
         self.push_document(font, path);
         let Some(doc) = self.docs.last_mut() else { return };
-        doc.saved = Arc::new(Font::clone(&doc.font));
-        doc.stamp = None;
+        doc.recovered = true;
+        (doc.saved, doc.stamp) = match original {
+            Some((font, stamp)) => (Arc::new(font), Some(stamp)),
+            None => (Arc::new(Font::clone(&doc.font)), None),
+        };
         if let Some(title) = title {
             doc.title = title;
         }
