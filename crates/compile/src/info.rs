@@ -671,8 +671,7 @@ pub(crate) fn derive_with_family(font: &Resolved, family: &str, style: &str, war
     let stated_vertical = if ufo {
         ["vheaVertAscender", "vheaVertDescender", "vheaVertLineGap"].iter().all(|n| params.get(n).and_then(float).is_some())
     } else {
-        ["vheaVertAscender", "vheaVertDescender", "vheaVertLineGap"].iter().all(|n| params.get(n).and_then(int).is_some())
-            || font.vertical_layers
+        ["vheaVertAscender", "vheaVertDescender", "vheaVertLineGap"].iter().all(|n| params.get(n).and_then(int).is_some()) || font.vertical_layers
     };
     let vertical = crate::export_params::vertical_table(params).unwrap_or(stated_vertical);
 

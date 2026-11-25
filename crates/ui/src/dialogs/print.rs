@@ -62,7 +62,7 @@ craft::ui::words! {
         preview_note: "fontcraftPrint.previewNote" = "The preview leaves out the labels set in the printer's own font.";
         previous: "fontcraftPrint.previous" = "Previous Page";
         next: "fontcraftPrint.next" = "Next Page";
-        page: "fontcraftPrint.page" = "Page {page} of {pages}";
+        page: template "fontcraftPrint.page" = "Page {page} of {pages}";
         print: "fontcraftPrint.print" = "Print";
         save: "fontcraftPrint.save" = "Save as PDF…";
         done: "fontcraftPrint.done" = "Done";
@@ -71,8 +71,8 @@ craft::ui::words! {
         no_printers: "fontcraftPrint.noPrinters" = "No printer was found. Save the pages as a PDF file, or add a printer and press Refresh.";
         discovery_failed: "fontcraftPrint.discoveryFailed" = "The list of printers could not be read.";
         sending: "fontcraftPrint.sending" = "Sending the pages to the printer…";
-        sent: "fontcraftPrint.sent" = "Sent to the printer: {receipt}";
-        failed: "fontcraftPrint.failed" = "The pages were not printed: {error}";
+        sent: template "fontcraftPrint.sent" = "Sent to the printer: {receipt}";
+        failed: template "fontcraftPrint.failed" = "The pages were not printed: {error}";
         stopped: "fontcraftPrint.stopped" = "The print job stopped without an answer.";
     }
 }

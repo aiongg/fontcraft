@@ -87,7 +87,9 @@ fn an_agent_builds_composites_and_exports_them() {
     let set = run(&mut s, "glyph.setAnchors", json!({"glyphs": glyphs}));
     assert!(set["added"].as_u64().unwrap() >= 18, "{set}");
     for (glyph, names) in [("A", ["bottom", "top"]), ("idotless", ["bottom", "top"]), ("acutecomb", ["_top", "top"])] {
-        names.map(|n| anchor(&s, glyph, n));
+        for n in names {
+            anchor(&s, glyph, n);
+        }
     }
     let added = run(&mut s, "glyph.addGlyphs", json!({"text": "Agrave Eacute idieresis n+n=n_n"}));
     assert_eq!(added["skipped"], json!([]), "{added}");
