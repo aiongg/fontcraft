@@ -196,7 +196,7 @@ fn erase_corner(ring: &mut Ring, j: usize, grid: f64, work: &mut usize) -> bool 
         return false;
     }
     for (k, nodes) in changed {
-        ring.nodes.splice(k..=k, nodes);
+        drop(ring.nodes.splice(k..=k, nodes));
     }
     true
 }

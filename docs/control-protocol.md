@@ -283,7 +283,8 @@ input did takes several rounds of frames and is answered after the last:
   (`{changed: false}`). A radio button is turned off by choosing another one.
 - `set: "text"`: `value` is a text of at most 4,096 characters or a number. The field is clicked,
   its text selected and replaced, and Tab commits it; a list of suggestions the typing opened is
-  closed first with Escape, so the text stays as given. Line breaks are taken by multi-line fields
+  closed first with Escape, so the text stays as given. Nothing is typed, and the request fails,
+  when the click did not give the field the keyboard. Line breaks are taken by multi-line fields
   only; other control characters are refused.
 - `set: "choice"`: `value` is the label of an option, in any case where only one matches. The list
   opens and the option is clicked; one that is not in view is typed first, which brings it there.
@@ -294,7 +295,7 @@ input did takes several rounds of frames and is answered after the last:
   has the `value` it reached, which is another one where the slider keeps to its own stops.
 
 An element that is disabled, read-only or out of view is refused. What covers an element at that
-point takes the click, as it takes the mouse's. The replies are those of
+point takes the click, as it takes the mouse's, but not the keys after it. The replies are those of
 [Window input](#window-input), with `changed: true` for a change; read the new value with
 `ui.elements`.
 

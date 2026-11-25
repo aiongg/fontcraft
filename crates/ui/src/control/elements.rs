@@ -132,6 +132,8 @@ pub struct Stage {
 
 #[derive(Clone, Copy, Debug)]
 enum Next {
+    /// A field was clicked and should have the keyboard.
+    Focused,
     /// A field's text was typed; `options` showed in a list under the same label before.
     Commit { options: bool },
     /// The list of a select is open, or opening; `typed` once the option's label was typed into it.
@@ -453,6 +455,20 @@ fn options(app: &FontCraftApp, method: &str, viewport: ViewportId, label: &str) 
     })
 }
 
+/// Whether the keys pressed now go to `element`: it has the keyboard, or an option of its list stands for it.
+fn has_keyboard(app: &FontCraftApp, method: &str, target: &Target) -> Result<bool, String> {
+    Ok(target.element.focused || options(app, method, target.viewport, &target.element.label)?.iter().any(|o| o.focused))
+}
+
+/// Whether the keys pressed now go to something else than `element` and its open list.
+fn keyboard_elsewhere(app: &FontCraftApp, method: &str, target: &Target) -> Result<bool, String> {
+    let label = target.element.label.as_str();
+    with_windows(app, method, |windows| {
+        let mut focused = windows.iter().filter(|w| w.viewport == target.viewport).flat_map(|w| &w.elements).filter(|e| e.focused);
+        focused.any(|e| e.id != target.element.id && e.label != label && e.within.as_deref().unwrap_or_default() != label)
+    })
+}
+
 /// What a round of `ui.set` came to.
 enum Round {
     Done(Value),
@@ -484,8 +500,8 @@ impl Target {
 }
 
 /// `ui.set {element, value}`: a check box, switch or toggle takes `true` or `false` and is clicked when it is not
-/// there already; a text or number field takes a text or a number: it is clicked, its text selected and replaced, and
-/// Tab commits it, after Escape has closed the suggestions that would take the Tab; a select takes the label of an
+/// there already; a text or number field takes a text or a number: it is clicked, and once it has the keyboard its text
+/// is selected and replaced, and Tab commits it, after Escape has closed the suggestions that would take the Tab; a select takes the label of an
 /// option, which is picked from its list; a slider takes a number and is dragged there. The reply is
 /// `{changed: false}`, or `{queued, window, changed: true}` with the `value` a slider reached.
 pub fn set(app: &mut FontCraftApp, params: &Value) -> Result<Value, String> {
@@ -565,6 +581,10 @@ fn type_text(app: &mut FontCraftApp, target: &Target, value: &Value, next: Optio
     let (element, label) = (&target.element, &target.element.label);
     let showing = !options(app, M, target.viewport, label)?.is_empty();
     if let Some(Next::Commit { options }) = next {
+        // A field that lost the keyboard has what was typed; the keys would go to something else.
+        if !has_keyboard(app, M, target)? {
+            return Ok(Round::Done(json!({"changed": true})));
+        }
         // Escape closes the suggestions and nothing else while they show; without them it would restore the text.
         let mut steps = if showing && !options { target.key(Key::Escape, Mods::NONE) } else { 0 };
         steps += target.key(Key::Tab, Mods::NONE);
@@ -576,10 +596,17 @@ fn type_text(app: &mut FontCraftApp, target: &Target, value: &Value, next: Optio
     if text.chars().any(|c| c.is_control() && !(lines && c == '\n')) {
         return Err(format!("{M}: `{label}` takes no control characters"));
     }
-    let mut steps = target.click(M, element)?;
+    if !matches!(next, Some(Next::Focused)) {
+        let steps = target.click(M, element)?;
+        queued(app, steps, target.viewport);
+        return Ok(Round::More(Next::Focused));
+    }
+    if !has_keyboard(app, M, target)? {
+        return Err(format!("{M}: `{label}` did not take the keyboard when it was clicked; something covers it"));
+    }
     let mut command = Mods::NONE;
     command.cmd = true;
-    steps += target.key(Key::A, command);
+    let mut steps = target.key(Key::A, command);
     if text.is_empty() {
         steps += target.key(Key::Backspace, Mods::NONE);
     } else {
@@ -621,6 +648,9 @@ fn choose(app: &mut FontCraftApp, target: &Target, value: &Value, next: Option<N
         return Ok(Round::Done(json!({"changed": true})));
     }
     if found.is_none_or(|o| o.enabled) && !typed {
+        if keyboard_elsewhere(app, M, target)? {
+            return Err(format!("{M}: the list of `{label}` does not have the keyboard, so `{want}` was not typed into it"));
+        }
         // Typing moves the list to the options that start with the text, and narrows one with a filter field.
         target.host.inject_text(target.viewport, &want);
         queued(app, 1, target.viewport);
@@ -724,6 +754,35 @@ mod tests {
             ("ui.set", json!({"element": family["id"]})),
         ] {
             assert!(!t.error(method, bad).is_empty());
+        }
+    }
+
+    /// A click that does not give the field the keyboard types nothing: the keys would go to what took it.
+    #[test]
+    fn a_field_that_did_not_get_the_keyboard_is_not_typed_into() {
+        let mut t = TestApp::new();
+        t.ok("engine.execute", json!({"command": "font.info", "params": {}}));
+        t.frames(3);
+        let before = t.app.session.font().unwrap().clone();
+        let fields = t.ok("ui.elements", json!({"role": "textInput"}));
+        let fields = fields["elements"].as_array().cloned().unwrap_or_default();
+        let fields: Vec<&Value> = fields.iter().filter(|e| e["set"] == "text" && e["visible"] == true && e["label"] != "").collect();
+        let (Some(field), Some(other)) = (fields.first(), fields.get(1)) else { panic!("two fields: {fields:?}") };
+        for value in ["", "Typed elsewhere"] {
+            let params = json!({"element": field["id"], "value": value});
+            for _ in 0..crate::control::frames_before(&t.app, "ui.set", &params) {
+                t.frame();
+            }
+            crate::control::handle(&mut t.app, &json!({"id": 1, "method": "ui.set", "params": params}));
+            t.frames(6);
+            // Something else takes the keyboard before the next round.
+            let stage = t.app.control.stage.take();
+            assert!(stage.is_some());
+            t.ok("ui.click", json!({"element": other["id"]}));
+            t.app.control.stage = stage;
+            assert!(t.error("ui.set", params).contains("did not take the keyboard"));
+            t.frames(3);
+            assert!(t.app.session.font().unwrap().same_as(&before));
         }
     }
 
