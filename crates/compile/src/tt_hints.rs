@@ -298,6 +298,7 @@ pub fn tt_hinting(
     }
 
     let family = match family_tt_zones(source) {
+        Ok(z) if auto.is_some() => measured.family_zones(z, &settings),
         Ok(z) => z,
         Err(e) => {
             warnings.push(format!("the family TT zones cannot be read ({e}); its TrueType hints were left out"));
@@ -348,7 +349,11 @@ pub fn tt_hinting(
                 programs.cvt.extend(cvt);
                 programs.prep.extend(extra);
             }
-            Err(e) => warnings.push(format!("the TTFAutohint options cannot be applied to `prep` ({e}); they were left out")),
+            Err(e) => {
+                // The glyph programs would read overshoot entries and storage it sets.
+                warnings.push(format!("the TrueType autohinter's `prep` cannot be built ({e}); its TrueType hints were left out"));
+                return Ok(raw_only(raw, warnings));
+            }
         }
         // `maxp.maxSizeOfInstructions` counts glyph programs only.
         programs.limits.max_size_of_instructions = 0;

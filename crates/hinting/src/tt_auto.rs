@@ -50,7 +50,7 @@ use fontcraft_model::{Font, Layer, Shape};
 use crate::control::{ControlInstructions, ControlKind};
 use crate::tt::delta_column_key;
 use crate::tt_styles::{Styles, ZoneGroup, measure_scripts};
-use crate::{DeltaDir, Direction, HintSettings, HintingError, NodeRef, PointMap, Rounding, StemRef, TtInstruction, TtKind, TtPoint, ZoneRef};
+use crate::{DeltaDir, Direction, HintSettings, HintingError, NodeRef, PointMap, Rounding, StemRef, TtInstruction, TtKind, TtPoint, TtZone, ZoneRef};
 
 /// Most nodes of one layer the autohinter looks at (the TrueType point limit).
 pub const MAX_AUTOHINT_NODES: usize = 65_535;
@@ -445,15 +445,16 @@ pub fn autohint_prep(
     };
     let exceptions = snapping_exceptions(&options.x_height_snapping_exceptions)
         .map_err(|message| HintingError::BadParameter { name: "TTFAutohint options".into(), message })?;
+    let align = Alignment::of(&settings.tt_zones);
     // Group 0 comes last: its scaling is what the stem function finds in storage.
     t.push_str(&no_zones_group());
     for (number, group) in measured.styles.own_groups().take_while(|(n, _)| group_storage(*n).is_some()) {
-        t.push_str(&group_rows(options, settings, layout, &exceptions, &NumberedGroup { number, group: group.clone() }));
+        t.push_str(&group_rows(options, settings, layout, &exceptions, &align, &NumberedGroup { number, group: group.clone() }));
     }
     let zones: Vec<usize> = (0..settings.tt_zones.len()).filter(|k| measured.styles.zone_group(*k) == 0).collect();
     let named_x = zones.iter().copied().find(|k| settings.tt_zones.get(*k).is_some_and(|z| z.name == "xHeight"));
     let group = ZoneGroup { zones, x_height: named_x.filter(|_| measured.x_height) };
-    t.push_str(&group_rows(options, settings, layout, &exceptions, &NumberedGroup { number: 0, group }));
+    t.push_str(&group_rows(options, settings, layout, &exceptions, &align, &NumberedGroup { number: 0, group }));
     if options.hinting_limit > 0 {
         let _ = writeln!(t, "MPPEM[ ]\nPUSH {}\nGT[ ]\nIF[ ]\nPUSH 1 1\nINSTCTRL[ ]\nEIF[ ]", options.hinting_limit.min(MAX_OPTION_PPM));
     }
@@ -680,11 +681,9 @@ ENDF[ ]
 ; {FN_AUTO_STEM_GROUP}: origin target width scaled fitted
 PUSH {FN_AUTO_STEM_GROUP}
 FDEF[ ]
-RS[ ]
 PUSH {S_X_FITTED}
 SWAP[ ]
 WS[ ]
-RS[ ]
 PUSH {S_X_SCALED}
 SWAP[ ]
 WS[ ]
@@ -738,6 +737,47 @@ struct NumberedGroup {
     group: ZoneGroup,
 }
 
+/// Which zone each zone is aligned to.
+struct Alignment {
+    target: Vec<Option<usize>>,
+    /// 0 for a zone rounded on its own, `None` in or below a cycle.
+    depth: Vec<Option<usize>>,
+}
+
+impl Alignment {
+    fn of(zones: &[TtZone]) -> Self {
+        let target: Vec<Option<usize>> = zones
+            .iter()
+            .enumerate()
+            .map(|(k, z)| {
+                let name = z.align.as_deref()?;
+                zones.iter().position(|z| z.name == name).filter(|&j| j != k)
+            })
+            .collect();
+        let depth = (0..zones.len())
+            .map(|start| {
+                let mut k = start;
+                for d in 0..=zones.len() {
+                    match target.get(k).copied().flatten() {
+                        Some(j) => k = j,
+                        None => return Some(d),
+                    }
+                }
+                None
+            })
+            .collect();
+        Self { target, depth }
+    }
+
+    fn target(&self, k: usize) -> Option<usize> {
+        self.target.get(k).copied().flatten()
+    }
+
+    fn depth(&self, k: usize) -> Option<usize> {
+        self.depth.get(k).copied().flatten()
+    }
+}
+
 /// The `prep` text of one zone group: its scaling, kept in its storage, its zones' rows and their
 /// overshoots.
 fn group_rows(
@@ -745,9 +785,10 @@ fn group_rows(
     settings: &HintSettings,
     layout: &crate::CvtLayout,
     exceptions: &[(u16, u16)],
+    align: &Alignment,
     at: &NumberedGroup,
 ) -> String {
-    let mut t = x_height_scaling(options, settings, layout, exceptions, at);
+    let mut t = x_height_scaling(options, settings, layout, exceptions, align, at);
     if let Some(s) = group_storage(at.number) {
         for (to, from) in [(s, S_X_SCALED), (s.saturating_add(1), S_X_FITTED)] {
             t.push_str(&format!("PUSH {to} {from}\nRS[ ]\nWS[ ]\n"));
@@ -786,6 +827,7 @@ fn x_height_scaling(
     settings: &HintSettings,
     layout: &crate::CvtLayout,
     exceptions: &[(u16, u16)],
+    align: &Alignment,
     at: &NumberedGroup,
 ) -> String {
     use crate::tt_font::{FN_ROUND, MAX_ZONE_THRESHOLD_PX};
@@ -837,25 +879,8 @@ fn x_height_scaling(
     }
     let _ = writeln!(t, "WS[ ]\nPUSH {S_X_SCALED}\nRS[ ]\nPUSH 0\nGT[ ]\nPUSH {S_X_FITTED}\nRS[ ]\nPUSH 0\nGT[ ]\nAND[ ]\nIF[ ]");
 
-    // Alignment depth of each zone: 0 for a zone rounded on its own, `None` in or below a cycle.
-    let target = |k: usize| -> Option<usize> {
-        let name = zones.get(k)?.align.as_deref()?;
-        zones.iter().position(|z| z.name == name).filter(|&j| j != k)
-    };
-    let depth: Vec<Option<usize>> = (0..zones.len())
-        .map(|start| {
-            let mut k = start;
-            for d in 0..=zones.len() {
-                match target(k) {
-                    Some(j) => k = j,
-                    None => return Some(d),
-                }
-            }
-            None
-        })
-        .collect();
     let mut aligned: Vec<(usize, usize, usize)> =
-        at.group.zones.iter().copied().filter_map(|k| Some((depth.get(k).copied().flatten().filter(|d| *d > 0)?, k, target(k)?))).collect();
+        at.group.zones.iter().copied().filter_map(|k| Some((align.depth(k).filter(|d| *d > 0)?, k, align.target(k)?))).collect();
     aligned.sort();
     // FN_ZONE_ALIGN's placement of zone `k` on zone `j`: the target's row plus the rounded distance.
     let placement = |k: usize, j: usize| -> Option<String> {
@@ -875,7 +900,7 @@ fn x_height_scaling(
     };
     for &k in &at.group.zones {
         let Some(z) = zones.get(k) else { continue };
-        if depth.get(k).copied().flatten() != Some(0) {
+        if align.depth(k) != Some(0) {
             continue;
         }
         let (Some((_, fit)), Some(src)) = (layout.zones.get(k).copied(), source(k)) else { continue };
@@ -918,6 +943,21 @@ pub struct MeasuredZones {
     pub x_height: bool,
     /// The zones of each script ([`prepare_settings`]).
     pub styles: Styles,
+    /// The master's own zones at the start of the settings' list; [`prepare_settings`] appends the
+    /// scripts' after them.
+    pub own_zones: usize,
+}
+
+impl MeasuredZones {
+    /// The family zones of an autohinted build: `family` with the zones appended to `settings`
+    /// after the master's own, which are their own family zones, when there is one family zone for
+    /// each of the master's. Else `family`, which then does not apply ([`crate::CvtLayout`]).
+    pub fn family_zones(&self, mut family: Vec<TtZone>, settings: &HintSettings) -> Vec<TtZone> {
+        if !family.is_empty() && family.len() == self.own_zones {
+            family.extend(settings.tt_zones.iter().skip(self.own_zones).cloned());
+        }
+        family
+    }
 }
 
 /// Leaves out of `settings` the zones the autohinter has no letters for, as ttfautohint, which
@@ -926,12 +966,13 @@ pub struct MeasuredZones {
 /// C, Q or S has. A zone that holds the top of a letter of the other list stays, since ttfautohint
 /// measures a zone at that height (a font whose capitals are as tall as its x-height).
 pub fn drop_unmeasured_zones(font: &Font, settings: &mut HintSettings) -> MeasuredZones {
-    drop_zones(font, settings, [false, false])
+    let fuzz = settings.tt_blue_fuzz;
+    drop_zones(font, settings, [false, false], fuzz)
 }
 
 /// [`drop_unmeasured_zones`], with the `xHeight` and `capHeight` zones that hold a height of
-/// another script's letters (`holds`) kept.
-fn drop_zones(font: &Font, settings: &mut HintSettings, holds: [bool; 2]) -> MeasuredZones {
+/// another script's letters (`holds`) kept; `fuzz` widens the zones.
+fn drop_zones(font: &Font, settings: &mut HintSettings, holds: [bool; 2], fuzz: f64) -> MeasuredZones {
     let tops = |letters: &[char]| -> Vec<f64> {
         font.glyphs
             .iter()
@@ -941,7 +982,7 @@ fn drop_zones(font: &Font, settings: &mut HintSettings, holds: [bool; 2]) -> Mea
             .collect()
     };
     let (lower, upper) = (tops(&X_HEIGHT_LETTERS), tops(&CAP_HEIGHT_LETTERS));
-    let fuzz = if settings.tt_blue_fuzz.is_finite() { settings.tt_blue_fuzz.max(0.0) } else { 0.0 };
+    let fuzz = if fuzz.is_finite() { fuzz.max(0.0) } else { 0.0 };
     let mut gone = Vec::new();
     let lists = [("xHeight", &lower, &upper), ("capHeight", &upper, &lower)];
     for ((name, own, other), held) in lists.into_iter().zip(holds) {
@@ -952,20 +993,23 @@ fn drop_zones(font: &Font, settings: &mut HintSettings, holds: [bool; 2]) -> Mea
         }
     }
     settings.tt_zones.retain(|z| !gone.contains(&z.name));
-    MeasuredZones { left_out: gone, x_height: !lower.is_empty(), styles: Styles::default() }
+    MeasuredZones { left_out: gone, x_height: !lower.is_empty(), styles: Styles::default(), own_zones: settings.tt_zones.len() }
 }
 
 /// Prepares `settings` for an autohinted build: leaves out the zones without letters
 /// ([`drop_unmeasured_zones`]; a letter of a script that shares the zone counts too), appends the
-/// zones measured on the letters of the other scripts ([`crate::tt_styles`]) and, when the master has no horizontal TT stem, adds one of the
-/// standard width ([`standard_stem`]). Every master of a variable font gets the same entries.
+/// zones measured on the letters of the other scripts ([`crate::tt_styles`]) and, when the master has
+/// no horizontal TT stem, adds one of the standard width ([`standard_stem`]). Which letters a zone
+/// holds is decided with the main master's TTFBlueFuzz, so every master of a variable font gets the
+/// same entries.
 pub fn prepare_settings(font: &Font, settings: &mut HintSettings, options: &TtAutohintOptions) -> MeasuredZones {
     let main = match settings.main_master == settings.master {
         true => None,
-        false => HintSettings::for_master(font, &settings.main_master).ok().map(|s| s.tt_zones),
+        false => HintSettings::for_master(font, &settings.main_master).ok(),
     };
-    let scripts = measure_scripts(font, settings, main.as_deref().unwrap_or(&settings.tt_zones));
-    let mut measured = drop_zones(font, settings, scripts.holds);
+    let (zones, fuzz) = main.as_ref().map_or((&settings.tt_zones, settings.tt_blue_fuzz), |m| (&m.tt_zones, m.tt_blue_fuzz));
+    let scripts = measure_scripts(font, settings, zones, fuzz);
+    let mut measured = drop_zones(font, settings, scripts.holds, fuzz);
     measured.x_height |= scripts.x_height;
     measured.styles = scripts.styles;
     measured.styles.shift(settings.tt_zones.len());

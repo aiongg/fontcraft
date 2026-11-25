@@ -68,7 +68,8 @@ pub const FN_AUTO_STEM: u8 = 10;
 /// and signed, replaced by the one that shows.
 pub const FN_AUTO_OVERSHOOT: u8 = 11;
 /// [`FN_AUTO_STEM`] for a glyph of another zone group than the first: origin, target, stem width
-/// entry (−1: none), the storage of the group's scaled x-height and of its fitted one.
+/// entry (−1: none), the group's scaled x-height and its fitted one. The caller reads both from
+/// storage, where their numbers are constants the analysis of a program can follow.
 pub const FN_AUTO_STEM_GROUP: u8 = 12;
 
 /// Storage set by `prep`: 1 when overshoots show at this size.

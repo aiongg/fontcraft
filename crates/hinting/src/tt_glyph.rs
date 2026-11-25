@@ -337,7 +337,7 @@ impl Compiler<'_, '_> {
                     let scaled = (auto && c.cx.auto_group > 0).then(|| crate::tt_auto::group_storage(c.cx.auto_group)).flatten();
                     if let Some(scaled) = scaled {
                         c.line(format_args!(
-                            "PUSH {} {} {w} {scaled} {} {FN_AUTO_STEM_GROUP}\nCALL[ ]",
+                            "PUSH {} {} {w} {scaled}\nRS[ ]\nPUSH {}\nRS[ ]\nPUSH {FN_AUTO_STEM_GROUP}\nCALL[ ]",
                             origin.index,
                             target.index,
                             scaled.saturating_add(1)

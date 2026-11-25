@@ -688,8 +688,8 @@ fn read_gasp(v: &Value, warnings: &mut Vec<String>) -> Vec<(u16, u16)> {
     by_size.into_iter().collect()
 }
 
-/// The built-in glyph data, read once, for the glyph filters of TT zones and stems.
-fn glyph_data() -> Option<&'static GlyphData> {
+/// The built-in glyph data, read once.
+pub(crate) fn glyph_data() -> Option<&'static GlyphData> {
     static DATA: OnceLock<Option<GlyphData>> = OnceLock::new();
     DATA.get_or_init(|| GlyphData::new().ok()).as_ref()
 }

@@ -14,16 +14,15 @@
 //! caseless letters apart, gathered into clusters of [`CLUSTER_EM`] em. A cluster of at least a
 //! fifth of those letters is a zone from the median flat edge to the median round one. The
 //! x-height is the lowest such top of the lower case, else the commonest top of caseless letters.
-//! Which letters make a cluster is decided on the main master, so every master of a variable font
-//! gets the same zones.
+//! Which letters make a cluster is decided on the main master, with its TTFBlueFuzz, so every master
+//! of a variable font gets the same zones.
 
 use std::collections::BTreeMap;
-use std::sync::OnceLock;
 
 use fontcraft_geom::{BezPath, PathEl, Point};
-use fontcraft_model::glyphdata::GlyphData;
 use fontcraft_model::{Font, Glyph, glyph_props};
 
+use crate::settings::glyph_data;
 use crate::{HintSettings, MAX_TT_ZONES, TtAutohintOptions, TtZone};
 
 /// A script the autohinter measures zones for.
@@ -156,11 +155,6 @@ impl Styles {
         }
         GlyphStyle::Group(tagged(&options.fallback_script).and_then(|s| self.scripts.get(&s)).copied().unwrap_or(NO_ZONES))
     }
-}
-
-fn glyph_data() -> Option<&'static GlyphData> {
-    static DATA: OnceLock<Option<GlyphData>> = OnceLock::new();
-    DATA.get_or_init(|| GlyphData::new().ok()).as_ref()
 }
 
 /// Characters of no script that are hinted as Latin: the ones of ASCII and Latin-1, the general
@@ -404,12 +398,12 @@ pub(crate) struct ScriptZones {
 }
 
 /// Measures the scripts other than Latin that the font draws; `main_zones` are the main master's
-/// TT zones and `settings` the master's being built.
-pub(crate) fn measure_scripts(font: &Font, settings: &HintSettings, main_zones: &[TtZone]) -> ScriptZones {
+/// TT zones and `fuzz` its TTFBlueFuzz; `settings` are the master's being built.
+pub(crate) fn measure_scripts(font: &Font, settings: &HintSettings, main_zones: &[TtZone], fuzz: f64) -> ScriptZones {
     let mut out = ScriptZones::default();
     out.styles.scripts.insert(0, 0);
     let main = if font.master(&settings.main_master).is_ok() { settings.main_master.as_str() } else { settings.master.as_str() };
-    let fuzz = if settings.tt_blue_fuzz.is_finite() { settings.tt_blue_fuzz.max(0.0) } else { 0.0 };
+    let fuzz = if fuzz.is_finite() { fuzz.max(0.0) } else { 0.0 };
     let named = |n: &str| main_zones.iter().position(|z| z.name == n);
     let (x_zone, cap_zone) = (named("xHeight"), named("capHeight"));
     let room = MAX_TT_ZONES.saturating_sub(settings.tt_zones.len());
@@ -522,6 +516,47 @@ mod tests {
             assert_eq!(top(&font, 'x', &options, ppem), latin, "x at {ppem} PPM");
             assert_eq!(top(&font, 'п', &options, ppem), cyrillic, "п at {ppem} PPM");
         }
+    }
+
+    /// A master with a TTFBlueFuzz of its own gets the zones the main master gets: a Cyrillic x-height
+    /// 4 units above the xHeight zone stays a group of its own. A family zone for each of the master's
+    /// zones keeps applying beside the appended ones.
+    #[test]
+    fn every_master_gets_the_zones_of_the_main_masters_blue_fuzz() {
+        use std::sync::Arc;
+        let mut font = boxes(&[('x', 500.0), ('H', 700.0), ('п', 520.0), ('н', 520.0), ('т', 520.0)]);
+        let mut bold = font.masters[0].clone();
+        bold.id = "m02".into();
+        bold.params.set(crate::settings::TTF_BLUE_FUZZ, fontcraft_model::plist::Value::Number(fontcraft_model::plist::Number::int(10)));
+        Arc::make_mut(&mut font.masters).push(bold);
+        for name in font.glyphs.iter().map(|g| g.name.clone()).collect::<Vec<_>>() {
+            let mut g = font.glyph_mut(&name).unwrap();
+            let mut layer = g.layer("m01").unwrap().clone();
+            layer.id = "m02".into();
+            layer.master = "m02".into();
+            g.layers.push(layer);
+        }
+        let prepared = |master: &str| {
+            let mut settings = HintSettings::for_master(&font, master).unwrap();
+            let measured = crate::prepare_settings(&font, &mut settings, &TtAutohintOptions::default());
+            (measured, settings)
+        };
+        let ((main, settings), (other, bold)) = (prepared("m01"), prepared("m02"));
+        assert_eq!(bold.tt_blue_fuzz, 10.0);
+        assert_eq!(main.styles.own.len(), 1, "{main:?}");
+        assert_eq!(main, other);
+        let names = |s: &HintSettings| s.tt_zones.iter().map(|z| z.name.clone()).collect::<Vec<_>>();
+        assert_eq!(names(&settings), names(&bold));
+
+        let own = main.own_zones;
+        assert!(own < settings.tt_zones.len());
+        let family = main.family_zones(settings.tt_zones[..own].to_vec(), &settings);
+        assert_eq!(family, settings.tt_zones);
+        assert_eq!(main.family_zones(family[..own - 1].to_vec(), &settings).len(), own - 1, "another count does not apply");
+        assert!(main.family_zones(Vec::new(), &settings).is_empty());
+        let mut threshold = settings.clone();
+        threshold.tt_family_zones_threshold = Some(12);
+        assert_eq!(crate::CvtLayout::new(&threshold, &family).unwrap().family.len(), threshold.tt_zones.len());
     }
 
     /// A glyph of no script is hinted without zones; with a fallback script as one of it; with
