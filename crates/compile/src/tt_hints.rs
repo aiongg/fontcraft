@@ -245,7 +245,7 @@ pub fn tt_hinting(
     }
 
     let mut raw = Imported::default();
-    let mut scale_x_height = false;
+    let mut measured = fontcraft_hinting::MeasuredZones::default();
     let auto = if autohinted(&settings, options) {
         let Some(auto) = AutoSetup::new(&settings, warnings) else { return Ok(None) };
         if restricted(fs_type, &auto.options) {
@@ -257,7 +257,7 @@ pub fn tt_hinting(
             warnings.push(format!("Autohint is on, so the TrueType autohinter replaced the manual instructions of {}", names(&list)));
         }
         instructed = (0..order.len()).map(|gid| (gid, Vec::new())).collect();
-        scale_x_height = fontcraft_hinting::prepare_settings(source, &mut settings, &auto.options).x_height;
+        measured = fontcraft_hinting::prepare_settings(source, &mut settings, &auto.options);
         if auto.options.windows_compatibility {
             // Zones at the heights Windows clips to, so extremes there land on a pixel row.
             let (ascent, descent) = win_metrics;
@@ -339,7 +339,7 @@ pub fn tt_hinting(
             Ok(l) => programs.limits.merge(&l),
             Err(_) => programs.limits.uncertain = true,
         }
-        match fontcraft_hinting::autohint_prep(&auto.options, &settings, &programs.layout, scale_x_height) {
+        match fontcraft_hinting::autohint_prep(&auto.options, &settings, &programs.layout, &measured) {
             Ok((cvt, extra)) => {
                 match analyse(&extra, &functions) {
                     Ok(l) => programs.limits.merge(&l),
@@ -375,7 +375,13 @@ pub fn tt_hinting(
             decomposed = outline_layer(built, &outline);
             built = &decomposed;
         }
-        let zones = settings.tt_zones_for(source, &g.name);
+        let mut zones = settings.tt_zones_for(source, &g.name);
+        let mut group = 0;
+        if let Some(auto) = &auto {
+            let fontcraft_hinting::GlyphStyle::Group(own) = measured.styles.of(source, &g.name, &auto.options) else { continue };
+            group = own;
+            zones = measured.styles.zones_of(group, &zones);
+        }
         let stems = settings.tt_stems_for(source, &g.name);
         let autohinted;
         let mut after_iup = Vec::new();
@@ -442,6 +448,7 @@ pub fn tt_hinting(
             stems: Some(&stems),
             delta_column: delta_column.as_deref(),
             auto_stems: auto.is_some(),
+            auto_group: group,
         };
         match glyph_program(&cx) {
             Ok(p) => {

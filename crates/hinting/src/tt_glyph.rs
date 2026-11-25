@@ -40,7 +40,8 @@ use fontcraft_ttasm::{FunctionTable, MAX_GLYPH_PROGRAM_BYTES, MAX_PROGRAM_TEXT, 
 
 use crate::replay::describe;
 use crate::tt_font::{
-    FN_POINT_DELTA, FN_POINT_ROUND, FN_STEM, FN_TRIPLE, FN_ZONE_DISTANCE, FN_ZONE_SNAP, S_GDI, STEM_NO_ROUNDING, STEM_ROUND, stem_mode,
+    FN_AUTO_STEM, FN_AUTO_STEM_GROUP, FN_POINT_DELTA, FN_POINT_ROUND, FN_STEM, FN_TRIPLE, FN_ZONE_DISTANCE, FN_ZONE_SNAP, S_GDI, STEM_NO_ROUNDING,
+    STEM_ROUND, stem_mode,
 };
 use crate::{
     CvtLayout, DeltaDir, Direction, HintSettings, HintingError, MAX_DELTA_PPM, MAX_LAYER_HINTS, PointMap, Rounding, StemRef, TouchedState,
@@ -102,6 +103,9 @@ pub struct GlyphContext<'a> {
     /// ([`crate::autohint_fpgm`], [`crate::autohint_prep`]): Stem instructions with stem Auto take
     /// their width by the stem width mode, and round extremes past a zone take its overshoot.
     pub auto_stems: bool,
+    /// With `auto_stems`: the glyph's zone group ([`crate::Styles`]), whose x-height scales its
+    /// stems.
+    pub auto_group: usize,
 }
 
 /// A compiled glyph program.
@@ -330,7 +334,15 @@ impl Compiler<'_, '_> {
                 let (w, f) = stem.and_then(|k| self.cx.layout.stem(k)).map_or((-1, -1), |(w, f)| (i32::from(w), i32::from(f)));
                 let mode = stem_mode(t.rounding);
                 self.moved(target, d, |c| {
-                    if auto {
+                    let scaled = (auto && c.cx.auto_group > 0).then(|| crate::tt_auto::group_storage(c.cx.auto_group)).flatten();
+                    if let Some(scaled) = scaled {
+                        c.line(format_args!(
+                            "PUSH {} {} {w} {scaled} {} {FN_AUTO_STEM_GROUP}\nCALL[ ]",
+                            origin.index,
+                            target.index,
+                            scaled.saturating_add(1)
+                        ));
+                    } else if auto {
                         c.line(format_args!("PUSH {} {} {w} {FN_AUTO_STEM}\nCALL[ ]", origin.index, target.index));
                     } else {
                         c.line(format_args!("PUSH {} {} {w} {f} {mode} {FN_STEM}\nCALL[ ]", origin.index, target.index));

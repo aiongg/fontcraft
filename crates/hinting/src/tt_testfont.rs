@@ -121,11 +121,13 @@ pub fn autohinted(model: &fontcraft_model::Font, glyph: &str, options: &TtAutohi
     let n = u16::try_from(points.len()).unwrap();
     let map = crate::VecPointMap { paths: vec![(0..n).map(Some).collect()], count: n };
     let control = crate::control::ControlInstructions::default();
+    let crate::GlyphStyle::Group(group) = measured.styles.of(model, glyph, options) else { panic!("`{glyph}` is not hinted") };
+    let zones = measured.styles.zones_of(group, &(0..settings.tt_zones.len()).collect::<Vec<_>>());
     let hints = crate::autohint_glyph(&crate::AutoGlyph {
         glyph,
         layer,
         settings: &settings,
-        zones: None,
+        zones: Some(&zones),
         stems: None,
         options,
         control: &control,
@@ -138,7 +140,7 @@ pub fn autohinted(model: &fontcraft_model::Font, glyph: &str, options: &TtAutohi
     programs.fpgm.extend(crate::autohint_fpgm().unwrap());
     let functions = fontcraft_ttasm::FunctionTable::from_fpgm(&programs.fpgm).unwrap();
     programs.limits.merge(&fontcraft_ttasm::analyse(&programs.fpgm, &functions).unwrap());
-    let (cvt, prep) = crate::autohint_prep(options, &settings, &programs.layout, measured.x_height).unwrap();
+    let (cvt, prep) = crate::autohint_prep(options, &settings, &programs.layout, &measured).unwrap();
     programs.limits.merge(&fontcraft_ttasm::analyse(&prep, &functions).unwrap());
     programs.cvt.extend(cvt);
     programs.prep.extend(prep);
@@ -150,10 +152,11 @@ pub fn autohinted(model: &fontcraft_model::Font, glyph: &str, options: &TtAutohi
         layout: &programs.layout,
         functions: &functions,
         settings: &settings,
-        zones: None,
+        zones: Some(&zones),
         stems: None,
         delta_column: None,
         auto_stems: true,
+        auto_group: group,
     })
     .unwrap();
     font_of(&programs, &points, &program.bytes)

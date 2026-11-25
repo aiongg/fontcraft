@@ -67,6 +67,9 @@ pub const FN_AUTO_STEM: u8 = 10;
 /// The overshoot function the autohinter adds after it: a zone's overshoot at this size, unrounded
 /// and signed, replaced by the one that shows.
 pub const FN_AUTO_OVERSHOOT: u8 = 11;
+/// [`FN_AUTO_STEM`] for a glyph of another zone group than the first: origin, target, stem width
+/// entry (−1: none), the storage of the group's scaled x-height and of its fitted one.
+pub const FN_AUTO_STEM_GROUP: u8 = 12;
 
 /// Storage set by `prep`: 1 when overshoots show at this size.
 pub const S_SHOW_OVERSHOOTS: u8 = 0;
