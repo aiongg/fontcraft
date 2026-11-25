@@ -47,6 +47,7 @@ pub const SWITCHES: &[&str] = &[
     "view.showImage",
     "view.showMasterCompatibility",
     "edit.keepLayerSelectionInSync",
+    "edit.toggleMatchWhenEditing",
     "view.showGroupMembers",
     "view.showHints",
     "view.showTunniLines",
@@ -70,6 +71,7 @@ pub const SWITCHES: &[&str] = &[
     "path.togglePowerNudge",
     "window.palette",
     "window.previewPanel",
+    "view.animateAxis",
     "audit.showPanel",
 ];
 
@@ -169,6 +171,7 @@ fn checked(app: &FontCraftApp, display: &mut Display, switches: &mut Switches, i
     Some(match id {
         "view.showMasterCompatibility" => app.view.display.master_compatibility,
         "edit.keepLayerSelectionInSync" => app.view.display.keep_layer_selection_in_sync,
+        "edit.toggleMatchWhenEditing" => app.view.display.match_when_editing,
         "view.showHints" => app.view.display.hints,
         "view.showGroupMembers" => app.view.text.group_members,
         "view.showMeasurementLine" => app.view.text.measurement,
@@ -179,6 +182,7 @@ fn checked(app: &FontCraftApp, display: &mut Display, switches: &mut Switches, i
         "path.togglePowerNudge" => app.session.settings().get_bool(fontcraft_tools::drag_aids::POWER_NUDGE_SETTING).unwrap_or(false),
         "window.palette" => crate::shell::window::palette_shows(app),
         "window.previewPanel" => shows(PanelId::Preview),
+        "view.animateAxis" => app.view.preview.sweep.is_some(),
         "audit.showPanel" => shows(PanelId::FontAudit),
         _ => return None,
     })

@@ -112,6 +112,7 @@ fn display(app: &FontCraftApp) -> Map<String, Value> {
         ("hints", d.hints),
         ("masterCompatibility", d.master_compatibility),
         ("keepLayerSelectionInSync", d.keep_layer_selection_in_sync),
+        ("matchWhenEditing", d.match_when_editing),
         ("showImage", d.image),
     ] {
         out.insert(key.into(), json!(on));

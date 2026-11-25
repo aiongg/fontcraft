@@ -396,6 +396,11 @@ pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, 
         return Err(CompileError::Table { table: "fvar", message: "a variable font needs two masters and an axis with a range".into() });
     }
     designspace.check_variable_origin()?;
+    // Layers left out of interpolation are no sources of their glyph; where another glyph draws
+    // it at that master, its interpolated drawing stands in.
+    let linear = fontcraft_interp::InterpOptions { hoi: false, ..fontcraft_interp::InterpOptions::default() };
+    let drawn = fontcraft_interp::sources::with_inactive_interpolated(font, &designspace, &linear);
+    let font: &Font = drawn.as_ref().unwrap_or(font);
     let origin = designspace.origin().cloned().ok_or(CompileError::NotYetImplemented("a designspace without an origin"))?;
     let axis_count = u16::try_from(designspace.axes().len()).map_err(|_| CompileError::Table { table: "fvar", message: "too many axes".into() })?;
 

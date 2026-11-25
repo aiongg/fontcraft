@@ -475,11 +475,15 @@ pub fn sources_at<'a>(font: &'a Font, target: &Target, warnings: &mut Vec<String
 
 /// The static instance `target` names when the compile must interpolate it: it lies away from
 /// every master, it sets manual weights, InterpolationWeightY or Local Interpolation, it lies
-/// at a master where some glyph's alternate layer applies, or a designspace rule holds there.
+/// at a master where some glyph's alternate layer applies, a designspace rule holds there, or a
+/// glyph has a source left out of interpolation.
 pub fn needs_instance_font(font: &Font, target: &Target) -> Option<usize> {
     let Target::Instance(index) = *target else { return None };
     let inst = font.instances.get(index).filter(|i| i.kind.is_none())?;
-    if font.master_at(&inst.location).is_none() || fontcraft_interp::instance::adjusts_interpolation(font, index) {
+    if font.master_at(&inst.location).is_none()
+        || fontcraft_interp::instance::adjusts_interpolation(font, index)
+        || fontcraft_interp::sources::has_inactive(font)
+    {
         return Some(index);
     }
     // A designspace rule that holds at the instance swaps glyphs, which the instance font does.

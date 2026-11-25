@@ -53,8 +53,9 @@ craft::ui::words! {
     }
 }
 
-/// The part for `b`, then its timing graph; what the person changed goes to `sent`.
-pub fn view(ui: &mut Ui, b: &HoiBox, sent: &mut Vec<Msg>) {
+/// The part for `b`, then its timing graph, whose dots show at `clock` (0 to 1); what the person changed goes to
+/// `sent`.
+pub fn view(ui: &mut Ui, b: &HoiBox, clock: Option<f64>, sent: &mut Vec<Msg>) {
     let words = Env::of(ui).words::<HoiBoxWords>();
     let run = |sent: &mut Vec<Msg>, id: &str, extra: Value| sent.push(Msg::run(id, with(&target(b), extra)));
     Section::new(words.title.clone()).id_salt("fontcraftHoiBox").show(ui, |ui, _| {
@@ -83,7 +84,7 @@ pub fn view(ui: &mut Ui, b: &HoiBox, sent: &mut Vec<Msg>) {
             });
         }
     });
-    super::hoi_timing::view(ui, &b.graph);
+    super::hoi_timing::view(ui, &b.graph, clock);
 }
 
 /// The node, its layer and the axis: the targets every `hoi.*` command of the part takes.
@@ -164,7 +165,7 @@ mod tests {
         let seen = Rc::clone(&posted);
         let mut f = Fixture::new(move |ui| {
             let mut sent = Vec::new();
-            view(ui, &b, &mut sent);
+            view(ui, &b, None, &mut sent);
             seen.borrow_mut().extend(sent);
         });
         f.settle();

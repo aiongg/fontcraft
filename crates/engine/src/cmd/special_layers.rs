@@ -314,6 +314,8 @@ fn reinterpolated(
         (src.location.clone(), only(without(&sources.main)))
     } else if let Some((set, src)) = in_set {
         (src.location.clone(), only(without(&set.sources)))
+    } else if let Some(src) = sources.inactive.iter().find(|s| s.layer_id == id) {
+        (src.location.clone(), sources.clone())
     } else {
         if given.is_empty() {
             return Err("a backup layer has no location of its own: give `location`".into());

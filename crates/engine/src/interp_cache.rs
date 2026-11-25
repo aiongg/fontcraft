@@ -30,6 +30,10 @@
 //! manual master weights, Local Interpolation and InterpolationWeightY
 //! (`preview.respectsInstanceData`).
 //!
+//! A location view ([`InterpCache::location_view`]) is the same at any location, for a preview that
+//! sweeps an axis. It holds the kerning of its own glyphs only, so a step costs the glyphs shown,
+//! not the font.
+//!
 //! Who uses it: the preview of instances and `preview.render` (M9.20), the compatibility
 //! indicators and the Master Compatibility view (M9.22). Commands may build a designspace
 //! directly; the cache only saves work.
@@ -39,8 +43,8 @@ use std::sync::Arc;
 
 use fontcraft_interp::compat::{check_glyph, scope};
 use fontcraft_interp::instance::{instance_font_with_notes, options_for};
-use fontcraft_interp::{Compat, Designspace, GlyphSources, InterpError, InterpOptions, MasterPairs, ModelCache};
-use fontcraft_model::{Font, Glyph, GlyphTable, Kerning, Layer, MAX_COMPONENT_DEPTH, Master, Shape};
+use fontcraft_interp::{Compat, Designspace, GlyphSources, InterpError, InterpOptions, MAX_AXES, MAX_COORDINATE, MasterPairs, ModelCache};
+use fontcraft_model::{Font, Glyph, GlyphTable, Instance, Kerning, Layer, MAX_COMPONENT_DEPTH, Master, Shape};
 
 /// Most interpolated instance layers kept.
 pub const MAX_INSTANCE_LAYERS: usize = 100_000;
@@ -48,6 +52,8 @@ pub const MAX_INSTANCE_LAYERS: usize = 100_000;
 pub const MAX_VIEW_GLYPHS: usize = 10_000;
 /// Instance views kept at once; past it they are all dropped.
 const MAX_VIEWS: usize = 64;
+/// Location views kept at once (the last steps of an axis sweep); past it the oldest are dropped.
+const MAX_LOCATION_VIEWS: usize = 8;
 /// The start of the id of an instance view's one master; the instance's index follows.
 pub const VIEW_MASTER_PREFIX: &str = "preview-instance-";
 
@@ -62,6 +68,9 @@ struct InstanceBase {
     master: Master,
     kerning: Arc<Kerning>,
 }
+
+/// A location's bits and the glyphs a location view was asked for.
+type LocationKey = (Vec<u64>, Vec<String>);
 
 /// The interpolation cache of one document.
 #[derive(Default)]
@@ -85,6 +94,8 @@ pub struct InterpCache {
     instance_bases: HashMap<usize, Arc<InstanceBase>>,
     /// Instance views by instance and the glyphs they were asked for.
     views: HashMap<(usize, Vec<String>), Arc<Font>>,
+    /// Location views, oldest first, by the location's bits and the glyphs they were asked for.
+    location_views: VecDeque<(LocationKey, Arc<Font>)>,
     models: ModelCache,
 }
 
@@ -108,6 +119,7 @@ impl InterpCache {
                 }
                 self.invalidate(&changed.names);
                 self.views.clear();
+                self.location_views.clear();
             } else {
                 self.clear();
             }
@@ -288,6 +300,64 @@ impl InterpCache {
         Ok(view)
     }
 
+    /// A font for previewing `location` (internal coordinates, one per font axis): one master there
+    /// with the metrics interpolated, holding `glyphs` and the glyphs their components use, each
+    /// with its interpolated layer as the master layer, and the kerning between them. A glyph that
+    /// cannot be interpolated is left out. The last few views are kept.
+    pub fn location_view(&mut self, font: &Arc<Font>, revision: u64, location: &[f64], glyphs: &[String]) -> Result<Arc<Font>, InterpError> {
+        self.sync(font, revision);
+        if location.len() > MAX_AXES {
+            return Err(InterpError::LimitExceeded { what: "coordinates in one location", limit: MAX_AXES });
+        }
+        if let Some(v) = location.iter().find(|v| !v.is_finite() || v.abs() > MAX_COORDINATE) {
+            return Err(InterpError::BadNumber { what: format!("the coordinate {v}") });
+        }
+        if glyphs.len() > MAX_VIEW_GLYPHS {
+            return Err(InterpError::LimitExceeded { what: "glyphs in one preview", limit: MAX_VIEW_GLYPHS });
+        }
+        let key: LocationKey = (location.iter().map(|v| v.to_bits()).collect(), glyphs.to_vec());
+        if let Some((_, view)) = self.location_views.iter().find(|(k, _)| *k == key) {
+            return Ok(Arc::clone(view));
+        }
+
+        let names = with_components(font, glyphs);
+        let mut probe = Font::clone(font);
+        let instance = probe.instances.len();
+        Arc::make_mut(&mut probe.instances).push(Instance {
+            name: "Preview Location".into(),
+            location: location.to_vec(),
+            exports: false,
+            ..Instance::default()
+        });
+        let options = options_for(&probe, instance)?;
+        probe.kerning = Arc::new(kerning_between(font, &names));
+        probe.glyphs = GlyphTable::from_glyphs(names.iter().filter_map(|n| font.glyphs.get(n).cloned()).collect());
+        let view = match instance_font_with_notes(&probe, instance, &options) {
+            Ok((view, _)) => view,
+            // One glyph that cannot be interpolated does not take the others with it.
+            Err(_) => {
+                let mut shells = probe.clone();
+                shells.glyphs =
+                    GlyphTable::from_glyphs(probe.glyphs.iter().map(|g| Arc::new(Glyph { layers: Vec::new(), ..Glyph::clone(g) })).collect());
+                let (mut view, _) = instance_font_with_notes(&shells, instance, &options)?;
+                let mut drawn = Vec::new();
+                for g in probe.glyphs.iter() {
+                    let Ok(layers) = interpolate_glyphs(&probe, instance, &options, std::slice::from_ref(&g.name)) else { continue };
+                    let Some((_, layer)) = layers.into_iter().next() else { continue };
+                    drawn.push(Arc::new(Glyph { layers: vec![layer], ..Glyph::clone(g) }));
+                }
+                view.glyphs = GlyphTable::from_glyphs(drawn);
+                view
+            }
+        };
+        let view = Arc::new(view);
+        while self.location_views.len() >= MAX_LOCATION_VIEWS {
+            self.location_views.pop_front();
+        }
+        self.location_views.push_back((key, Arc::clone(&view)));
+        Ok(view)
+    }
+
     /// Interpolates the glyphs of `names` at `instance` that are neither kept nor known to
     /// fail: all in one run, or one by one when the run fails, so one glyph that cannot be
     /// interpolated does not take the others with it.
@@ -400,6 +470,7 @@ impl InterpCache {
         self.instance_layers.retain(|(name, _), _| !names.contains(name.as_str()));
         self.instance_failed.retain(|(name, _)| !names.contains(name.as_str()));
         self.views.clear();
+        self.location_views.clear();
     }
 
     /// Drops everything.
@@ -414,6 +485,7 @@ impl InterpCache {
         self.instance_failed.clear();
         self.instance_bases.clear();
         self.views.clear();
+        self.location_views.clear();
         self.models.clear();
     }
 }
@@ -426,6 +498,67 @@ fn interpolate_glyphs(font: &Font, instance: usize, options: &InterpOptions, nam
     reduced.kerning = Arc::default();
     let (out, _) = instance_font_with_notes(&reduced, instance, options)?;
     Ok(out.glyphs.iter().filter_map(|g| g.layers.first().map(|l| (g.name.clone(), l.clone()))).collect())
+}
+
+/// `glyphs` and the glyphs their layers' components use, one nesting level after the other, at
+/// most [`MAX_VIEW_GLYPHS`].
+fn with_components(font: &Font, glyphs: &[String]) -> Vec<String> {
+    let mut seen: HashSet<&str> = HashSet::new();
+    let mut out: Vec<String> = Vec::new();
+    let mut level: Vec<&str> = glyphs.iter().map(String::as_str).filter(|n| seen.insert(*n)).collect();
+    for _ in 0..=MAX_COMPONENT_DEPTH {
+        let mut next: Vec<&str> = Vec::new();
+        for name in level {
+            let Some(g) = font.glyphs.get(name) else { continue };
+            if out.len() >= MAX_VIEW_GLYPHS {
+                return out;
+            }
+            out.push(g.name.clone());
+            for shape in g.layers.iter().flat_map(|l| &l.shapes) {
+                if let Shape::Component(c) = shape
+                    && seen.len() < MAX_VIEW_GLYPHS
+                    && seen.insert(c.glyph.as_str())
+                {
+                    next.push(c.glyph.as_str());
+                }
+            }
+        }
+        if next.is_empty() {
+            break;
+        }
+        level = next;
+    }
+    out
+}
+
+/// The font's kerning between the glyphs `names` and their kerning groups. A side spelled in a
+/// way this does not know stays.
+fn kerning_between(font: &Font, names: &[String]) -> Kerning {
+    let glyphs: HashSet<&str> = names.iter().map(String::as_str).collect();
+    let mut groups: HashSet<&str> = HashSet::new();
+    for g in names.iter().filter_map(|n| font.glyphs.get(n)) {
+        let k = &g.kern_groups;
+        groups.extend([&k.left, &k.right, &k.top, &k.bottom].into_iter().filter_map(|g| g.as_deref()));
+    }
+    let kept = |side: &str| {
+        if font.glyphs.get(side).is_some() {
+            return glyphs.contains(side);
+        }
+        match fontcraft_model::side_group(side) {
+            Some(group) => groups.is_empty() || groups.contains(group),
+            None => true,
+        }
+    };
+    let mut out = Kerning::clone(&font.kerning);
+    for table in [&mut out.ltr, &mut out.rtl, &mut out.vertical] {
+        for master in &mut table.0 {
+            master.firsts.retain(|f| kept(&f.first));
+            for first in &mut master.firsts {
+                first.seconds.retain(|(second, _)| kept(second));
+            }
+        }
+    }
+    out
 }
 
 fn same<T: PartialEq>(a: &Arc<T>, b: &Arc<T>) -> bool {
@@ -511,6 +644,9 @@ pub trait SessionInterpExt {
     /// The active document's view of the instance at `instance` holding `glyphs`
     /// ([`InterpCache::instance_view`]).
     fn instance_view(&mut self, instance: usize, glyphs: &[String]) -> Result<Arc<Font>, String>;
+
+    /// The active document's view of a location holding `glyphs` ([`InterpCache::location_view`]).
+    fn location_view(&mut self, location: &[f64], glyphs: &[String]) -> Result<Arc<Font>, String>;
 }
 
 fn interp_cache(s: &mut crate::Session) -> Option<(&mut InterpCache, Arc<Font>, u64)> {
@@ -557,11 +693,16 @@ impl SessionInterpExt for crate::Session {
         let (cache, font, revision) = interp_cache(self).ok_or("no document open")?;
         cache.instance_view(&font, revision, instance, glyphs).map_err(|e| e.to_string())
     }
+
+    fn location_view(&mut self, location: &[f64], glyphs: &[String]) -> Result<Arc<Font>, String> {
+        let (cache, font, revision) = interp_cache(self).ok_or("no document open")?;
+        cache.location_view(&font, revision, location, glyphs).map_err(|e| e.to_string())
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use fontcraft_model::{Axis, Instance, Path};
+    use fontcraft_model::{Axis, Instance, KernFirst, KernTable, MasterKerning, Path};
 
     use super::*;
 
@@ -592,6 +733,28 @@ mod tests {
 
     fn width(layer: &Layer) -> f64 {
         layer.width
+    }
+
+    #[test]
+    fn a_location_view_holds_the_glyphs_there_and_their_kerning() {
+        let mut f = Font::clone(&font());
+        let pair = |master: &str, v: f64| MasterKerning {
+            master: master.into(),
+            firsts: vec![KernFirst { first: "a".into(), seconds: vec![("a".into(), v), ("b".into(), v)] }],
+        };
+        f.kerning = Arc::new(Kerning { ltr: KernTable(vec![pair("thin", -10.0), pair("black", -50.0)]), ..Kerning::default() });
+        let f = Arc::new(f);
+        let mut cache = InterpCache::new();
+        let view = cache.location_view(&f, 1, &[300.0], &["a".to_string()]).unwrap();
+        assert_eq!(view.glyphs.iter().map(|g| g.name.as_str()).collect::<Vec<_>>(), ["a"]);
+        let master = view.masters.first().unwrap();
+        let layer = view.glyph("a").unwrap().layer(&master.id).unwrap();
+        assert_eq!(layer.width, 250.0, "a quarter of the way from 200 to 400");
+        let kerning: Vec<_> = view.kerning.ltr.0.iter().flat_map(|m| &m.firsts).flat_map(|f| &f.seconds).cloned().collect();
+        assert_eq!(kerning, [("a".to_string(), -20.0)], "the pair with the glyph left out is not interpolated");
+        let again = cache.location_view(&f, 1, &[300.0], &["a".to_string()]).unwrap();
+        assert!(Arc::ptr_eq(&view, &again), "a repeated frame costs nothing");
+        assert!(cache.location_view(&f, 1, &[f64::NAN], &["a".to_string()]).is_err());
     }
 
     #[test]

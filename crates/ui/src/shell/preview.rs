@@ -90,6 +90,8 @@ pub struct PreviewState {
     pub panel: PreviewOptions,
     pub area_shows: Shows,
     pub panel_shows: Shows,
+    /// The axis both previews sweep along (`view.animateAxis`); `None` while none is animated.
+    pub sweep: Option<super::axis_sweep::AxisSweep>,
 }
 
 impl PreviewState {

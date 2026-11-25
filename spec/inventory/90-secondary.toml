@@ -2019,12 +2019,20 @@ shortcut = ""
 kind = "ui"
 params = "{on?: bool}"
 area = "interpolation"
-milestone = "M13"
+milestone = "M9"
 summary = "While on, structural edits are repeated on the corresponding nodes of every compatible master: adding or deleting nodes, setting a start point, reversing a contour, adding corner effects. A separate drag mode moves the matching nodes of all visible masters together."
 ref = "FontLab 8 What's new › Families & variation › Variation (Match when Editing); What's new since VI › Match Moves"
 status = "docs"
 origin = "fontlab"
-notes = "Moved from M9 to M13 by the M9 planning pass: a secondary-reference feature beyond the primary reference, as the M3 and M6 passes moved such rows (owner decision, docs/plans/M3.md § 7, question 3)."
+notes = "Built (M9.35): path.insertNode, edit.delete, path.makeNodeFirst and path.reverseContours take `matchLayers` (crates/engine/src/cmd/node/matching.rs): the same edit by the same addresses on every other master, intermediate and alternate layer of the glyph with the edited layer's shapes and node types, in one undo step; a master or intermediate layer that differs is left alone and named in `skipped`, and an edit one layer cannot take, or that would leave a layer incompatible, is refused whole. The toggle is window state: while it is on, the window passes the parameter. Not built: corner effects, and the drag mode that moves the matching nodes of all visible masters."
+guesses = [
+  "`matchLayers` covers four structural edits: adding and deleting nodes (and whole paths), setting the start node and reversing contours.",
+  "A node is added at the same parameter along the corresponding segment of each layer; the secondary reference may place it at the same share of the length.",
+  "Alternate layers with the same structure are edited too, and one drawn differently is left alone without a message; a backup layer or the background matches nothing.",
+]
+observe = [
+  "With Match when Editing on, add a node near the middle of a curve in one master and note where it lands on the corresponding curve of another master whose handles have other lengths.",
+]
 
 [[command]]
 id = "font.mergeFontsToMasters"
@@ -2123,18 +2131,26 @@ label = "Animate Axis"
 menu = ["View"]
 shortcut = ""
 kind = "ui"
-params = "{axis: tag, on?: bool}"
+params = "{axis?: tag (default: the axis under way, else the first with a range), on?: bool}"
 area = "interpolation"
-milestone = "M13"
+milestone = "M9"
 summary = "Sweeps the preview location back and forth along one axis so kinks and jumps in the interpolation show up."
 ref = "FontLab 8 What's new › Families & variation › Variation (Play buttons)"
 status = "docs"
 origin = "fontlab"
+notes = "Built (M9.37) in crates/ui/src/shell/axis_sweep.rs: the Preview Area and the Preview Panel draw the text interpolated at each step (`InterpCache::location_view`, the kerning included) and the Glyph Sources panel shows the influence there. A step is made in the frame that shows it, and the next frame is asked for after it, at most 30 a second."
+guesses = [
+  "The sweep starts at the location each preview shows and runs two seconds from one end of the axis to the other, linearly; the secondary reference's play button would settle the speed.",
+  "While the sweep runs, the previews draw at most 200 different glyphs and keep their own instance choice, which they show again when it ends.",
+  "Starting it with no preview and no Glyph Sources panel showing opens the Preview Area; closing the last of them, or changing the document, ends it, and a hidden window holds it still.",
+]
+observe = [
+  "Press the play button of an axis in the Variations panel and time one sweep; note whether it eases at the ends and which views follow it.",
+]
 
 # =====================================================================================================
 # FontLab — TrueType hinting extras
 # =====================================================================================================
-notes = "Moved from M9 to M13 by the M9 planning pass: a secondary-reference feature beyond the primary reference, as the M3 and M6 passes moved such rows (owner decision, docs/plans/M3.md § 7, question 3)."
 
 [[panel]]
 id = "palette.ttHintProgram"
@@ -4561,12 +4577,15 @@ label = "Glyph Sources"
 location = "palette"
 controls = ["font axis sliders with reset", "glyph axis sliders (axes private to the current glyph) with edit and reset", "source list for the current glyph: default source in bold, font sources the glyph does not yet have in grey", "per source: active tick, incompatibility marker, show-in-background toggle, influence bar for the current location", "header toggle for multi-source editing", "add source at the current location; delete source", "layers of the selected source: one foreground layer plus background layers"]
 area = "interpolation"
-milestone = "M13"
+milestone = "M9"
 summary = "Treats every glyph as having its own list of sources in the design space: its master layers plus what the primary reference calls intermediate layers. The panel shows at a glance which sources exist, which font masters the glyph does not draw, and how much each one contributes at the previewed location; adding a source here is the same as adding an intermediate layer at the previewed location."
 ref = "Fontra reference › Editor › Panels › Designspace"
 status = "docs"
 origin = "fontra"
-notes = "Moved from M9 to M13 by the M9 planning pass: a secondary-reference feature beyond the primary reference, as the M3 and M6 passes moved such rows (owner decision, docs/plans/M3.md § 7, question 3)."
+notes = "Built (M9.37) as the dock panel `glyphSources` (crates/ui/src/panels/glyph_sources.rs): each axis' previewed coordinate with an Animate button, each source's name, location, on checkbox and influence bar with its share in percent, and the masters the glyph has no layer for. The bars are for the location the Preview Area shows (the Preview Panel while only that is open): its instance's, else the current master's, and the animated axis where the sweep is. Not built: axis sliders, glyph axes, show-in-background, multi-source editing, and adding or deleting a source here (the Layers palette does both)."
+guesses = [
+  "The influence bars follow the preview's instance, since there is no location slider; the secondary reference's bars follow its axis sliders.",
+]
 
 [[command]]
 id = "glyph.setSourceActive"
@@ -4574,29 +4593,37 @@ label = "Use Source in Interpolation"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?, source: id, active: bool}"
+params = "{glyph: name, source: layer id, active: bool} → {glyph, source, active, changed}"
 area = "interpolation"
-milestone = "M13"
+milestone = "M9"
 summary = "Excludes one of a glyph's sources from interpolation, or includes it again, without deleting its drawing. An inactive source is skipped at export for that glyph."
 ref = "Fontra reference › Editor › Panels › Designspace (the on checkbox)"
 status = "docs"
 origin = "fontra"
-notes = "Moved from M9 to M13 by the M9 planning pass: a secondary-reference feature beyond the primary reference, as the M3 and M6 passes moved such rows (owner decision, docs/plans/M3.md § 7, question 3)."
+notes = "Built (M9.37): the layer's user data key `com.fontcraft.sourceInactive` (fontcraft_model::fc_keys), read by `fontcraft_interp::GlyphSources::of`, so static instances (one at a master's location included), previews, the compatibility check and the variable compile leave the source out and the glyph interpolates from the rest. In a variable font, where another glyph draws the glyph at an inactive master (a decomposed composite, mark positions), its interpolated drawing stands in. Master-bound values (metrics, kerning) keep the master. Exporting a master itself still draws its layer."
+guesses = [
+  "The inactive flag is stored in the layer's user data, so other applications and compilers that read the source use every layer.",
+  "The origin master's layer cannot be switched off, since every delta starts from it; the secondary reference's behaviour when the default source is switched off would settle it.",
+  "Alternate layers can be switched off too; a range set without an active layer does not switch anything.",
+]
+observe = [
+  "Switch off the default source of a glyph and export a variable font: note whether the box refuses and what the glyph becomes.",
+]
 
 [[command]]
 id = "view.showSourceInfluence"
 label = "Show Source Influence"
-menu = ["View"]
+menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?, location?: {axisTag: number}}"
+params = "{glyph: name, location?: {axisTag: number}} → {glyph, location, sources: [{layer, master, name, kind, location, active, origin, weight}], missing: [{master, name}]}"
 area = "interpolation"
-milestone = "M13"
+milestone = "M9"
 summary = "Reports, for a design-space location, how much each source of the glyph contributes to the interpolated result; the panel draws it as a bar per source. Read-only."
 ref = "Fontra reference › Editor › Panels › Designspace (bars icon)"
 status = "docs"
 origin = "fontra"
-notes = "Moved from M9 to M13 by the M9 planning pass: a secondary-reference feature beyond the primary reference, as the M3 and M6 passes moved such rows (owner decision, docs/plans/M3.md § 7, question 3)."
+notes = "Built (M9.37) as a query over `fontcraft_interp::instance::source_weights`: the effective scalar of each source in the glyph's own variation model, which sum to 1. It has no menu item: the Glyph Sources panel always shows its bars."
 
 [[panel]]
 id = "window.crossAxisMappings"

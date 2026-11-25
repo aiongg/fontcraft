@@ -75,6 +75,10 @@ pub const CROSS_AXIS_MAPPINGS: &str = "com.fontcraft.crossAxisMappings";
 /// `component.setInstanceLocation`; `crate::pinned`).
 pub const COMPONENT_LOCATION: &str = "com.fontcraft.componentLocation";
 
+/// A source layer left out of interpolation: the integer 1 (M9.37, `glyph.setSourceActive`,
+/// `fontcraft_interp::sources`). A layer without the key takes part.
+pub const SOURCE_INACTIVE: &str = "com.fontcraft.sourceInactive";
+
 /// Every key with the object it is stored on.
 pub const ALL: &[(&str, Owner)] = &[
     (ANCHOR_EXPRESSIONS, Owner::Anchor),
@@ -95,6 +99,7 @@ pub const ALL: &[(&str, Owner)] = &[
     (AUDIT, Owner::Font),
     (CROSS_AXIS_MAPPINGS, Owner::Font),
     (COMPONENT_LOCATION, Owner::Component),
+    (SOURCE_INACTIVE, Owner::Layer),
 ];
 
 /// Whether `key` is one of FontCraft's own keys.

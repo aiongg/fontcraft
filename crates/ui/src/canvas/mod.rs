@@ -61,6 +61,8 @@ pub struct Display {
     pub image: bool,
     /// Edit › Keep Layer Selection in Sync: another master of a compatible glyph keeps the canvas selection.
     pub keep_layer_selection_in_sync: bool,
+    /// Edit › Match When Editing: structural edits go to every compatible layer (`shell::compatibility::with_matching`).
+    pub match_when_editing: bool,
 }
 
 impl Default for Display {
@@ -82,6 +84,7 @@ impl Default for Display {
             master_compatibility: false,
             image: true,
             keep_layer_selection_in_sync: false,
+            match_when_editing: false,
         }
     }
 }

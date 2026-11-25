@@ -2,7 +2,7 @@
 //!
 //! | Reply | Notice |
 //! |---|---|
-//! | `glyph.matchMasters`, `glyph.relocateStartPoints`: `skipped` | the label, then each skipped glyph with its reason |
+//! | `glyph.matchMasters`, `glyph.relocateStartPoints`, the edits that take `matchLayers`: `skipped` | the label, then each skipped glyph with its reason |
 //! | `color.generateDarkPalette`: `palette`, `name` | the new palette's number and name |
 //! | any command: `formatWarnings` (what a UFO, UFOZ or designspace save would lose), else the command's own `warnings` | the first warning, and how many follow |
 //!
@@ -30,7 +30,7 @@ const REPORTS_SKIPPED: [&str; 2] = ["glyph.matchMasters", "glyph.relocateStartPo
 
 /// The notice for `reply` of command `id`, or `None` when it has nothing to say.
 pub fn notice(id: &str, reply: &Value) -> Option<String> {
-    if REPORTS_SKIPPED.contains(&id) {
+    if REPORTS_SKIPPED.contains(&id) || crate::shell::compatibility::MATCHED.contains(&id) {
         return skipped(id, reply).or_else(|| format_warning(reply));
     }
     if id == "color.generateDarkPalette" {
