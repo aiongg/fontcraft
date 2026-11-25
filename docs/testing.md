@@ -229,6 +229,14 @@ the fonts can be checked with other readers (fontTools' `TTFont(...).ensureDecom
     has neither table, so `--build N` writes random fonts of each with fontTools.
   - `crates/tables/crosscheck/optimize.py`: the `optimize` steps (`gvar` IUP, implied on-curve points, variation
     store, `GPOS` compaction, `COLR` layer reuse) against the same work done by fontTools.
+  - `crates/tables/crosscheck/python_tools.py`: ttxn, cu2qu, ttfcomponentizer, ttfdecomponentizer, statisticsPen,
+    `reorderGlyphs`, fontTools `diff`, otf2otc, otc2otf and `pyftsubset --no-hinting` against our subcommands.
+    `crates/tables/crosscheck/afdko_c_tools.py` does the same for sfntedit, spot, sfntdiff and tx;
+    `crates/audit/crosscheck/afdko_findings.py` for checkoutlinesufo and comparefamily. All three share one harness:
+    `--reference-only` runs the reference tools alone, and a rerun reuses what is there. `tx -afm` needs a writable
+    system temporary folder.
+  - `crates/audit/crosscheck/fontbakery_verdicts.py`: FontBakery's verdicts against the audit's, check by check.
+    `crates/audit/crosscheck/threshold_survey.py` counts how often each audit check fires on the corpus (no oracle).
   - `crates/io-ufo/crosscheck/color_layers.py`: a UFO's colour layer list, palettes and layer glyphs against
     glyphsLib's UFOs, and their round trip through FontCraft.
 - **Glyph database.** `cargo xtask glyphdata --check` (outside the gate; needs
