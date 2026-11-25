@@ -233,15 +233,16 @@ pub fn mean_depth(profile: &SideProfile) -> Option<f64> {
     (n > 0).then(|| sum / n as f64)
 }
 
-/// The mean depth of `profile` in the bottom, middle and top third of its rows: the mean over the
-/// third's rows with ink of each sample's distance inward from the side's extreme. A third without
+/// The mean depth of `profile` in the bottom, middle and top third of its rows (a row belongs to the
+/// third its centre lies in, so a symmetric profile has symmetric thirds): the mean over the third's
+/// rows with ink of each sample's distance inward from the side's extreme. A third without
 /// ink is `None`; so is the whole without ink anywhere.
 pub fn zone_depths(profile: &SideProfile) -> Option<[Option<f64>; 3]> {
     let extreme = profile.extreme()?;
     let count = profile.samples.len().max(1);
     let mut sums = [(0.0, 0usize); 3];
     for (i, x) in profile.samples.iter().enumerate() {
-        let (Some(x), Some(zone)) = (x, sums.get_mut(i * 3 / count)) else { continue };
+        let (Some(x), Some(zone)) = (x, sums.get_mut((2 * i + 1) * 3 / (2 * count))) else { continue };
         zone.0 += (x - extreme).abs();
         zone.1 += 1;
     }
