@@ -104,7 +104,7 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
     let _ = Row::new().show(ui, |ui, _| {
         let active = (m.mode == "box").then_some(m.box_point.as_str());
         if let Some(point) = widgets::box_point(ui, words.origin.clone(), active) {
-            sent.push(shell("transform.setOrigin", json!({"mode": "box", "boxPoint": point})));
+            sent.push(shell("transform.setOrigin", json!({"mode": "box", "boxPoint": point, "point": null})));
         }
         let reference = ToggleButton::new(words.reference.clone(), Bind::given(m.mode == "reference"))
             .icon(IconId::new("target"))
@@ -115,7 +115,9 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
         if reference.events.committed().is_some()
             && let Some(p) = m.point
         {
-            sent.push(shell("transform.setOrigin", json!({"mode": "reference", "point": p})));
+            // Pressed while it is on: the reference point goes.
+            let origin = if m.mode == "reference" { json!({"point": null}) } else { json!({"mode": "reference", "point": p}) };
+            sent.push(shell("transform.setOrigin", origin));
         }
         // A CJK glyph has no metric heights to pick from: the layer's centre stands in for them.
         if m.cjk {
@@ -363,6 +365,34 @@ mod tests {
             *posted.borrow(),
             vec![Msg::Shell(craft::ui::runtime::commands::CommandRef::with_params("transform.setOrigin", json!({"mode": "layer"})))]
         );
+    }
+
+    /// Reference Point works about the placed point; pressed again it takes the point away, so the Rotate and Scale
+    /// tools turn about the selection's centre again.
+    #[test]
+    fn reference_point_is_taken_and_put_aside() {
+        for (mode, sent) in [("box", json!({"mode": "reference", "point": [10.0, 20.0]})), ("reference", json!({"point": null}))] {
+            let model = Tracked::new(TransformModel {
+                mode: mode.into(),
+                box_point: "center".into(),
+                metric: "baseline".into(),
+                point: Some([10.0, 20.0]),
+                origin: json!({"mode": "box", "boxPoint": "center"}).to_string(),
+                targets: Some(Targets { json: json!({"glyph": "A", "layer": "m01"}).to_string() }),
+                ..Default::default()
+            });
+            let posted = Rc::new(RefCell::new(Vec::new()));
+            let seen = Rc::clone(&posted);
+            let mut fixture = Fixture::new(move |ui| {
+                let mut sent = Vec::new();
+                show(ui, Props { model: &model, sent: &mut sent });
+                seen.borrow_mut().extend(sent);
+            });
+            fixture.settle();
+            let button = fixture.by_label("Reference Point").expect("the Reference Point button");
+            fixture.click(&button).settle();
+            assert_eq!(*posted.borrow(), vec![Msg::Shell(craft::ui::runtime::commands::CommandRef::with_params("transform.setOrigin", sent))]);
+        }
     }
 
     /// The palette gives the panel a fixed height: a body taller than it scrolls with the wheel.

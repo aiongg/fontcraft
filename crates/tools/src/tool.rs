@@ -27,7 +27,7 @@ pub struct ToolSettings {
     pub increments: [f64; 3],
     /// The selection's bounding box and its knobs are showing (`view.showBoundingBox`).
     pub bounding_box: bool,
-    /// The reference point placed with the Rotate or Scale tool (`transform.setOrigin`).
+    /// The reference point placed with the Rotate or Scale tool (`transform.setOrigin`), which the shell keeps.
     pub reference: Option<Point>,
     /// The lever's divisor of pointer movement (`editing.leverRatio`); 1 turns the lever off.
     pub lever_ratio: f64,

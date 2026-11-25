@@ -685,13 +685,13 @@ label = "Set Transformation Origin"
 menu = []
 shortcut = ""
 kind = "ui"
-params = "{mode?: 'box'|'reference'|'metrics'|'layer', boxPoint?: 'topLeft'|'top'|'topRight'|'left'|'center'|'right'|'bottomLeft'|'bottom'|'bottomRight', metric?: 'baseline'|'halfXHeight'|'xHeight'|'halfCapHeight'|'capHeight', point?: [x, y]}"
+params = "{mode?: 'box'|'reference'|'metrics'|'layer', boxPoint?: 'topLeft'|'top'|'topRight'|'left'|'center'|'right'|'bottomLeft'|'bottom'|'bottomRight', metric?: 'baseline'|'halfXHeight'|'xHeight'|'halfCapHeight'|'capHeight', point?: [x, y] | null}"
 area = "drawing"
 milestone = "M3"
 summary = "Chooses the fixed point for Palette transformations: a point of the selection bounding box, the reference point set with the Scale or Rotate tool, a vertical metric of the master, or (for CJK glyphs) the centre of the layer. Alignment ignores this setting, except through Path > Align Selection."
 ref = "Palette › Transformations › Transformation Origin"
 status = "handbook"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 13:54–14:07: the Transformations section shows the 3×3 box picker, a reference-point crosshair and a metrics-origin picker. Choosing an origin is not shown. Built in M3.5: `point` without `mode` places the reference point and keeps the mode (what a click with the Rotate or Scale tool sends); `boxPoint` and `metric` are kept for their modes; mode `reference` needs a placed point."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 13:54–14:07: the Transformations section shows the 3×3 box picker, a reference-point crosshair and a metrics-origin picker. Choosing an origin is not shown. Built in M3.5: `point` without `mode` places the reference point and keeps the mode (what a click with the Rotate or Scale tool sends); `boxPoint` and `metric` are kept for their modes; mode `reference` needs a placed point. `point: null` takes the reference point away; choosing a box point in the Palette sends it, and so does pressing Reference Point while it is on."
 guesses = [
   "The metrics-point origin sits at half the advance width for every operation, not only mirroring (Palette question 5).",
 ]
@@ -1066,10 +1066,12 @@ ref = "Palette › Transformations › Transformation Origin"
 status = "handbook"
 notes = "Documented, not yet observed. M6.32 draws it (`crates/ui/src/canvas/bounding_box.rs`); the placed point is the Rotate and Scale tools' common fixed point. While none is placed, those tools show the centre of the selection's box, which a drag is about."
 guesses = [
+  "A placed reference point serves the Rotate and Scale tools in every glyph and document until another is placed, or until a box point is chosen in the Palette or Reference Point is pressed while it is on, which take it away; rotating in a second glyph after a click in the first settles it.",
   "With other tools the crosshair shows only while the Transformations section works about the reference point; placing a point and switching to the Select tool in the reference app settles it.",
 ]
 observe = [
   "Click with the Rotate tool, then choose the Select tool with the box origin and with the reference point chosen in the Palette: note when the crosshair shows.",
+  "Click with the Rotate tool in one glyph, open another glyph and drag with the Rotate tool: note the point it turns about. Then choose a box point in the Palette and drag again.",
 ]
 
 [[behavior]]

@@ -561,7 +561,12 @@ fn box_knobs_set_the_size_properties() {
     app.drain();
     let origin = painted(&app, super::bounding_box::shapes);
     assert_eq!((count(&origin, t.bounding_box), count(&origin, t.transform_origin)), (0, 3), "the Rotate tool shows its fixed point");
-    assert_eq!(app.tools.view.marks.origin.map(|o| o.at), Some(fontcraft_geom::Point::new(250.0, 50.0)));
+    let at = |app: &FontCraftApp| app.tools.view.marks.origin.map(|o| (o.at.x, o.at.y));
+    assert_eq!(at(&app), Some((250.0, 50.0)));
+    shell(&mut app, "transform.setOrigin", json!({"point": [10, 20]}));
+    assert_eq!(at(&app), Some((10.0, 20.0)), "the placed point");
+    shell(&mut app, "transform.setOrigin", json!({"mode": "box", "boxPoint": "left", "point": null}));
+    assert_eq!(at(&app), Some((250.0, 50.0)), "a box point puts it aside");
 }
 
 /// Info for Selection opens the settings of a selected smart component, the settings of a smart glyph with nothing
