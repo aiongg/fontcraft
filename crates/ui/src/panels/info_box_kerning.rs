@@ -83,9 +83,9 @@ fn edge_labels(words: &InfoBoxKerningWords, edge: Edge) -> (Label, Label) {
     }
 }
 
-/// The parameters of a kerning command: `fields` with the box's master and direction.
-fn params(k: &KernBox, fields: Value) -> Value {
-    let mut out = k.place();
+/// The parameters of a kerning command on `pair`: `fields` with its master and the box's direction.
+fn params(k: &KernBox, pair: &KernPair, fields: Value) -> Value {
+    let mut out = k.place(pair);
     if let (Value::Object(out), Value::Object(fields)) = (&mut out, fields) {
         out.extend(fields);
     }
@@ -100,11 +100,11 @@ fn kern(ui: &mut Ui, label: Label, k: &KernBox, edge: &KernEdge, sent: &mut Vec<
     match widgets::clearable_number(ui, label, pair.value) {
         Some(NumberEdit::Set(v)) => sent.push(Msg::run(
             "kerning.setPair",
-            params(k, json!({"left": pair.edited_side(PairSide::Left), "right": pair.edited_side(PairSide::Right), "value": v})),
+            params(k, pair, json!({"left": pair.edited_side(PairSide::Left), "right": pair.edited_side(PairSide::Right), "value": v})),
         )),
         Some(NumberEdit::Clear) => {
             if let Some([left, right]) = &pair.applied {
-                sent.push(Msg::run("kerning.removePair", params(k, json!({"left": left, "right": right}))));
+                sent.push(Msg::run("kerning.removePair", params(k, pair, json!({"left": left, "right": right}))));
             }
         }
         None => {}
@@ -133,7 +133,7 @@ fn lock(ui: &mut Ui, words: &InfoBoxKerningWords, label: Label, k: &KernBox, pai
         && let Some(p) = pair
     {
         let command = if state == KernLock::Open { "kerning.removeException" } else { "kerning.addException" };
-        sent.push(Msg::run(command, params(k, json!({"left": p.left, "right": p.right, "side": side.name()}))));
+        sent.push(Msg::run(command, params(k, p, json!({"left": p.left, "right": p.right, "side": side.name()}))));
     }
 }
 
@@ -171,6 +171,7 @@ mod tests {
         let pair = KernPair {
             left: "T".into(),
             right: "o".into(),
+            master: "m01".into(),
             value: Some(-40.0),
             applied: Some(["@T".into(), "o".into()]),
             locks: [KernLock::Closed, KernLock::Open],
@@ -178,7 +179,6 @@ mod tests {
         };
         KernBox {
             glyph: "o".into(),
-            master: "m01".into(),
             direction: "ltr".into(),
             edges: vec![
                 KernEdge { edge: Edge::Left, pair: Some(pair.clone()), own: PairSide::Right },

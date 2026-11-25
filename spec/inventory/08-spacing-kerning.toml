@@ -487,7 +487,7 @@ milestone = "M5"
 summary = "The spacing shortcuts act only while the Text tool is active, on the current glyph (the one after the cursor). They are disabled in the locked kerning mode."
 ref = "Spacing & Kerning › Spacing › Spacing Shortcuts; Kerning › Kerning Modes"
 status = "handbook"
-notes = "Documented, not yet observed. The commands take `glyphs` and `layer`; in text mode the shell fills them with the current glyph and the tab's master. Outside text mode the keys run nothing; in locked kerning mode the key changes nothing and the status line says why. With `vertical: true` the commands act on the top and bottom sidebearings (M5.20); the shell does not pass it yet, so in top-to-bottom text the key still changes nothing."
+notes = "Documented, not yet observed. The commands take `glyphs` and `layer`; in text mode the shell fills them with the current glyph and the layer its text item shows. Outside text mode the keys run nothing; in locked kerning mode the key changes nothing and the status line says why. In top-to-bottom text the shell adds `vertical: true` and the keys are Up and Down (M5.53)."
 guesses = [
   "A spacing shortcut on a metric that holds a metrics key changes the number and keeps the key, which then shows as out of sync; no source says whether the reference keeps the key, removes it or ignores the keypress.",
 ]
@@ -502,8 +502,9 @@ milestone = "M5"
 summary = "Modifier scheme for the arrow-key spacing shortcuts: Ctrl addresses the left sidebearing, Cmd the right one, Ctrl and Cmd together shift the outline within the width, and Shift multiplies the 1-unit step to 10. Left/Right arrows give the direction in which the addressed edge moves."
 ref = "Spacing & Kerning › Spacing › Spacing Shortcuts"
 status = "handbook"
-notes = "Documented, not yet observed. In top-to-bottom text the commands take `vertical: true` (M5.20): the left-side shortcuts set the top sidebearing, the right-side ones the bottom sidebearing, and a shift moves the outline up (Left) or down (Right) by changing the vertical origin, so the outline's coordinates and the horizontal metrics stay."
+notes = "Documented, not yet observed. In top-to-bottom text the commands take `vertical: true` (M5.20): the left-side shortcuts set the top sidebearing, the right-side ones the bottom sidebearing, and a shift moves the outline up (Left) or down (Right) by changing the vertical origin, so the outline's coordinates and the horizontal metrics stay. In top-to-bottom text Up is pressed for Left and Down for Right (M5.53)."
 guesses = [
+  "In top-to-bottom text the keys are the arrows along the column, Up where horizontal text has Left and Down where it has Right, so the arrow still shows which way the edge moves; Left and Right with Ctrl do nothing. Trying the keys in top-to-bottom text settles it.",
   "In right-to-left text the shortcuts address the visual left and right sidebearings, as in left-to-right text. No source says.",
   "In top-to-bottom text the spacing shortcuts act on the top and bottom sidebearings: Ctrl on the top one, Cmd on the bottom one, both together shift the outline vertically. No source says; trying the shortcuts in top-to-bottom text settles it.",
 ]
@@ -956,7 +957,7 @@ milestone = "M5"
 summary = "The kerning part of the Edit View Info box: the kerning values for the current glyph against each immediate neighbour, the glyph's two kerning group names, and the locks that control group exceptions."
 ref = "Spacing & Kerning › Kerning › Info Box; Kerning Groups; Kerning Group Exceptions"
 status = "handbook"
-notes = "Documented, not yet observed: the Info box shows the kerning between the current glyph and the glyph on each side, with the grey placeholder 'Kern' when none is set, the glyph's kerning groups in the Group fields, and the locks that make the glyph an exception. A typed value goes to the sides the locks name (kerning.setPair); a lock runs kerning.addException or kerning.removeException, and a refused close goes to the status line. With several glyphs selected (M5.22) the Group fields send every glyph in `glyphs` (`kerning.setLeftGroup`, `kerning.setRightGroup`, one undo step) and show a group only when all the glyphs share it (`spacing.getSharedMetrics` `groups`); the kern fields still act on the pair at the cursor. The kerning fields are left out when the two glyphs come from different masters (4.0 release notes (\"What's new in Glyphs\", updates.glyphsapp.com/Glyphs3.4-3434.html); version 3, build 3226)."
+notes = "Documented, not yet observed: the Info box shows the kerning between the current glyph and the glyph on each side, with the grey placeholder 'Kern' when none is set, the glyph's kerning groups in the Group fields, and the locks that make the glyph an exception. A typed value goes to the sides the locks name (kerning.setPair); a lock runs kerning.addException or kerning.removeException, and a refused close goes to the status line. With several glyphs selected (M5.22) the Group fields send every glyph in `glyphs` (`kerning.setLeftGroup`, `kerning.setRightGroup`, one undo step) and show a group only when all the glyphs share it (`spacing.getSharedMetrics` `groups`); the kern fields still act on the pair at the cursor. The kerning fields are left out when the two glyphs come from different masters: the field and its lock are disabled, as at the end of a line (4.0 release notes (\"What's new in Glyphs\", updates.glyphsapp.com/Glyphs3.4-3434.html); version 3, build 3226)."
 observe = [
   "Select H, O and D with different left groups in text mode and read the Info box's left Group field.",
   "Put the cursor beside a glyph without kerning groups and look at its lock.",
@@ -965,6 +966,7 @@ observe = [
 guesses = [
   "With several glyphs selected, a Group field whose glyphs differ is empty with the grey Multiple Values placeholder, and a kern field acts on the pair at the cursor only. The reference has an Info box for several glyphs with placeholders (4.0 release notes, build 3866); their wording is not documented.",
   "A side whose glyph has no kerning group there shows its lock disabled, since opening it has nothing to make an exception from; the Info box on an ungrouped glyph in the running app settles it.",
+  "Towards a glyph shown in another master the kerning field is empty and disabled rather than absent; the release notes say only that the kerning is left out.",
   "In right-to-left text the kern field, lock and group at the left edge belong to the pair with the glyph drawn on the left, the next glyph in logical order; a right-to-left tab in the running app settles it.",
 ]
 
@@ -1080,11 +1082,12 @@ ref = "Spacing & Kerning › Kerning › Kerning Shortcuts"
 status = "handbook"
 notes = "Documented, not yet observed: with the Text tool and the cursor between the pair, Ctrl+Alt+Left increases the kerning with the glyph on the left, and Shift gives steps of 10. The handbook does not say which way the number moves; reading \"increase\" as a more positive value is our inference (guess on kerning.increaseLeft)."
 guesses = [
-  "The kerning keys write to the master of the layer the edited text item shows, as the Info box beside the cursor does, not to the tab's master; a kerning key on an item of Show All Masters in the reference app settles it.",
+  "The text kerns a pair in the master both items show, else in the tab's master, and the kerning keys write that value; a kerning key on an item of Show All Masters and on a pair of two masters in the reference app settles it.",
   "Increase adds to the kerning value (more space) and decrease subtracts; the handbook names the directions without a sign, and the reference kerning tutorial says negative values tighten a pair. The Info box kern value after one keypress, in the running app or a video, settles it.",
 ]
 observe = [
   "In a new font, type AV with the Text tool, put the cursor between A and V, press Ctrl+Alt+Left once and read the kern value in the Info box: +1 or -1.",
+  "With Show All Masters on, kern a pair in the second master's copy of the word with the keys and read the pair in both masters. Then type two glyphs, switch the second to another master in Palette › Layers, and press the key: what does the line show, and which master's pair changes?",
 ]
 
 [[command]]
@@ -1217,9 +1220,11 @@ status = "handbook"
 notes = "Documented, not yet observed: Ctrl with Alt acts on the pair with the glyph on the left, Cmd with Alt on the pair with the glyph on the right, and Shift gives steps of 10."
 guesses = [
   "In right-to-left text Ctrl picks the pair with the glyph that is visually on the left and Cmd the pair with the glyph visually on the right; the handbook does not mention right-to-left text here, and watching the shortcuts on right-to-left text settles it.",
+  "In top-to-bottom text Up stands for Left and Down for Right: Ctrl and Alt with them kern the pair of the glyph above and the current one, Cmd and Alt the pair with the glyph below, both among the vertical pairs. No source says; trying the keys in top-to-bottom text settles it.",
 ]
 observe = [
   "In a right-to-left tab put the cursor between alef-hb and bet-hb and press Ctrl+Alt+Left, then Cmd+Alt+Right: note which pair changes and by what sign.",
+  "In top-to-bottom text press Ctrl+Alt and Cmd+Alt with each of the four arrows and read the kerning fields after each: which pair changes, by what sign, and which arrows do nothing?",
 ]
 
 # ───────────────────────────── Kerning groups ─────────────────────────────

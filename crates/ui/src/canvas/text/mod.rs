@@ -29,11 +29,12 @@ pub mod paint;
 pub mod tokens;
 pub mod tool;
 
-use fontcraft_engine::model::Font;
+use fontcraft_engine::model::{Font, Master};
 use fontcraft_textlayout::{Direction, Item, KerningMode, Text};
 use serde_json::{Map, Value, json};
 
 use crate::app::{FontCraftApp, ViewState};
+use crate::shell::masters::{self, LayersView};
 
 /// The id of the Text tool (`fontcraft_tools::TOOLS`), which stands for text mode.
 pub const TEXT_TOOL: &str = "text";
@@ -145,6 +146,19 @@ impl EditText {
             Item::Placeholder => self.text.current_glyph(),
             Item::Missing(_) | Item::LineBreak => None,
         }
+    }
+
+    /// The master item `index` shows its glyph in.
+    pub fn item_master<'f>(&self, font: &'f Font, layers: &LayersView, index: usize) -> Option<&'f Master> {
+        let tab = masters::current_master(font, layers)?;
+        fontcraft_textlayout::item_master(font, &tab.id, &self.text, Some(&layers.layers), index)
+    }
+
+    /// The master whose kerning the line shows between the items `first` and `second`, and the kerning keys and the Info
+    /// box edit: that of both items, else the tab's.
+    pub fn pair_master<'f>(&self, font: &'f Font, layers: &LayersView, first: usize, second: usize) -> Option<&'f Master> {
+        let tab = masters::current_master(font, layers)?;
+        fontcraft_textlayout::kerning_master(font, &tab.id, &self.text, Some(&layers.layers), first, second)
     }
 
     /// The glyphs the text selection shows, each once, in text order and at most `limit`; empty with only a cursor.

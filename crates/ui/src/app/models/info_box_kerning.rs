@@ -5,6 +5,9 @@
 //! Pairs are in logical order, as `kerning.getPair` and the setters take them. The edges are as drawn: left to right,
 //! the left edge is the pair with the glyph before; right to left, it is the pair with the glyph after, which is
 //! drawn on the left; top to bottom, the first edge is the pair with the glyph above.
+//!
+//! A pair is read and stored in the master both glyphs are shown in; glyphs shown in different masters have no kerning
+//! field between them.
 
 use craft::ui::contract::PlainData;
 use serde_json::{Value, json};
@@ -47,6 +50,8 @@ impl PairSide {
 pub struct KernPair {
     pub left: String,
     pub right: String,
+    /// The master the pair is read from and stored in.
+    pub master: String,
     /// The kerning that applies; `None` when no stored pair applies.
     pub value: Option<f64>,
     /// The stored pair that applies, in command spelling (a glyph name or `@group`).
@@ -88,7 +93,7 @@ impl KernPair {
         }
     }
 
-    fn from_reply(left: &str, right: &str, reply: &Value) -> KernPair {
+    fn from_reply(left: &str, right: &str, master: &str, reply: &Value) -> KernPair {
         let applies = reply.get("step").is_some_and(|s| !s.is_null());
         let value = reply.get("value").and_then(Value::as_f64).filter(|v| applies && v.is_finite());
         let pair = reply.get("pair");
@@ -103,6 +108,7 @@ impl KernPair {
         KernPair {
             left: left.to_string(),
             right: right.to_string(),
+            master: master.to_string(),
             value,
             applied,
             locks: [lock("left"), lock("right")],
@@ -125,7 +131,7 @@ pub enum Edge {
 #[derive(PlainData, Clone, Debug, Default, PartialEq)]
 pub struct KernEdge {
     pub edge: Edge,
-    /// `None` at the start or the end of a line.
+    /// `None` at the start or the end of a line and towards a glyph shown in another master.
     pub pair: Option<KernPair>,
     pub own: PairSide,
 }
@@ -134,8 +140,6 @@ pub struct KernEdge {
 #[derive(PlainData, Clone, Debug, Default, PartialEq)]
 pub struct KernBox {
     pub glyph: String,
-    /// The master the pairs are read from and stored in.
-    pub master: String,
     /// `ltr`, `rtl` or `vertical`, as the kerning commands spell it.
     pub direction: String,
     /// The edge drawn first (left or top), then the other.
@@ -147,9 +151,9 @@ pub struct KernBox {
 }
 
 impl KernBox {
-    /// The parameters every kerning command of this box shares.
-    pub fn place(&self) -> Value {
-        json!({"master": self.master, "direction": self.direction})
+    /// The parameters every kerning command on `pair` shares.
+    pub fn place(&self, pair: &KernPair) -> Value {
+        json!({"master": pair.master, "direction": self.direction})
     }
 }
 
@@ -162,23 +166,25 @@ pub fn kern_box(cx: &mut ProjectCx<'_>) -> Option<KernBox> {
     let edit = &cx.view.text;
     let glyph = edit.current()?.to_string();
     let index = edit.edited_index()?;
-    let master = crate::canvas::tools::active_master(font, cx.view)?.id.clone();
-    let before = index.checked_sub(1).and_then(|i| edit.item_glyph(i)).map(str::to_string);
-    let after = index.checked_add(1).and_then(|i| edit.item_glyph(i)).map(str::to_string);
-    let writing = edit.direction;
-    let direction = match writing {
-        WritingDirection::Ltr => "ltr",
-        WritingDirection::Rtl => "rtl",
-        WritingDirection::Ttb => "vertical",
+    // The items of a pair and their master, when both are glyphs shown in it.
+    let items = |first: Option<usize>| -> Option<(String, String, String)> {
+        let first = first?;
+        let second = first.checked_add(1)?;
+        let master = edit.item_master(font, &cx.view.layers, first)?;
+        let same = edit.item_master(font, &cx.view.layers, second)?.id == master.id;
+        same.then_some((edit.item_glyph(first)?.to_string(), edit.item_glyph(second)?.to_string(), master.id.clone()))
     };
+    let (before, after) = (items(index.checked_sub(1)), items(Some(index)));
+    let writing = edit.direction;
+    let direction = writing.layout().name();
     let session = &mut *cx.session;
-    let mut pair = |left: &str, right: &str| -> Option<KernPair> {
+    let mut pair = |(left, right, master): (String, String, String)| -> Option<KernPair> {
         let query = json!({"left": left, "right": right, "master": master, "direction": direction});
         let reply = session.query("kerning.getPair", &query).ok()?;
-        Some(KernPair::from_reply(left, right, &reply))
+        Some(KernPair::from_reply(&left, &right, &master, &reply))
     };
-    let before_pair = before.as_deref().and_then(|b| pair(b, &glyph));
-    let after_pair = after.as_deref().and_then(|a| pair(&glyph, a));
+    let before_pair = before.and_then(&mut pair);
+    let after_pair = after.and_then(&mut pair);
     let edge = |edge, pair, own| KernEdge { edge, pair, own };
     let (edges, preceding_command) = match writing {
         WritingDirection::Ltr => {
@@ -192,7 +198,7 @@ pub fn kern_box(cx: &mut ProjectCx<'_>) -> Option<KernBox> {
         }
     };
     let preceding = if text::text_mode(cx.view) { before_pair } else { None };
-    Some(KernBox { glyph, master, direction: direction.to_string(), edges, preceding, preceding_command: preceding_command.into() })
+    Some(KernBox { glyph, direction: direction.to_string(), edges, preceding, preceding_command: preceding_command.into() })
 }
 
 #[cfg(test)]
@@ -252,13 +258,13 @@ mod tests {
             "value": -40, "step": "groupGroup", "pair": {"left": "@T", "right": "@o"},
             "locks": {"left": "closed", "right": "open"}, "groups": {"left": "T", "right": "o"},
         });
-        let pair = KernPair::from_reply("T", "o", &reply);
+        let pair = KernPair::from_reply("T", "o", "m01", &reply);
         assert_eq!(pair.value, Some(-40.0));
         assert_eq!(pair.applied, Some(["@T".to_string(), "@o".to_string()]));
         assert_eq!(pair.lock(PairSide::Left), KernLock::Closed);
         assert_eq!(pair.edited_side(PairSide::Left), "@T");
         assert_eq!(pair.edited_side(PairSide::Right), "o");
-        let none = KernPair::from_reply("a", "b", &json!({"value": 0, "step": null, "pair": null}));
+        let none = KernPair::from_reply("a", "b", "m01", &json!({"value": 0, "step": null, "pair": null}));
         assert_eq!((none.lock(PairSide::Right), none.value, none.applied), (KernLock::Ungrouped, None, None));
     }
 }

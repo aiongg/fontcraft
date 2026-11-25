@@ -361,6 +361,34 @@ fn a_picked_layer_gives_its_glyph_its_width() {
     assert_eq!((l.placed[0].advance, l.placed[1].advance), (900.0, 600.0), "a layer the glyph lacks is ignored");
 }
 
+/// Items shown in another master kern among themselves in that master; a pair of two masters kerns in the text's.
+#[test]
+fn a_pair_kerns_in_the_master_both_items_show() {
+    let mut f = font();
+    let mut bold = f.masters[0].clone();
+    bold.id = "m02".into();
+    Arc::make_mut(&mut f.masters).push(bold);
+    for name in ["A", "B"] {
+        f.glyph_mut(name).unwrap().layers.push(fontcraft_model::Layer::new("m02", 700.0));
+    }
+    kern(&mut f, Direction::Ltr, "A", "B", -10.0);
+    Direction::Ltr.table_mut(Arc::make_mut(&mut f.kerning)).set("m02", "A", "B", -30.0);
+    let mut t = text(&f, "ABAB");
+    for item in [0, 1, 2] {
+        assert!(t.set_layer(item, Some("m02")));
+    }
+    let l = layout(&f, "m01", &t, &Options::default()).unwrap();
+    let kerns: Vec<f64> = l.placed.iter().map(|p| p.kern).collect();
+    assert_eq!(kerns, [0.0, -30.0, 0.0, -10.0]);
+    let master = |first| kerning_master(&f, "m01", &t, None, first, first + 1).map(|m| m.id.clone());
+    assert_eq!((master(0).as_deref(), master(2).as_deref()), (Some("m02"), Some("m01")));
+    // A layer picked for the glyph counts like an item's own.
+    let picked = std::collections::BTreeMap::from([("B".to_string(), "m02".to_string())]);
+    let l = layout(&f, "m01", &t, &Options { layers: Some(&picked), ..Options::default() }).unwrap();
+    assert_eq!(l.placed[3].kern, -30.0);
+    assert!(kerning_master(&f, "gone", &t, None, 0, 1).is_none());
+}
+
 /// An item's own layer moves with it through edits and gives that item, and no other, its width.
 #[test]
 fn insert_and_delete_keep_item_layers_aligned() {
