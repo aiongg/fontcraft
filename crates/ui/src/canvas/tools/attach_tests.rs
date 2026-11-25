@@ -16,7 +16,7 @@ use fontcraft_tools::{Item, Selection};
 use serde_json::{Value, json};
 
 use crate::app::context_menu::item_state;
-use crate::app::models::components::{attachment_bands, cap_box, segment_box};
+use crate::app::models::components::{attachment_bands, cap_box, corner_box, segment_box};
 use crate::app::{APP, FontCraftApp, Msg, ViewMsg};
 
 /// The hint indices of the three attachments [`attach_app`] adds.
@@ -149,6 +149,27 @@ fn attachments_are_highlighted_clicked_and_deleted_like_the_command() {
     assert_eq!(layer(&app), layer(&headless), "the key gives the font the command gives");
 }
 
+/// Four selected corners show the values they share, `None` where they differ, and one edit sets all four in one undo
+/// step (`infoBox.cornerComponent`).
+#[test]
+fn several_corners_share_the_info_box() {
+    let mut app = attach_app();
+    add_glyph(&mut app, "_corner.s", false, &[(0.0, 40.0), (0.0, 0.0), (40.0, 0.0)], &[("origin", 0.0, 0.0)]);
+    run(&mut app, "cornerComponent.add", json!({"glyph": "A", "points": [[0, 0], [0, 1], [0, 2], [0, 3]], "corner": "_corner.s"}));
+    let corners: Vec<usize> =
+        layer(&app).info.hints.iter().enumerate().filter(|(_, h)| fontcraft_engine::model::corner::is_corner(h)).map(|(i, _)| i).collect();
+    assert_eq!(corners.len(), 4);
+    run(&mut app, "cornerComponent.setScale", json!({"glyph": "A", "corners": [corners[0]], "scaleX": 80}));
+    shell(&mut app, "selection.set", json!({ "hints": corners }));
+    let shown = |app: &FontCraftApp| corner_box(app.session.font().unwrap(), "A", &layer(app), &app.tools.selection).unwrap();
+    let b = shown(&app);
+    assert_eq!((b.corners, b.name.as_deref(), b.scale), (corners.clone(), Some("_corner.s"), [None, Some(100.0)]));
+    let before = undo_steps(&app);
+    run(&mut app, "cornerComponent.setScale", json!({"glyph": "A", "corners": corners, "scaleX": 115}));
+    assert_eq!(undo_steps(&app), before + 1);
+    assert_eq!(shown(&app).scale[0].map(f64::round), Some(115.0));
+}
+
 /// The segment and brush parts of the Info box show for the selected one; a pick in the picker the name opens runs the
 /// kind's `setGlyph`, Cancel changes nothing, and the arrow's command opens the glyph (`infoBox.segmentComponent`,
 /// `infoBox.brush`, `segmentComponent.editGlyph`, `brush.editGlyph`).
@@ -159,7 +180,7 @@ fn info_box_edits_run_the_commands_and_cancel_changes_nothing() {
     let font = app.session.font().unwrap();
     let l = layer(&app);
     let b = segment_box(font, "A", &l, &app.tools.selection, false).expect("the segment part shows");
-    assert_eq!((b.hint, b.name.as_str(), b.exists, b.brush), (SEGMENT, "_segment.wave", true, false));
+    assert_eq!((b.hints.as_slice(), b.name.as_deref(), b.exists, b.brush), ([SEGMENT].as_slice(), Some("_segment.wave"), true, false));
     assert!(segment_box(font, "A", &l, &app.tools.selection, true).is_none(), "no brush is selected");
     assert!(cap_box(font, "A", &l, &app.tools.selection).is_none(), "no cap is selected");
 

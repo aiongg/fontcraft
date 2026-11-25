@@ -319,7 +319,7 @@ label = "Choose Attachment Anchor"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{glyph?: name, layer?: id, component: index, anchor: name}"
+params = "{glyph?: name, layer?: id, component: index | components: [index], anchor: name}"
 area = "components"
 milestone = "M6"
 summary = "Chooses which of several same-type anchors (top, top_alt, top_viet ...) an attached component snaps to. In the UI it is the anchor menu in the component Info box, which only appears when more than one candidate anchor exists."
@@ -378,7 +378,7 @@ milestone = "M6"
 summary = "Context-menu item on an auto-aligned component that turns alignment off for it, so the component can be positioned by hand."
 ref = "Reusing Shapes › Components › Automatic Alignment"
 status = "observed"
-notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 17:30–17:36: the context menu of a component lists Disable Automatic Alignment, and after choosing it the component is dragged freely. Stores alignment -1 on the component (file-format specification v3)."
+notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 17:30–17:36: the context menu of a component lists Disable Automatic Alignment, and after choosing it the component is dragged freely. Stores alignment -1 on the component (file-format specification v3). The context menu shows it for selected components that are aligned and acts on those (M6.34)."
 
 [[command]]
 id = "component.enableAutomaticAlignment"
@@ -392,9 +392,10 @@ milestone = "M6"
 summary = "Context-menu item on a manually placed component that turns automatic alignment back on for it."
 ref = "Reusing Shapes › Components › Automatic Alignment"
 status = "handbook"
-notes = "Documented, not yet observed. The layer is laid out at once, also when the component was aligned already but stood elsewhere, so audit.fix can put a misaligned component right."
+notes = "Documented, not yet observed. The layer is laid out at once, also when the component was aligned already but stood elsewhere, so audit.fix can put a misaligned component right. The context menu shows it for selected components that are not aligned and acts on those; with a mixed selection Enable and Disable both show (M6.34)."
 guesses = [
   "Enable stores 0 (decided by the layer) on a layer of components only and 1 (forced) on a layer that has paths, so the item always aligns the component; enabling alignment on a component next to a path in the reference app settles it.",
+  "With aligned and unaligned components selected both Enable and Disable Automatic Alignment show, each for the components whose state it changes; the context menu of such a selection in the reference app settles it.",
 ]
 
 [[command]]
@@ -409,7 +410,7 @@ milestone = "M6"
 summary = "Context-menu item that pins a component in place so it cannot be moved. It applies to components that are not auto-aligned."
 ref = "Reusing Shapes › Components › Locking Components"
 status = "handbook"
-notes = "Documented, not yet observed. Sets the component's `locked` flag, the same flag `path.lockPath` sets on components since M3; the two commands share one implementation."
+notes = "Documented, not yet observed. Sets the component's `locked` flag, the same flag `path.lockPath` sets on components since M3; the two commands share one implementation. The context menu acts on the selected components that are neither locked nor aligned and hides the item when there are none (M6.34)."
 guesses = [
   "Lock Component is offered only for components that are not aligned automatically, and the command refuses an aligned component with a message; the context menu of an aligned component in the reference app settles it.",
 ]
@@ -426,7 +427,7 @@ milestone = "M6"
 summary = "Context-menu item that releases a locked component so it can be moved again."
 ref = "Reusing Shapes › Components › Locking Components"
 status = "handbook"
-notes = "Documented, not yet observed. Clears the `locked` flag that component.lock and path.lockPath set."
+notes = "Documented, not yet observed. Clears the `locked` flag that component.lock and path.lockPath set. The context menu acts on the selected components that are locked and hides the item when there are none (M6.34)."
 
 [[command]]
 id = "glyph.decomposeGlyph"
@@ -1493,9 +1494,12 @@ milestone = "M6"
 summary = "Shown for a selected corner component when View › Show Info is on."
 ref = "Reusing Shapes › Corner Components › Using Corner Components"
 status = "handbook"
-notes = "Documented, not yet observed. M6.11: `crates/ui/src/panels/info_box_component.rs`, beside the selection box. The name opens the corner glyph picker for cornerComponent.setGlyph, the arrow runs cornerComponent.editGlyph, the fields cornerComponent.setScale and the four buttons cornerComponent.setAlignment."
+notes = "Documented, not yet observed. M6.11: `crates/ui/src/panels/info_box_component.rs`, beside the selection box. The name opens the corner glyph picker for cornerComponent.setGlyph, the arrow runs cornerComponent.editGlyph, the fields cornerComponent.setScale and the four buttons cornerComponent.setAlignment. Several selected: the box shows their number after the name, a field holds the value they share and is empty where they differ (the name reads `Multi`), an edit sets all of them in one undo step, and the arrow opens the first one's glyph (M6.34)."
 guesses = [
-  "Corner components cannot be selected yet, so the box describes the corner on the first selected node that holds one; selecting the corner itself, as the reference app does, settles it.",
+  "The box describes the selected corner components, else those on the selected nodes; the reference app with a node selected that holds a corner settles it.",
+]
+observe = [
+  "Select two corner components of different scale: note what each field of the Info box shows, and what typing a scale changes.",
 ]
 
 [[panel]]
@@ -1852,7 +1856,7 @@ milestone = "M13"
 summary = "Shown for a selected cap component when View › Show Info is on: the cap glyph's name and arrow button, a horizontal and a vertical scale field, four alignment buttons and a fit checkbox."
 ref = "Reusing Shapes › Cap Components › Using Cap Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): the controls are those in the 3.0.3 release-notes screenshot (W5), a still image, not a video, so the row stays `handbook`; with several caps selected, a field whose values differ shows `Multi`. The greyed horizontal value under Fit is from forum 22406."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): the controls are those in the 3.0.3 release-notes screenshot (W5), a still image, not a video, so the row stays `handbook`; with several caps selected, a field whose values differ shows `Multi`. The greyed horizontal value under Fit is from forum 22406. Several selected: as the source says, except that ours leaves a number field whose values differ empty instead of writing `Multi` into it (the name does read `Multi`); Fit then shows the mixed state (M6.34)."
 guesses = [
   "The cap part shows for a selected cap as well as for a cap on a selected node.",
 ]
@@ -2044,7 +2048,7 @@ milestone = "M13"
 summary = "Shown for a selected segment component when View › Show Info is on."
 ref = "Reusing Shapes › Segment Components › Using Segment Components"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): a 2021 feature request (forum 21014) asks for a way to mirror segment components after they are applied, which agrees with an Info box without scale fields."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Written sources (M6.25; labels W1 to W8 and forum threads are listed in docs/spec/09-reusing-shapes.md § 8.6): a 2021 feature request (forum 21014) asks for a way to mirror segment components after they are applied, which agrees with an Info box without scale fields. Several selected: the box shows their number after the name, a field holds the value they share and is empty where they differ (the name reads `Multi`), an edit sets all of them in one undo step, and the arrow opens the first one's glyph (M6.34)."
 guesses = [
   "The segment Info box has only the name and the arrow button, with no scale, alignment or fit controls, as the handbook lists; a screenshot of the Info box in the reference app settles it.",
 ]
@@ -2234,7 +2238,7 @@ milestone = "M13"
 summary = "Shown for a selected brush when View › Show Info is on."
 ref = "Reusing Shapes › Brushes › Using Brushes"
 status = "handbook"
-notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison."
+notes = "Moved from M6 to M13 by the M6 plan, which the owner accepted (docs/plans/M6.md § 7 question 4 (b)). The M13 plan (docs/plans/M13.md, packages M13.40 to M13.42) builds it after the checks of its § 8 have been made in the reference app; neither oracle supports it and no corpus source uses it, so a font exported by the reference app from our synthetic test font is the only comparison. Several selected: the box shows their number after the name, a field holds the value they share and is empty where they differ (the name reads `Multi`), an edit sets all of them in one undo step, and the arrow opens the first one's glyph (M6.34)."
 guesses = [
   "The brush Info box has only the name and the arrow button, with no scale, alignment or fit controls, as the handbook lists; a screenshot of the Info box in the reference app settles it.",
 ]

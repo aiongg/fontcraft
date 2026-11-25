@@ -79,6 +79,10 @@ pub fn selection_targets(scene: &Scene, selection: &Selection, spec: &CommandSpe
                 if !takes_points {
                     shapes.extend(selected_paths(scene, selection));
                 }
+                // Reversing acts on paths: with only components selected it takes every path, as with nothing selected.
+                if spec.id.starts_with("path.reverseContours") {
+                    shapes.retain(|&s| scene.path(s).is_some());
+                }
                 if !shapes.is_empty() {
                     m.insert("shapes".into(), Value::Array(shapes.iter().map(|&s| json!(s)).collect()));
                 }

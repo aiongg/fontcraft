@@ -15,9 +15,15 @@
 //! | segment component | segment glyph name; arrow button | the picker for `segmentComponent.setGlyph`; `segmentComponent.editGlyph` |
 //! | brush | brush glyph name; arrow button | the picker for `brush.setGlyph`; `brush.editGlyph` |
 //!
-//! X and Y are greyed out while the component is aligned automatically (only X while it is aligned horizontally), and
-//! every field while it is locked. With Fit on, the cap's horizontal scale is computed and greyed out.
+//! Each part describes every selected object of its kind, with their number after the name: a field shows the value
+//! they share, is empty where they differ (a name reads `Multi`), and an edit sets it on all of them in one undo step.
+//! The arrow button edits the first one's glyph.
+//!
+//! X and Y are greyed out while no selected component takes them: one aligned automatically refuses both (only X while
+//! it is aligned horizontally) and a locked one every field; the commands leave such members of a list alone and the
+//! status line names them. With Fit on every cap, the horizontal scale is computed and greyed out.
 
+use craft::behavior::Mixed;
 use craft::ui::buttons::Button;
 use craft::ui::choice::Checkbox;
 use craft::ui::contract::{Bind, Entry, Props as _, Show as _, ShowContainer as _};
@@ -53,6 +59,7 @@ craft::ui::words! {
         smart: "fontcraftComponentBox.smart" = "Smart";
         smart_tip: "fontcraftComponentBox.smartTip" = "Smart Component Settings";
         /// The arrow button that edits the glyph a part names.
+        multi: "fontcraftComponentBox.multi" = "Multi";
         edit: "fontcraftComponentBox.edit" = "↗";
         edit_base: "fontcraftComponentBox.editBase" = "Edit the base glyph";
         edit_corner: "fontcraftComponentBox.editCorner" = "Edit the corner glyph";
@@ -87,39 +94,39 @@ craft::ui::words! {
 /// The component part.
 pub fn component_part(ui: &mut Ui, b: &ComponentBox, sent: &mut Vec<Msg>) {
     let words = Env::of(ui).words::<ComponentBoxWords>();
-    let target = json!({"glyph": b.glyph, "layer": b.layer, "component": b.component});
+    let target = json!({"glyph": b.glyph, "layer": b.layer, "components": b.components});
     Section::new(words.component.clone()).show(ui, |ui, _| {
         let _ = Row::new().show(ui, |ui, _| {
-            let name = if b.selected > 1 { format!("{} (+{})", b.base, b.selected - 1) } else { b.base.clone() };
+            let name = counted(&words, b.base.as_deref(), b.components.len());
             if Button::new(name).tooltip(words.choose_base.clone()).show(ui).clicked() {
                 sent.push(shell("editView.chooseGlyph", with(&target, json!({"purpose": "baseGlyph"}))));
             }
             if b.anchors.len() > 1 {
                 let entries: Vec<Entry<String>> = b.anchors.iter().map(|a| Entry::new(a.clone(), a.clone())).collect();
-                let shown = b.anchor.clone().unwrap_or_default();
-                if let Some(anchor) = Select::new(words.anchor.clone(), Bind::given(shown.clone()), &entries).show(ui).events.committed()
-                    && *anchor != shown
+                let shown = b.anchor.clone().map_or(Mixed::Mixed, Mixed::Same);
+                if let Some(anchor) = Select::new(words.anchor.clone(), Bind::given(shown), &entries).show(ui).events.committed()
+                    && Some(anchor) != b.anchor.as_ref()
                 {
                     sent.push(Msg::run("component.setAnchor", with(&target, json!({ "anchor": anchor }))));
                 }
             }
-            if b.smart && Button::new(words.smart.clone()).selected(true).tooltip(words.smart_tip.clone()).show(ui).clicked() {
-                let params = json!({"glyph": b.glyph, "layer": b.layer, "components": [b.component]});
+            if !b.smart.is_empty() && Button::new(words.smart.clone()).selected(true).tooltip(words.smart_tip.clone()).show(ui).clicked() {
+                let params = json!({"glyph": b.glyph, "layer": b.layer, "components": b.smart});
                 sent.push(shell("smartComponent.showSettings", params));
             }
-            if Button::new(words.edit.clone()).tooltip(words.edit_base.clone()).id_salt("editBase").show(ui).clicked() {
-                sent.push(shell("component.editBaseGlyph", json!({ "component": b.component })));
+            if Button::new(words.edit.clone()).tooltip(words.edit_base.clone()).id_salt("editBase").show(ui).clicked()
+                && let Some(first) = b.components.first()
+            {
+                sent.push(shell("component.editBaseGlyph", json!({ "component": first })));
             }
         });
-        let v = b.values;
-        let editable = !b.locked && v.is_some();
         let fields: [(&Label, &Label, &str, Option<f64>, bool); 6] = [
-            (&words.x, &words.x_tip, "x", Some(b.x), b.x_free),
-            (&words.y, &words.y_tip, "y", Some(b.y), b.y_free),
-            (&words.scale_x, &words.scale_x_tip, "scaleX", v.map(|v| v.scale_x), editable),
-            (&words.scale_y, &words.scale_y_tip, "scaleY", v.map(|v| v.scale_y), editable),
-            (&words.slant, &words.slant_tip, "slant", v.map(|v| v.slant), editable),
-            (&words.rotation, &words.rotation_tip, "rotation", v.map(|v| v.rotation), editable),
+            (&words.x, &words.x_tip, "x", b.x, b.x_free),
+            (&words.y, &words.y_tip, "y", b.y, b.y_free),
+            (&words.scale_x, &words.scale_x_tip, "scaleX", b.scale_x, b.editable),
+            (&words.scale_y, &words.scale_y_tip, "scaleY", b.scale_y, b.editable),
+            (&words.slant, &words.slant_tip, "slant", b.slant, b.editable),
+            (&words.rotation, &words.rotation_tip, "rotation", b.rotation, b.editable),
         ];
         let _ = Row::new().show(ui, |ui, _| {
             for (label, tip, key, value, enabled) in fields {
@@ -134,16 +141,16 @@ pub fn component_part(ui: &mut Ui, b: &ComponentBox, sent: &mut Vec<Msg>) {
 /// The corner part.
 pub fn corner_part(ui: &mut Ui, b: &CornerBox, sent: &mut Vec<Msg>) {
     let words = Env::of(ui).words::<ComponentBoxWords>();
-    let target = json!({"glyph": b.glyph, "layer": b.layer, "corners": [b.corner]});
+    let target = json!({"glyph": b.glyph, "layer": b.layer, "corners": b.corners});
     Section::new(words.corner.clone()).show(ui, |ui, _| {
         let names = Names {
-            name: &b.name,
+            name: counted(&words, b.name.as_deref(), b.corners.len()),
             exists: b.exists,
             choose: &words.choose_corner,
             edit: &words.edit_corner,
             purpose: "cornerGlyph",
             edit_command: "cornerComponent.editGlyph",
-            edit_params: json!({"glyph": b.glyph, "layer": b.layer, "corner": b.corner}),
+            edit_params: json!({"glyph": b.glyph, "layer": b.layer, "corner": b.corners.first()}),
         };
         name_row(ui, &words, &names, &target, sent);
         let _ = Row::new().show(ui, |ui, _| {
@@ -156,23 +163,24 @@ pub fn corner_part(ui: &mut Ui, b: &CornerBox, sent: &mut Vec<Msg>) {
 /// The cap part (M6.25): the cap glyph's name and arrow button, ↔ and ↕ scale, four alignment buttons and Fit.
 pub fn cap_part(ui: &mut Ui, b: &CapBox, sent: &mut Vec<Msg>) {
     let words = Env::of(ui).words::<ComponentBoxWords>();
-    let target = json!({"glyph": b.glyph, "layer": b.layer, "caps": [b.cap]});
+    let target = json!({"glyph": b.glyph, "layer": b.layer, "caps": b.caps});
     Section::new(words.cap.clone()).show(ui, |ui, _| {
         let names = Names {
-            name: &b.name,
+            name: counted(&words, b.name.as_deref(), b.caps.len()),
             exists: b.exists,
             choose: &words.choose_cap,
             edit: &words.edit_cap,
             purpose: "capGlyph",
             edit_command: "cornerComponent.editGlyph",
-            edit_params: json!({"glyph": b.glyph, "layer": b.layer, "corner": b.cap}),
+            edit_params: json!({"glyph": b.glyph, "layer": b.layer, "corner": b.caps.first()}),
         };
         name_row(ui, &words, &names, &target, sent);
         let _ = Row::new().show(ui, |ui, _| {
-            scale_fields(ui, &words, b.scale, [!b.fit, true], "capComponent.setScale", &target, sent);
-            let fit = Checkbox::new(Bind::given(b.fit)).label(words.fit.clone()).tooltip(words.fit_tip.clone()).show(ui);
+            scale_fields(ui, &words, b.scale, [b.fit != Some(true), true], "capComponent.setScale", &target, sent);
+            let fit =
+                Checkbox::new(Bind::given(b.fit.map_or(Mixed::Mixed, Mixed::Same))).label(words.fit.clone()).tooltip(words.fit_tip.clone()).show(ui);
             if let Some(on) = fit.events.committed()
-                && *on != b.fit
+                && Some(*on) != b.fit
             {
                 sent.push(Msg::run("capComponent.setFit", with(&target, json!({ "fit": on }))));
             }
@@ -198,17 +206,19 @@ pub fn segment_part(ui: &mut Ui, b: &SegmentBox, sent: &mut Vec<Msg>) {
             &words.edit_segment,
         )
     };
-    let target = with(&json!({"glyph": b.glyph, "layer": b.layer}), keyed_value(list_key, json!([b.hint])));
-    let edit_params = with(&json!({"glyph": b.glyph, "layer": b.layer}), keyed_value(index_key, json!(b.hint)));
+    let target = with(&json!({"glyph": b.glyph, "layer": b.layer}), keyed_value(list_key, json!(b.hints)));
+    let edit_params = with(&json!({"glyph": b.glyph, "layer": b.layer}), keyed_value(index_key, json!(b.hints.first())));
     Section::new(title.clone()).show(ui, |ui, _| {
-        let names = Names { name: &b.name, exists: b.exists, choose, edit, purpose, edit_command, edit_params: edit_params.clone() };
+        let name = counted(&words, b.name.as_deref(), b.hints.len());
+        let names = Names { name, exists: b.exists, choose, edit, purpose, edit_command, edit_params: edit_params.clone() };
         name_row(ui, &words, &names, &target, sent);
     });
 }
 
 /// What the name row of an attachment shows.
 struct Names<'a> {
-    name: &'a str,
+    /// The glyph's name as [`counted`] writes it.
+    name: String,
     exists: bool,
     choose: &'a Label,
     edit: &'a Label,
@@ -222,7 +232,7 @@ struct Names<'a> {
 fn name_row(ui: &mut Ui, words: &ComponentBoxWords, n: &Names<'_>, target: &Value, sent: &mut Vec<Msg>) {
     let _ = Row::new().show(ui, |ui, _| {
         let tip = if n.exists { n.choose.clone() } else { words.missing.clone() };
-        if Button::new(n.name.to_string()).tooltip(tip).show(ui).clicked() {
+        if Button::new(n.name.clone()).tooltip(tip).show(ui).clicked() {
             sent.push(shell("editView.chooseGlyph", with(target, json!({ "purpose": n.purpose }))));
         }
         if Button::new(words.edit.clone()).tooltip(n.edit.clone()).enabled(n.exists).id_salt("editGlyph").show(ui).clicked() && n.exists {
@@ -232,13 +242,21 @@ fn name_row(ui: &mut Ui, words: &ComponentBoxWords, n: &Names<'_>, target: &Valu
 }
 
 /// The horizontal and vertical scale fields of a corner or cap, in percent.
-fn scale_fields(ui: &mut Ui, words: &ComponentBoxWords, scale: [f64; 2], enabled: [bool; 2], command: &str, target: &Value, sent: &mut Vec<Msg>) {
+fn scale_fields(
+    ui: &mut Ui,
+    words: &ComponentBoxWords,
+    scale: [Option<f64>; 2],
+    enabled: [bool; 2],
+    command: &str,
+    target: &Value,
+    sent: &mut Vec<Msg>,
+) {
     let [sx, sy] = scale;
     let [ex, ey] = enabled;
     for (label, tip, key, value, on) in
         [(&words.scale_x, &words.scale_x_tip, "scaleX", sx, ex), (&words.scale_y, &words.scale_y_tip, "scaleY", sy, ey)]
     {
-        if let Some(n) = field(ui, label, tip, Some(value), on) {
+        if let Some(n) = field(ui, label, tip, value, on) {
             sent.push(Msg::run(command, with(target, keyed(key, n))));
         }
     }
@@ -253,6 +271,12 @@ fn mode_buttons(ui: &mut Ui, words: &ComponentBoxWords, current: Option<&str>, c
             sent.push(Msg::run(command, with(target, json!({ "mode": mode }))));
         }
     }
+}
+
+/// The name `count` selected objects share, or `Multi`, with their number when there are several.
+fn counted(words: &ComponentBoxWords, name: Option<&str>, count: usize) -> String {
+    let name = name.unwrap_or(words.multi.as_str());
+    if count > 1 { format!("{name} ({count})") } else { name.to_string() }
 }
 
 /// A number field that commits only while `enabled`.
@@ -298,7 +322,7 @@ mod tests {
 
     use super::{cap_part, component_part, corner_part, segment_part};
     use crate::app::Msg;
-    use crate::app::models::components::{CapBox, ComponentBox, ComponentValues, CornerBox, SegmentBox};
+    use crate::app::models::components::{CapBox, ComponentBox, CornerBox, SegmentBox};
 
     fn fixture(show: impl Fn(&mut Ui, &mut Vec<Msg>) + 'static) -> (Fixture, Rc<RefCell<Vec<Msg>>>) {
         let posted = Rc::new(RefCell::new(Vec::new()));
@@ -321,15 +345,18 @@ mod tests {
         ComponentBox {
             glyph: "Aacute".into(),
             layer: "m01".into(),
-            component: 1,
-            base: "acutecomb".into(),
-            values: Some(ComponentValues { x: 100.0, y: 0.0, scale_x: 100.0, scale_y: 100.0, slant: 0.0, rotation: 0.0 }),
-            x: 100.0,
-            y: 0.0,
+            components: vec![1],
+            base: Some("acutecomb".into()),
+            x: Some(100.0),
+            y: Some(0.0),
+            scale_x: Some(100.0),
+            scale_y: Some(100.0),
+            slant: Some(0.0),
+            rotation: Some(0.0),
             x_free: true,
             y_free: true,
-            smart: true,
-            selected: 1,
+            editable: true,
+            smart: vec![1],
             ..Default::default()
         }
     }
@@ -345,7 +372,7 @@ mod tests {
         let posted = posted.borrow();
         assert_eq!(
             posted.first(),
-            Some(&Msg::run("component.setTransform", json!({"glyph": "Aacute", "layer": "m01", "component": 1, "scaleX": 50.0})))
+            Some(&Msg::run("component.setTransform", json!({"glyph": "Aacute", "layer": "m01", "components": [1], "scaleX": 50.0})))
         );
         assert_eq!(posted.get(1).and_then(Msg::command_id), Some("smartComponent.showSettings"));
     }
@@ -365,9 +392,9 @@ mod tests {
         let b = CornerBox {
             glyph: "H".into(),
             layer: "m01".into(),
-            corner: 2,
-            name: "_corner.serif".into(),
-            scale: [100.0, 100.0],
+            corners: vec![2],
+            name: Some("_corner.serif".into()),
+            scale: [Some(100.0), Some(100.0)],
             mode: Some("left".into()),
             exists: true,
         };
@@ -386,17 +413,38 @@ mod tests {
         );
     }
 
+    /// Corners that differ show their number and empty fields, and an edit goes to all of them.
+    #[test]
+    fn mixed_corners_show_their_number_and_take_one_edit() {
+        let b = CornerBox {
+            glyph: "H".into(),
+            layer: "m01".into(),
+            corners: vec![0, 1, 4],
+            name: None,
+            scale: [None, Some(100.0)],
+            mode: None,
+            exists: true,
+        };
+        let (mut f, posted) = fixture(move |ui, sent| corner_part(ui, &b, sent));
+        assert!(f.by_label("Multi (3)").is_some(), "the number of corners");
+        type_into(&mut f, "↔%", "115");
+        assert_eq!(
+            *posted.borrow(),
+            vec![Msg::run("cornerComponent.setScale", json!({"glyph": "H", "layer": "m01", "corners": [0, 1, 4], "scaleX": 115.0}))]
+        );
+    }
+
     /// The cap's Fit checkbox posts `capComponent.setFit`; with Fit on the horizontal scale is computed and refuses edits.
     #[test]
     fn cap_fit_greys_the_horizontal_scale() {
         let b = CapBox {
             glyph: "l".into(),
             layer: "m01".into(),
-            cap: 0,
-            name: "_cap.flag".into(),
-            scale: [80.0, 100.0],
+            caps: vec![0],
+            name: Some("_cap.flag".into()),
+            scale: [Some(80.0), Some(100.0)],
             mode: Some("both".into()),
-            fit: true,
+            fit: Some(true),
             exists: true,
         };
         let (mut f, posted) = fixture(move |ui, sent| cap_part(ui, &b, sent));
@@ -415,7 +463,7 @@ mod tests {
             (false, "_segment.wave", "segmentGlyph", "segmentComponents", "segmentComponent.editGlyph", "segmentComponent"),
             (true, "_brush.bar", "brushGlyph", "brushes", "brush.editGlyph", "brush"),
         ] {
-            let b = SegmentBox { glyph: "l".into(), layer: "m01".into(), hint: 3, name: name.into(), exists: true, brush };
+            let b = SegmentBox { glyph: "l".into(), layer: "m01".into(), hints: vec![3], name: Some(name.into()), exists: true, brush };
             let (mut f, posted) = fixture(move |ui, sent| segment_part(ui, &b, sent));
             assert!(f.by_label("↔%").is_none() && f.by_label("Fit").is_none(), "no scale or fit controls");
             let named = f.by_label(name).expect("the glyph name");

@@ -38,7 +38,7 @@ use fontcraft_engine::model::attach;
 use serde_json::{Map, Value, json};
 
 use crate::app::models::Stamp;
-use crate::app::models::components::{caps_on_nodes, corners_on_nodes, segments_on_nodes};
+use crate::app::models::components::{caps_on_nodes, corners_on_nodes, segments_on_nodes, selected_components};
 use crate::app::{FontCraftApp, Msg};
 use crate::canvas::tools::scene;
 use crate::canvas::tools::targets::selected_segments;
@@ -82,7 +82,7 @@ const COMMANDS: &[UiCommand] = &[UiCommand {
     label: "Choose Glyph",
     menu: &[],
     shortcut: None,
-    params: "{purpose?: \"addComponent\" (default) | \"addComponentAllMasters\" | \"baseGlyph\" | \"addCorner\" | \"cornerGlyph\" | \"addCap\" | \"capGlyph\" | \"addSegment\" | \"segmentGlyph\" | \"addBrush\" | \"brushGlyph\", glyph?: name, layer?: id, component?: index, points?: [[shape, node]], segments?: [[shape, node]], corners?: [indices], caps?: [indices], segmentComponents?: [indices], brushes?: [indices], query?: string, select?: name, pick?: bool, open?: bool (default true)} show the glyph picker of a component command. Component purposes search the font as glyph.search does; the corner, cap, segment and brush purposes list the glyphs named _corner.…, _cap.…, _segment.… or _brush.… whose names hold every word of the query. The purpose and its targets are fixed when the picker opens: glyph and layer default to the edited ones, component to the selected component, points to the selected nodes, segments to the selected segments (a brush falls back to the selected nodes), and corners, caps, segment components and brushes to the selected ones or those on the selected nodes. select highlights a result; pick runs the purpose's command with the highlighted glyph and closes the picker",
+    params: "{purpose?: \"addComponent\" (default) | \"addComponentAllMasters\" | \"baseGlyph\" | \"addCorner\" | \"cornerGlyph\" | \"addCap\" | \"capGlyph\" | \"addSegment\" | \"segmentGlyph\" | \"addBrush\" | \"brushGlyph\", glyph?: name, layer?: id, component?: index, components?: [indices], points?: [[shape, node]], segments?: [[shape, node]], corners?: [indices], caps?: [indices], segmentComponents?: [indices], brushes?: [indices], query?: string, select?: name, pick?: bool, open?: bool (default true)} show the glyph picker of a component command. Component purposes search the font as glyph.search does; the corner, cap, segment and brush purposes list the glyphs named _corner.…, _cap.…, _segment.… or _brush.… whose names hold every word of the query. The purpose and its targets are fixed when the picker opens: glyph and layer default to the edited ones, the components to the selected ones, points to the selected nodes, segments to the selected segments (a brush falls back to the selected nodes), and corners, caps, segment components and brushes to the selected ones or those on the selected nodes. select highlights a result; pick runs the purpose's command with the highlighted glyph and closes the picker",
 }];
 
 /// What a pick does.
@@ -285,18 +285,20 @@ fn targets(app: &FontCraftApp, p: &Value, purpose: Purpose) -> Result<Map<String
     match purpose {
         Purpose::AddComponent | Purpose::AddComponentAllMasters => {}
         Purpose::BaseGlyph => {
-            let index = match p.get("component").filter(|v| !v.is_null()) {
-                Some(v) => v.as_u64().and_then(|i| usize::try_from(i).ok()).ok_or("`component` must be an index")?,
-                None => selection
-                    .and_then(|s| {
-                        s.shapes.iter().copied().find(|&i| matches!(layer.shapes.get(i), Some(fontcraft_engine::model::Shape::Component(_))))
-                    })
-                    .ok_or("select a component, or give `component`")?,
+            let of_value = |v: &Value| v.as_u64().and_then(|i| usize::try_from(i).ok()).ok_or("a component must be an index");
+            let picked: Vec<usize> = match (list("components")?, p.get("component").filter(|v| !v.is_null())) {
+                (Some(_), Some(_)) => return Err("give `component` or `components`, not both".into()),
+                (Some(given), None) => given.as_array().into_iter().flatten().map(of_value).collect::<Result<_, _>>()?,
+                (None, Some(v)) => vec![of_value(v)?],
+                (None, None) => selection.map(|s| selected_components(layer, s)).unwrap_or_default(),
             };
-            if !matches!(layer.shapes.get(index), Some(fontcraft_engine::model::Shape::Component(_))) {
-                return Err(format!("shape {index} is not a component of the layer"));
+            if picked.is_empty() {
+                return Err("select a component, or give `component` or `components`".into());
             }
-            m.insert("component".into(), json!(index));
+            if let Some(i) = picked.iter().find(|&&i| !matches!(layer.shapes.get(i), Some(fontcraft_engine::model::Shape::Component(_)))) {
+                return Err(format!("shape {i} is not a component of the layer"));
+            }
+            m.insert("components".into(), json!(picked));
         }
         Purpose::AddCorner | Purpose::AddCap => {
             let given = list("points")?;
@@ -371,7 +373,7 @@ fn purpose_arg(p: &Value) -> Result<Option<Purpose>, String> {
 }
 
 fn has_targets(p: &Value) -> bool {
-    ["glyph", "layer", "component", "points", "segments", "corners", "caps", "segmentComponents", "brushes"]
+    ["glyph", "layer", "component", "components", "points", "segments", "corners", "caps", "segmentComponents", "brushes"]
         .iter()
         .any(|k| p.get(*k).is_some_and(|v| !v.is_null()))
 }

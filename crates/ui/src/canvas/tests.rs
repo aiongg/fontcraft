@@ -184,7 +184,7 @@ fn a_click_on_a_placeholder_selects_its_component() {
     crate::control::dispatch(&mut app, "ui.pointer", &json!({ "events": events })).unwrap();
     app.drain();
     assert!(app.tools.selection.shapes.contains(&3), "{:?}", app.tools.selection);
-    assert_eq!(app.models.palette.info_box.component.as_ref().map(|c| c.base.as_str()), Some("empty"));
+    assert_eq!(app.models.palette.info_box.component.as_ref().and_then(|c| c.base.as_deref()), Some("empty"));
     let selection = super::tools::tokens::ToolTokens::standard().selection;
     assert_eq!(count(&painted(&app, paint::components::shapes), selection), 3, "its box and cross are in the selection colour");
 }

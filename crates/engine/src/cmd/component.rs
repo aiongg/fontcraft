@@ -13,7 +13,9 @@
 //! composites an edit touches after every command ([`fontcraft_components::metrics::realign`]),
 //! so these commands only write what the user chose; aligned positions follow. An aligned
 //! component refuses a move or a position edit with a message, except the vertical part when it
-//! is aligned horizontally only; a locked component refuses every move and transform edit.
+//! is aligned horizontally only; a locked component refuses every move and transform edit. The
+//! Info box edits (transform, base glyph, anchor) also take a list, as one undo step: members that
+//! cannot take the edit are left alone and named in the reply.
 
 use std::collections::HashMap;
 
@@ -23,6 +25,7 @@ use fontcraft_components::propagate::{base_layer, effective_anchors_with};
 use fontcraft_components::{ComponentIndex, MAX_ANCHOR_NAME_LEN, MAX_LAYER_COMPONENTS};
 use fontcraft_geom::round_to_grid;
 use fontcraft_hinting::Renumbered;
+use fontcraft_model::glyphdata::GlyphData;
 use fontcraft_model::{Alignment, Component, Font, Layer, LayerSide, MAX_COORDINATE, Shape, Transform};
 use serde_json::{Value, json};
 
@@ -88,7 +91,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Set Component Transform",
             [],
             None,
-            "{glyph: name, layer?: id, component?: index (default the layer's only component), x?: number, y?: number, scaleX?: percent, scaleY?: percent, slant?: degrees (rightward, within ±89), rotation?: degrees (counterclockwise, within ±360)} sets the values the component Info box shows; scales are not 0 and within ±10,000 %. Position edits are refused on an aligned component (only y when it is aligned horizontally) and every edit on a locked one → {glyph, layer, component, x, y, scaleX, scaleY, slant, rotation}",
+            "{glyph: name, layer?: id, component?: index (default the layer's only component) | components?: [index], x?: number, y?: number, scaleX?: percent, scaleY?: percent, slant?: degrees (rightward, within ±89), rotation?: degrees (counterclockwise, within ±360)} sets the values the component Info box shows; scales are not 0 and within ±10,000 %. Position edits are refused on an aligned component (only y when it is aligned horizontally) and every edit on a locked one; with `components` such members are left alone and listed in `skipped`, and the edit is refused when none can take it → {glyph, layer, component, x, y, scaleX, scaleY, slant, rotation} | {glyph, layer, components: [index], skipped: [{component, base, reason}]}",
             has_doc,
             set_transform
         )
@@ -98,7 +101,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Change Component Glyph",
             [],
             None,
-            "{glyph: name, layer?: id, component?: index (default the layer's only component), base: name} points the component at another glyph; its slot in the shape order, transform, alignment setting and attachment anchor stay. A base that would make a glyph contain itself is refused → {glyph, layer, component, base}",
+            "{glyph: name, layer?: id, component?: index (default the layer's only component) | components?: [index], base: name} points the component, or every component of the list, at another glyph; the slots in the shape order, transforms, alignment settings and attachment anchors stay. A base that would make a glyph contain itself is refused → {glyph, layer, component: index | components: [index], base}",
             has_doc,
             set_base_glyph
         )
@@ -119,7 +122,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Choose Attachment Anchor",
             [],
             None,
-            "{glyph: name, layer?: id, component: index, anchor: name (\"\" clears it)} chooses which anchor of the glyph before it the component attaches to: the name of one of its own underscore anchors without the underscore (\"top\" for \"_top\"), or that name with a suffix (\"top_viet\", \"top_2\") → {glyph, layer, component, anchor: name | null}",
+            "{glyph: name, layer?: id, component: index | components: [index], anchor: name (\"\" clears it)} chooses which anchor of the glyph before it the component attaches to: the name of one of its own underscore anchors without the underscore (\"top\" for \"_top\"), or that name with a suffix (\"top_viet\", \"top_2\"). With `components` the members that cannot attach by the name are left alone and listed in `skipped`, and the edit is refused when none can → {glyph, layer, component, anchor: name | null} | {glyph, layer, components: [index], anchor, skipped: [{component, base, reason}]}",
             has_doc,
             set_anchor
         )
@@ -262,6 +265,33 @@ fn one_component(p: &Params, layer: &Layer) -> Result<usize> {
         (None, _) => Err(p.bad(format!("layer `{}` has no components", layer.id))),
         _ => Err(p.bad("the layer has several components: give `component`")),
     }
+}
+
+/// The components of a command that takes `component` or `components`, and whether the list was given. A single
+/// component refuses an edit it cannot take; a list leaves such members alone ([`skipped_json`]).
+fn component_or_list(p: &Params, layer: &Layer) -> Result<(Vec<usize>, bool)> {
+    if p.get("components").is_none() {
+        return Ok((vec![one_component(p, layer)?], false));
+    }
+    if p.get("component").is_some() {
+        return Err(p.bad("give `component` or `components`, not both"));
+    }
+    Ok((component_indices(p, layer)?, true))
+}
+
+/// The members of a list that could not take the edit: (shape index, reason).
+type Skipped = Vec<(usize, String)>;
+
+fn skipped_json(layer: &Layer, skipped: &Skipped) -> Value {
+    let one = |(i, reason): &(usize, String)| json!({"component": i, "base": component_at(layer, *i).map(|c| c.glyph.as_str()), "reason": reason});
+    Value::Array(skipped.iter().map(one).collect())
+}
+
+/// The refusal of a list none of whose members can take the edit.
+fn none_taken(p: &Params, skipped: &Skipped) -> crate::EngineError {
+    let reason = skipped.first().map_or_else(String::new, |(i, reason)| format!("component {i} {reason}"));
+    let more = skipped.len().saturating_sub(1);
+    p.bad(if more > 0 { format!("no component can take the edit: {reason} (and {more} more)") } else { reason })
 }
 
 fn check_component(p: &Params, key: &str, layer: &Layer, i: usize) -> Result<()> {
@@ -546,83 +576,126 @@ pub(crate) fn free_axes(font: &Font, layer: &Layer, i: usize) -> (bool, bool) {
     }
 }
 
+/// The values `component.setTransform` sets.
+struct TransformEdit {
+    x: Option<f64>,
+    y: Option<f64>,
+    scale_x: Option<f64>,
+    scale_y: Option<f64>,
+    slant: Option<f64>,
+    rotation: Option<f64>,
+}
+
+impl TransformEdit {
+    fn read(p: &Params) -> Result<Self> {
+        let x = p.opt_f64("x")?;
+        let y = p.opt_f64("y")?;
+        let scale_x = p.opt_f64("scaleX")?;
+        let scale_y = p.opt_f64("scaleY")?;
+        let slant = p.opt_f64("slant")?;
+        let rotation = p.opt_f64("rotation")?;
+        if [x, y, scale_x, scale_y, slant, rotation].iter().all(Option::is_none) {
+            return Err(p.bad("give at least one of `x`, `y`, `scaleX`, `scaleY`, `slant`, `rotation`"));
+        }
+        for (key, v) in [("x", x), ("y", y)] {
+            if let Some(v) = v
+                && !in_range(v)
+            {
+                return Err(p.bad(format!("`{key}` must be within ±{MAX_COORDINATE}")));
+            }
+        }
+        for (key, v) in [("scaleX", scale_x), ("scaleY", scale_y)] {
+            if let Some(v) = v
+                && (v == 0.0 || v.abs() > MAX_SCALE_PERCENT)
+            {
+                return Err(p.bad(format!("`{key}` must not be 0 and must be within ±{MAX_SCALE_PERCENT} %")));
+            }
+        }
+        if slant.is_some_and(|v| v.abs() > MAX_SLANT) {
+            return Err(p.bad(format!("`slant` must be within ±{MAX_SLANT}°")));
+        }
+        if rotation.is_some_and(|v| v.abs() > MAX_ROTATION) {
+            return Err(p.bad(format!("`rotation` must be within ±{MAX_ROTATION}°")));
+        }
+        Ok(Self { x, y, scale_x, scale_y, slant, rotation })
+    }
+
+    /// The transform of `c` with the values set, positions rounded to `step`; or why `c`, aligned as `mode`, cannot
+    /// take them.
+    fn apply(&self, c: &Component, mode: Option<AlignMode>, step: f64) -> std::result::Result<Transform, String> {
+        if c.info.locked {
+            return Err("is locked: unlock it to change its transform".into());
+        }
+        match mode {
+            Some(AlignMode::Horizontal) if self.x.is_some() => {
+                return Err("is aligned horizontally: only `y` can be set; disable its automatic alignment to place it by hand".into());
+            }
+            Some(AlignMode::Full) if self.x.is_some() || self.y.is_some() => {
+                return Err("is aligned automatically: disable its automatic alignment to place it by hand".into());
+            }
+            _ => {}
+        }
+        let x = self.x.map(|v| round_to_grid(v, step));
+        let y = self.y.map(|v| round_to_grid(v, step));
+        let only_position = [self.scale_x, self.scale_y, self.slant, self.rotation].iter().all(Option::is_none);
+        Ok(match (c.transform, only_position) {
+            // A position edit keeps a matrix a matrix.
+            (Transform::Matrix([a, b, c, d, mx, my]), true) => Transform::Matrix([a, b, c, d, x.unwrap_or(mx), y.unwrap_or(my)]),
+            (other, _) => {
+                let ((px, py), (sx, sy), angle, (kx, ky)) =
+                    fields_of(&other).ok_or("has a transform that cannot be shown as position, scale, slant and rotation")?;
+                Transform::Decomposed {
+                    pos: (x.unwrap_or(px), y.unwrap_or(py)),
+                    scale: (self.scale_x.map_or(sx, |v| v / 100.0), self.scale_y.map_or(sy, |v| v / 100.0)),
+                    angle: self.rotation.unwrap_or(angle),
+                    slant: (self.slant.unwrap_or(kx), ky),
+                }
+            }
+        })
+    }
+}
+
 fn set_transform(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("component.setTransform", v)?;
     let t = layer_target(&p)?;
     let font = s.doc()?.font.clone();
     let r = t.resolve(&font)?;
-    let i = one_component(&p, r.layer)?;
-    let c = component_at(r.layer, i).ok_or_else(|| p.bad(format!("shape {i} is not a component")))?;
-    let x = p.opt_f64("x")?;
-    let y = p.opt_f64("y")?;
-    let scale_x = p.opt_f64("scaleX")?;
-    let scale_y = p.opt_f64("scaleY")?;
-    let slant = p.opt_f64("slant")?;
-    let rotation = p.opt_f64("rotation")?;
-    if [x, y, scale_x, scale_y, slant, rotation].iter().all(Option::is_none) {
-        return Err(p.bad("give at least one of `x`, `y`, `scaleX`, `scaleY`, `slant`, `rotation`"));
-    }
-    for (key, v) in [("x", x), ("y", y)] {
-        if let Some(v) = v
-            && !in_range(v)
-        {
-            return Err(p.bad(format!("`{key}` must be within ±{MAX_COORDINATE}")));
-        }
-    }
-    for (key, v) in [("scaleX", scale_x), ("scaleY", scale_y)] {
-        if let Some(v) = v
-            && (v == 0.0 || v.abs() > MAX_SCALE_PERCENT)
-        {
-            return Err(p.bad(format!("`{key}` must not be 0 and must be within ±{MAX_SCALE_PERCENT} %")));
-        }
-    }
-    if slant.is_some_and(|v| v.abs() > MAX_SLANT) {
-        return Err(p.bad(format!("`slant` must be within ±{MAX_SLANT}°")));
-    }
-    if rotation.is_some_and(|v| v.abs() > MAX_ROTATION) {
-        return Err(p.bad(format!("`rotation` must be within ±{MAX_ROTATION}°")));
-    }
-    if c.info.locked {
-        return Err(p.bad(format!("component {i} is locked: unlock it to change its transform")));
-    }
-    let (free_x, free_y) = free_axes(&font, r.layer, i);
-    if (x.is_some() && !free_x) || (y.is_some() && !free_y) {
-        return Err(p.bad(match (free_x, free_y) {
-            (false, true) => {
-                format!("component {i} is aligned horizontally: only `y` can be set; disable its automatic alignment to place it by hand")
-            }
-            _ => format!("component {i} is aligned automatically: disable its automatic alignment to place it by hand"),
-        }));
-    }
+    let (list, many) = component_or_list(&p, r.layer)?;
+    let edit = TransformEdit::read(&p)?;
     let step = grid(&font);
-    let x = x.map(|v| round_to_grid(v, step));
-    let y = y.map(|v| round_to_grid(v, step));
-    let only_position = [scale_x, scale_y, slant, rotation].iter().all(Option::is_none);
-    let transform = match (c.transform, only_position) {
-        // A position edit keeps a matrix a matrix.
-        (Transform::Matrix([a, b, c, d, mx, my]), true) => Transform::Matrix([a, b, c, d, x.unwrap_or(mx), y.unwrap_or(my)]),
-        (other, _) => {
-            let ((px, py), (sx, sy), angle, (kx, ky)) = fields_of(&other)
-                .ok_or_else(|| p.bad(format!("the transform of component {i} cannot be shown as position, scale, slant and rotation")))?;
-            Transform::Decomposed {
-                pos: (x.unwrap_or(px), y.unwrap_or(py)),
-                scale: (scale_x.map_or(sx, |v| v / 100.0), scale_y.map_or(sy, |v| v / 100.0)),
-                angle: rotation.unwrap_or(angle),
-                slant: (slant.unwrap_or(kx), ky),
+    let modes: HashMap<usize, AlignMode> = align::aligned_components(&font, r.layer).into_iter().collect();
+    let mut skipped = Skipped::new();
+    let mut next: HashMap<usize, Transform> = HashMap::new();
+    for &i in &list {
+        let Some(c) = component_at(r.layer, i) else { continue };
+        match edit.apply(c, modes.get(&i).copied(), step) {
+            Ok(t) if t.numbers().iter().all(|v| in_range(*v)) && t.affine().as_coeffs().iter().all(|v| in_range(*v)) => {
+                next.insert(i, t);
             }
+            Ok(_) => return Err(p.bad("the resulting transform is out of range")),
+            Err(reason) => skipped.push((i, reason)),
         }
-    };
-    if !transform.numbers().iter().all(|v| in_range(*v)) || !transform.affine().as_coeffs().iter().all(|v| in_range(*v)) {
-        return Err(p.bad("the resulting transform is out of range"));
+    }
+    if next.is_empty() {
+        return Err(none_taken(&p, &skipped));
     }
     s.edit("Set Component Transform", |f| {
         t.edit_layer(f, |layer| {
-            if let Some(c) = component_at_mut(layer, i) {
-                c.transform = transform;
+            for (&i, transform) in &next {
+                if let Some(c) = component_at_mut(layer, i)
+                    && c.transform != *transform
+                {
+                    c.transform = *transform;
+                }
             }
             Ok(())
         })
     })?;
+    if many {
+        let changed: Vec<usize> = list.iter().copied().filter(|i| next.contains_key(i)).collect();
+        return Ok(json!({"glyph": t.glyph, "layer": r.layer.id, "components": changed, "skipped": skipped_json(r.layer, &skipped)}));
+    }
+    let (i, transform) = next.iter().next().map(|(i, t)| (*i, *t)).ok_or_else(|| p.bad("the layer has no components"))?;
     let ((px, py), (sx, sy), angle, (kx, _)) = fields_of(&transform).unwrap_or(((0.0, 0.0), (1.0, 1.0), 0.0, (0.0, 0.0)));
     Ok(json!({
         "glyph": t.glyph,
@@ -644,7 +717,7 @@ fn set_base_glyph(s: &mut Session, v: &Value) -> Result<Value> {
     let t = layer_target(&p)?;
     let font = s.doc()?.font.clone();
     let r = t.resolve(&font)?;
-    let i = one_component(&p, r.layer)?;
+    let (list, many) = component_or_list(&p, r.layer)?;
     let base = p.str("base")?;
     if font.glyph(base).is_none() {
         return Err(p.bad(format!("`base`: there is no glyph `{base}`")));
@@ -653,15 +726,20 @@ fn set_base_glyph(s: &mut Session, v: &Value) -> Result<Value> {
     let layer_id = r.layer.id.clone();
     s.edit("Change Component Glyph", |f| {
         t.edit_layer(f, |layer| {
-            if let Some(c) = component_at_mut(layer, i)
-                && c.glyph != base
-            {
-                c.glyph = base.to_string();
+            for &i in &list {
+                if let Some(c) = component_at_mut(layer, i)
+                    && c.glyph != base
+                {
+                    c.glyph = base.to_string();
+                }
             }
             Ok(())
         })
     })?;
-    Ok(json!({ "glyph": t.glyph, "layer": layer_id, "component": i, "base": base }))
+    if many {
+        return Ok(json!({ "glyph": t.glyph, "layer": layer_id, "components": list, "base": base }));
+    }
+    Ok(json!({ "glyph": t.glyph, "layer": layer_id, "component": list.first(), "base": base }))
 }
 
 // ── Move ────────────────────────────────────────────────────────────────────────────────────────
@@ -719,15 +797,35 @@ fn move_components(s: &mut Session, v: &Value) -> Result<Value> {
 
 // ── Attachment anchor ───────────────────────────────────────────────────────────────────────────
 
+/// Why the component cannot attach by the anchor `name`; `None` when it can: the name of one of its own underscore
+/// anchors without the underscore, or that name with a suffix.
+fn anchor_refusal(p: &Params, font: &Font, data: &GlyphData, layer: &Layer, c: &Component, name: &str) -> Result<Option<String>> {
+    // The base layer the component draws and attaches by, as propagation picks it.
+    let Some(base) = font.glyph(&c.glyph) else { return Ok(Some(format!("the component's glyph `{}` does not exist", c.glyph))) };
+    let Some(from) = base_layer(base, layer, c) else {
+        return Ok(Some(format!("glyph `{}` has no layer for master `{}`", c.glyph, layer.master)));
+    };
+    let own = effective_anchors_with(font, Some(data), &c.glyph, &from.id).map_err(|e| components_error(p, e))?;
+    let plain: Vec<&str> = own.iter().filter_map(|a| a.name.strip_prefix('_')).filter(|n| !n.is_empty()).collect();
+    let fits = plain.iter().any(|base| name == *base || name.strip_prefix(base).is_some_and(|rest| rest.len() > 1 && rest.starts_with('_')));
+    Ok(match (fits, plain.is_empty()) {
+        (true, _) => None,
+        (false, true) => Some(format!("`{}` has no attachment anchors (names starting with an underscore)", c.glyph)),
+        (false, false) => Some(format!("`{name}` is not an anchor `{}` attaches to; it attaches to {}", c.glyph, plain.join(", "))),
+    })
+}
+
 fn set_anchor(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("component.setAnchor", v)?;
     let t = layer_target(&p)?;
     let font = s.doc()?.font.clone();
     let r = t.resolve(&font)?;
-    let i = opt_index(&p, "component")?.ok_or_else(|| p.bad("`component` is required"))?;
-    check_component(&p, "component", r.layer, i)?;
-    let c = component_at(r.layer, i).ok_or_else(|| p.bad(format!("shape {i} is not a component")))?;
+    if p.get("component").is_none() && p.get("components").is_none() {
+        return Err(p.bad("`component` or `components` is required"));
+    }
+    let (mut list, many) = component_or_list(&p, r.layer)?;
     let name = p.str("anchor")?;
+    let mut skipped = Skipped::new();
     let anchor = if name.is_empty() {
         None
     } else {
@@ -735,33 +833,38 @@ fn set_anchor(s: &mut Session, v: &Value) -> Result<Value> {
             return Err(p.bad(format!("`anchor` must be at most {MAX_ANCHOR_NAME_LEN} bytes without control characters")));
         }
         let data = s.glyph_data()?;
-        // The base layer the component draws and attaches by, as propagation picks it.
-        let base = font.glyph(&c.glyph).ok_or_else(|| p.bad(format!("the component's glyph `{}` does not exist", c.glyph)))?;
-        let from = base_layer(base, r.layer, c).ok_or_else(|| p.bad(format!("glyph `{}` has no layer for master `{}`", c.glyph, r.layer.master)))?;
-        let own = effective_anchors_with(&font, Some(&*data), &c.glyph, &from.id).map_err(|e| components_error(&p, e))?;
-        let plain: Vec<&str> = own.iter().filter_map(|a| a.name.strip_prefix('_')).filter(|n| !n.is_empty()).collect();
-        let fits = plain.iter().any(|base| name == *base || name.strip_prefix(base).is_some_and(|rest| rest.len() > 1 && rest.starts_with('_')));
-        if !fits {
-            return Err(p.bad(if plain.is_empty() {
-                format!("`{}` has no attachment anchors (names starting with an underscore)", c.glyph)
-            } else {
-                format!("`{name}` is not an anchor `{}` attaches to; it attaches to {}", c.glyph, plain.join(", "))
-            }));
+        let mut taken = Vec::with_capacity(list.len());
+        for &i in &list {
+            let Some(c) = component_at(r.layer, i) else { continue };
+            match anchor_refusal(&p, &font, &data, r.layer, c, name)? {
+                None => taken.push(i),
+                Some(reason) if many => skipped.push((i, reason)),
+                Some(reason) => return Err(p.bad(reason)),
+            }
         }
+        if taken.is_empty() {
+            return Err(none_taken(&p, &skipped));
+        }
+        list = taken;
         Some(name.to_string())
     };
     let layer_id = r.layer.id.clone();
     s.edit("Choose Attachment Anchor", |f| {
         t.edit_layer(f, |layer| {
-            if let Some(c) = component_at_mut(layer, i)
-                && c.info.anchor != anchor
-            {
-                c.info.anchor = anchor.clone();
+            for &i in &list {
+                if let Some(c) = component_at_mut(layer, i)
+                    && c.info.anchor != anchor
+                {
+                    c.info.anchor = anchor.clone();
+                }
             }
             Ok(())
         })
     })?;
-    Ok(json!({ "glyph": t.glyph, "layer": layer_id, "component": i, "anchor": anchor }))
+    if many {
+        return Ok(json!({ "glyph": t.glyph, "layer": layer_id, "components": list, "anchor": anchor, "skipped": skipped_json(r.layer, &skipped) }));
+    }
+    Ok(json!({ "glyph": t.glyph, "layer": layer_id, "component": list.first(), "anchor": anchor }))
 }
 
 // ── Alignment and locks ─────────────────────────────────────────────────────────────────────────
@@ -1122,6 +1225,39 @@ mod tests {
         // Acomp's acute is aligned: its position cannot be set, its scale can.
         refused(&mut s, "component.setTransform", json!({"glyph": "Acomp", "component": 1, "x": 0}));
         run(&mut s, "component.setTransform", json!({"glyph": "Acomp", "component": 1, "scaleY": 80}));
+    }
+
+    #[test]
+    fn component_edits_take_a_list_and_name_the_members_they_skip() {
+        let mut s = session();
+        manual(&mut s);
+        s.edit("more", |f| {
+            let mut b = f.glyph_mut("B")?;
+            let l = &mut b.layers[0];
+            l.shapes.push(Shape::Component(Component::new("A", 50.0, 0.0)));
+            l.shapes.push(Shape::Component(Component::new("A", 90.0, 0.0)));
+            Ok(())
+        })
+        .unwrap();
+        run(&mut s, "component.lock", json!({"glyph": "B", "components": [2]}));
+        let undo = |s: &Session| s.inspect()["documents"][0]["undo"].as_array().map_or(0, Vec::len);
+        let before = undo(&s);
+        let out = run(&mut s, "component.setTransform", json!({"glyph": "B", "components": [1, 2, 3], "scaleX": 115}));
+        assert_eq!(out["components"], json!([1, 3]));
+        assert_eq!((&out["skipped"][0]["component"], &out["skipped"][0]["base"]), (&json!(2), &json!("A")));
+        assert!(out["skipped"][0]["reason"].as_str().unwrap().contains("locked"), "{out}");
+        assert_eq!(undo(&s), before + 1, "one undo step");
+        let scale = |s: &Session, i: usize| fields_of(&comp(s, "B", i).transform).unwrap().1;
+        assert_eq!((scale(&s, 1), scale(&s, 2), scale(&s, 3)), ((1.15, 1.0), (1.0, 1.0), (1.15, 1.0)));
+        refused(&mut s, "component.setTransform", json!({"glyph": "B", "components": [2], "scaleX": 50}));
+        refused(&mut s, "component.setTransform", json!({"glyph": "B", "component": 1, "components": [1], "scaleX": 50}));
+
+        run(&mut s, "component.setBaseGlyph", json!({"glyph": "B", "components": [1, 3], "base": "C"}));
+        assert_eq!((comp(&s, "B", 1).glyph, comp(&s, "B", 2).glyph, comp(&s, "B", 3).glyph), ("C".into(), "A".into(), "C".into()));
+        refused(&mut s, "component.setBaseGlyph", json!({"glyph": "B", "components": [1, 0], "base": "A"}));
+
+        let out = run(&mut s, "component.setAnchor", json!({"glyph": "Acomp", "components": [0, 1], "anchor": "top_viet"}));
+        assert_eq!((&out["components"], &out["skipped"][0]["component"]), (&json!([1]), &json!(0)));
     }
 
     #[test]

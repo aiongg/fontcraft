@@ -168,13 +168,19 @@ const OBJECT_ITEMS: &[(&str, &[&str])] = &[
 /// the anchor menu of the component Info box.
 const HIDDEN: &[&str] = &["component.setAnchor"];
 
-/// Items that open a picker or a dialog for their choice instead of running at once.
-pub const ASKS: &[&str] = &["glyph.addComponent", "component.setBaseGlyph", "glyph.componentFromSelection"];
+/// Items that open a dialog for their choice instead of running at once.
+pub const ASKS: &[&str] = &["glyph.componentFromSelection"];
 
 /// Items that open the glyph picker of their kind on the targets the selection gives (`dialogs::glyph_picker`), and
 /// the picker's purpose.
-const PICKS: &[(&str, &str)] =
-    &[("cornerComponent.add", "addCorner"), ("capComponent.add", "addCap"), ("segmentComponent.add", "addSegment"), ("brush.add", "addBrush")];
+const PICKS: &[(&str, &str)] = &[
+    ("glyph.addComponent", "addComponent"),
+    ("component.setBaseGlyph", "baseGlyph"),
+    ("cornerComponent.add", "addCorner"),
+    ("capComponent.add", "addCap"),
+    ("segmentComponent.add", "addSegment"),
+    ("brush.add", "addBrush"),
+];
 
 /// Engine commands the glyph section shows, whose registry entries list no context.
 const GLYPH_ITEMS: &[&str] = &["glyph.setExport"];
@@ -655,7 +661,10 @@ pub fn sections(app: &FontCraftApp, kinds: &[&'static str]) -> Vec<Section> {
         _ if on_guide && matches!(id, "guide.add" | "guide.addGlobal") => false,
         _ if HIDDEN.contains(&id) => false,
         _ if IMAGE_ITEMS.contains(&id) => image_item_visible(app, id),
-        Some((scene, selection)) => item_state::visible(scene, selection, id),
+        Some((scene, selection)) => {
+            item_state::component_targets(app.session.font().ok(), scene, selection, id).is_none_or(|list| !list.is_empty())
+                && item_state::visible(scene, selection, id)
+        }
         None => id != GUIDE_PROPERTIES,
     };
     let mut shown: Vec<&'static str> = Vec::new();
@@ -697,7 +706,7 @@ fn item(app: &FontCraftApp, at: Option<&(Scene<'_>, &Selection)>, c: &Candidate)
     let choices = if c.id == SET_STEM_REFERENCE && check.is_ok() { stem_choices(app) } else { Vec::new() };
     ContextItem {
         command: c.id,
-        label: c.label,
+        label: at.and_then(|(scene, selection)| item_state::label(scene, selection, c.id)).unwrap_or(c.label),
         enabled: check.is_ok(),
         disabled_reason: check.err(),
         checked: match c.id {
@@ -902,6 +911,10 @@ pub fn params_for(app: &mut FontCraftApp, menu: &CanvasMenu, id: &str) -> Value 
     // A guide goes through the clicked node, else through the click.
     let place = if matches!(hit, Some(Hit::Node { .. })) { hit_at } else { click };
     let scene_says = |f: &dyn Fn(&Scene, &Selection) -> Value| scene_of(app).map(|(scene, selection)| f(&scene, selection));
+    let components = scene_of(app).and_then(|(scene, selection)| item_state::component_targets(app.session.font().ok(), &scene, selection, id));
+    if let Some(components) = components {
+        m.insert("components".into(), json!(components));
+    }
     match id {
         "path.makeNodeFirst" => {
             if let Some(Hit::Node { shape, node }) = hit {
