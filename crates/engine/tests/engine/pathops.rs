@@ -291,6 +291,38 @@ fn a_cut_splits_a_square_into_two_closed_pieces() {
 }
 
 #[test]
+fn a_cut_across_two_overlapping_rectangles_joins_them_along_the_line() {
+    let mut s = Session::with_document();
+    add(&mut s, "A", rect(0.0, 0.0, 100.0, 100.0));
+    add(&mut s, "A", rect(50.0, -20.0, 150.0, 120.0));
+    run(&mut s, "path.cutWithLine", json!({"glyph": "A", "from": [-10, 50], "to": [160, 50]}));
+    // The four crossings pair up from the left, so each piece has one half of each rectangle.
+    let ps = paths(&s, "A", None);
+    assert_eq!(ps.len(), 2);
+    for p in &ps {
+        assert!(p.closed);
+        assert_eq!(p.nodes.len(), 8, "{:?}", xy(p));
+        assert!((area(p) - 12_000.0).abs() < 1e-6, "{:?}", xy(p));
+        for x in [0.0, 50.0, 100.0, 150.0] {
+            assert!(xy(p).contains(&(x, 50.0)), "{:?}", xy(p));
+        }
+    }
+}
+
+#[test]
+fn remove_overlap_leaves_no_point_where_a_descender_joins_its_stem() {
+    let mut s = Session::with_document();
+    add(&mut s, "A", rect(0.0, 0.0, 100.0, 500.0));
+    add(&mut s, "A", rect(0.0, -200.0, 100.0, 50.0));
+    run(&mut s, "path.removeOverlap", json!({"glyph": "A"}));
+    let ps = paths(&s, "A", None);
+    assert_eq!(ps.len(), 1);
+    // The stem's start (0, 0) lies on the joined side and stays the start; nothing else is left
+    // on the sides.
+    assert_eq!(xy(&ps[0]), [(0.0, 0.0), (0.0, -200.0), (100.0, -200.0), (100.0, 500.0), (0.0, 500.0)]);
+}
+
+#[test]
 fn quadratic_and_cubic_conversions() {
     let mut s = Session::with_document();
     let spline = json!([

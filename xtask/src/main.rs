@@ -67,10 +67,12 @@ commands:
                   (known differences with a reason: xtask/roundtrip-allow.toml)
   audit [--match TEXT]
                   run the outline audit (`outlines` profile) on every source of the corpus comparison set
-  overlap [--out DIR] [--reference FILE] [--match TEXT] [--quadratic]
+  overlap [--out DIR] [--reference FILE]... [--match TEXT] [--quadratic] [--editor]
                   remove overlaps on every glyph layer of the corpus comparison set and measure it
-                  (--quadratic: convert the input to quadratic curves first)
-                  (inputs for crates/pathops/crosscheck/reference.py go to DIR/layers.jsonl)
+                  (--quadratic: convert the input to quadratic curves first; --editor: run the command's
+                  contour-level operation and report start points and merge points)
+                  (inputs for crates/pathops/crosscheck/reference.py go to DIR/layers.jsonl; one
+                  --reference per operation that script ran)
   testfonts [--out DIR]
                   build the synthetic test fonts for the checks in the reference app and write them
                   as .glyphs files with a README (default DIR: plan/local/testfonts/)

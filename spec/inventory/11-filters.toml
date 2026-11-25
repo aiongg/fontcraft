@@ -875,6 +875,10 @@ status = "handbook"
 notes = "Video \"Design Amazing Fonts | The Best Beginners tutorial to Glyphs 3 and Type Design\" (channel of playlist PLcxk4zxYs459_dJ3WFzEkjdVFjd3sEWp8, https://www.youtube.com/watch?v=VGe96Qjlvvc; it shows Glyphs 3, not Glyphs 4), 11:24–11:30: the Path menu lists Remove Overlap with Cmd+Shift+O. 15:06–15:10 and 30:18–30:19: overlapping shapes are merged into one after Select All (partly visible; the command is not seen). FontCraft: nonzero union by the pathops crate; new points are rounded to the grid; components stay. With `glyphs`, a locked glyph or a layer the operation cannot finish is listed in `skipped` and left as it was; with one `glyph` it is an error."
 guesses = [
   "Every path operation runs each glyph layer under a 5 s time limit, single-glyph commands included; a layer that runs out of time is skipped with `glyphs` and an error with one `glyph` (docs/plans/M3.md › M3.6, rule 8).",
+  "A point the merge leaves on a straight line is dropped; a node that already lay on a straight line of its path stays, and so does a path's start point. The booleans follow the same rule.",
+]
+observe = [
+  "Draw an H of three overlapping rectangles, one of them with an extra node on a straight side, and run Remove Overlap: which points on straight sides are left, and where does the result start?",
 ]
 
 [[behavior]]

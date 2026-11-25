@@ -567,7 +567,7 @@ The differences that overlap removal causes are on `crates/oracle/allow.toml`, f
 | Difference | Why |
 |---|---|
 | A `glyf` or `CFF` outline whose coverage differs by less than a whole pixel anywhere and under 0.1% of the ink in total | An intersection point that falls near a half unit is rounded to the other side (327.5 written as 328 against fontmake's 327), or one engine leaves a point on a straight line where the other merges two segments |
-| `maxp.maxPoints` | The two engines leave different numbers of points where contours merge (FontCraft keeps a point on a straight line where two contours met, docs/plans/M3.md › M3.6, rule 7) |
+| `maxp.maxPoints` | The two engines leave different numbers of points where contours merge (FontCraft keeps a node drawn on a straight line, and a contour's start where the merge puts it on one, docs/plans/M3.md › M3.6, rule 7) |
 
 fontmake's overlap removal fails on five corpus sources that build with overlaps kept:
 booleanOperations takes no quadratic segments (`glyphs2/QCurve.glyphs`, `glyphs3/QCurve.glyphs`)
