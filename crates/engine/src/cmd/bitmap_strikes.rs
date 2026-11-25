@@ -37,6 +37,10 @@ const MAX_RASTER_PIXELS: u64 = 64 << 20;
 pub(super) const MAX_CALL_RASTER_PIXELS: u64 = 256 << 20;
 /// Most pixels a placed PDF's page is drawn at for one bitmap.
 const MAX_PDF_PAGE_PIXELS: u64 = 16 << 20;
+/// Most pixels, and most pages, of placed PDFs kept drawn while a strike is made. The page drawn last is kept whatever
+/// its size.
+const MAX_KEPT_PDF_PIXELS: u64 = 16 << 20;
+const MAX_KEPT_PDF_PAGES: usize = 64;
 /// Samples taken across each side of a bitmap pixel when a placed PDF is drawn into it.
 const PDF_SAMPLES: u32 = 4;
 
@@ -740,10 +744,9 @@ pub(super) fn rasterize_glyphs(
             warnings.push(why);
         }
     };
-    // The last page drawn: a sheet of drawings placed on many glyphs in a row is drawn once,
-    // and its pixels are charged once.
-    let mut drawn: Option<((String, u64), fontcraft_io_pdf::PdfRaster)> = None;
-    let mut charged: Option<(String, u64)> = None;
+    // A sheet of drawings placed on many glyphs, or several placed in turn, is drawn once, and its pixels are charged
+    // once, while the pages fit.
+    let mut pages = DrawnPages::default();
     // Each placed file is read and measured once per strike, however many glyphs place it.
     let mut page_sizes = PageSizes::new();
     for glyph in font.glyphs.iter().filter(|g| g.export && only.is_none_or(|o| o.contains(&g.name))) {
@@ -806,10 +809,8 @@ pub(super) fn rasterize_glyphs(
             let mut area = (w * h).unsigned_abs();
             if let Some(pdf) = &placed {
                 area = area.saturating_mul(u64::from(PDF_SAMPLES * PDF_SAMPLES));
-                let page = (pdf.file.clone(), pdf.pixels_per_point.to_bits());
-                if charged.as_ref() != Some(&page) {
+                if pages.want(pdf) {
                     area = area.saturating_add(pdf.page_pixels);
-                    charged = Some(page);
                 }
             }
             pixels = pixels.saturating_add(area);
@@ -845,7 +846,7 @@ pub(super) fn rasterize_glyphs(
                     let at = Affine::new([scale, 0.0, 0.0, -scale, -(x0 as f64), y1 as f64]);
                     fontcraft_render::render_path(&outline, at, w, h, &style).map_err(|e| p.bad(format!("glyph `{}`: {e}", glyph.name)))?
                 }
-                Some(pdf) => match draw_placed_pdf(assets, pdf, &mut drawn, (x0, y1), (w, h)) {
+                Some(pdf) => match draw_placed_pdf(assets, pdf, &mut pages, (x0, y1), (w, h)) {
                     Ok(image) => image,
                     Err(why) => {
                         warn(format!("strike {label}: glyph `{}`: the placed PDF is left out: {why}", glyph.name));
@@ -954,25 +955,55 @@ fn placed_pdf(
     }))
 }
 
+/// A page at a resolution.
+type PageKey = (String, u64);
+
+fn page_key(pdf: &PlacedPdf) -> PageKey {
+    (pdf.file.clone(), pdf.pixels_per_point.to_bits())
+}
+
+/// The pages of placed PDFs kept drawn, or the reason one cannot be. The pixels of a page count whether it is drawn or
+/// only measured, so both charge the same.
+#[derive(Default)]
+struct DrawnPages {
+    /// The kept pages with their pixels, the one asked for last at the end.
+    kept: Vec<(PageKey, u64)>,
+    drawn: HashMap<PageKey, std::result::Result<fontcraft_io_pdf::PdfRaster, String>>,
+}
+
+impl DrawnPages {
+    /// Keeps the page of `pdf`, dropping the ones asked for longest ago when they no longer fit. True when it was not
+    /// kept before, so it is to be drawn.
+    fn want(&mut self, pdf: &PlacedPdf) -> bool {
+        let key = page_key(pdf);
+        let before = self.kept.iter().position(|(k, _)| *k == key).map(|at| self.kept.remove(at));
+        let new = before.is_none();
+        self.kept.push((key, pdf.page_pixels));
+        let mut pixels = self.kept.iter().fold(0u64, |sum, (_, n)| sum.saturating_add(*n));
+        while self.kept.len() > 1 && (pixels > MAX_KEPT_PDF_PIXELS || self.kept.len() > MAX_KEPT_PDF_PAGES) {
+            let (dropped, n) = self.kept.remove(0);
+            pixels = pixels.saturating_sub(n);
+            self.drawn.remove(&dropped);
+        }
+        new
+    }
+}
+
 /// The bitmap of a placed PDF: `size` pixels whose top-left corner is at `top_left` (pixels up
 /// from the baseline), each as dark as the page's shown part is there on average, over
-/// [`PDF_SAMPLES`]² samples. `drawn` keeps the last page drawn, by file and resolution.
+/// [`PDF_SAMPLES`]² samples. `pages` keeps the pages drawn.
 fn draw_placed_pdf(
     assets: &dyn AssetStore,
     pdf: &PlacedPdf,
-    drawn: &mut Option<((String, u64), fontcraft_io_pdf::PdfRaster)>,
+    pages: &mut DrawnPages,
     (left, top): (i64, i64),
     (w, h): (u32, u32),
 ) -> std::result::Result<fontcraft_render::Image, String> {
-    let key = (pdf.file.clone(), pdf.pixels_per_point.to_bits());
-    if drawn.as_ref().is_none_or(|(k, _)| *k != key) {
-        *drawn = None;
+    let raster = pages.drawn.entry(page_key(pdf)).or_insert_with(|| {
         let bytes = assets.read(&pdf.file).map_err(|e| format!("`{}` cannot be read: {e}", pdf.file))?;
-        let raster =
-            fontcraft_io_pdf::render_pdf(&bytes, pdf.pixels_per_point, MAX_PDF_PAGE_PIXELS).map_err(|e| format!("the page cannot be drawn: {e}"))?;
-        *drawn = Some((key, raster));
-    }
-    let Some((_, raster)) = drawn.as_ref() else { return Err("the page cannot be drawn".into()) };
+        fontcraft_io_pdf::render_pdf(&bytes, pdf.pixels_per_point, MAX_PDF_PAGE_PIXELS).map_err(|e| format!("the page cannot be drawn: {e}"))
+    });
+    let raster = raster.as_ref().map_err(Clone::clone)?;
     let page = &raster.image;
     let scale = raster.pixels_per_point;
     if !(scale.is_finite() && scale > 0.0) {
@@ -1144,6 +1175,31 @@ mod tests {
         let placed: Vec<_> = strike.glyphs.iter().filter(|g| g.glyph.starts_with("pdf")).collect();
         assert_eq!(placed.len(), glyphs);
         assert!(placed.iter().all(|g| (g.width, g.height) == (10, 10)));
+    }
+
+    /// Glyphs that place two PDFs in turn read each of them twice: once to measure it, once to draw it.
+    #[test]
+    fn pdfs_placed_in_turn_are_each_drawn_once() {
+        let mut font = Font::new("Sheets");
+        let master = font.default_master().unwrap().id.clone();
+        for i in 0..10 {
+            let name = format!("pdf{i}");
+            font.add_glyph(&name, Vec::new(), 600.0).unwrap();
+            let mut glyph = font.glyph_mut(&name).unwrap();
+            let layer = glyph.layer_mut(&master).unwrap();
+            let sheet = if i % 2 == 0 { "one.pdf" } else { "two.pdf" };
+            layer.info.image = Some(Image { path: Some(sheet.into()), ..Image::default() });
+        }
+        let mut inner = MemoryAssets::new();
+        inner.insert("one.pdf", corner_pdf());
+        inner.insert("two.pdf", corner_pdf());
+        let store = Counting { inner, reads: AtomicUsize::new(0) };
+        let value = json!({});
+        let p = Params::new("bitmap.setStrikes", &value).unwrap();
+        let mut warnings = Vec::new();
+        rasterize_strike(&font, &store, &p, (100, 1), &mut RasterBudget::unlimited(), true, &mut warnings).unwrap();
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(store.reads.load(Ordering::Relaxed), 4);
     }
 
     #[test]
