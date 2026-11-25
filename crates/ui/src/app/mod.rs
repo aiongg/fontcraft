@@ -252,6 +252,8 @@ pub struct FontCraftApp {
     pub preview_host: Option<Box<dyn preview_host::PreviewHost>>,
     /// Where the user's settings are kept between runs; `None` keeps nothing (tests, the browser).
     pub user_store: Option<Box<dyn user_store::UserStore>>,
+    /// The window's layout as the store has it; `None` until the store is read.
+    pub kept_layout: Option<user_store::KeptLayout>,
     /// Opens web links in the browser and shows files in the file manager; the desktop app supplies the system's,
     /// tests and the browser build have none.
     pub opener: craft_ext::platform::open::Opener,
@@ -328,6 +330,7 @@ impl FontCraftApp {
             frame_hook: None,
             preview_host: None,
             user_store: None,
+            kept_layout: None,
             opener: craft_ext::platform::open::Opener::NONE,
             clipboard_reader: None,
             clipboard_flavours: None,
@@ -776,7 +779,9 @@ impl ShellApp for FontCraftApp {
             }
             self.frame_hook = Some(hook);
         }
-        user_store::save(self);
+        if let Some(again) = user_store::save(self) {
+            ctx.request_repaint_after(again);
+        }
         if self.closing.take_close_window() {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
@@ -796,7 +801,11 @@ impl ShellApp for FontCraftApp {
     }
 
     fn close_requested(&mut self) -> CloseDecision {
-        close::close_requested(self)
+        let decision = close::close_requested(self);
+        if decision == CloseDecision::Close {
+            user_store::flush(self);
+        }
+        decision
     }
 }
 

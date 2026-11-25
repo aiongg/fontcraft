@@ -266,8 +266,10 @@ to a command, a projection, the close decision) is a plain test on `FontCraftApp
 - **File pickers.** A command listed in `app::files::PICKED` (engine or shell) that arrives without its path opens
   the host's picker; the answer posts the command again with the path.
 - **User settings.** The settings live in the session's settings store. `apps/fontcraft` supplies an
-  `app::user_store::UserStore` that reads them from the settings folder when the window opens and writes them back
-  when they change (once per frame); `crates/ui` reads and writes no files itself.
+  `app::user_store::UserStore` that reads them from the settings folder when the window opens and takes them back
+  when they change (checked once per frame; written half a second later and as the window closes: `config.toml`).
+  The dock's layout goes the same way (`shell/kept_layout.rs`, `ui.json`). `crates/ui` reads and writes no files itself,
+  except that `run` gives craft's placement store its file (`window.json`).
 - **Network and the system.** `apps/fontcraft` hands over `Options::fetch` (a blocking HTTPS GET for the
   Extension Manager's indexes, entry files and screenshots, run on the host's jobs by `shell/extension_downloads.rs`)
   and `Options::opener` (`FontCraftApp::opener`: links in the browser, files in the file manager). Tests set fakes; the
