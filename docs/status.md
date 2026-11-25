@@ -2,7 +2,7 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-11-25: round C (the packages of the third planning pass and the fixes of their reviews) built, with integration fixes X.integ199 on. The gate has not run yet_
+_Updated: 2026-11-25: round C (the packages of the third planning pass and the fixes of their reviews) built, with integration fixes X.integ199 to X.integ205. Gate: the 11 steps of `cargo xtask ci` passed one at a time on 02a8a52 (5,455 tests passed, 54 skipped)_
 
 ## State of the tree
 
