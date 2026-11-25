@@ -60,7 +60,9 @@ pub fn restore(value: &Value) -> Result<(Workspace<PanelId>, ClosedPalette), Str
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic)]
 mod tests {
+    use craft::behavior::Axis;
     use craft::behavior::dock::{Action, Column, DockEdge, Node, PanelState, Target};
+    use craft::ui::runtime::access::Role;
     use craft::ui::runtime::commands::CommandRef;
 
     use super::*;
@@ -73,6 +75,43 @@ mod tests {
             Node::Split { first, second, .. } => columns(first, edge).or_else(|| columns(second, edge)),
             _ => None,
         }
+    }
+
+    /// Drags the nth divider (in reading order along `axis`) whose centre is at x `from` or more by `by` points.
+    fn drag_divider(t: &mut TestApp, axis: Axis, from: f32, nth: usize, by: f32) {
+        let tree = t.frames.tree();
+        let along = |p: egui::Pos2| if axis == Axis::X { p.x } else { p.y };
+        let mut bars: Vec<egui::Rect> = tree
+            .keys()
+            .into_iter()
+            .filter(|key| tree.role_of(*key) == Some(Role::SPLITTER))
+            .filter_map(|key| tree.bounds_of(key))
+            .filter(|bar| (bar.height() > bar.width()) == (axis == Axis::X) && bar.center().x >= from)
+            .collect();
+        bars.sort_by(|a, b| along(a.center()).total_cmp(&along(b.center())));
+        let at = bars.get(nth).unwrap_or_else(|| panic!("divider {nth} of {bars:?}")).center();
+        let to = if axis == Axis::X { at + egui::vec2(by, 0.0) } else { at + egui::vec2(0.0, by) };
+        t.ok("ui.drag", json!({"x": at.x, "y": at.y, "toX": to.x, "toY": to.y}));
+        t.frame();
+    }
+
+    /// The dock's own dividers resize the sidebar, the Palette and the Layers section, and the sizes are in the kept
+    /// layout.
+    #[test]
+    fn the_sidebars_and_the_layers_section_resize_by_their_edges() {
+        let mut t = TestApp::new();
+        drag_divider(&mut t, Axis::X, 0.0, 0, 70.0);
+        // The Palette is at the window's end; its first divider is under Metrics, its second under Layers.
+        drag_divider(&mut t, Axis::Y, 800.0, 1, 60.0);
+        drag_divider(&mut t, Axis::X, 800.0, 0, -50.0);
+        let kept = to_value(&t.app.view.workspace, &[]).unwrap();
+        let (mut workspace, _) = restore(&kept).unwrap();
+        let root = workspace.layout.root.as_mut().unwrap();
+        let sidebar = columns(root, DockEdge::Start).unwrap()[0].width;
+        let end = &columns(root, DockEdge::End).unwrap()[0];
+        let layers = end.groups.iter().find(|group| group.panels.contains(&PanelId::Layers)).unwrap().height;
+        assert!(sidebar.is_some() && end.width.is_some(), "{sidebar:?} {:?}", end.width);
+        assert!(layers.is_some_and(|height| height > 230.0), "{layers:?}");
     }
 
     /// The sidebars' widths, the Layers section's height and a hidden Palette come back, the Palette with the panels it
