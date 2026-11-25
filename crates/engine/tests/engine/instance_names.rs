@@ -6,9 +6,9 @@ use std::sync::Arc;
 
 use fontcraft_compile::var::{VariableOptions, compile_variable};
 use fontcraft_compile::{Flavour, Options, compile};
-use fontcraft_engine::Session;
 use fontcraft_engine::cmd::instance_names::names_of;
 use fontcraft_engine::model::{Axis, Font, Glyph, GlyphTable, Instance, Target};
+use fontcraft_engine::{EngineError, Session, work};
 use serde_json::{Value, json};
 use skrifa::FontRef;
 use skrifa::raw::TableProvider;
@@ -126,6 +126,14 @@ fn the_names_are_those_of_the_exported_fonts() {
     assert_eq!(named.len(), usize::from(compiled.fvar().unwrap().instance_count()));
     let values: usize = entry["stat"]["axes"].as_array().unwrap().iter().map(|a| a["values"].as_array().unwrap().len()).sum();
     assert_eq!(values, usize::from(compiled.stat().unwrap().axis_value_count()));
+}
+
+#[test]
+fn a_cancelled_query_gives_nothing() {
+    let token = work::Token::new();
+    assert!(token.cancel());
+    let found = work::with(token, None, || names_of(&family(), "Slice Sans", &json!({})));
+    assert!(matches!(found, Err(EngineError::Cancelled)), "{found:?}");
 }
 
 #[test]

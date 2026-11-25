@@ -7,7 +7,8 @@
 //! | Name Table Entry | name ID, platform, encoding, language and text: one record, with no plus and minus | `ID platform encoding language; text` |
 //!
 //! OK posts one `font.customParameters.set`; it is off while a record cannot be stored or the command would refuse the
-//! value. Bits and entries the table has no column for are kept.
+//! value. Bits and entries the table has no column for are kept, and a value of more than [`MAX_RECORDS`] records is not
+//! opened.
 
 use std::collections::BTreeSet;
 
@@ -52,6 +53,7 @@ craft::ui::words! {
         add: "fontcraftRecordTable.add" = "Add";
         remove: "fontcraftRecordTable.remove" = "Remove this record";
         bad_size: "fontcraftRecordTable.badSize" = "A size is a whole number from 0 to 65535, each one once";
+        bad_entry: "fontcraftRecordTable.badEntry" = "Fill Name ID, Platform, Encoding and Language from the left, one word each";
         empty: "fontcraftRecordTable.empty" = "No records. Add one.";
     }
 }
@@ -84,38 +86,64 @@ impl RecordKind {
     /// A new record.
     fn blank(self) -> Record {
         match self {
-            RecordKind::Gasp => Record { cells: vec!["65535".into()], bits: 15 },
-            RecordKind::Meta => Record { cells: vec!["dlng".into(), String::new()], bits: 0 },
-            RecordKind::NameEntry => Record { cells: vec![String::new(); 5], bits: 0 },
+            RecordKind::Gasp => Record { cells: vec!["65535".into()], bits: 15, ..Record::default() },
+            RecordKind::Meta => Record { cells: vec!["dlng".into(), String::new()], ..Record::default() },
+            RecordKind::NameEntry => Record { cells: vec![String::new(); 5], ..Record::default() },
         }
     }
 
-    /// The records of a stored value.
-    pub fn read(self, value: &Plist) -> Vec<Record> {
+    /// Why [`RecordKind::write`] refuses a record.
+    fn problem(self, words: &RecordTableWords) -> &Label {
+        match self {
+            RecordKind::Gasp | RecordKind::Meta => &words.bad_size,
+            RecordKind::NameEntry => &words.bad_entry,
+        }
+    }
+
+    /// The records of a stored value; `None` when there are more than [`MAX_RECORDS`].
+    pub fn read(self, value: &Plist) -> Option<Vec<Record>> {
+        let count = match value {
+            Plist::Dict(d) => d.entries.len(),
+            Plist::Array(a) => a.items.len(),
+            _ => 1,
+        };
+        (count <= MAX_RECORDS).then(|| self.read_all(value))
+    }
+
+    fn read_all(self, value: &Plist) -> Vec<Record> {
         match (self, value) {
             (RecordKind::Gasp, Plist::Dict(d)) => d
                 .entries
                 .iter()
-                .take(MAX_RECORDS)
-                .map(|(size, bits)| Record { cells: vec![size.as_str().to_string()], bits: fv::number(bits).map_or(0, |n| n as i64) })
+                .map(|(size, bits)| Record {
+                    cells: vec![size.as_str().to_string()],
+                    bits: fv::number(bits).map_or(0, |n| n as i64),
+                    ..Record::default()
+                })
                 .collect(),
             (RecordKind::Meta, Plist::Array(a)) => {
                 let read = |item: &Plist| match item {
                     Plist::Dict(d) => {
                         let text = |key: &str| d.get(key).and_then(Plist::as_str).unwrap_or_default().to_string();
-                        Record { cells: vec![text("tag"), text("data")], bits: 0 }
+                        let kept = match fv::to_json(item) {
+                            Value::Object(map) => map,
+                            _ => Map::new(),
+                        };
+                        Record { cells: vec![text("tag"), text("data")], bits: 0, kept }
                     }
-                    other => Record { cells: vec![plain_text(other).unwrap_or_default(), String::new()], bits: 0 },
+                    other => Record { cells: vec![plain_text(other).unwrap_or_default(), String::new()], ..Record::default() },
                 };
-                a.items.iter().take(MAX_RECORDS).map(read).collect()
+                a.items.iter().map(read).collect()
             }
             (RecordKind::NameEntry, value) => {
                 let text = plain_text(value).unwrap_or_default();
                 let (head, tail) = text.split_once(';').unwrap_or((text.as_str(), ""));
-                let mut cells: Vec<String> = head.split_whitespace().take(4).map(str::to_string).collect();
-                cells.resize(4, String::new());
+                let mut words = head.split_whitespace();
+                let mut cells: Vec<String> = (0..3).map(|_| words.next().unwrap_or_default().to_string()).collect();
+                // What a fifth word would be shows in the last column, to be taken out.
+                cells.push(words.collect::<Vec<_>>().join(" "));
                 cells.push(tail.trim().to_string());
-                vec![Record { cells, bits: 0 }]
+                vec![Record { cells, ..Record::default() }]
             }
             _ => Vec::new(),
         }
@@ -136,21 +164,40 @@ impl RecordKind {
                 }
                 Some(Value::Object(out))
             }
-            RecordKind::Meta => Some(records.iter().map(|r| json!({ "tag": r.cell(0), "data": r.cell(1).trim() })).collect()),
+            RecordKind::Meta => {
+                let write = |r: &Record| {
+                    let mut map = r.kept.clone();
+                    for (key, text) in [("tag", r.cell(0)), ("data", r.cell(1).trim())] {
+                        // A value that is no text shows empty, and stays unless a text takes its place.
+                        if !text.is_empty() || map.get(key).is_none_or(Value::is_string) {
+                            map.insert(key.into(), json!(text));
+                        }
+                    }
+                    Value::Object(map)
+                };
+                Some(records.iter().map(write).collect())
+            }
             RecordKind::NameEntry => {
                 let r = records.first()?;
-                let head: Vec<&str> = (0..4).map(|c| r.cell(c).trim()).take_while(|t| !t.is_empty()).collect();
+                let cells: Vec<&str> = (0..4).map(|c| r.cell(c).trim()).collect();
+                let filled = cells.iter().take_while(|t| !t.is_empty()).count();
+                let (head, rest) = cells.split_at_checked(filled)?;
+                let one_word = |t: &&str| !t.contains(|c: char| c.is_whitespace() || c == ';');
+                if !rest.iter().all(|t| t.is_empty()) || !head.iter().all(one_word) {
+                    return None;
+                }
                 Some(Value::String(format!("{}; {}", head.join(" "), r.cell(4).trim())))
             }
         }
     }
 }
 
-/// One record: the texts of its columns, and the `gasp` flag bits.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+/// One record: the texts of its columns, the `gasp` flag bits, and the stored entries of a `meta` record.
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Record {
     pub cells: Vec<String>,
     pub bits: i64,
+    pub kept: Map<String, Value>,
 }
 
 impl Record {
@@ -256,7 +303,7 @@ impl StackDialog for RecordTableDialog {
             }
             let refused = match kind.write(records) {
                 Some(value) => refusal(name, &value),
-                None => Some(words.bad_size.as_str().to_string()),
+                None => Some(kind.problem(&words).as_str().to_string()),
             };
             if let Some(message) = &refused {
                 Text::new(message.clone()).tone(Tone::Bad).show(ui);
@@ -279,11 +326,16 @@ pub fn run(host: &mut DialogHost, app: &mut FontCraftApp) {
     if let Some(InfoDialog::Records { target, name, index }) = app.view.font_info.request.clone() {
         app.view.font_info.request = None;
         if let Some(kind) = RecordKind::of(&name) {
-            let mut records = stored_value(app, &target, &name, index).map(|v| kind.read(&v)).unwrap_or_default();
-            if kind == RecordKind::NameEntry && records.is_empty() {
-                records.push(kind.blank());
+            let stored = stored_value(app, &target, &name, index);
+            match stored.map_or_else(|| Some(Vec::new()), |v| kind.read(&v)) {
+                Some(mut records) => {
+                    if kind == RecordKind::NameEntry && records.is_empty() {
+                        records.push(kind.blank());
+                    }
+                    host.open(RecordTableDialog::new(target, name, index, kind, records));
+                }
+                None => app.status = format!("{name} has more than {MAX_RECORDS} records; the table does not open"),
             }
-            host.open(RecordTableDialog::new(target, name, index, kind, records));
         }
     }
     if let Some(DialogResult::Ok((target, name, index, value))) = host.take::<RecordTableDialog>() {
@@ -306,16 +358,31 @@ mod tests {
     fn records_read_back_as_they_were_written() {
         for (name, value) in [
             ("gasp Table", json!({"8": 10, "20": 7, "65535": 31})),
-            ("meta Table", json!([{"tag": "dlng", "data": "Latn"}, {"tag": "slng", "data": "Latn, sr-Cyrl"}])),
+            ("meta Table", json!([{"tag": "dlng", "data": "Latn"}, {"tag": "slng", "data": "Latn, sr-Cyrl", "note": "kept"}])),
+            ("meta Table", json!([{"tag": "slng", "data": ["Latn"]}])),
             ("Name Table Entry", json!("25; Prefix")),
             ("Name Table Entry", json!("19 3 1 0x0407; Muster; mit Strichpunkt")),
         ] {
             let kind = RecordKind::of(name).unwrap();
-            let records = kind.read(&from_json(name, &value).unwrap());
+            let records = kind.read(&from_json(name, &value).unwrap()).unwrap();
             assert_eq!(kind.write(&records), Some(value), "{name}");
         }
         let same = vec![RecordKind::Gasp.blank(), RecordKind::Gasp.blank()];
         assert_eq!(RecordKind::Gasp.write(&same), None, "one size twice");
-        assert_eq!(RecordKind::Gasp.write(&[Record { cells: vec!["big".into()], bits: 1 }]), None);
+        assert_eq!(RecordKind::Gasp.write(&[Record { cells: vec!["big".into()], bits: 1, ..Record::default() }]), None);
+        let many: Map<String, Value> = (0..=MAX_RECORDS).map(|size| (size.to_string(), json!(1))).collect();
+        let many = from_json("gasp Table", &Value::Object(many)).unwrap();
+        assert_eq!(RecordKind::Gasp.read(&many), None, "no record is cut off");
+    }
+
+    /// A Name Table Entry with a gap before a filled column is refused, not stored without it.
+    #[test]
+    fn a_name_entry_with_a_gap_is_refused() {
+        let entry = |cells: [&str; 5]| {
+            RecordKind::NameEntry.write(&[Record { cells: cells.iter().map(|c| (*c).to_string()).collect(), ..Record::default() }])
+        };
+        assert_eq!(entry(["19", "", "1", "0x0407", "Muster"]), None);
+        assert_eq!(entry(["19", "3", "1", "0x0407 x", "Muster"]), None);
+        assert_eq!(entry(["19", "3", "", "", "Muster"]), Some(json!("19 3; Muster")));
     }
 }

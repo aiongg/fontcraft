@@ -150,6 +150,7 @@ pub(crate) fn finalize_kerning(
 /// Adds the vertical kerning's `lookup` as the `vkrn` feature of the default script, of every script
 /// and language with generated kerning (shapers read one script's record, so a script of its own must
 /// name the feature again), and of the code's language systems of the scripts of the kerned glyphs.
+/// `fontcraft_fea` leaves out the language systems that would hold nothing else.
 fn add_vertical(kerns: &mut Kerns, lookup: PendingLookup, pairs: &[KernPair], code: &KernCode, char_map: &HashMap<u32, GlyphId16>) {
     let mut kerned: IntSet<GlyphId16> = IntSet::empty();
     for pair in pairs {

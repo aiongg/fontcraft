@@ -2,7 +2,7 @@
 //! glyphs, through the compiler's own rules ([`fontcraft_compile::exported`]), without building a font.
 //!
 //! [`names_of`] runs on a font without the session, so the Exports tab runs it on a worker thread with the font of the
-//! revision shown then.
+//! revision shown then. Work that is cancelled (`crate::work`) stops between two entries.
 //!
 //! Limits: at most [`MAX_ENTRIES`] entries are computed, fewer when their texts together pass [`MAX_TEXT_BYTES`]; the
 //! reply says which were left out.
@@ -68,6 +68,7 @@ pub fn names_of(font: &Font, title: &str, raw: &Value) -> Result<Value> {
         if bytes > MAX_TEXT_BYTES {
             break;
         }
+        crate::work::check()?;
         let entry = entry(&compiler, title, index, instance, &options);
         bytes = bytes.saturating_add(entry.names.iter().map(|n| n.text.len()).fold(0, usize::saturating_add));
         entries.push(entry);

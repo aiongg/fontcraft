@@ -2,13 +2,14 @@
 //! shows.
 //!
 //! The query runs through the host's jobs on the font of the revision shown then: at once for a document whose names are
-//! not known yet, after [`CHECK_PAUSE`] once the document changed. A result of a revision no longer shown is dropped and
-//! the font is asked again. The answer goes to the view state (`ExportsView::names`); until the next one lands the tab
+//! not known yet, after [`CHECK_PAUSE`] once the document changed. A query of a revision no longer shown is stopped before
+//! its next entry, and the font is asked again. The answer goes to the view state (`ExportsView::names`); until the next one lands the tab
 //! keeps showing the last one of the document.
 
 use std::sync::{Arc, Mutex};
 
 use fontcraft_engine::cmd::instance_names::names_of;
+use fontcraft_engine::work::{self, Token};
 use serde_json::{Value, json};
 
 use super::feature_work::{CHECK_PAUSE, exports_tab_shows};
@@ -21,12 +22,15 @@ const POLL: f64 = 0.03;
 /// The document's id and revision.
 type Key = (u64, u64);
 
+/// A query under way: what it reads, what stops it, and its answer to come.
+type Job = (Key, Arc<Token>, Arc<Mutex<Option<Value>>>);
+
 /// The query under way and what waits for it.
 #[derive(Default)]
 pub struct ExportNamesWork {
     /// The revision last seen, and the time it was first seen.
     seen: Option<(Key, f64)>,
-    job: Option<(Key, Arc<Mutex<Option<Value>>>)>,
+    job: Option<Job>,
 }
 
 /// One frame's look at the work: collects what finished, starts what is due, and asks for a frame when work waits.
@@ -40,12 +44,17 @@ pub fn logic(app: &mut FontCraftApp, ctx: &egui::Context) {
 /// [`logic`] at time `now`, in seconds; returns how many seconds until a frame should look again.
 pub fn step(app: &mut FontCraftApp, now: f64) -> Option<f64> {
     let wanted = if exports_tab_shows(app) { app.session.active().map(|d| (d.id, d.revision)) } else { None };
-    if let Some((key, landing)) = &app.export_names.job
+    if let Some((key, token, _)) = &app.export_names.job
+        && wanted != Some(*key)
+    {
+        token.cancel();
+    }
+    if let Some((key, token, landing)) = &app.export_names.job
         && let Some(reply) = landing.lock().ok().and_then(|mut l| l.take())
     {
-        let key = *key;
+        let (key, stopped) = (*key, token.is_cancelled());
         app.export_names.job = None;
-        if wanted == Some(key) {
+        if wanted == Some(key) && !stopped {
             app.view.font_info.exports.names = Some(ExportedNames { doc: key.0, revision: key.1, reply: Arc::new(reply) });
             app.view_changed();
         }
@@ -82,10 +91,11 @@ fn start(app: &mut FontCraftApp, key: Key) {
     let landing: Arc<Mutex<Option<Value>>> = Arc::default();
     let out = Arc::clone(&landing);
     let wake = app.window.clone();
+    let token = Token::new();
+    let stop = Arc::clone(&token);
     let job = move || {
-        let reply = fontcraft_engine::guard::catch_panic(|| names_of(&font, &title, &json!({})).map_err(|e| e.to_string()))
-            .unwrap_or_else(Err)
-            .unwrap_or_else(|error| json!({ "error": error }));
+        let names = || work::with(stop, None, || names_of(&font, &title, &json!({})).map_err(|e| e.to_string()));
+        let reply = fontcraft_engine::guard::catch_panic(names).unwrap_or_else(Err).unwrap_or_else(|error| json!({ "error": error }));
         if let Ok(mut slot) = out.lock() {
             *slot = Some(reply);
         }
@@ -93,6 +103,6 @@ fn start(app: &mut FontCraftApp, key: Key) {
             ctx.request_repaint();
         }
     };
-    app.export_names.job = Some((key, landing));
+    app.export_names.job = Some((key, token, landing));
     app.host.jobs().spawn("exported names", Box::new(job));
 }

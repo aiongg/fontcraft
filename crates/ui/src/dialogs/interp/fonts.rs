@@ -10,7 +10,7 @@ use serde_json::{Map, Value, json};
 
 use super::super::fields::{Field, Kind, MAX_CHOICES};
 use super::super::spec::{DialogSpec, Fields, Shaped};
-use super::no_link;
+use super::{OpenFonts, no_link};
 
 /// The percentage the command takes, either side of 0.
 const MAX_AMOUNT: f64 = 100_000.0;
@@ -33,25 +33,19 @@ pub const GENERATE_INSTANCES: DialogSpec = DialogSpec::new(
 .run_on_ok()
 .buttons("Generate", "");
 
-/// The open fonts with one master, as (reference, label): the path a document was opened from, else its title.
-fn single_master_fonts(session: &Session) -> Vec<(String, String)> {
-    session
-        .documents()
-        .iter()
-        .filter(|d| d.font.masters.len() == 1)
-        .take(MAX_CHOICES)
-        .map(|d| (d.path.as_ref().map_or_else(|| d.title.clone(), |p| p.display().to_string()), d.title.clone()))
-        .collect()
+fn single_master_fonts(session: &Session) -> OpenFonts {
+    OpenFonts::of(session, |d| d.font.masters.len() == 1)
 }
 
 fn blend_fields(session: &Session) -> Vec<Field> {
-    let (choices, labels): (Vec<String>, Vec<String>) = single_master_fonts(session).into_iter().unzip();
+    let fonts = single_master_fonts(session);
+    let (choices, labels) = (&fonts.choices, &fonts.labels);
     let font = |key: &str, label: &str, at: usize, doc: &str| Field {
         key: key.into(),
         label: label.into(),
         default: choices.get(at).or(choices.first()).map_or(Value::Null, |c| json!(c)),
         kind: Kind::Choice { choices: choices.clone(), labels: labels.clone() },
-        doc: doc.into(),
+        doc: format!("{doc}{}", fonts.note()),
         group: None,
         same_as: None,
     };
@@ -70,8 +64,9 @@ fn blend_fields(session: &Session) -> Vec<Field> {
 }
 
 fn blend_given(session: &Session, given: &Map<String, Value>) -> Result<Map<String, Value>, String> {
-    if single_master_fonts(session).len() < 2 {
-        return Err("Interpolate Fonts: open two fonts with one master each".into());
+    let fonts = single_master_fonts(session);
+    if fonts.choices.len() < 2 {
+        return Err(format!("Interpolate Fonts: open two fonts with one master each{}", fonts.note()));
     }
     Ok(given.clone())
 }
@@ -142,6 +137,30 @@ mod tests {
 
     fn defaults(fields: Vec<Field>) -> Map<String, Value> {
         fields.into_iter().map(|f| (f.key, f.default)).collect()
+    }
+
+    /// A font the command would take for another, of the same title, is no choice; saved ones are told apart by path.
+    #[test]
+    fn fonts_of_one_title_are_not_confused() {
+        use fontcraft_engine::model::Font;
+        let mut s = Session::new();
+        s.add_document(Font::new("One"), Some("/fonts/a/Sans.glyphs".into())).unwrap();
+        s.add_document(Font::new("Two"), Some("/fonts/b/Sans.glyphs".into())).unwrap();
+        s.add_document(Font::new("Three"), None).unwrap();
+        let untitled = s.doc().unwrap().title.clone();
+        s.add_document(Font::new("Four"), Some(format!("/fonts/{untitled}.glyphs").into())).unwrap();
+        let fonts = single_master_fonts(&s);
+        assert_eq!(fonts.choices.len(), 4, "{fonts:?}");
+        assert_eq!(fonts.labels[..2], fonts.choices[..2], "told apart by path");
+        assert!(!fonts.left_out);
+
+        let mut s = Session::new();
+        s.add_document(Font::new("Five"), Some(format!("/fonts/{untitled}.glyphs").into())).unwrap();
+        s.add_document(Font::new("Six"), None).unwrap();
+        assert_eq!(s.doc().unwrap().title, untitled);
+        let fonts = single_master_fonts(&s);
+        assert_eq!((fonts.choices.len(), fonts.left_out), (1, true), "the title names the first font: {fonts:?}");
+        assert!(blend_given(&s, &Map::new()).is_err_and(|e| e.contains("save it")));
     }
 
     /// Each dialog opens on parameters its command takes.

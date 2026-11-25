@@ -49,12 +49,14 @@ pub struct GlyphListDialog {
     pub search: String,
     /// The font's glyphs in glyph order.
     glyphs: Arc<Vec<String>>,
+    /// What [`matches`] gave last, with the search it was given.
+    found: Option<(String, Vec<String>, bool)>,
     open: bool,
 }
 
 impl GlyphListDialog {
     pub fn new(target: Target, name: String, index: usize, text: String, glyphs: Arc<Vec<String>>) -> GlyphListDialog {
-        GlyphListDialog { id: dialog_id("fontInfo.glyphList"), target, name, index, text, search: String::new(), glyphs, open: true }
+        GlyphListDialog { id: dialog_id("fontInfo.glyphList"), target, name, index, text, search: String::new(), glyphs, found: None, open: true }
     }
 }
 
@@ -81,15 +83,19 @@ impl StackDialog for GlyphListDialog {
 
     fn show(&mut self, ui: &mut Ui, _: &DialogStack) -> Option<DialogResult<Self::Result>> {
         let words = Env::of(ui).words::<GlyphListWords>();
-        let GlyphListDialog { name, text, search, glyphs, open, .. } = self;
+        let GlyphListDialog { name, text, search, glyphs, found: kept, open, .. } = self;
         let shown = FormDialog::new(name.clone(), Bind::bound(text)).opened(Bind::bound(open)).show(ui, |ui, _, text| {
             let _ = TextField::new(words.value.clone(), Bind::bound(&mut *text)).lines(LINES).limit(None).show(ui);
             let _ = TextField::search(words.search.clone(), Bind::bound(&mut *search)).show(ui);
-            let (found, more) = matches(glyphs, search);
+            if kept.as_ref().is_none_or(|(of, ..)| of.as_str() != search.as_str()) {
+                let (found, more) = matches(glyphs, search);
+                *kept = Some((search.clone(), found.into_iter().map(str::to_string).collect(), more));
+            }
+            let (found, more) = kept.as_ref().map_or((&[][..], false), |(_, found, more)| (found.as_slice(), *more));
             Stack::new().show(ui, |ui, _| {
-                for glyph in &found {
+                for glyph in found {
                     let on = names::mentions(name, text, glyph);
-                    let out = Checkbox::new(Bind::given(on)).label((*glyph).to_string()).id_salt(("glyph", *glyph)).show(ui);
+                    let out = Checkbox::new(Bind::given(on)).label(glyph.clone()).id_salt(("glyph", glyph.as_str())).show(ui);
                     if let Some(on) = out.events.committed() {
                         *text = names::with_glyph(name, text, glyph, *on);
                     }

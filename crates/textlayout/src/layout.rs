@@ -93,8 +93,7 @@ pub struct Options<'a> {
     pub break_opportunities: bool,
     /// Text Preview: the items are measured through the full preview font ([`crate::measure`])
     /// before lines break, so kerning and substitutions decide where a line ends. Measured items
-    /// do not kern from the document's kerning in horizontal text; in vertical text they do, since
-    /// the compiled font holds no vertical kerning of the document.
+    /// do not kern from the document's kerning, which the compiled font holds.
     pub measure: Option<Measure<'a>>,
 }
 
@@ -445,9 +444,8 @@ pub fn layout(font: &Font, master: &str, text: &Text, options: &Options<'_>) -> 
             return shift;
         }
         let Some(p) = (if options.shaping.is_some() { before.get(i).copied().flatten() } else { i.checked_sub(1) }) else { return 0.0 };
-        // The shaped widths hold the compiled kerning already. The model's vertical kerning is
-        // not compiled, so vertical text keeps it.
-        if direction != Direction::Vertical && measured.get(i).copied().unwrap_or(false) && measured.get(p).copied().unwrap_or(false) {
+        // The shaped widths hold the compiled kerning already.
+        if measured.get(i).copied().unwrap_or(false) && measured.get(p).copied().unwrap_or(false) {
             return 0.0;
         }
         let table = match levels {

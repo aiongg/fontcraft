@@ -5170,7 +5170,7 @@ summary = "The dialog of Font › Interpolate Fonts…: two open fonts with one 
 ref = "FontForge Element menu › Interpolate Fonts"
 status = "docs"
 origin = "fontforge"
-notes = "Built for M7.35 (crates/ui/src/dialogs/interp/fonts.rs). It draws no preview."
+notes = "Built for M7.35 (crates/ui/src/dialogs/interp/fonts.rs). It draws no preview. A font the command would take for another (a never-saved one with another's title) is not listed."
 guesses = [
   "The dialog opens at 50 percent with the first two open fonts of one master; the reference asks for the second font as a file.",
 ]

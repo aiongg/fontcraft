@@ -1696,6 +1696,38 @@ fn vertical_kerning_is_exported_as_vkrn() {
     }
     assert!(seen.iter().all(|(tag, vkrn)| *vkrn && tag != "~fc~") && seen.iter().any(|(tag, _)| tag == "latn"), "{seen:?}");
 
+    // A script with vertical kerning alone has no record, so it reads the default script's, `kern` included; one whose
+    // code positions glyphs keeps its record as it is and has `vkrn` in it.
+    let mut cjk = f.clone();
+    for (name, cp) in [("uni4E00", 0x4E00), ("uni5341", 0x5341)] {
+        cjk.add_glyph(name, vec![cp], 1000.0).unwrap();
+    }
+    fontcraft_spacing::kerning::Direction::Vertical.table_mut(Arc::make_mut(&mut cjk.kerning)).set("m01", "uni4E00", "uni5341", -40.0);
+    let systems = "languagesystem DFLT dflt;\nlanguagesystem latn dflt;\nlanguagesystem hani dflt;\nlanguagesystem hani JAN;";
+    Arc::make_mut(&mut cjk.features).prefixes[0].code = systems.into();
+    let records = |f: &Font| -> Vec<(String, Vec<String>)> {
+        let out = compile_ttf(f, &Options::default()).unwrap();
+        let gpos = FontRef::new(&out.bytes).unwrap().gpos().unwrap();
+        let (features, scripts) = (gpos.feature_list().unwrap(), gpos.script_list().unwrap());
+        let tags = |lang: &skrifa::raw::tables::layout::LangSys| -> Vec<String> {
+            lang.feature_indices().iter().map(|i| features.feature_records()[usize::from(i.get())].feature_tag().to_string()).collect()
+        };
+        let mut seen = Vec::new();
+        for record in scripts.script_records() {
+            let script = record.script(scripts.offset_data()).unwrap();
+            seen.push((record.script_tag().to_string(), tags(&script.default_lang_sys().unwrap().unwrap())));
+            for lang in script.lang_sys_records() {
+                seen.push((format!("{}/{}", record.script_tag(), lang.lang_sys_tag()), tags(&lang.lang_sys(script.offset_data()).unwrap())));
+            }
+        }
+        seen
+    };
+    let row = |script: &str, tags: &[&str]| (script.to_string(), tags.iter().map(|t| (*t).to_string()).collect::<Vec<_>>());
+    assert_eq!(records(&cjk), [row("DFLT", &["kern", "vkrn"]), row("latn", &["kern", "vkrn"])]);
+    let palt = "feature palt { script hani; pos uni4E00 <0 0 -10 0>; } palt;";
+    Arc::make_mut(&mut cjk.features).prefixes.push(Snippet { code: palt.into(), ..Default::default() });
+    assert_eq!(records(&cjk), [row("DFLT", &["kern", "vkrn"]), row("hani", &["palt", "vkrn"]), row("latn", &["kern", "vkrn"])]);
+
     let mut hand = f.clone();
     Arc::make_mut(&mut hand.features).prefixes.push(Snippet { code: "feature vkrn { pos A V <0 0 0 7>; } vkrn;".into(), ..Default::default() });
     let out = compile_ttf(&hand, &Options::default()).unwrap();

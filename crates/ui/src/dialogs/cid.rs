@@ -14,7 +14,7 @@ use fontcraft_engine::model::cid::{CidFont, is_cid_keyed};
 use serde_json::{Map, Value, json};
 
 use super::fields::{Field, Kind, MAX_CHOICES};
-use super::interp::no_link;
+use super::interp::{OpenFonts, no_link};
 use super::spec::{DialogSpec, Fields, Shaped};
 
 pub const SPECS: &[DialogSpec] = &[CONVERT, FLATTEN, EDIT_SUBFONTS];
@@ -118,23 +118,21 @@ fn edit_fields(session: &Session) -> Vec<Field> {
     let subfonts: Vec<String> = cid.iter().flat_map(|c| c.subfonts.iter()).take(MAX_CHOICES).map(|s| s.name.clone()).collect();
     let supplement = cid.as_ref().map_or(0, |c| i64::from(c.ros.supplement));
     let active = session.active().map(|d| d.id);
-    let others: Vec<(String, String)> = session
-        .documents()
-        .iter()
-        .filter(|d| Some(d.id) != active)
-        .take(MAX_CHOICES.saturating_sub(1))
-        .map(|d| (d.path.as_ref().map_or_else(|| d.title.clone(), |p| p.display().to_string()), d.title.clone()))
-        .collect();
+    let fonts = OpenFonts::of(session, |d| Some(d.id) != active);
+    let note = fonts.note();
+    // The command takes a font called like the keyword for the keyword.
+    let others = fonts.choices.into_iter().zip(fonts.labels).filter(|(r, _)| r != BLANK).take(MAX_CHOICES.saturating_sub(1));
     let (choices, labels): (Vec<String>, Vec<String>) = std::iter::once((BLANK.to_string(), "Blank".to_string())).chain(others).unzip();
-    let pick = |key: &str, label: &str, choices: Vec<String>, labels: Vec<String>, doc: &str| Field {
+    let pick = |key: &str, label: &str, choices: Vec<String>, labels: Vec<String>, doc: String| Field {
         key: key.into(),
         label: label.into(),
         default: choices.first().map_or(Value::Null, |c| json!(c)),
         kind: Kind::Choice { choices, labels },
-        doc: doc.into(),
+        doc,
         group: None,
         same_as: None,
     };
+    let add = format!("The sub-font to add: an empty one, or the glyphs of another open font{note}");
     vec![
         Field::choice(
             "action",
@@ -143,9 +141,9 @@ fn edit_fields(session: &Session) -> Vec<Field> {
             "insert",
             "What OK does",
         ),
-        pick("insert", "Add", choices, labels, "The sub-font to add: an empty one, or the glyphs of another open font").in_group("Add Sub-font"),
+        pick("insert", "Add", choices, labels, add).in_group("Add Sub-font"),
         Field::text("name", "Name", MAX_NAME_LEN, "The new sub-font's name; empty takes the added font's family name").in_group("Add Sub-font"),
-        pick("remove", "Remove", subfonts.clone(), subfonts, "The sub-font to remove with its glyphs").in_group("Remove Sub-font"),
+        pick("remove", "Remove", subfonts.clone(), subfonts, "The sub-font to remove with its glyphs".into()).in_group("Remove Sub-font"),
         Field::integer("supplement", "Supplement", 0, MAX_SUPPLEMENT, supplement, "The character collection's supplement number")
             .in_group("Set Supplement"),
     ]

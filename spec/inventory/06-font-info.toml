@@ -412,7 +412,7 @@ guesses = [
   "A refused value's message stays under its row until the next edit; the reference app with vendorID ABCDE settles it.",
   "An axis-tag value is a menu of the font's axes and Disable Masters check boxes for its masters, stored as a list of names; the reference app's rows settle it.",
   "A parameter that names glyphs keeps its text field with a button for a glyph picker, and names the font lacks are only pointed out; the reference app's rows settle both.",
-  "gasp Table, meta Table and Name Table Entry open a table of their records; the reference app's editors settle it.",
+  "gasp Table, meta Table and Name Table Entry open a table of their records (at most 256), and a Name Table Entry is filled from its first column on; the reference app's editors settle it.",
   "A value from a fixed list of whole numbers (Post Table Type) is stored as a number, any other as text; the file the reference app writes after picking one settles it.",
 ]
 observe = [

@@ -37,6 +37,8 @@ const MAX_FILTER_SETS: usize = 4_096;
 
 /// Vertical kerning.
 const VKRN: Tag = Tag::new(b"vkrn");
+/// The script shapers read for a script without a record.
+const DEFAULT_SCRIPT: Tag = Tag::new(b"DFLT");
 /// The script `vkrn`'s lookups are claimed for until the table is finished.
 const CLAIM_SCRIPT: Tag = Tag::new(b"~fc~");
 
@@ -332,12 +334,43 @@ impl FeatureProvider for Provider<'_> {
     }
 }
 
-/// Takes the script `vkrn`'s lookups were claimed for out of `gpos`, with the features only it has.
+/// Whether `generated` holds vertical kerning, whose lookups are claimed for [`CLAIM_SCRIPT`].
+pub(crate) fn has_claim(generated: &GeneratedLookups) -> bool {
+    generated.features.keys().any(|key| key.feature == VKRN)
+}
+
+/// Takes the script `vkrn`'s lookups were claimed for out of `gpos`, with the features only it has, and the language
+/// systems that hold nothing but the generated `vkrn`: shapers read one record, so one of those would hide the kerning
+/// and the other positioning of the record it stands before, which has `vkrn` too.
 pub(crate) fn drop_claim(gpos: &mut Gpos) {
     let scripts = &mut gpos.script_list.script_records;
     let Some(at) = scripts.iter().position(|r| r.script_tag == CLAIM_SCRIPT) else { return };
     let mut dropped: BTreeSet<u16> = BTreeSet::new();
     for_lang_systems(&mut scripts.remove(at).script, |lang| dropped.extend(lang.feature_indices.iter().copied()));
+    let features = &gpos.feature_list.feature_records;
+    let lookups = move |index: usize| features.get(index).map(|r| r.feature.lookup_list_indices.as_slice());
+    let claimed: Vec<&[u16]> = dropped.iter().filter_map(|i| lookups(usize::from(*i))).collect();
+    let vertical: BTreeSet<u16> = features
+        .iter()
+        .enumerate()
+        .filter(|(at, r)| r.feature_tag == VKRN && lookups(*at).is_some_and(|l| claimed.contains(&l)))
+        .filter_map(|(at, _)| u16::try_from(at).ok())
+        .collect();
+    let bare = |lang: &LangSys| {
+        lang.required_feature_index == u16::MAX && !lang.feature_indices.is_empty() && lang.feature_indices.iter().all(|i| vertical.contains(i))
+    };
+    scripts.retain_mut(|r| {
+        let default = r.script_tag == DEFAULT_SCRIPT;
+        let script: &mut Script = &mut r.script;
+        let languages = script.lang_sys_records.iter().map(|l| &*l.lang_sys);
+        if !default && script.default_lang_sys.as_ref().into_iter().chain(languages).all(bare) {
+            return false;
+        }
+        if script.default_lang_sys.as_ref().is_some() {
+            script.lang_sys_records.retain(|l| !bare(&l.lang_sys));
+        }
+        true
+    });
     for record in scripts.iter_mut() {
         for_lang_systems(&mut record.script, |lang| {
             dropped.remove(&lang.required_feature_index);

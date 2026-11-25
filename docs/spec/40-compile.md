@@ -182,7 +182,10 @@ offsets overflow. Each feature lists each of its lookups once, in order, as fea-
 Vertical kerning becomes one `vkrn` lookup of y advances (`kerning.verticalGroups`, 08 question 22).
 Neither reference compiler writes `vkrn`, so the `GPOS` of a font with vertical pairs differs from
 theirs by that lookup and feature: the reference app exports vertical kerning, and its release notes
-are the source.
+are the source. A script or language gets no record of its own for `vkrn` alone, so it goes on reading
+the record it read without vertical kerning. In a font with vertical pairs whose code has an
+automatic-code marker in `kern` and in `dist`, fea-rs may take the other of the two markers than it
+does without them.
 
 Built by M8.7 (`crates/compile/src/layout.rs`), for static builds:
 
