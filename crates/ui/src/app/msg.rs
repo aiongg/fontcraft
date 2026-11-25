@@ -65,6 +65,8 @@ pub enum ViewMsg {
     FeatureFind(Option<crate::shell::font_info_tabs::FindState>),
     /// Font View's search field took the keyboard (`fontView.focusSearch`).
     FontViewSearchFocused,
+    /// Font View scrolled to the glyph asked for (`FontViewState::reveal`).
+    FontViewRevealed,
     /// A press, drag or release on the Bitmap Glyph Editor's pixel canvas (`shell::bitmap_editor::input`).
     Bitmap(crate::shell::bitmap_editor::BitmapInput),
 }

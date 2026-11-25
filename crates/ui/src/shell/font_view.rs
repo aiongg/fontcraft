@@ -33,7 +33,7 @@ const COMMANDS: &[UiCommand] = &[
         label: "Set Glyph Selection",
         menu: &[],
         shortcut: None,
-        params: "{glyphs: [names], mode?: \"replace\" | \"add\" | \"remove\" (default replace)} select these glyphs in Font View (unknown names are an error); commands fired without targets while Font View shows act on this selection",
+        params: "{glyphs: [names], mode?: \"replace\" | \"add\" | \"remove\" (default replace), reveal?: bool} select these glyphs in Font View (unknown names are an error; reveal: scroll to the first of them); commands fired without targets while Font View shows act on this selection",
     },
     UiCommand {
         id: "view.editSelectedGlyphs",
@@ -254,6 +254,10 @@ fn set_selection(app: &mut FontCraftApp, p: &Value) -> Result<(), String> {
     if !matches!(mode, "replace" | "add" | "remove") {
         return Err(format!("`mode` must be \"replace\", \"add\" or \"remove\", got \"{mode}\""));
     }
+    let reveal = match p.get("reveal") {
+        None | Some(Value::Null) => false,
+        Some(v) => v.as_bool().ok_or("`reveal` must be true or false")?,
+    };
     let font = app.session.font().map_err(|e| e.to_string())?;
     // Sets, so selecting every glyph of a large font is one pass, not a pass per name.
     let known: HashSet<&str> = font.glyphs.iter().map(|g| g.name.as_str()).collect();
@@ -278,6 +282,9 @@ fn set_selection(app: &mut FontCraftApp, p: &Value) -> Result<(), String> {
         && let Some(last) = names.last()
     {
         fv.anchor = Some(last.clone());
+    }
+    if reveal {
+        fv.reveal = names.first().cloned();
     }
     Ok(())
 }

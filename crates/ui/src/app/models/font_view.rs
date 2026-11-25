@@ -65,6 +65,10 @@ pub struct FontViewModel {
     pub search: String,
     /// The search field takes the keyboard on this pass.
     pub focus_search: bool,
+    /// The row the grid or the list scrolls to on this pass.
+    pub reveal: Option<usize>,
+    /// How many selected glyphs the search or the sidebar hides.
+    pub hidden: usize,
     /// The master the cells draw and the Components cell edits.
     pub master: Option<String>,
     /// The vertical extent a cell shows, in font units: the master's ascender and descender.
@@ -312,7 +316,14 @@ pub fn project(model: &mut Tracked<FontViewModel>, cache: &mut OutlineCache, fil
         };
         sort_rows(&mut visible, sort, key);
     }
-    let selected = state.selected.iter().filter_map(|n| index.get(n.as_str()).copied()).collect();
+    let selected: Vec<usize> = state.selected.iter().filter_map(|n| index.get(n.as_str()).copied()).collect();
+    let hidden = if visible.len() == rows.len() || selected.is_empty() {
+        0
+    } else {
+        let shown: HashSet<usize> = visible.iter().copied().collect();
+        selected.iter().filter(|i| !shown.contains(i)).count()
+    };
+    let reveal = state.reveal.as_deref().and_then(|n| index.get(n).copied());
     let anchor = state.anchor.as_deref().and_then(|n| index.get(n).copied());
     let (ascender, descender) = frame(&font, &master);
     let value = FontViewModel {
@@ -326,6 +337,8 @@ pub fn project(model: &mut Tracked<FontViewModel>, cache: &mut OutlineCache, fil
         sort: state.sort,
         search: state.search.query.clone(),
         focus_search: state.focus_search,
+        reveal,
+        hidden,
         master: Some(master),
         ascender,
         descender,
@@ -354,13 +367,18 @@ fn glyph_status<'s>(font: &Font, glyph: &Glyph, statuses: &'s [StatusChoice], de
 
 /// The rows `fontView.queryGlyphs` gives for `query`, in its order.
 fn run_query(cx: &mut ProjectCx<'_>, query: Value, master: &str, index: &HashMap<&str, usize>) -> Result<Vec<usize>, String> {
+    Ok(query_names(cx, query, master)?.iter().filter_map(|n| index.get(n.as_str()).copied()).collect())
+}
+
+/// The glyphs `fontView.queryGlyphs` gives for `query`, in its order.
+pub fn query_names(cx: &mut ProjectCx<'_>, query: Value, master: &str) -> Result<Vec<String>, String> {
     let Value::Object(mut params) = query else { return Err("the Font View query must be an object".into()) };
     if !master.is_empty() {
         params.entry("master").or_insert_with(|| Value::String(master.to_string()));
     }
     let result = cx.session.query("fontView.queryGlyphs", &Value::Object(params)).map_err(|e| e.to_string())?;
     let names = result.get("glyphs").and_then(Value::as_array).ok_or("the query gave no glyph list")?;
-    Ok(names.iter().filter_map(Value::as_str).filter_map(|n| index.get(n).copied()).collect())
+    Ok(names.iter().filter_map(Value::as_str).map(str::to_string).collect())
 }
 
 /// What a column sorts by.

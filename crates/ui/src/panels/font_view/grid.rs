@@ -77,12 +77,19 @@ pub fn show(ui: &mut Ui, model: &FontViewModel, images: &CellImages, sent: &mut 
     let (ascender, descender) = (model.ascender, model.descender);
     let mut selection = keys::selection(model);
     let source = Shown::new(model);
-    let out = TileGrid::<usize>::new(words.glyphs.clone())
+    let grid = TileGrid::<usize>::new(words.glyphs.clone());
+    let grid = match model.reveal {
+        Some(row) => grid.reveal(row),
+        None => grid,
+    };
+    let out = grid
         .empty(words.no_glyphs.clone())
         .zoom(zoom)
         .caption(caption)
         .type_ahead(true)
         .deletable(true)
+        .allow_empty(true)
+        .marquee(true)
         .selection(Bind::bound(&mut selection))
         // A hovered file's name may not be known yet; the drop checks it again.
         .takes_drop(DropKind::new(DropPlace::Onto, |files: &OsFiles, _: &DropAt<usize>| {
@@ -142,5 +149,6 @@ pub fn show(ui: &mut Ui, model: &FontViewModel, images: &CellImages, sent: &mut 
             }
         }
     }
+    keys::revealed(model, sent);
     keys::requests(ui.ctx(), model, &selection, &out.response.events, sent);
 }

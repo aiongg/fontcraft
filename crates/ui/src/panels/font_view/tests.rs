@@ -11,10 +11,10 @@ use serde_json::json;
 
 use super::marks::{Badge, MarkTokens, badge_rect};
 use super::{Props, show};
-use crate::app::Msg;
 use crate::app::font_view::{Column, ViewMode};
 use crate::app::models::cell_marks::{CellMarks, UnicodeMark};
 use crate::app::models::font_view::{FontViewModel, GlyphRow};
+use crate::app::{Msg, ViewMsg};
 
 fn model(mode: ViewMode, selected: Vec<usize>) -> FontViewModel {
     model_of(&["A", "B", "C"], mode, selected)
@@ -380,4 +380,45 @@ fn the_unicode_mark_shows_with_the_name() {
     assert!(!has_marker(&fills));
     let (fills, texts) = marked(UnicodeMark::Marker, 40.0);
     assert!(!has_marker(&fills) && !texts.iter().any(|s| s == "A"), "{texts:?}");
+}
+
+/// A drag from empty grid space selects the cells it touches; a click there empties the selection.
+#[test]
+fn a_drag_from_empty_space_selects_the_cells_it_touches() {
+    let (mut fixture, posted) = open(model_of(&TWELVE, ViewMode::Grid, vec![4]));
+    fixture.room(egui::vec2(420.0, 900.0)).settle();
+    let (first, last) = (fixture.by_label("A").expect("the first cell"), fixture.by_label("L").expect("the last cell"));
+    let start = last.rect.right_bottom() + egui::vec2(4.0, 40.0);
+    posted.borrow_mut().clear();
+    fixture.drag_at(start, first.center() - start).settle();
+    let swept: Vec<String> = match posted.borrow().last() {
+        Some(Msg::Shell(c)) if c.id.as_str() == "fontView.setSelection" => {
+            let names = c.params["glyphs"].as_array().cloned().unwrap_or_default();
+            names.iter().filter_map(|n| n.as_str().map(str::to_string)).collect()
+        }
+        other => panic!("{other:?}"),
+    };
+    assert!(swept.contains(&"A".to_string()) && swept.contains(&"L".to_string()), "{swept:?}");
+    posted.borrow_mut().clear();
+    fixture.click_at(start).settle();
+    assert_eq!(posted.borrow().last(), Some(&shell("fontView.setSelection", json!({"glyphs": []}))));
+}
+
+/// A row to scroll to is taken once; hidden selected glyphs are counted beside Show All, which clears what hides them.
+#[test]
+fn a_reveal_is_taken_and_show_all_clears_the_filters() {
+    for mode in [ViewMode::Grid, ViewMode::List] {
+        let mut m = model_of(&TWELVE, mode, vec![11]);
+        m.reveal = Some(11);
+        let (_, posted) = open(m);
+        assert!(posted.borrow().contains(&Msg::View(ViewMsg::FontViewRevealed)), "{mode:?}");
+    }
+    let mut m = model(ViewMode::Grid, vec![1]);
+    m.visible = vec![0];
+    m.hidden = 1;
+    let (mut fixture, posted) = open(m);
+    let button = fixture.by_label("Show All").expect("Show All");
+    posted.borrow_mut().clear();
+    fixture.click(&button).settle();
+    assert!(posted.borrow().contains(&shell("fontView.setSearch", json!({"query": ""}))), "{:?}", posted.borrow());
 }

@@ -181,12 +181,13 @@ label = "Set Glyph Selection"
 menu = []
 shortcut = ""
 kind = "ui"
-params = "{glyphs: [names], mode?: \"replace\" | \"add\" | \"remove\"}"
+params = "{glyphs: [names], mode?: \"replace\" | \"add\" | \"remove\", reveal?: bool}"
 area = "font-view"
 milestone = "M4"
 summary = "Our headless equivalent of clicking cells: sets the Font View glyph selection by name. Every batch command without explicit targets acts on this selection."
 ref = "Font View › Batch-Processing › Selecting Glyphs"
 status = "inferred"
+notes = "`reveal` scrolls to the first glyph named. The commands that add glyphs select their result and scroll to it the same way."
 own = true
 
 [[command]]
@@ -402,6 +403,7 @@ summary = "Adds the database entries selected in the Glyph Info window to the cu
 ref = "Font View › Adding New Glyphs › Adding From the Glyph Info Database"
 status = "handbook"
 guesses = [
+  "When every name is in the font already, those glyphs become the selection. Settled by observation.",
   "Names the font already has are left as they are and listed in `existing`; no Replace question is asked. Settled by observation.",
 ]
 observe = [
@@ -443,6 +445,7 @@ status = "handbook"
 guesses = [
   "Generated glyphs are empty, as wide as the Default Layer Width parameter or the built-in width makes a new glyph (as New Glyph), take the code point the entry gives or the glyph data gives their name, and are placed by the default sort key; all of them are one undo step. Settled by observing Generate on a list filter.",
 ]
+notes = "The generated glyphs become the selection and the status line counts them."
 observe = [
   "Generate one missing glyph from a list filter and from a language: note its width, Unicode value and place, then undo once and note how many go.",
 ]
@@ -1189,7 +1192,7 @@ ref = "Font View › Grid View"
 status = "handbook"
 guesses = [
   "Shift+click adds every visible glyph from the last clicked glyph to the clicked one; Cmd+click adds or removes one glyph; a click on empty space clears the selection. Settled by observation.",
-  "Dragging across the grid draws a rectangle that selects the cells it touches, added to the selection while Shift or Cmd is held. Settled by observation.",
+  "Dragging from empty space draws a rectangle that selects the cells it touches, added to the selection while Shift or Cmd is held. Settled by observation.",
   "Section headers of the glyphOrder parameter show only while the view lists every glyph in glyph order (no filter, search or sort). Settled by observation.",
 ]
 observe = [
@@ -2355,7 +2358,7 @@ milestone = "M4"
 summary = "In Font View, edit.paste (Cmd+V) adds the copied glyphs to the target font as new glyphs."
 ref = "Font View › Copying Glyphs Between Files"
 status = "handbook"
-notes = "edit.paste recognises the copied-glyphs text in `json` or `text`. Documented, not yet observed."
+notes = "edit.paste recognises the copied-glyphs text in `json` or `text`. The pasted glyphs become the selection and are scrolled to; when the search or the sidebar hides them, the status row counts them beside Show All. Documented, not yet observed."
 guesses = [
   "Pasted glyphs take their place in the default sort order, like added glyphs. Settled by observation.",
 ]
@@ -2968,6 +2971,7 @@ milestone = "M4"
 summary = "In Font View, edit.selectAll (Cmd+A) selects every glyph currently visible, not every glyph of the font, so the sidebar and search decide the scope."
 ref = "Font View › Batch-Processing › Selecting Glyphs"
 status = "handbook"
+notes = "While Font View shows, whatever has the keyboard; a focused text field or list that takes Select All keeps it. Selecting nodes (selection.set and its relatives) refuses there unless the command names the glyph, so the tab behind Font View keeps its selection."
 
 [[behavior]]
 id = "fontView.deselectAll"

@@ -622,6 +622,7 @@ impl FontCraftApp {
             ViewMsg::FeaturePreview(ask) => self.view.font_info.features.preview = ask,
             ViewMsg::FeatureFind(find) => self.view.font_info.features.find = find,
             ViewMsg::FontViewSearchFocused => self.view.font_view.focus_search = false,
+            ViewMsg::FontViewRevealed => self.view.font_view.reveal = None,
             ViewMsg::Bitmap(input) => return crate::shell::bitmap_editor::input(self, input),
         }
         Ok(())

@@ -55,6 +55,9 @@ craft::ui::words! {
         selected: "fontcraftFontView.selected" = "selected";
         shown: "fontcraftFontView.shown" = "shown";
         in_font: "fontcraftFontView.inFont" = "in font";
+        /// After how many selected glyphs the search or the sidebar hides, and the button that shows every glyph.
+        hidden: "fontcraftFontView.hidden" = "of the selected hidden";
+        show_all: "fontcraftFontView.showAll" = "Show All";
         /// The grid or list of a font with no glyph shown.
         no_glyphs: "fontcraftFontView.noGlyphs" = "No glyphs";
         /// Without an open font.

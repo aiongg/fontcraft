@@ -295,3 +295,73 @@ fn cells_mark_the_state_of_their_glyphs() {
     shell(&mut app, "fontView.setViewMode", json!({"mode": "list"}));
     assert_eq!(marks(&app, "A"), CellMarks::default(), "List View projects no marks");
 }
+
+/// Select All, Deselect All and Invert Selection act on the glyphs Font View lists, from the menu, the key and the
+/// control channel alike, and leave the selection of the tab behind it alone; node selection refuses there.
+#[test]
+fn select_all_deselect_and_invert_work_on_the_visible_glyphs() {
+    let mut app = app();
+    app.session.execute("path.addRectangle", &json!({"glyph": "A", "x": 100, "y": 0, "width": 400, "height": 700})).unwrap();
+    app.drain();
+    shell(&mut app, "view.editSelectedGlyphs", json!({"glyphs": ["A"]}));
+    shell(&mut app, "edit.selectAll", json!({}));
+    let nodes = app.tools.selection.clone();
+    assert!(!nodes.is_empty(), "the edit view's own selection");
+
+    shell(&mut app, "fontView.show", json!({}));
+    shell(&mut app, "fontView.setSearch", json!({"query": "e", "fields": ["name"]}));
+    let listed = shown(&app);
+    assert!(listed.contains(&"e".to_string()) && listed.len() > 1 && listed.len() < 54, "{listed:?}");
+    shell(&mut app, "edit.selectAll", json!({}));
+    assert_eq!(selected(&app), listed, "{}", app.status);
+
+    shell(&mut app, "fontView.setSelection", json!({"glyphs": ["e"]}));
+    // Fired as the menu and the key fire it.
+    app.fire(CommandRef::new("edit.invertSelection"));
+    app.drain();
+    assert_eq!(selected(&app), listed.iter().filter(|n| *n != "e").cloned().collect::<Vec<_>>());
+    shell(&mut app, "edit.deselectAll", json!({}));
+    assert!(selected(&app).is_empty());
+
+    for id in ["selection.selectNext", "path.focusOnSelectedPath"] {
+        shell(&mut app, id, json!({}));
+        assert!(app.status.contains("open a glyph first"), "{id}: {}", app.status);
+    }
+    assert_eq!(app.tools.selection, nodes, "the hidden tab's selection stays");
+}
+
+/// What a command adds becomes the selection and is scrolled to; the status counts it, and glyphs the search hides are
+/// counted beside Show All, which lists every glyph again. Undo takes them out of the selection.
+#[test]
+fn added_glyphs_become_the_selection() {
+    let mut app = app();
+    let run = |app: &mut FontCraftApp, id: &str, params: Value| {
+        app.status.clear();
+        app.sent.push(Msg::run(id, params));
+        app.drain();
+    };
+    run(&mut app, "glyph.addGlyphs", json!({"text": "Aacute Agrave A", "onExisting": "keep"}));
+    assert_eq!(selected(&app), ["Aacute", "Agrave"], "{}", app.status);
+    assert!(app.status.contains("2 added") && app.status.contains("1 already in the font"), "{}", app.status);
+    let reveal = app.models.font_view.reveal.and_then(|i| app.models.font_view.name(i)).map(str::to_string);
+    assert_eq!(reveal.as_deref(), Some("Aacute"));
+    app.sent.push(Msg::View(crate::app::ViewMsg::FontViewRevealed));
+    app.drain();
+    assert_eq!(app.models.font_view.reveal, None);
+
+    shell(&mut app, "fontView.setSearch", json!({"query": "zero"}));
+    let copied = app.session.execute("edit.copy", &json!({"glyphs": ["B"]})).unwrap();
+    run(&mut app, "edit.paste", json!({"text": copied["json"]}));
+    assert!(app.status.contains("1 added"), "{}", app.status);
+    assert_eq!(selected(&app), ["B.001"]);
+    assert_eq!(app.models.font_view.hidden, 1);
+    let sent = crate::panels::font_view::status::show_all(&["B.001"]);
+    app.sent.extend(sent);
+    app.drain();
+    assert_eq!((app.models.font_view.hidden, selected(&app), shown(&app).len()), (0, vec!["B.001".to_string()], 57));
+
+    run(&mut app, "glyph.duplicateGlyph", json!({"glyphs": ["C", "D"]}));
+    assert_eq!(selected(&app), ["C.001", "D.001"], "{}", app.status);
+    run(&mut app, "edit.undo", json!({}));
+    assert!(selected(&app).is_empty(), "undo takes the copies out of the selection");
+}

@@ -117,12 +117,18 @@ pub fn show(ui: &mut Ui, model: &FontViewModel, sent: &mut Vec<Msg>) {
     let statuses = status_entries(model, &headers);
     // The Status pop-up a row picked from: the glyph and the entry's value.
     let picked: RefCell<Option<(String, String)>> = RefCell::new(None);
-    let out = Table::<usize>::new(words.glyphs.clone(), specs)
+    let table = Table::<usize>::new(words.glyphs.clone(), specs);
+    let table = match model.reveal {
+        Some(row) => table.reveal(row),
+        None => table,
+    };
+    let out = table
         .empty(words.no_glyphs.clone())
         .sort(sort)
         .striped(true)
         .type_ahead(true)
         .deletable(true)
+        .allow_empty(true)
         .rename_column(key(Column::Name))
         .selection(Bind::bound(&mut selection))
         .show_items(ui, &source, &mut |row, icx| {
@@ -155,6 +161,7 @@ pub fn show(ui: &mut Ui, model: &FontViewModel, sent: &mut Vec<Msg>) {
     if let Some((glyph, value)) = picked.take() {
         sent.push(status_request(&glyph, &value));
     }
+    keys::revealed(model, sent);
     keys::requests(ui.ctx(), model, &selection, &out.events, sent);
     for event in &out.events {
         if let CollectionEvent::Column(change) = event {

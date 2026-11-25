@@ -20,8 +20,8 @@ use egui::Context;
 use fontcraft_tools::{Key, Modifiers};
 use serde_json::json;
 
-use crate::app::Msg;
 use crate::app::models::font_view::FontViewModel;
+use crate::app::{Msg, ViewMsg};
 
 /// The window key Font View's grid or list takes for `key` with `mods`: an arrow, Home or End, alone or with Shift,
 /// and Return, Delete or Backspace alone. `None` for every other key, which goes on to the menu shortcuts.
@@ -54,6 +54,13 @@ pub fn remove(glyphs: Vec<String>) -> Msg {
 pub fn selection(model: &FontViewModel) -> Selection<usize> {
     let lead = model.anchor.filter(|a| model.selected.contains(a)).or_else(|| model.selected.last().copied());
     Selection::new(model.selected.clone(), lead, lead)
+}
+
+/// The message that the grid or the list, shown this pass, took the row to scroll to; a row the view hides is dropped.
+pub fn revealed(model: &FontViewModel, sent: &mut Vec<Msg>) {
+    if model.reveal.is_some() {
+        sent.push(Msg::View(ViewMsg::FontViewRevealed));
+    }
 }
 
 /// The messages for what the grid or the list reported: `after` is the selection it left, `events` its events. `ctx`

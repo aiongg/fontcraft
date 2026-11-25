@@ -1012,7 +1012,7 @@ pub fn steps_for(app: &mut FontCraftApp, menu: &CanvasMenu, id: &str) -> Vec<Msg
         return vec![shell("dialog.open", params)];
     }
     if id == SHOW_IN_FONT_VIEW {
-        return vec![shell("fontView.setSelection", json!({"glyphs": [menu.glyph]})), shell("fontView.show", json!({}))];
+        return vec![shell("fontView.setSelection", json!({"glyphs": [menu.glyph], "reveal": true})), shell("fontView.show", json!({}))];
     }
     if menu.sections.iter().any(|s| s.context == TT_INSTRUCTOR)
         && let Some(steps) = instructor_steps(app, id)
