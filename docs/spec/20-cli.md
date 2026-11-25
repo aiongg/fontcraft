@@ -366,7 +366,7 @@ Engine commands: `font.compile`, `font.compilePlan`. Autohinting delegates to `a
 
 | Reference tool | Reference option | Ours | Note |
 |---|---|---|---|
-| makeotf | `-f` | SOURCE (or --afdko-project) |  |
+| makeotf | `-f` | SOURCE (or --project-file) |  |
 | makeotf | `-o` | -o (a directory keeps the default <PostScript name>.otf) |  |
 | makeotf | `-b / -nb` | --bold / --no-bold |  |
 | makeotf | `-i / -ni` | --italic / --no-italic |  |
@@ -376,7 +376,7 @@ Engine commands: `font.compile`, `font.compilePlan`. Autohinting delegates to `a
 | makeotf | `-gf` | --goadb |  |
 | makeotf | `-ga / -nga` | --apply-goadb / --no-apply-goadb |  |
 | makeotf | `-gs / -ngs` | --subset-to-goadb |  |
-| makeotf | `-ds` | --designspace |  |
+| makeotf | `-ds` | refused: a compiled variable font is opened as a document with its axes |  |
 | makeotf | `-r / -nr` | --release / --no-release |  |
 | makeotf | `-S / -nS` | --subroutinize / --no-subroutinize |  |
 | makeotf | `-maxs` | --max-subrs |  |
@@ -386,27 +386,27 @@ Engine commands: `font.compile`, `font.compilePlan`. Autohinting delegates to `a
 | makeotf | `-rev` | --bump-version |  |
 | makeotf | `-osbOn / -osbOff` | --fs-selection-on / --fs-selection-off |  |
 | makeotf | `-osv` | --os2-version |  |
-| makeotf | `-cs / -cl` | --mac-cmap-script / --mac-cmap-language |  |
-| makeotf | `-cm / -ch / -cv` | --cmap-mac / --cmap-h / --cmap-v |  |
+| makeotf | `-cs / -cl` | --mac-script / --mac-language |  |
+| makeotf | `-cm / -ch / -cv` | --mac-cmap / --cid-cmap / --cmap-v |  |
 | makeotf | `-ci` | --uvs |  |
 | makeotf | `-dbl` | --legacy-double-mapping |  |
-| makeotf | `-fi` | --afdko-fontinfo |  |
-| makeotf | `-fp` | --options (reads .fpr too) |  |
+| makeotf | `-fi` | --fontinfo |  |
+| makeotf | `-fp` | --project-file (or --options FILE.fpr) |  |
 | makeotf | `-sp` | --save-options |  |
-| makeotf | `-cn / -ncn` | --cid-keyed / (default) |  |
-| makeotf | `-shw / -nshw` | --no-warn-unhinted / --warn-unhinted |  |
+| makeotf | `-cn / -ncn` | refused: a name-keyed source is not converted; a CID-keyed source builds a CID-keyed CFF |  |
+| makeotf | `-shw / -nshw` | refused: the compile does not report CFF glyphs without stem hints |  |
 | makeotf | `-swo / -nswo` | --no-optimize-widths / --optimize-widths |  |
 | makeotf | `-stubCmap4` | --stub-cmap4 |  |
 | makeotf | `-omitMacNames / -useMacNames` | --no-mac-names / --mac-names |  |
 | makeotf | `-overrideMenuNames / -donotOverrideMenuNames` | --feature-names-override / (default) |  |
 | makeotf | `-skco / -nskco / -nsko` | --no-kern-class0-optimization / --kern-class0-optimization |  |
 | makeotf | `-addDSIG / -omitDSIG` | --stub-dsig / --no-stub-dsig |  |
-| makeotf | `-mvar` | --keep-mvar |  |
+| makeotf | `-mvar` | refused: a compiled font is compiled again, so no MVAR is carried over |  |
 | makeotf | `-V / -nV` | --warnings all / --warnings default |  |
 | makeotf | `-v` | --version |  |
 | makeotf | `-showFinal` | --show-final-names |  |
 | makeotf | `-lic` | --license-code |  |
-| makeotf | default file names (font.pfa, features, FontMenuNameDB …) | --afdko-project |  |
+| makeotf | default file names (font.pfa, features, FontMenuNameDB …) | --project-defaults |  |
 | addfeatures | `-f -o -b -i -ff -fs -mf -gf -ds -osbOn -osbOff -osv -cs -cl -cm -ch -cv -ci -dbl -lic -stubCmap4 -omitMacNames -overrideMenuNames -skco -mvar -V -showFinal -addDSIG -omitDSIG` | same options as for makeotf | addfeatures is the back end makeotf calls; compile on a bare font does its job |
 | addfeatures | `-lookupFinal` | --lookup-final-names |  |
 | addfeatures | `-h / -u` | --help / -h |  |
@@ -417,16 +417,16 @@ Engine commands: `font.compile`, `font.compilePlan`. Autohinting delegates to `a
 | buildcff2vf | `-o / --output` | -o |  |
 | buildcff2vf | `-k / --keep-glyph-names` | --post-format 2 |  |
 | buildcff2vf | `--omit-mac-names` | --no-mac-names |  |
-| buildcff2vf | `-c / --check-compat` | --check-compatibility=fix |  |
-| buildcff2vf | `-i / --include-glyphs` | --sparse-glyphs |  |
+| buildcff2vf | `-c / --check-compat` | refused: no step repairs incompatible curves; --check-compatibility lists them |  |
+| buildcff2vf | `-i / --include-glyphs` | refused: a sparse master is a master layer that leaves glyphs out |  |
 | buildcff2vf | `-v / --version` | -v / --version |  |
-| varLib | designspace | SOURCE with --format variable and --master-finder |  |
+| varLib | designspace | SOURCE with --format variable |  |
 | varLib | `-o / -d / --output-dir` | -o / --output-dir |  |
 | varLib | `-x` | --exclude-table |  |
 | varLib | `--disable-iup` | --no-optimize-gvar |  |
 | varLib | `--no-colr-layer-reuse` | --no-colr-layer-reuse |  |
 | varLib | `--drop-implied-oncurves` | --drop-implied-oncurves |  |
-| varLib | `--master-finder` | --master-finder |  |
+| varLib | `--master-finder` | refused: variable fonts are built from the source's masters |  |
 | varLib | `--variable-fonts` | --variable-fonts |  |
 | varLib | `-v / --verbose / -q / --quiet` | -v / -q |  |
 | fontmake | `-g / --glyphs-path, -u / --ufo-paths, -m / --mm-designspace, positional` | SOURCE (kind detected from content) |  |
@@ -439,16 +439,16 @@ Engine commands: `font.compile`, `font.compilePlan`. Autohinting delegates to `a
 | fontmake | `--variable-fonts` | --variable-fonts |  |
 | fontmake | `-M / --masters-as-instances` | --masters-as-instances |  |
 | fontmake | `--family-name` | --family-name |  |
-| fontmake | `--round-instances` | --round-instances |  |
-| fontmake | `--designspace-path` | --emit-designspace |  |
-| fontmake | `--master-dir / --instance-dir` | --master-dir / --instance-dir |  |
+| fontmake | `--round-instances` | refused: coordinates are rounded where the outlines are written |  |
+| fontmake | `--designspace-path` | refused: no intermediate designspace is written |  |
+| fontmake | `--master-dir / --instance-dir` | refused: no intermediate sources are written |  |
 | fontmake | `--validate-ufo` | --validate-sources |  |
 | fontmake | `--check-compatibility / --no-check-compatibility` | --check-compatibility / --no-check-compatibility |  |
-| fontmake | `--expand-features-to-instances` | --expand-features-to-instances |  |
+| fontmake | `--expand-features-to-instances` | refused: the layout is compiled per font |  |
 | fontmake | `--fea-include-dir` | --include-dir |  |
 | fontmake | `--no-generate-GDEF` | --no-generate-gdef |  |
-| fontmake | `--save-ufo-as-zip` | --ufo-structure zip |  |
-| fontmake | `--ufo-structure / --indent-json` | --ufo-structure / --indent-json |  |
+| fontmake | `--save-ufo-as-zip` | refused: no intermediate sources are written |  |
+| fontmake | `--ufo-structure / --indent-json` | refused: no intermediate sources are written |  |
 | fontmake | `--keep-overlaps` | --keep-overlaps |  |
 | fontmake | `--keep-direction` | --keep-direction |  |
 | fontmake | `--ttf-curves` | --ttf-curves |  |
@@ -459,13 +459,13 @@ Engine commands: `font.compile`, `font.compilePlan`. Autohinting delegates to `a
 | fontmake | `--optimize-cff` | --optimize-cff |  |
 | fontmake | `-s / --subroutinize, -S / --no-subroutinize` | --subroutinize / --no-subroutinize |  |
 | fontmake | `--no-optimize-gvar` | --no-optimize-gvar |  |
-| fontmake | `--filter` | --filter (names a registered filter command, not a Python class) |  |
+| fontmake | `--filter` | --filter (a filter string of a registered filter, not a Python class) |  |
 | fontmake | `--auto-use-my-metrics / --no-auto-use-my-metrics` | same |  |
 | fontmake | `--drop-implied-oncurves` | --drop-implied-oncurves |  |
 | fontmake | `--interpolate-binary-layout` | --interpolate-binary-layout [DIR] | instances only; DIR relative to the source |
 | fontmake | `--feature-writer` | --feature-writer (names a built-in generator, not a Python class) |  |
 | fontmake | `--debug-feature-file` | --debug-feature-file |  |
-| fontmake | `--no-variable-features` | --no-variable-features |  |
+| fontmake | `--no-variable-features` | refused: the layout of a variable font is compiled as one |  |
 | fontmake | `--mti-source` | --mti-source |  |
 | fontmake | `--production-names / --no-production-names` | same |  |
 | fontmake | `--subset / --no-subset` | same |  |
@@ -475,7 +475,7 @@ Engine commands: `font.compile`, `font.compilePlan`. Autohinting delegates to `a
 | fontmake | `--no-write-skipexportglyphs` | convert --skip-export-key glyphs |  |
 | fontc | input_source, -s / --source | SOURCE |  |
 | fontc | `-o / --output-file` | -o |  |
-| fontc | `--emit-debug` | --emit-debug |  |
+| fontc | `--emit-debug` | refused: the build has no intermediate representation to write |  |
 | fontc | `--prefer-simple-glyphs` | --prefer-simple-glyphs[=BOOL] |  |
 | fontc | `--flatten-components` | --flatten-components[=BOOL] |  |
 | fontc | `--erase-open-corners` | --erase-open-corners[=BOOL] |  |
@@ -483,10 +483,10 @@ Engine commands: `font.compile`, `font.compilePlan`. Autohinting delegates to `a
 | fontc | `--decompose-transformed-components` | same |  |
 | fontc | `--decompose-components` | same |  |
 | fontc | `--emit-timing` | --trace FILE (plus --timing for a summary) |  |
-| fontc | `-b / --build-dir` | --build-dir |  |
+| fontc | `-b / --build-dir` | refused: the build keeps nothing in a working folder |  |
 | fontc | `-g / --glyph-name-filter` | --glyphs re:PATTERN |  |
 | fontc | `--skip-features` | --skip-features |  |
-| fontc | `--emit-lookup-debug-info` | --debug-lookups |  |
+| fontc | `--emit-lookup-debug-info` | refused: the compiled features carry no lookup names |  |
 | fontc | `--keep-direction` | --keep-direction |  |
 | fontc | `--no-production-names` | --no-production-names |  |
 | fontc | `--vv` | --version -v |  |
