@@ -191,7 +191,7 @@ pub fn style_new_path(layer: &Layer, mut path: Path) -> Path {
 
 /// Whether `layer` is a full-colour layer, by the colour kind a layer resolves to: a master layer,
 /// or a layer whose palette attribute takes precedence, is not one even with the full-colour flag.
-fn is_full_color(layer: &Layer) -> bool {
+pub(super) fn is_full_color(layer: &Layer) -> bool {
     matches!(fontcraft_color::layers::kind(layer), Some(fontcraft_color::layers::ColorLayerKind::FullColor))
 }
 

@@ -132,6 +132,12 @@ impl ShapeAttrs {
         *self == ShapeAttrs::default()
     }
 
+    /// The limits drawing attributes keep: every number finite, colour components from 0 to 1, and no more gradient
+    /// stops than allowed.
+    pub fn check(&self) -> Result<(), String> {
+        check_attrs(self)
+    }
+
     /// Every number, for range checks.
     pub fn numbers(&self) -> impl Iterator<Item = f64> + '_ {
         let dim = |d: &Option<Dimension>| match d {

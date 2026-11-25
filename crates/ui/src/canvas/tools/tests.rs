@@ -478,6 +478,26 @@ fn corners_are_selected_by_click_and_deleted_like_the_command() {
 /// Copy with a corner selected copies the corner; Paste with two other nodes selected puts it on both, as `edit.copy`
 /// with `corners` and `edit.paste` with `points` do (`corner.copyPasteOntoNodes`). Mirroring from the menu flips the
 /// selected corner (`corner.mirrorViaPalette`).
+/// Paste Attributes waits for the clipboard's text and goes onto the canvas selection.
+#[test]
+fn copied_attributes_paste_onto_the_selection() {
+    use crate::app::clipboard::{self, PasteKind};
+    let mut app = corner_app();
+    let copied = app.session.execute("edit.copyAttributes", &json!({"glyph": "A", "points": [[0, 2]]})).unwrap();
+    let text = copied["text"].as_str().unwrap_or_else(|| panic!("{copied}")).to_string();
+    let waiting = clipboard::fired(&mut app, craft::ui::runtime::commands::CommandRef::new("edit.pasteAttributes"));
+    assert!(waiting.is_none() && app.clipboard.request == Some(PasteKind::Attributes));
+    app.clipboard.request = None;
+    shell(&mut app, "selection.set", json!({"points": [[0, 2], [0, 3]]}));
+    clipboard::paste(&mut app, &text, PasteKind::Attributes);
+    match app.sent.last() {
+        Some(crate::app::Msg::Run(c)) => {
+            assert_eq!((c.id.as_str(), &c.params["points"]), ("edit.pasteAttributes", &json!([[0, 2], [0, 3]])));
+        }
+        other => panic!("expected edit.pasteAttributes, got {other:?}"),
+    }
+}
+
 #[test]
 fn a_copied_corner_pastes_onto_selected_nodes_and_mirrors_in_place() {
     let mut app = corner_app();

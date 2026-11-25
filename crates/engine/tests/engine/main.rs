@@ -10,6 +10,7 @@ mod annotation;
 mod attach_cap;
 mod attach_segment;
 mod attributes;
+mod attributes_clipboard;
 mod audit;
 mod audit_files;
 mod audit_fix_binary;
