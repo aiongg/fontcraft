@@ -273,6 +273,9 @@ impl Job<'_> {
         if !self.gpos {
             c.gpos = None;
         }
+        if let (Some(gpos), true) = (c.gpos.as_mut(), self.generated.is_some_and(crate::provider::has_claim)) {
+            crate::provider::drop_claim(gpos);
+        }
         let lookup_debug =
             if self.debug_lookups { Some(crate::debug::build(tree, &c, &self.files, &self.sources, positions).map_err(|d| vec![d])?) } else { None };
         if let (Some(generated), Some(gsub)) = (self.generated.filter(|g| !g.feature_variations.is_empty()), c.gsub.as_mut()) {

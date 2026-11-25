@@ -123,6 +123,7 @@ mod image;
 mod import_naming;
 mod indic_positional;
 mod instance_masters;
+mod instance_names;
 mod instances;
 mod interaction;
 mod interpolation;

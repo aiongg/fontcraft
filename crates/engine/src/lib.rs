@@ -67,6 +67,16 @@ pub use fontcraft_pathops as pathops;
 pub use fontcraft_plugins as plugins;
 use serde_json::{Value, json};
 
+/// The registered name of the language a name's language tag (`model::LANGUAGES`) stands for: `DEU` is German.
+pub fn language_name(tag: &str) -> Option<&'static str> {
+    let bytes = tag.as_bytes();
+    let mut padded = *b"    ";
+    for (to, from) in padded.iter_mut().zip(bytes) {
+        *to = *from;
+    }
+    if bytes.len() > padded.len() { None } else { fontcraft_audit::data::tags::language_name(padded) }
+}
+
 /// The extension traits through which the command areas reach their state on a [`Session`] or a
 /// [`DocState`] ([`slots`]): `use fontcraft_engine::prelude::*;`.
 pub mod prelude {
@@ -656,7 +666,7 @@ impl Session {
     }
 
     /// Sets the user's custom glyph data files (name, bytes), in order: the app reads them from
-    /// its settings folder. Malformed files are skipped; the problems are returned.
+    /// the `Info` folder of its settings folder ([`Session::load_user_info`]). Malformed files are skipped; the problems are returned.
     pub fn set_user_glyph_data(&mut self, files: &[(&str, &[u8])]) -> Vec<String> {
         let mut problems = Vec::new();
         let parsed = glyph_data::parse_files(files, &mut problems);

@@ -473,6 +473,7 @@ mod tests {
             units: false,
             repeatable: false,
             choices: &[],
+            names: crate::catalog::Names::Nothing,
             summary: "",
         }
     }

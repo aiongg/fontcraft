@@ -234,6 +234,19 @@ fn font_instance_queries_carry_the_edit_warnings() {
     assert_eq!(out["warnings"], json!([]));
 }
 
+/// Several entries move together in list order, as one undo step; a move that leaves every entry where it is makes none.
+#[test]
+fn font_instance_reorder_moves_several_entries_together() {
+    let mut s = font(vec![instance("A"), instance("B"), instance("C"), instance("D")]);
+    let r = run(&mut s, "font.instance.reorder", json!({"instances": ["D", "A"], "toIndex": 1}));
+    assert_eq!(r, json!({"index": 1, "indices": [1, 2]}));
+    assert_eq!(names(&mut s), ["B", "A", "D", "C"]);
+    refused(&mut s, "font.instance.reorder", json!({"instances": ["A", "D"], "toIndex": 3}));
+    run(&mut s, "font.instance.reorder", json!({"instances": ["A", "D"], "toIndex": 1}));
+    run(&mut s, "edit.undo", json!({}));
+    assert_eq!(names(&mut s), ["A", "B", "C", "D"]);
+}
+
 #[test]
 fn font_instance_set_active_remove_and_reorder() {
     let mut s = font(vec![instance("Regular"), instance("Bold"), instance("Black")]);

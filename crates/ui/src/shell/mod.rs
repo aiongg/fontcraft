@@ -16,6 +16,7 @@ pub mod components;
 pub mod context_menu;
 pub mod dock;
 pub mod encoding;
+pub mod export_names;
 pub mod extension_downloads;
 pub mod extension_manager;
 pub mod extensions;

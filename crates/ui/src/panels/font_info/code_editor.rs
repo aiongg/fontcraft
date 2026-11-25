@@ -7,6 +7,9 @@
 //! | a gutter icon | opens the details of the line's diagnostics (`fontInfo.featureErrorDetails`) |
 //! | a Fix button in the details | `font.features.applyFix {error, fix}` |
 //!
+//! The field fills the height its pane leaves it and scrolls there with its gutter; a caret that moves out of view is
+//! scrolled to. An error jumped to from the sidebar is selected and scrolled to (`EntryPane::jump`).
+//!
 //! The field's last selection goes back to the Features tab, whose snippets menu puts a snippet in its place; the
 //! caret then goes after the snippet and the field takes the keyboard (`EntryPane::caret`).
 //!
@@ -27,10 +30,7 @@
 //! the line's first message is drawn dimmed after its text. A click on the icon opens the details of the line's
 //! diagnostics with their Fix buttons.
 //!
-//! Alt-click on a glyph, class or lookup name opens a popover with its preview (`fontInfo.featureNamePreview`): the
-//! editor asks with `ViewMsg::FeaturePreview` and the projection answers with `font.features.previewName`. The popover
-//! shows a glyph's Unicode values, a class's members (with the anchors of its `markClass` statements) or a lookup's
-//! first rules.
+//! Alt-click on a name or a `$` token opens its preview ([`feature_previews`]).
 
 use craft::theme::variant::Tone;
 use craft::theme::{Rgba, Srgba};
@@ -49,6 +49,7 @@ use craft::ui::runtime::focus::{self, FocusTarget};
 use craft::ui::runtime::keys;
 use craft::ui::style::UiTokens;
 use craft::ui::text::TextField;
+use craft_ext::ui::contract::reveal_rect;
 use craft_ext::ui::text::{
     AsyncCompleter, CompletionAnswer, CompletionQuery, FieldSelection as _, Highlight, HighlightText as _, TextSelection, field_layout, text_focused,
 };
@@ -58,9 +59,10 @@ use fontcraft_engine::features::edit::{HighlightKind, highlight};
 use serde_json::{Value, json};
 
 use super::code_find::{self, FindAction};
-use crate::app::models::font_features::{DiagnosticModel, EntryPane, FindModel, PreviewModel};
+use super::feature_previews;
+use crate::app::models::font_features::{DiagnosticModel, EntryPane, FindModel};
 use crate::app::{Msg, ViewMsg};
-use crate::shell::font_info_tabs::{CompletionAsk, EntryKey, EntryKind, FeatureDraft, FindState, PreviewAsk, select_entries};
+use crate::shell::font_info_tabs::{CompletionAsk, EntryKey, EntryKind, FeatureDraft, FindState, select_entries};
 
 craft::ui::words! {
     /// The words of the feature code editor.
@@ -73,24 +75,24 @@ craft::ui::words! {
         problems: "fontcraftFeatureCode.problems" = "Problems on line";
         fixable: "fontcraftFeatureCode.fixable" = "a fix is available";
         details: "fontcraftFeatureCode.details" = "Problem details";
-        preview: "fontcraftFeatureCode.preview" = "Name preview";
-        glyph: "fontcraftFeatureCode.glyph" = "Glyph";
-        unicode: "fontcraftFeatureCode.unicode" = "Unicode";
-        no_unicode: "fontcraftFeatureCode.noUnicode" = "No Unicode value";
-        not_exported: "fontcraftFeatureCode.notExported" = "Does not export";
-        class: "fontcraftFeatureCode.class" = "Class";
-        members: "fontcraftFeatureCode.members" = "glyphs";
-        not_in_font: "fontcraftFeatureCode.notInFont" = "Not in the font";
-        anchor: "fontcraftFeatureCode.anchor" = "Anchor";
-        lookup: "fontcraftFeatureCode.lookup" = "Lookup";
-        more_rules: "fontcraftFeatureCode.moreRules" = "More rules follow";
     }
 }
 
-/// Lines the code field shows.
-const CODE_LINES: usize = 18;
+/// Fewest and most lines the code field shows.
+const MIN_CODE_LINES: f32 = 6.0;
+const MAX_CODE_LINES: f32 = 500.0;
+
+/// The room of the code in the entry pane: where the pane's content starts, the pane's height, and the height what
+/// stands under the code takes.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Room {
+    pub top: f32,
+    pub height: f32,
+    pub under: f32,
+}
 
 /// What the code editor reports.
+#[derive(Default)]
 pub struct CodeOut {
     /// The messages to post.
     pub sent: Vec<Msg>,
@@ -98,12 +100,36 @@ pub struct CodeOut {
     pub selection: Option<TextSelection>,
 }
 
-/// Draws the code field and the diagnostics of `entry`.
-pub fn view(ui: &mut Ui, entry: &EntryPane) -> CodeOut {
+/// Draws the find bar, and the code field with the diagnostics of `entry` in the height of `room` the rest leaves, where
+/// it scrolls.
+pub fn view(ui: &mut Ui, entry: &EntryPane, room: Room) -> CodeOut {
+    let mut sent = Vec::new();
+    let action = code_find::bar(ui, entry, &mut sent);
+    let used = (ui.cursor().min.y - room.top).max(0.0);
+    let row = ui.ctx().fonts_mut(|fonts| fonts.row_height(&TextStyle::Monospace.resolve(ui.style()))).max(1.0);
+    let height = (room.height - used - room.under).max(MIN_CODE_LINES * row);
+    let mut out = CodeOut::default();
+    let salt = ("fontcraftFeatureCode.box", entry.key.kind.name(), entry.key.index, entry.key.name.as_str());
+    super::features_tab::scroll_box(ui, salt, height, |ui| out = field(ui, entry, action, height));
+    sent.append(&mut out.sent);
+    CodeOut { sent, ..out }
+}
+
+/// The lines a field in a box `height` points tall shows, each `line` points tall.
+pub(super) fn lines_in(height: f32, line: f32) -> usize {
+    (height / line.max(1.0)).floor().clamp(MIN_CODE_LINES, MAX_CODE_LINES) as usize
+}
+
+/// The code field in its box, `height` points tall, with its gutter.
+fn field(ui: &mut Ui, entry: &EntryPane, action: Option<FindAction>, height: f32) -> CodeOut {
     let words = Env::of(ui).words::<CodeEditorWords>();
     let key = &entry.key;
     let mut sent = Vec::new();
-    let action = code_find::bar(ui, entry, &mut sent);
+    // The field's own line height, learnt from how tall it showed: it belongs to the field's style.
+    let line_id = egui::Id::unique("fontcraftFeatureCode.line");
+    let number_font = TextStyle::Monospace.resolve(ui.style());
+    let line = ui.ctx().data(|d| d.get_temp::<f32>(line_id)).unwrap_or_else(|| 1.5 * ui.ctx().fonts_mut(|f| f.row_height(&number_font)));
+    let lines = lines_in(height, line);
     let edit_id = egui::Id::unique(("fontcraftFeatureCode.edit", key.kind.name(), key.index, key.name.as_str()));
     let pending: Option<PendingEdit> = ui.ctx().data_mut(|d| {
         let pending = d.get_temp::<PendingEdit>(edit_id);
@@ -112,7 +138,7 @@ pub fn view(ui: &mut Ui, entry: &EntryPane) -> CodeOut {
     });
     let field = TextField::new(words.code.clone(), Bind::given(entry.code.clone()))
         .mono()
-        .lines(CODE_LINES)
+        .lines(lines)
         .sizing(Sizing::FillWidth)
         .limit(None)
         .enabled(!entry.automatic)
@@ -129,7 +155,6 @@ pub fn view(ui: &mut Ui, entry: &EntryPane) -> CodeOut {
         Some(p) if !entry.automatic => field.replace_selection(p.insert.clone()),
         _ => field,
     };
-    let number_font = TextStyle::Monospace.resolve(ui.style());
     let gutter_width = gutter_width(ui, entry.draft.as_deref().unwrap_or(&entry.code), &number_font);
     let out = ui
         .horizontal_top(|ui| {
@@ -147,6 +172,15 @@ pub fn view(ui: &mut Ui, entry: &EntryPane) -> CodeOut {
         }
     } else if entry.completion.is_some() && !text_focused(ui.ctx(), out.response.id) {
         sent.push(Msg::View(ViewMsg::FeatureCompletion(None)));
+    }
+    if let Some((_, galley)) = field_layout(ui, &out.response)
+        && galley.rows.len() < lines
+    {
+        let shown = out.response.rect.height() / lines as f32;
+        if shown.is_finite() && shown >= 1.0 && (shown - line).abs() > 0.5 {
+            ui.ctx().data_mut(|d| d.insert_temp(line_id, shown));
+            ui.ctx().request_repaint();
+        }
     }
     if let Some(caret) = entry.caret.filter(|_| !entry.automatic) {
         out.select(ui.ctx(), TextSelection::caret_at(caret.min(entry.code.chars().count())));
@@ -185,7 +219,7 @@ pub fn view(ui: &mut Ui, entry: &EntryPane) -> CodeOut {
         sent.push(Msg::View(ViewMsg::FeatureDraft(typed.clone().map(|code| FeatureDraft { key: key.clone(), code }))));
     }
     let shown = typed.as_deref().unwrap_or(&entry.code);
-    if let Some(ask) = alt_clicked(ui, &out.response, shown, key) {
+    if let Some(ask) = feature_previews::alt_clicked(ui, &out.response, shown, key) {
         sent.push(Msg::View(ViewMsg::FeaturePreview(Some(ask))));
     }
     let listed = shown_diagnostics(entry, shown);
@@ -196,6 +230,7 @@ pub fn view(ui: &mut Ui, entry: &EntryPane) -> CodeOut {
     if let Some(found) = &entry.find {
         find_action(ui, &out.response, entry, found, shown, action, &mut sent);
     }
+    follow_selection(ui, &out.response, entry, shown, &mut sent);
     let selection = out.last_selection(ui.ctx()).and_then(|s| s.within(entry.code.chars().count()));
     if let Some(text) = out.events.committed()
         && !entry.automatic
@@ -208,8 +243,41 @@ pub fn view(ui: &mut Ui, entry: &EntryPane) -> CodeOut {
     if let Some(opener) = gutter(ui, &out.response, gutter_width, &number_font, listed, &words) {
         details(ui, &out.response, opener, listed, &words, &mut sent);
     }
-    preview(ui, &out.response, entry, &words, &mut sent);
+    feature_previews::popover(ui, &out.response, entry, &mut sent);
     CodeOut { sent, selection }
+}
+
+/// Selects the place the sidebar's error icon jumped to, and keeps the caret in view: when the selection moved since the
+/// last pass, by typing, the arrow keys, Next, Previous or a jump, the code scrolls to it.
+fn follow_selection(ui: &mut Ui, field: &Response, entry: &EntryPane, shown: &str, sent: &mut Vec<Msg>) {
+    let Some((pos, galley)) = field_layout(ui, field) else {
+        // A jump waits for a pass in which the field's text has a layout.
+        if entry.jump.is_some() {
+            ui.ctx().request_repaint();
+        }
+        return;
+    };
+    let ctx = ui.ctx().clone();
+    if let Some((start, end)) = entry.jump {
+        let len = shown.chars().count();
+        field.select(&ctx, TextSelection::new(start.min(len), end.min(len)));
+        if !entry.automatic {
+            let _ = focus::request(&ctx, FocusTarget::Id(field.id));
+        }
+        sent.push(Msg::View(ViewMsg::FeatureJumped));
+    }
+    let seen_id = field.id.with("fontcraftFeatureCode.seenSelection");
+    let now = field.last_selection(&ctx);
+    let before = ctx.data(|d| d.get_temp::<Option<TextSelection>>(seen_id));
+    if before != Some(now) {
+        ctx.data_mut(|d| d.insert_temp(seen_id, now));
+    }
+    let moved = before.is_some_and(|b| b != now) || entry.jump.is_some();
+    if let Some(s) = now.filter(|_| moved) {
+        // A jump shows where the error starts, a moving caret itself.
+        let at = if entry.jump.is_some() { s.range().start } else { s.caret };
+        reveal_rect(ui, galley.pos_from_cursor(CCursor::new(at)).translate(pos.to_vec2()));
+    }
 }
 
 /// A change of the code field's text the editor makes in the next pass: the field selects `replace` in this pass,
@@ -529,7 +597,7 @@ fn next_after(k: &EntryKey, shown: &EntryKey) -> bool {
 }
 
 /// The byte ranges `ranges` of `text`, in order, as character ranges, in one pass over the text.
-fn match_chars(text: &str, ranges: &[(usize, usize)]) -> Vec<(usize, usize)> {
+pub(super) fn match_chars(text: &str, ranges: &[(usize, usize)]) -> Vec<(usize, usize)> {
     let mut out = Vec::with_capacity(ranges.len());
     let (mut byte, mut chars) = (0usize, 0usize);
     let to = |target: usize, byte: &mut usize, chars: &mut usize| {
@@ -546,113 +614,6 @@ fn match_chars(text: &str, ranges: &[(usize, usize)]) -> Vec<(usize, usize)> {
         let s = to(*start, &mut byte, &mut chars);
         let e = to(*end, &mut byte, &mut chars);
         out.push((s, e));
-    }
-    out
-}
-
-/// Most characters a name Alt-click reads on each side of the click.
-const MAX_NAME_CHARS: usize = 200;
-/// Most glyph names a preview lists in its text.
-const MAX_PREVIEW_NAMES: usize = 300;
-
-/// Whether `c` may be part of a glyph, class or lookup name; `@` and a backslash only lead one.
-fn is_name_char(c: char) -> bool {
-    c.is_alphanumeric() || matches!(c, '_' | '.' | '-')
-}
-
-/// The characters of the name at character `at` of `text`, start and end: name characters on both sides of `at`, with a
-/// leading `@` or backslash kept, at most [`MAX_NAME_CHARS`] on each side. `None` where no name is.
-pub(super) fn name_at(text: &str, at: usize) -> Option<(usize, usize)> {
-    let byte = text.char_indices().nth(at).map_or(text.len(), |(b, _)| b);
-    let mut back = 0;
-    for c in text.get(..byte).unwrap_or_default().chars().rev().take(MAX_NAME_CHARS) {
-        if is_name_char(c) {
-            back += 1;
-        } else {
-            if matches!(c, '@' | '\\') {
-                back += 1;
-            }
-            break;
-        }
-    }
-    let ahead = text.get(byte..).unwrap_or_default().chars().take(MAX_NAME_CHARS).take_while(|c| is_name_char(*c)).count();
-    let (start, end) = (at.saturating_sub(back), at.saturating_add(ahead));
-    let named = text.chars().skip(start).take(end.saturating_sub(start)).any(is_name_char);
-    named.then_some((start, end))
-}
-
-/// The name an Alt-click on the code field `field` landed on this pass, in `text` (the text shown).
-fn alt_clicked(ui: &Ui, field: &Response, text: &str, key: &EntryKey) -> Option<PreviewAsk> {
-    let (clicked, alt, at) = ui.input(|i| (i.pointer.primary_clicked(), i.modifiers.alt, i.pointer.interact_pos()));
-    let at = at.filter(|at| clicked && alt && field.rect.intersect(ui.clip_rect()).contains(*at))?;
-    let (pos, galley) = field_layout(ui, field)?;
-    let index = galley.cursor_from_pos(at - pos).index.0;
-    let (start, end) = name_at(text, index)?;
-    let name: String = text.chars().skip(start).take(end.saturating_sub(start)).collect();
-    Some(PreviewAsk { key: key.clone(), name, start, end })
-}
-
-/// The popover of the Alt-clicked name's preview, hanging under the name; closing it drops the question.
-fn preview(ui: &mut Ui, field: &Response, entry: &EntryPane, words: &CodeEditorWords, sent: &mut Vec<Msg>) {
-    let Some(p) = &entry.preview else { return };
-    let Some((pos, galley)) = field_layout(ui, field) else { return };
-    let under = galley.pos_from_cursor(CCursor::new(p.start)).union(galley.pos_from_cursor(CCursor::new(p.end))).translate(pos.to_vec2());
-    let mut open = true;
-    Popover::new(words.preview.clone(), Bind::bound(&mut open)).at_point(under.left_bottom()).show(ui, |ui, _| {
-        for line in preview_lines(p, words) {
-            Text::new(line).show(ui);
-        }
-        if let Some(problem) = &p.problem {
-            Text::new(problem.clone()).shade(Shade::Muted).show(ui);
-        }
-    });
-    if !open {
-        sent.push(Msg::View(ViewMsg::FeaturePreview(None)));
-    }
-}
-
-/// The lines of text a preview shows.
-pub(super) fn preview_lines(p: &PreviewModel, words: &CodeEditorWords) -> Vec<String> {
-    let names = |list: &[String]| {
-        let mut text = list.iter().take(MAX_PREVIEW_NAMES).cloned().collect::<Vec<_>>().join(" ");
-        if list.len() > MAX_PREVIEW_NAMES {
-            text.push_str(" …");
-        }
-        text
-    };
-    let mut out = Vec::new();
-    match p.kind.as_str() {
-        "glyph" => {
-            out.push(format!("{} {}", words.glyph.as_str(), p.name.trim_start_matches('\\')));
-            if p.unicodes.is_empty() {
-                out.push(words.no_unicode.as_str().to_string());
-            } else {
-                out.push(format!("{}: {}", words.unicode.as_str(), p.unicodes.join(" ")));
-            }
-            if p.hidden {
-                out.push(words.not_exported.as_str().to_string());
-            }
-        }
-        "class" => {
-            out.push(format!("{} @{}: {} {}", words.class.as_str(), p.name.trim_start_matches('@'), p.glyphs.len(), words.members.as_str()));
-            if p.anchors.is_empty() {
-                out.push(names(&p.glyphs));
-            }
-            for (anchor, glyphs) in &p.anchors {
-                out.push(format!("{} {anchor}: {glyphs}", words.anchor.as_str()));
-            }
-            if !p.unknown.is_empty() {
-                out.push(format!("{}: {}", words.not_in_font.as_str(), names(&p.unknown)));
-            }
-        }
-        "lookup" => {
-            out.push(format!("{} {}", words.lookup.as_str(), p.name));
-            out.extend(p.rules.iter().cloned());
-            if p.more {
-                out.push(words.more_rules.as_str().to_string());
-            }
-        }
-        _ => {}
     }
     out
 }
@@ -898,7 +859,7 @@ fn shown_diagnostics<'a>(entry: &'a EntryPane, text: &str) -> &'a [DiagnosticMod
 
 /// The runs of `text` ([`runs`]), kept in the context's memory under `id` while the text, the underlined ranges and the
 /// colours stay the same, so a long entry is classed once rather than every frame.
-fn kept_runs(
+pub(super) fn kept_runs(
     ctx: &egui::Context,
     id: egui::Id,
     text: &str,

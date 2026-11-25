@@ -237,10 +237,6 @@ fn feature_expand_code_assembles_one_master() {
     let feature = code.find("feature liga {").expect("the feature");
     assert!(class < feature, "classes come before features:\n{code}");
     assert!(code.contains("sub f i by f_i;"));
-    match s.execute("font.features.expandCode", &json!({"target": {"instance": 0}})) {
-        Err(EngineError::Unsupported(_)) => {}
-        other => panic!("an instance target is not available yet, got {other:?}"),
-    }
     refused(&mut s, "font.features.expandCode", json!({"target": {"master": "Bold"}}), "no master `Bold`");
 }
 

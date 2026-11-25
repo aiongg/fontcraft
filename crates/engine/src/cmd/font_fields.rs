@@ -62,7 +62,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Set Localized Value",
             [],
             None,
-            "{scope: 'font'|'master'|'instance', target?: id|name|index (required below the font), key: string, language: string, value: string} add or change one language of a localizable field, adding the field when the target lacks it. language: dflt (the default) or a language-system tag the name table maps to a Windows language (DEU, FRA…) → {key, language}",
+            "{scope: 'font'|'master'|'instance', target?: id|name|index or targets?: [id|name|index] (one of them required below the font), key: string, language: string, value?: string, from?: string, onlyMissing?: bool} add or change one language of a localizable field on each target as one undo step, adding the field where a target lacks it. language: dflt (the default) or a language-system tag the name table maps to a Windows language (DEU, FRA…). from: the text of that language moves to `language`, in its place; a target without it is left alone, and without `value` each target keeps its own text. onlyMissing: targets that have the language are left alone. `value` is required without `from` → {key, language, targets: [index] (the changed ones)}",
             has_doc,
             set_localized
         ),
@@ -71,7 +71,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Remove Localized Value",
             [],
             None,
-            "{scope: 'font'|'master'|'instance', target?: id|name|index (required below the font), key: string, language: string} remove one language of a localizable field; removing its last language removes the field → {key, language, fieldRemoved: bool}",
+            "{scope: 'font'|'master'|'instance', target?: id|name|index or targets?: [id|name|index] (one of them required below the font), key: string, language: string} remove one language of a localizable field from each target as one undo step; removing its last language removes the field. Targets without it are left alone, and it is refused when none has it → {key, language, fieldRemoved: bool, targets: [index] (the changed ones)}",
             has_doc,
             remove_localized
         ),
@@ -80,7 +80,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Copy Rows",
             [],
             None,
-            "{scope: 'font'|'master'|'instance', target?: id|name|index (required below the font), keys?: [string]} the Font Info rows of one target as clipboard text: every added field and custom parameter in stored order, or the rows `keys` name (built-in fields such as familyName and unitsPerEm too; a parameter name gives every parameter of that name) in that order → {rows: [{scope, kind: 'field'|'param', key, value, enabled}], json: string, text: string (property list in the source format's spelling)}",
+            "{scope: 'font'|'master'|'instance', target?: id|name|index or targets?: [id|name|index] (one of them required below the font), keys?: [string], rows?: [{key: string, kind?: 'field'|'param', index?: integer}]} the Font Info rows of one target as clipboard text: every added field and custom parameter in stored order, the single rows `rows` names (index: which of the rows of that key and kind, from 0; with several targets each row comes from the first that holds it), or the rows `keys` name (built-in fields such as familyName and unitsPerEm too; a parameter name gives every parameter of that name) in that order → {rows: [{scope, kind: 'field'|'param', key, value, enabled}], json: string, text: string (property list in the source format's spelling)}",
             has_doc,
             copy_rows
         ),
@@ -92,6 +92,15 @@ pub fn specs() -> Vec<CommandSpec> {
             "{scope: 'font'|'master'|'instance', targets?: [id|name|index] (required below the font), rows?: [row] | {fontcraftRows, rows}, text?: string (either clipboard form), mode?: 'replace'|'append'|'skip' (default replace)} paste rows into each target as one undo step. replace: a field or a parameter the target has takes the pasted value, except a parameter that may repeat, which is appended; append: parameters are added after the others; skip: rows the target already has are left out. A field cannot repeat, so append replaces it. A parameter matches the target's row under any spelling of it; a name parameter (designers, familyNames…) is written as the name property, as font.customParameters.add does. A row the scope does not allow, and a row whose value fails its check, is skipped and listed with the reason; the other rows are pasted. A target already holding the most fields or parameters refuses the whole paste → {added, replaced, skipped: [{target?, key, reason}]}",
             has_doc,
             paste_rows
+        ),
+        cmd!(
+            "font.info.removeRows",
+            "Remove Rows",
+            [],
+            None,
+            "{scope: 'font'|'master'|'instance', targets?: [id|name|index] (required below the font), rows: [{key: string, kind?: 'field'|'param', index?: integer}]} remove added fields and custom parameters from each target as one undo step; key is the row's as stored, index which of the rows of that key and kind, from 0. A target without a row keeps its others, a built-in field stays and is listed, and it is refused when no target has any of the rows → {removed: count, skipped: [{key, reason}]}",
+            has_doc,
+            remove_rows
         ),
         cmd!(
             "font.info.stepVersion",
@@ -517,17 +526,21 @@ fn remove_field(s: &mut Session, p: &Value) -> Result<Value> {
     Ok(json!({ "removed": keys }))
 }
 
-fn set_localized(s: &mut Session, p: &Value) -> Result<Value> {
-    let p = Params::new("font.info.setLocalizedValue", p)?;
-    let scope = scope_of(&p)?;
-    let font = s.font()?;
-    let i = target_of(&p, font, scope)?;
-    let key = p.str("key")?;
-    let language = language_of(&p, "language")?.ok_or_else(|| p.bad("`language` is required"))?;
-    let text = p.str("value")?;
-    if text.len() > fontcraft_fontinfo::MAX_FIELD_BYTES {
-        return Err(p.bad(format!("`value` is longer than {} bytes", fontcraft_fontinfo::MAX_FIELD_BYTES)));
+/// The targets of a localized edit: `target` names one, `targets` several.
+fn one_or_more(p: &Params, font: &Font, scope: Scope) -> Result<Vec<usize>> {
+    match (p.get("target"), p.get("targets")) {
+        (Some(_), Some(_)) => Err(p.bad("give `target` or `targets`, not both")),
+        (None, Some(_)) => {
+            let all = targets_of(p, font, scope, "targets")?;
+            if all.is_empty() { Err(p.bad(format!("`targets` names no {}", scope.name()))) } else { Ok(all) }
+        }
+        _ => target_of(p, font, scope).map(|i| vec![i]),
     }
+}
+
+/// The languages of one target's localizable field `key`, and the key it is stored under; empty when the target lacks
+/// the field.
+fn languages_at(p: &Params, font: &Font, scope: Scope, i: usize, key: &str) -> Result<(String, Vec<Localized>)> {
     let props = properties(font, scope, i).ok_or_else(|| p.bad(format!("there is no {} #{i}", scope.name())))?;
     let spec = fields::field(scope, key);
     if spec.is_some_and(|f| f.built_in) {
@@ -542,33 +555,82 @@ fn set_localized(s: &mut Session, p: &Value) -> Result<Value> {
     if present.is_none() && props.0.len() >= fontcraft_fontinfo::MAX_PROPERTIES_PER_SCOPE {
         return Err(p.bad(format!("the {} already has {} fields", scope.name(), fontcraft_fontinfo::MAX_PROPERTIES_PER_SCOPE)));
     }
-    let mut entries = match present {
+    let entries = match present {
         Some(PropertyValue::Localized(entries)) => entries,
         Some(PropertyValue::Single(old)) => vec![Localized { language: DEFAULT_LANGUAGE.into(), value: old, extra: Extra::new() }],
         None => Vec::new(),
     };
-    match entries.iter().position(|l| l.language == language) {
-        Some(at) => {
-            if let Some(l) = entries.get_mut(at) {
-                l.value = text.to_string();
-            }
-        }
-        None if entries.len() >= fontcraft_fontinfo::MAX_LANGUAGES => {
-            return Err(p.bad(format!("`{stored}` already has {} languages", fontcraft_fontinfo::MAX_LANGUAGES)));
-        }
-        None => entries.push(Localized { language: language.clone(), value: text.to_string(), extra: Extra::new() }),
-    }
-    s.edit("Set Localized Value", |font| write_property(font, scope, i, &stored, PropertyValue::Localized(entries)).map_err(|m| p.bad(m)))?;
-    Ok(json!({ "key": stored, "language": language }))
+    Ok((stored, entries))
 }
 
-fn remove_localized(s: &mut Session, p: &Value) -> Result<Value> {
-    let p = Params::new("font.info.removeLocalizedValue", p)?;
+fn set_localized(s: &mut Session, p: &Value) -> Result<Value> {
+    let p = Params::new("font.info.setLocalizedValue", p)?;
     let scope = scope_of(&p)?;
     let font = s.font()?;
-    let i = target_of(&p, font, scope)?;
+    let targets = one_or_more(&p, font, scope)?;
     let key = p.str("key")?;
-    let language = p.str("language")?.trim().to_string();
+    let language = language_of(&p, "language")?.ok_or_else(|| p.bad("`language` is required"))?;
+    let from = p.opt_str("from")?.map(str::trim);
+    let text = p.opt_str("value")?;
+    if text.is_none() && from.is_none() {
+        return Err(p.bad("`value` is required"));
+    }
+    if text.is_some_and(|t| t.len() > fontcraft_fontinfo::MAX_FIELD_BYTES) {
+        return Err(p.bad(format!("`value` is longer than {} bytes", fontcraft_fontinfo::MAX_FIELD_BYTES)));
+    }
+    let only_missing = p.bool_or("onlyMissing", false)?;
+    let mut plan: Vec<(usize, String, Vec<Localized>)> = Vec::with_capacity(targets.len());
+    for &i in &targets {
+        let (stored, mut entries) = languages_at(&p, font, scope, i, key)?;
+        let there = entries.iter().position(|l| l.language == language);
+        if only_missing && there.is_some() {
+            continue;
+        }
+        let at = match from {
+            // The text under `from` moves to `language`, taking the place of a text there.
+            Some(from) => {
+                let Some(old) = entries.iter().find(|l| l.language == from).map(|l| l.value.clone()) else { continue };
+                if from != language {
+                    entries.retain(|l| l.language != language);
+                }
+                if let Some(l) = entries.iter_mut().find(|l| l.language == from) {
+                    l.language = language.clone();
+                    l.value = text.map_or(old, str::to_string);
+                }
+                plan.push((i, stored, entries));
+                continue;
+            }
+            None => there,
+        };
+        let value = text.unwrap_or_default().to_string();
+        let languages = entries.len();
+        match at.and_then(|at| entries.get_mut(at)) {
+            Some(l) => l.value = value,
+            None if languages >= fontcraft_fontinfo::MAX_LANGUAGES => {
+                return Err(p.bad(format!("`{stored}` already has {} languages", fontcraft_fontinfo::MAX_LANGUAGES)));
+            }
+            None => entries.push(Localized { language: language.clone(), value, extra: Extra::new() }),
+        }
+        plan.push((i, stored, entries));
+    }
+    let Some(stored) = plan.first().map(|(_, stored, _)| stored.clone()) else {
+        return Err(p.bad(match from {
+            Some(from) => format!("no target has a `{from}` entry of `{key}`"),
+            None => format!("every target already has a `{language}` entry of `{key}`"),
+        }));
+    };
+    let changed: Vec<usize> = plan.iter().map(|(i, ..)| *i).collect();
+    s.edit("Set Localized Value", |font| {
+        for (i, stored, entries) in plan {
+            write_property(font, scope, i, &stored, PropertyValue::Localized(entries)).map_err(|m| p.bad(m))?;
+        }
+        Ok(())
+    })?;
+    Ok(json!({ "key": stored, "language": language, "targets": changed }))
+}
+
+/// The field `key` of one target without its `language`: the key it is stored under and the languages left.
+fn without_language(p: &Params, font: &Font, scope: Scope, i: usize, key: &str, language: &str) -> Result<(String, Vec<Localized>)> {
     let props = properties(font, scope, i).ok_or_else(|| p.bad(format!("there is no {} #{i}", scope.name())))?;
     let stored = property_key(props, scope, key).ok_or_else(|| p.bad(format!("`{key}` is not a field of the {}", scope.name())))?;
     let entries = match props.get(&stored).map(|x| &x.value) {
@@ -579,19 +641,156 @@ fn remove_localized(s: &mut Session, p: &Value) -> Result<Value> {
     if !entries.iter().any(|l| l.language == language) {
         return Err(p.bad(format!("`{stored}` has no `{language}` entry")));
     }
-    let rest: Vec<Localized> = entries.iter().filter(|l| l.language != language).cloned().collect();
-    let field_removed = rest.is_empty();
-    s.edit("Remove Localized Value", |font| {
-        if field_removed {
-            if let Some(props) = properties_mut(font, scope, i) {
-                props.remove(&stored);
-            }
-            Ok(())
-        } else {
-            write_property(font, scope, i, &stored, PropertyValue::Localized(rest)).map_err(|m| p.bad(m))
+    let rest = entries.iter().filter(|l| l.language != language).cloned().collect();
+    Ok((stored, rest))
+}
+
+fn remove_localized(s: &mut Session, p: &Value) -> Result<Value> {
+    let p = Params::new("font.info.removeLocalizedValue", p)?;
+    let scope = scope_of(&p)?;
+    let font = s.font()?;
+    let targets = one_or_more(&p, font, scope)?;
+    let key = p.str("key")?;
+    let language = p.str("language")?.trim().to_string();
+    let mut plan: Vec<(usize, String, Vec<Localized>)> = Vec::with_capacity(targets.len());
+    let mut refused = None;
+    for &i in &targets {
+        match without_language(&p, font, scope, i, key, &language) {
+            Ok((stored, rest)) => plan.push((i, stored, rest)),
+            Err(e) => refused = Some(e),
         }
+    }
+    let Some(stored) = plan.first().map(|(_, stored, _)| stored.clone()) else {
+        return Err(refused.unwrap_or_else(|| p.bad(format!("no target has a `{language}` entry of `{key}`"))));
+    };
+    let field_removed = plan.iter().any(|(_, _, rest)| rest.is_empty());
+    let changed: Vec<usize> = plan.iter().map(|(i, ..)| *i).collect();
+    s.edit("Remove Localized Value", |font| {
+        for (i, stored, rest) in plan {
+            if rest.is_empty() {
+                if let Some(props) = properties_mut(font, scope, i) {
+                    props.remove(&stored);
+                }
+            } else {
+                write_property(font, scope, i, &stored, PropertyValue::Localized(rest)).map_err(|m| p.bad(m))?;
+            }
+        }
+        Ok(())
     })?;
-    Ok(json!({ "key": stored, "language": language, "fieldRemoved": field_removed }))
+    Ok(json!({ "key": stored, "language": language, "fieldRemoved": field_removed, "targets": changed }))
+}
+
+/// One row as `rows` names it: the key as stored, and which of the rows of that key and kind, from 0.
+struct RowRef {
+    /// Either kind when not given.
+    kind: Option<RowKind>,
+    key: String,
+    index: usize,
+}
+
+impl RowRef {
+    fn is(&self, kind: RowKind) -> bool {
+        self.kind.is_none_or(|k| k == kind)
+    }
+
+    /// Where the row stands among the rows of `keys`.
+    fn place<'k>(&self, keys: impl Iterator<Item = &'k str>) -> Option<usize> {
+        keys.enumerate().filter(|(_, key)| *key == self.key.as_str()).nth(self.index).map(|(at, _)| at)
+    }
+}
+
+/// The rows the `rows` parameter names.
+fn row_refs(p: &Params) -> Result<Vec<RowRef>> {
+    let list = p.array("rows")?;
+    if list.is_empty() {
+        return Err(p.bad("`rows` is empty"));
+    }
+    if list.len() > fontcraft_fontinfo::MAX_ROWS {
+        return Err(p.bad(format!("more than {} rows", fontcraft_fontinfo::MAX_ROWS)));
+    }
+    let read = |v: &Value| -> Result<RowRef> {
+        let key = v.get("key").and_then(Value::as_str).ok_or_else(|| p.bad("each of `rows` has a `key`"))?;
+        let kind = match v.get("kind").and_then(Value::as_str) {
+            None => None,
+            Some("field") => Some(RowKind::Field),
+            Some("param") => Some(RowKind::Param),
+            Some(other) => return Err(p.bad(format!("a row's `kind` is field or param, got `{other}`"))),
+        };
+        let index = match v.get("index") {
+            None | Some(Value::Null) => 0,
+            Some(n) => n.as_u64().and_then(|n| usize::try_from(n).ok()).ok_or_else(|| p.bad("a row's `index` is a whole number from 0"))?,
+        };
+        Ok(RowRef { kind, key: key.to_string(), index })
+    };
+    list.iter().map(read).collect()
+}
+
+fn remove_rows(s: &mut Session, p: &Value) -> Result<Value> {
+    let p = Params::new("font.info.removeRows", p)?;
+    let scope = scope_of(&p)?;
+    let font = s.font()?;
+    let targets = targets_of(&p, font, scope, "targets")?;
+    let refs = row_refs(&p)?;
+    let mut skipped: Vec<Value> = Vec::new();
+    let mut wanted: Vec<&RowRef> = Vec::new();
+    for r in &refs {
+        if r.is(RowKind::Field) && fields::field(scope, &r.key).is_some_and(|f| f.built_in) {
+            skipped.push(json!({"key": r.key, "reason": "a built-in field stays"}));
+        } else {
+            wanted.push(r);
+        }
+    }
+    // Per target the places of its rows: fields, then parameters, each in stored order.
+    let mut plan: Vec<(usize, Vec<usize>, Vec<usize>)> = Vec::with_capacity(targets.len());
+    for &i in &targets {
+        let (Some(props), Some(params)) = (properties(font, scope, i), params_of(font, scope, i)) else {
+            return Err(p.bad(format!("there is no {} #{i}", scope.name())));
+        };
+        let (mut field_places, mut param_places) = (Vec::new(), Vec::new());
+        for r in &wanted {
+            let field = if r.is(RowKind::Field) { r.place(props.0.iter().map(|x| x.key.as_str())) } else { None };
+            let param = if field.is_none() && r.is(RowKind::Param) { r.place(params.0.iter().map(|x| x.name.as_str())) } else { None };
+            field_places.extend(field);
+            param_places.extend(param);
+        }
+        for places in [&mut field_places, &mut param_places] {
+            places.sort_unstable();
+            places.dedup();
+        }
+        if !field_places.is_empty() || !param_places.is_empty() {
+            plan.push((i, field_places, param_places));
+        }
+    }
+    if plan.is_empty() {
+        return Err(p.bad(if wanted.is_empty() { "built-in fields cannot be removed".to_string() } else { "no target has the rows".to_string() }));
+    }
+    let removed: usize = plan.iter().map(|(_, f, q)| f.len().saturating_add(q.len())).sum();
+    s.edit("Remove Rows", |font| {
+        for (i, field_places, param_places) in &plan {
+            if !field_places.is_empty()
+                && let Some(props) = properties_mut(font, scope, *i)
+            {
+                let mut at = 0usize;
+                props.0.retain(|_| {
+                    let keep = field_places.binary_search(&at).is_err();
+                    at = at.saturating_add(1);
+                    keep
+                });
+            }
+            if !param_places.is_empty()
+                && let Some(params) = params_mut(font, scope, *i)
+            {
+                let mut at = 0usize;
+                params.0.retain(|_| {
+                    let keep = param_places.binary_search(&at).is_err();
+                    at = at.saturating_add(1);
+                    keep
+                });
+            }
+        }
+        Ok(())
+    })?;
+    Ok(json!({ "removed": removed, "skipped": skipped }))
 }
 
 // ---------- the row clipboard ----------
@@ -600,8 +799,31 @@ fn copy_rows(s: &mut Session, p: &Value) -> Result<Value> {
     let p = Params::new("font.info.copyRows", p)?;
     let scope = scope_of(&p)?;
     let font = s.font()?;
-    let i = target_of(&p, font, scope)?;
+    let targets = one_or_more(&p, font, scope)?;
+    let by_ref = match (p.get("rows"), p.get("keys")) {
+        (Some(_), Some(_)) => return Err(p.bad("give `rows` or `keys`, not both")),
+        (Some(_), None) => Some(row_refs(&p)?),
+        _ => None,
+    };
+    let i = match targets.as_slice() {
+        [one, ..] if targets.len() == 1 || by_ref.is_some() => *one,
+        _ => return Err(p.bad("several targets need `rows`")),
+    };
     let rows: Vec<Row> = match p.opt_strings("keys")? {
+        None if by_ref.is_some() => {
+            // Each row comes from the first target that holds it.
+            let all: Vec<(usize, Vec<Row>)> = targets.iter().map(|at| (*at, rows::rows_of(font, scope, *at))).collect();
+            let mut out = Vec::new();
+            for r in by_ref.iter().flatten() {
+                let built_in = fields::field(scope, &r.key).filter(|f| f.built_in && r.is(RowKind::Field));
+                let row = all.iter().find_map(|(at, held)| match built_in {
+                    Some(f) => rows::builtin_row(font, scope, *at, f.key),
+                    None => held.iter().filter(|row| r.is(row.kind) && row.key == r.key).nth(r.index).cloned(),
+                });
+                out.push(row.ok_or_else(|| p.bad(format!("the {} has no row `{}` #{}", scope.name(), r.key, r.index)))?);
+            }
+            out
+        }
         None => rows::rows_of(font, scope, i),
         Some(keys) => {
             if keys.len() > fontcraft_fontinfo::MAX_ROWS {

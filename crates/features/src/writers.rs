@@ -25,14 +25,16 @@ const KERN_CLASS: &str = "KernFeatureWriter";
 pub struct KernTags {
     pub kern: bool,
     pub dist: bool,
+    /// Vertical kerning.
+    pub vkrn: bool,
 }
 
 impl KernTags {
-    pub const ALL: KernTags = KernTags { kern: true, dist: true };
-    pub const NONE: KernTags = KernTags { kern: false, dist: false };
+    pub const ALL: KernTags = KernTags { kern: true, dist: true, vkrn: true };
+    pub const NONE: KernTags = KernTags { kern: false, dist: false, vkrn: false };
 
     pub fn any(self) -> bool {
-        self.kern || self.dist
+        self.kern || self.dist || self.vkrn
     }
 }
 
@@ -108,7 +110,7 @@ fn flag(value: &Value) -> Option<bool> {
     }
 }
 
-/// The `features` option: a non-empty list of the kern writer's tags.
+/// The `features` option: a non-empty list of the kern writer's tags, which leaves `vkrn` out.
 fn features(value: &Value) -> Option<KernTags> {
     let items = &value.as_array()?.items;
     if items.is_empty() {
@@ -131,7 +133,7 @@ fn features(value: &Value) -> Option<KernTags> {
 /// `features` option limits its tags; the last entry of a writer decides.
 pub fn append_tags(setting: Option<&Value>) -> Vec<&'static str> {
     let Some(entries) = setting.and_then(Value::as_array) else { return Vec::new() };
-    const KERN: &[&str] = &["kern", "dist"];
+    const KERN: &[&str] = &["kern", "dist", "vkrn"];
     const MARK: &[&str] = &["mark", "mkmk", "abvm", "blwm"];
     const CURS: &[&str] = &["curs"];
     let mut by_writer: Vec<(&'static [&'static str], Vec<&'static str>)> = Vec::new();

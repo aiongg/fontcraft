@@ -1,8 +1,8 @@
 //! The glyph data a document's commands read (`docs/spec/05-font-view.md` § 4.6).
 //!
 //! Layers, later ones winning per record: the built-in database; the user's custom files
-//! (`GlyphData*.xml` in the settings folder, which the app hands to
-//! [`crate::Session::set_user_glyph_data`]); the files beside the document's source, unless the
+//! (`GlyphData*.xml` in the `Info` folder of the settings folder, which the desktop app has read by
+//! [`crate::Session::load_user_info`]); the files beside the document's source, unless the
 //! font's *Ignore custom GlyphData file* parameter is on. A malformed file is skipped and
 //! reported; the others still apply.
 //!
@@ -94,33 +94,54 @@ pub fn ignores_source_files(font: &Font) -> bool {
 /// that order. Unreadable files are reported, not fatal.
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn source_files(path: &std::path::Path, problems: &mut Vec<String>) -> Vec<(String, Vec<u8>)> {
-    use std::io::Read;
     let Some(dir) = path.parent() else { return Vec::new() };
     let mut out = Vec::new();
-    for folder in [dir.to_path_buf(), dir.join("Info")] {
-        let Ok(entries) = std::fs::read_dir(&folder) else { continue };
-        let mut names: Vec<String> = entries
-            .filter_map(|e| e.ok())
-            .filter_map(|e| e.file_name().into_string().ok())
-            .filter(|n| n.starts_with("GlyphData") && n.ends_with(".xml"))
-            .take(MAX_FILES + 1)
-            .collect();
-        names.sort();
-        for name in names {
-            let file = folder.join(&name);
-            if let Err(e) = crate::file_access::check_read(&file) {
-                problems.push(format!("glyph data file {} is not read: {e}", file.display()));
-                continue;
-            }
-            if !std::fs::metadata(&file).is_ok_and(|m| m.is_file()) {
-                continue;
-            }
-            let mut bytes = Vec::new();
-            let limit = xml::MAX_FILE_BYTES as u64;
-            match std::fs::File::open(&file).and_then(|f| f.take(limit + 1).read_to_end(&mut bytes)) {
-                Ok(_) => out.push((file.display().to_string(), bytes)),
-                Err(e) => problems.push(format!("glyph data file {} cannot be read: {e}", file.display())),
-            }
+    for folder in [dir.to_path_buf(), dir.join(INFO_FOLDER)] {
+        out.extend(named_files(&folder, "GlyphData", ".xml", xml::MAX_FILE_BYTES, true, problems));
+    }
+    out
+}
+
+/// The folder of custom glyph data and groups files, beside a source and in the settings folder.
+#[cfg(not(target_arch = "wasm32"))]
+const INFO_FOLDER: &str = "Info";
+
+/// The files of `folder` whose name starts with `prefix` and ends with `suffix`, by name, each read
+/// up to a byte past `limit`, so one that is too large is seen to be. `checked`: the automation
+/// read root decides which may be read.
+#[cfg(not(target_arch = "wasm32"))]
+fn named_files(
+    folder: &std::path::Path,
+    prefix: &str,
+    suffix: &str,
+    limit: usize,
+    checked: bool,
+    problems: &mut Vec<String>,
+) -> Vec<(String, Vec<u8>)> {
+    use std::io::Read;
+    let mut out = Vec::new();
+    let Ok(entries) = std::fs::read_dir(folder) else { return out };
+    let mut names: Vec<String> = entries
+        .filter_map(|e| e.ok())
+        .filter_map(|e| e.file_name().into_string().ok())
+        .filter(|n| n.starts_with(prefix) && n.ends_with(suffix))
+        .take(MAX_FILES + 1)
+        .collect();
+    names.sort();
+    for name in names {
+        let file = folder.join(&name);
+        if checked && let Err(e) = crate::file_access::check_read(&file) {
+            problems.push(format!("{} is not read: {e}", file.display()));
+            continue;
+        }
+        if !std::fs::metadata(&file).is_ok_and(|m| m.is_file()) {
+            continue;
+        }
+        let mut bytes = Vec::new();
+        let most = (limit as u64).saturating_add(1);
+        match std::fs::File::open(&file).and_then(|f| f.take(most).read_to_end(&mut bytes)) {
+            Ok(_) => out.push((file.display().to_string(), bytes)),
+            Err(e) => problems.push(format!("{} cannot be read: {e}", file.display())),
         }
     }
     out
@@ -233,6 +254,32 @@ impl Session {
             }
         };
         self.user_groups = parse_groups_files(files, &data, &mut problems);
+        problems
+    }
+
+    /// Reads the user's glyph data (`GlyphData*.xml`) and groups (`Groups*.plist`) from the `Info`
+    /// folder of the app's settings folder `settings` and sets them ([`Session::set_user_glyph_data`],
+    /// [`Session::set_user_groups`]). Files that cannot be used are skipped; the problems are returned.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn load_user_info(&mut self, settings: &std::path::Path) -> Vec<String> {
+        let folder = settings.join(INFO_FOLDER);
+        let mut problems = Vec::new();
+        let data = named_files(&folder, "GlyphData", ".xml", xml::MAX_FILE_BYTES, false, &mut problems);
+        if !data.is_empty() {
+            let files: Vec<(&str, &[u8])> = data.iter().map(|(name, bytes)| (name.as_str(), bytes.as_slice())).collect();
+            problems.extend(self.set_user_glyph_data(&files));
+        }
+        let groups = named_files(&folder, "Groups", ".plist", MAX_GROUPS_FILE_BYTES, false, &mut problems);
+        let mut texts: Vec<(&str, &str)> = Vec::new();
+        for (name, bytes) in &groups {
+            match std::str::from_utf8(bytes) {
+                Ok(text) => texts.push((name, text)),
+                Err(_) => problems.push(format!("groups file {name} is ignored: it is not UTF-8 text")),
+            }
+        }
+        if !texts.is_empty() {
+            problems.extend(self.set_user_groups(&texts));
+        }
         problems
     }
 

@@ -18,6 +18,7 @@ use fontcraft_model::axes::design_value;
 use fontcraft_model::{Font, Instance, PropertyValue, StyleClass};
 use serde_json::{Map, json};
 
+use super::masters::moved_order;
 use super::*;
 use crate::params::{Params, kind};
 
@@ -79,7 +80,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Reorder Exports",
             [],
             None,
-            "{instance: id|name|index, toIndex: integer} move one export entry to position toIndex (from 0) of the list; the order does not change any exported file → {index}",
+            "{instances: [id|name|index] or instance: id|name|index, toIndex: integer} move export entries to another place in the list as one undo step; they end up next to each other in list order, the first of them at position toIndex, counted among the entries that stay; the order does not change any exported file → {index, indices}",
             has_doc,
             reorder
         ),
@@ -523,18 +524,17 @@ fn remove(s: &mut Session, v: &Value) -> Result<Value> {
 fn reorder(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("font.instance.reorder", v)?;
     let font = s.font()?;
-    let from = one_target(&p, font, "instance")?;
-    let last = font.instances.len().saturating_sub(1);
-    let to = p.opt_int("toIndex", 0, i64::try_from(last).unwrap_or(i64::MAX))?.ok_or_else(|| p.bad("`toIndex` is required"))?;
-    let to = usize::try_from(to).map_err(|_| p.bad("`toIndex` is out of range"))?;
-    s.edit("Reorder Exports", |font| {
-        let instances = std::sync::Arc::make_mut(&mut font.instances);
-        if from >= instances.len() || to >= instances.len() {
-            return Err(p.bad("`toIndex` is out of range"));
-        }
-        let inst = instances.remove(from);
-        instances.insert(to, inst);
-        Ok(())
-    })?;
-    Ok(json!({ "index": to }))
+    let moved = match (p.get("instance"), p.get("instances")) {
+        (Some(_), Some(_)) => return Err(p.bad("give `instance` or `instances`, not both")),
+        (Some(_), None) => vec![one_target(&p, font, "instance")?],
+        (None, _) => many_targets(&p, font, "instances")?,
+    };
+    let order = moved_order(&p, font.instances.len(), moved)?;
+    if order.changes() {
+        s.edit("Reorder Exports", |font| {
+            font.instances = std::sync::Arc::new(order.order.iter().filter_map(|i| font.instances.get(*i).cloned()).collect());
+            Ok(())
+        })?;
+    }
+    Ok(json!({ "index": order.to, "indices": order.indices() }))
 }

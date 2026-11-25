@@ -32,6 +32,7 @@ mod catalog_data;
 pub mod error;
 pub mod fields;
 pub mod glyphset;
+pub mod names;
 pub mod rows;
 pub mod scale;
 pub mod syntax;
@@ -40,7 +41,7 @@ pub mod tokens;
 pub mod value;
 pub mod warnings;
 
-pub use catalog::{Effect, ParamKind, ParamSpec, Scopes};
+pub use catalog::{Effect, Names, ParamKind, ParamSpec, Scopes};
 pub use error::{PatternError, RowsError, ScaleError, TargetError, ValueError};
 pub use target::{Scope, TargetRef};
 

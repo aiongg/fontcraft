@@ -80,10 +80,10 @@ label = "Open Font Info Dialog"
 menu = []
 shortcut = ""
 kind = "ui"
-params = "{dialog: 'fieldPicker'|'parameterPicker'|'os2Bits'|'panose'|'featurePicker', scope: 'font'|'master'|'instance', targets?: [index], name?: string, index?: number}"
+params = "{dialog: 'fieldPicker'|'parameterPicker'|'os2Bits'|'panose'|'glyphs'|'records'|'featurePicker', scope: 'font'|'master'|'instance', targets?: [index], name?: string, index?: number}"
 area = "font-info"
 milestone = "M7"
-summary = "Opens one of the Font Info window's pickers (fields, custom parameters, features) or the dialog that edits one parameter's value (OS/2 bit fields, PANOSE)."
+summary = "Opens one of the Font Info window's pickers (fields, custom parameters, features) or the dialog that edits one parameter's value (OS/2 bit fields, PANOSE, the glyphs a parameter names, the records of gasp Table, meta Table and Name Table Entry)."
 ref = "Font Info"
 status = "inferred"
 notes = "Our command behind the Font Info panel's plus buttons and parameter value fields in `crates/ui`, so the dialogs open through the command channel as clicks open them. The reference app opens the same pickers and editors from those buttons and fields; it has no command for them."
@@ -257,13 +257,13 @@ label = "Set Localized Value"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{scope: 'font'|'master'|'instance', target?: id|name|index, key: string, language: string, value: string}"
+params = "{scope: 'font'|'master'|'instance', target?: id|name|index, targets?: [id|name|index], key: string, language: string, value?: string, from?: string, onlyMissing?: bool}"
 area = "font-info"
 milestone = "M7"
 summary = "Adds or changes one language entry of a localizable field. In the UI the plus button beside the field adds another localization row and the language menu picks its language."
 ref = "Font Info"
 status = "handbook"
-notes = "Documented, not yet observed. Languages are OpenType language system tags without trailing spaces, as the file format stores them (GlyphsSDK `infoValue.language`: dflt, DEU…). M7 plan § 4: M7.3."
+notes = "Documented, not yet observed. Languages are OpenType language system tags without trailing spaces, as the file format stores them (GlyphsSDK `infoValue.language`: dflt, DEU…). M7 plan § 4: M7.3. M7.31: several targets as one undo step; `from` moves a language's text and keeps each target's own, `onlyMissing` leaves targets that have the language alone."
 guesses = [
   "A language tag the name table cannot map to a Windows language id is refused, except dflt (the default); the language menu of the reference app settles which tags it offers.",
 ]
@@ -277,13 +277,13 @@ label = "Remove Localized Value"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{scope: 'font'|'master'|'instance', target?: id|name|index, key: string, language: string}"
+params = "{scope: 'font'|'master'|'instance', target?: id|name|index, targets?: [id|name|index], key: string, language: string}"
 area = "font-info"
 milestone = "M7"
 summary = "Removes one language entry from a localizable field, the counterpart of the minus button on a localization row."
 ref = "Font Info"
 status = "handbook"
-notes = "Documented, not yet observed. M7 plan § 4: M7.3."
+notes = "Documented, not yet observed. M7 plan § 4: M7.3. M7.31: several targets as one undo step; those without the language are left alone."
 guesses = [
   "Removing the last language entry of a field removes the field; removing its default (dflt) entry while others remain is allowed, and export then uses the English entry as the default name; the reference app settles both.",
 ]
@@ -297,13 +297,13 @@ label = "Copy Rows"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{scope: 'font'|'master'|'instance', target?: id|name|index, keys?: [string]}"
+params = "{scope: 'font'|'master'|'instance', target?: id|name|index, targets?: [id|name|index], keys?: [string], rows?: [{key: string, kind?: 'field'|'param', index?: integer}]}"
 area = "font-info"
 milestone = "M7"
 summary = "Returns the selected Font Info rows (fields, custom parameters) as a transferable value and, in the UI, puts them on the clipboard. The UI reaches it through the normal Edit > Copy (Cmd+C) while rows are selected, so it has no menu entry or shortcut of its own."
 ref = "Font Info"
 status = "handbook"
-notes = "Documented, not yet observed. M7 plan § 4: M7.3."
+notes = "Documented, not yet observed. M7 plan § 4: M7.3. M7.31: `rows` names single rows, each taken from the first target that holds it; the window puts the property-list text on the clipboard."
 guesses = [
   "Rows are copied as our own JSON (scope, kind, key, value, enabled) and, for custom parameters and fields, also as property-list text in the file format's spelling, so a text editor or another document can read them; copying rows in the reference app and pasting into a text editor settles the format.",
 ]
@@ -323,7 +323,7 @@ milestone = "M7"
 summary = "Inserts previously copied rows into the current tab. The UI reaches it through Edit > Paste (Cmd+V); how a pasted row that already exists is merged, and whether pasting into another font or tab is allowed, is not documented."
 ref = "Font Info"
 status = "handbook"
-notes = "Documented, not yet observed. M7 plan § 4: M7.3."
+notes = "Documented, not yet observed. M7 plan § 4: M7.3. M7.31: the window pastes into the font, masters or exports its tab shows (`font.info.rows.paste`, or Edit › Paste while the clipboard holds rows and the panel shows) and lists the skipped rows in the status line."
 guesses = [
   "The mode append adds parameters after the others and, since a field cannot repeat, replaces a field the target has; skip leaves out every row the target already has; pasting in the reference app settles both.",
   "A pasted row whose field or single-valued parameter is already present replaces its value, a repeatable parameter is appended, a row not allowed in the target scope is skipped and listed, and pasting between tabs and between documents is allowed; pasting in the reference app settles all four.",
@@ -331,6 +331,23 @@ guesses = [
 ]
 observe = [
   "In font A (m7-one), copy a field row and a parameter row, then paste them into the Exports tab, into font B (m7-two)'s Font tab, and back into font A (m7-one)'s Font tab where they already exist: note for each whether the rows are added, replaced, duplicated or refused.",
+]
+
+[[command]]
+id = "font.info.removeRows"
+label = "Remove Rows"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{scope: 'font'|'master'|'instance', targets?: [id|name|index], rows: [{key: string, kind?: 'field'|'param', index?: integer}]}"
+area = "font-info"
+milestone = "M7"
+summary = "Removes the selected rows, added fields and custom parameters alike, from each target as one undo step. A target without a row keeps its others, and built-in fields stay. The UI reaches it through Cmd+Delete and Edit > Cut while rows are selected."
+ref = "Font Info"
+status = "handbook"
+notes = "The handbook documents Cmd+Delete on selected rows. M7.31; `font.info.removeField` and `font.customParameters.remove` remove one kind and refuse a target without the row."
+guesses = [
+  "Rows of several kinds go in one undo step, and a target that lacks some of them loses the others; undoing after Cmd+Delete on two kinds of row in the reference app settles it.",
 ]
 
 [[behavior]]
@@ -349,7 +366,7 @@ milestone = "M7"
 summary = "A row normally shows a minus button at its right edge; rows that show a plus button there (localizable fields) swap it for the minus button while Alt is held."
 ref = "Font Info"
 status = "handbook"
-notes = "Documented, not yet observed. M7 plan § 4: M7.15."
+notes = "Documented, not yet observed. M7.31 (`param_value::languages`): the minus removes its line's language; the last language's minus removes the field."
 
 [[behavior]]
 id = "fontInfo.rows.selection"
@@ -358,12 +375,16 @@ milestone = "M7"
 summary = "Clicking a row selects it and Cmd+click builds a selection of several rows. The selection is what Cmd+Delete, Copy and Paste act on."
 ref = "Font Info"
 status = "handbook"
-notes = "Documented, not yet observed. M7 plan § 4: M7.15."
+notes = "Documented, not yet observed. M7.31: `font.info.rows.select`, `.copy`, `.cut`, `.paste` and `.delete` (`crates/ui/src/shell/font_info.rs`); a click on a row's label selects it, and Copy, Cut, Paste and Cmd+Delete act on the selected rows while nothing has the keyboard. The Masters and Exports lists take Copy and Paste for the rows too."
 guesses = [
+  "The label is what a click selects by: a click in the field edits its value; clicking the parts of a row in the reference app settles where it selects.",
   "Shift-click adds every row between the last row clicked and the clicked one; Shift-clicking in the reference app settles it.",
-  "Copy puts the rows' JSON on the system clipboard, and a selected row of a parameter whose name repeats copies every row of that name; pasting copied rows into a text editor from the reference app settles the format.",
+  "Copy puts the rows' property-list text on the system clipboard, and a selected row of a parameter whose name repeats is copied alone; pasting copied rows into a text editor from the reference app settles the format.",
   "Paste replaces the rows with the same key in the shown font, masters or exports and appends repeatable parameters; pasting a row the target has in the reference app settles it.",
-  "Cmd+Delete removes the selected fields in one undo step and each selected parameter in one of its own, and leaves built-in fields; undoing after Cmd+Delete in the reference app settles the steps.",
+  "Cmd+Delete removes the selected rows as one undo step and leaves built-in fields, and Cut copies the rows before it removes them so; undoing after Cmd+Delete, and Cut with a row selected, in the reference app settle both.",
+  "Selected rows stay selected when other masters or exports are picked, so rows copied from one are pasted or removed on others; picking another export with a row selected in the reference app settles it.",
+  "With the Masters or Exports list focused, Copy and Paste act on the selected rows while Delete and Cmd+Delete remove the selected masters or exports; selecting a row, clicking another export and pressing Cmd+Delete in the reference app settles it.",
+  "Rows selected in one document are not selected in another; selecting a row and switching to another font in the reference app settles it.",
 ]
 
 [[behavior]]
@@ -373,7 +394,7 @@ milestone = "M7"
 summary = "A localizable field shows a language menu and a plus button; each added row holds the same field in another language chosen from the menu."
 ref = "Font Info"
 status = "handbook"
-notes = "Documented, not yet observed. M7 plan § 4: M7.15."
+notes = "Documented, not yet observed. M7 plan § 4: M7.15. M7.31: every language line shows the plus, and an edit on several exports is one undo step."
 guesses = [
   "The plus button adds the first language the field lacks, in the name table's tag order after the default language, with empty text; picking another language in a row's menu moves its text there; clicking the plus in the reference app settles both.",
 ]
@@ -385,15 +406,20 @@ milestone = "M7"
 summary = "A custom parameter row edits its value with the control its kind calls for: a check box for yes or no, a number field, a text field, a field of several lines for a list, a menu for a value from a fixed list, check boxes for a list of such values, a menu of the font's masters for a parameter that names a master, and an Edit button for a value with a dialog of its own (OS/2 bits, PANOSE, TTFZones, TTFStems and the others). A value the parameter's check refuses is not stored, and the check's message shows under the row."
 ref = "Font Info › Font › Custom Parameters"
 status = "inferred"
-notes = "Not documented and not yet observed. M7 plan: M7.22, `crates/ui/src/panels/font_info/param_value.rs` and `rows.rs`; the editor of each row is chosen in `crates/ui/src/app/models/font_info.rs` from the catalogue's kind and value list. A typed value goes through the check of font.customParameters.set (`fontcraft_fontinfo::value::check`) before anything is sent, so the row and the command refuse the same values with the same words; a dictionary or localized value is checked as a whole when one of its fields changes. Every edit is one font.customParameters.set. A master's TTFZones and TTFStems rows open their editors with window.ttfZones and window.ttfStems on that master."
+notes = "Not documented and not yet observed. M7 plan: M7.22, `crates/ui/src/panels/font_info/param_value.rs` and `rows.rs`; the editor of each row is chosen in `crates/ui/src/app/models/font_info.rs` from the catalogue's kind and value list. A typed value goes through the check of font.customParameters.set (`fontcraft_fontinfo::value::check`) before anything is sent, so the row and the command refuse the same values with the same words; a dictionary or localized value is checked as a whole when one of its fields changes. Every edit is one font.customParameters.set. A master's TTFZones and TTFStems rows open their editors with window.ttfZones and window.ttfStems on that master. M7.33: what a value names in the font comes from the parameter rows' `names` key (axis, master, glyph): an axis tag is a menu of the font's axes, Disable Masters check boxes for its masters, a parameter that names glyphs has an Edit button that opens a glyph picker, and a name the font lacks shows a warning under the row and is kept. gasp Table, meta Table and Name Table Entry are edited in a row table (crates/ui/src/dialogs/record_table.rs)."
 guesses = [
   "Variable Font Origin, Get Hints From Master and Link Metrics With Master are menus of the font's masters that store the master's id; the reference app's row and the file it writes settle it.",
   "A refused value's message stays under its row until the next edit; the reference app with vendorID ABCDE settles it.",
+  "An axis-tag value is a menu of the font's axes and Disable Masters check boxes for its masters, stored as a list of names; the reference app's rows settle it.",
+  "A parameter that names glyphs keeps its text field with a button for a glyph picker, and names the font lacks are only pointed out; the reference app's rows settle both.",
+  "gasp Table, meta Table and Name Table Entry open a table of their records (at most 256), and a Name Table Entry is filled from its first column on; the reference app's editors settle it.",
   "A value from a fixed list of whole numbers (Post Table Type) is stored as a number, any other as text; the file the reference app writes after picking one settles it.",
 ]
 observe = [
   "In font A (m7-one), add Variable Font Origin and Get Hints From Master on the Font tab and Link Metrics With Master on a master: note whether each is a menu of masters or a text field, and what the file stores after picking one.",
   "In font A (m7-one), add Post Table Type and Webfont Formats on the Font tab: note whether the first is a menu and the second check boxes, and what the file stores.",
+  "In font B (m7-two), add Style Name as STAT entry and Disable Masters on an export and Keep Glyphs on the Font tab: note the editor of each, and what Keep Glyphs shows for a glyph the font lacks.",
+  "In font A (m7-one), add gasp Table, meta Table and Name Table Entry on the Font tab: note which editor each opens.",
   "In font A (m7-one), add TTFZones on a master and click its value: note whether the TTFZones editor opens.",
 ]
 
@@ -406,7 +432,7 @@ ref = "Font Info › Font; Font Info › Exports; Font Info › Features › Nam
 status = "handbook"
 
 # ───────────────────────────── Font tab ─────────────────────────────
-notes = "Documented, not yet observed. glyphsLib expands `{{{key}}}` in font properties and in instance names and properties by looking the key up on its font or instance object; fontc 1.0.0 expands no tokens. FontCraft expands them through `fontinfo::tokens::expand`, which the compiler calls on the names of each export (M7.8) and `font.expandTextTokens` previews. M7 plan § 4: M7.13."
+notes = "Documented, not yet observed. glyphsLib expands `{{{key}}}` in font properties and in instance names and properties by looking the key up on its font or instance object; fontc 1.0.0 expands no tokens. FontCraft expands them through `fontinfo::tokens::expand`, which the compiler calls on the names of each export (M7.8) and `font.expandTextTokens` previews. M7 plan § 4: M7.13. A token that names nothing shows a warning under the row of the Exports tab that holds it, or in the tab's As Exported section when the font or the master holds it (M7.32)."
 
 [[panel]]
 id = "fontInfo.font"
@@ -427,7 +453,7 @@ milestone = "M7"
 summary = "First tab of Font Info: metadata shared by every exported font file, the design axes, and the font-level custom parameters."
 ref = "Font Info › Font"
 status = "handbook"
-notes = "Documented, not yet observed. The Axes rows act through font.axes.add, .set, .remove and .reorder; the name's disclosure menu lists font.axes.listPredefined (M9.27). M7 plan § 4: M7.16 (`crates/ui/src/panels/font_info/font_tab.rs`)."
+notes = "Documented, not yet observed. The Axes rows act through font.axes.add, .set, .remove and .reorder; the name's disclosure menu lists font.axes.listPredefined (M9.27). M7 plan § 4: M7.16 (`crates/ui/src/panels/font_info/font_tab.rs`). M7.30: the tab scrolls, and the axes reorder by drag in a list above their fields."
 guesses = [
   "The double-arrow button opens a prompt under the field that asks for the new units per em, starting at the current value, with Scale and Cancel buttons; clicking the button in the reference app settles the prompt's form.",
   "The minor version shows three digits, and its stepper is a plus and a minus button after the field; the reference app's Version field settles the look.",
@@ -579,7 +605,7 @@ milestone = "M7"
 summary = "An export that carries its own familyNames field uses that family name instead of the one on the Font tab."
 ref = "Font Info › Font › Family Name; Font Info › Exports › Style Linking"
 status = "handbook"
-notes = "A static instance's default-language familyNames is its family in name IDs 1, 4, 6 and 16 and in the file name (M7.8; tests in crates/compile/src/instance_names_tests.rs, and against fontmake's output for Inter in crates/engine/tests/engine/corpus_instance_names.rs)."
+notes = "A static instance's default-language familyNames is its family in name IDs 1, 4, 6 and 16 and in the file name (M7.8; tests in crates/compile/src/instance_names_tests.rs, and against fontmake's output for Inter in crates/engine/tests/engine/corpus_instance_names.rs). The Exports tab shows the resulting names before export (M7.32)."
 
 [[behavior]]
 id = "fontInfo.unitsPerEm.limits"
@@ -960,13 +986,13 @@ label = "Set Custom Parameter"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{scope: 'font'|'master'|'instance', targets?: [id|name|index], name: string, index?: integer, value?: any, enabled?: bool}"
+params = "{scope: 'font'|'master'|'instance', targets?: [id|name|index], name: string, index?: integer, value?: any, enabled?: bool, addMissing?: bool}"
 area = "font-info"
 milestone = "M7"
 summary = "Changes the value of an existing custom parameter row."
 ref = "Font Info › Font › Custom Parameters"
 status = "inferred"
-notes = "`enabled` is the row's checkbox (customParameters.enableCheckbox); the value is checked against the catalogue's kind for the name. `index` picks one of several rows of the same name. M7 plan § 4: M7.2. M7.21: the value lists, syntaxes and ranges of `crates/fontinfo/src/syntax.rs` apply as for add, and a refused value changes nothing; a value naming a missing master or palette is kept and listed under `warnings`."
+notes = "`enabled` is the row's checkbox (customParameters.enableCheckbox); the value is checked against the catalogue's kind for the name. `index` picks one of several rows of the same name. M7 plan § 4: M7.2. M7.21: the value lists, syntaxes and ranges of `crates/fontinfo/src/syntax.rs` apply as for add, and a refused value changes nothing; a value naming a missing master or palette is kept and listed under `warnings`. M7.31: `addMissing` adds the row to the targets that lack it."
 guesses = [
   "A value is checked against the catalogue's kind before it is stored, and an unknown name is refused rather than stored as is; editing a row in the running app's Font Info would settle it.",
 ]
@@ -1035,9 +1061,9 @@ milestone = "M7"
 summary = "Second tab of Font Info: the list of masters on the left and the properties of the selected master or masters on the right."
 ref = "Font Info › Masters"
 status = "handbook"
-notes = "Documented, not yet observed. Axes Coordinates act through font.master.setAxisLocation on every selected master (M9.27); Number Values (font.numbers.*) are M8's and read-only until then. Add Other Font is shown disabled until its dialog exists (M9). M7 plan § 4: M7.17 (`crates/ui/src/panels/font_info/masters_tab.rs`)."
+notes = "Documented, not yet observed. Axes Coordinates act through font.master.setAxisLocation on every selected master (M9.27); Number Values act through font.numbers.*, Add Other Font opens its dialog. M7 plan § 4: M7.17 (`crates/ui/src/panels/font_info/masters_tab.rs`). M7.30: the list stays while the fields scroll, several selected masters drag together, and what a command adds or moves becomes the selection."
 guesses = [
-  "A master made with Add Master becomes the selection, and a dragged master stays selected at its new place; the list's selection in the reference app after each action settles it.",
+  "Masters made with Add Master, Duplicate Selected, Add Other Font or Instance as Master become the selection, and dragged masters stay selected at their new place; the list's selection in the reference app after each action settles it.",
   "The minus button is disabled while every master is selected, because a font keeps at least one master; whether the reference app disables it or refuses with a message settles it.",
   "The General section has the name and icon only, without a plus button, because masters take no added General fields; the masters tab of the reference app settles it.",
 ]
@@ -1196,13 +1222,16 @@ label = "Reorder Masters"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{master: id|name|index, toIndex: integer}"
+params = "{masters: [id|name|index] or master: id|name|index, toIndex: integer}"
 area = "interpolation"
 milestone = "M7"
 summary = "Moves a master to another position in the list, as dragging it in the sidebar does. Order matters: the first master supplies glyph-level hinting information unless a Get Hints From Master parameter names another."
 ref = "Font Info › Masters › Managing Masters"
 status = "handbook"
-notes = "Documented, not yet observed. M7 plan § 4: M7.5."
+notes = "Documented, not yet observed. M7 plan § 4: M7.5. M7.30: several masters move together in list order, as one undo step; `toIndex` counts the masters that stay."
+guesses = [
+  "Dragging one of several selected masters moves all of them, next to each other in list order; dragging two selected masters in the reference app settles it.",
+]
 
 [[command]]
 id = "font.master.setIcon"
@@ -1390,7 +1419,10 @@ milestone = "M7"
 summary = "With several masters selected, name, metrics, stems, numbers and custom parameters are edited for all of them at once. A field whose values differ shows a gray Multiple Values placeholder until a new value is typed."
 ref = "Font Info › Masters › Managing Masters"
 status = "handbook"
-notes = "Documented, not yet observed. M7 plan § 4: M7.5 (font.master.get with several masters returns `null` for a value that differs), M7.17 (placeholder: the name, icon, metric positions and zones, stem widths, custom parameters, and the read-only axes coordinates and number values)."
+notes = "Documented, not yet observed. M7 plan § 4: M7.5 (font.master.get with several masters returns `null` for a value that differs), M7.17 (placeholder: the name, icon, metric positions and zones, stem widths, custom parameters, axes coordinates and number values). M7.31: the tab lists the rows any selected master holds; a row some lack shows how many hold it, its check box and minus act on those, and editing it adds it to the others."
+guesses = [
+  "A parameter only some of the selected masters hold is listed after the first one's rows with a count such as 1/2, and a new value for it is set on all of them; selecting two masters of which one has a parameter settles it.",
+]
 observe = [
   "In font B (m7-two), select both masters on the Masters tab: note which fields show Multiple Values, then edit a metric and check whether both masters get it.",
 ]
@@ -1804,7 +1836,7 @@ milestone = "M7"
 summary = "Third tab of Font Info: the list of fonts that File > Export produces, static instances and variable font settings, with the properties of the selected entries."
 ref = "Font Info › Exports"
 status = "handbook"
-notes = "Documented, not yet observed. The preview control comes from the Instance Preview parameter's description. Add Instance for Each Master, Instance as Master, Add Variable Font Setting are M9's rows; until M9 those menu items are disabled. Axes Coordinates act through font.instance.setAxisLocation on every selected entry (M9.27). M7 plan § 4: M7.18."
+notes = "Documented, not yet observed. The preview control comes from the Instance Preview parameter's description. Add Instance for Each Master, Instance as Master, Add Variable Font Setting run their M9 commands. Axes Coordinates act through font.instance.setAxisLocation on every selected entry (M9.27). M7 plan § 4: M7.18. M7.30: the list stays while the fields scroll. M7.32: an As Exported section of ours below the parameters, and a warning mark on entries that share a name."
 guesses = [
   "Active, Style Name, Weight Class, Width Class, the Axes Coordinates and Style Linking sit under the General heading, above the added fields; the Exports tab of the reference app settles the order.",
   "A variable font setting shows Active, its name and its custom parameters, without classes, axes or style linking; selecting a variable font setting in the reference app settles it.",
@@ -1897,7 +1929,7 @@ milestone = "M9"
 summary = "Adds one static instance per master, each named after its master and placed at the master's axis coordinates (a Thin master at weight 100 yields a Thin instance at weight 100). Whether existing instances at those locations are skipped is not stated."
 ref = "Font Info › Exports"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. M7.30: the added instances become the selection."
 guesses = [
   "Every chosen master gets an instance even when one already sits at its location, with no weight or width class of its own; settle by running the command twice on F1 in the reference app.",
 ]
@@ -1917,7 +1949,7 @@ milestone = "M9"
 summary = "Creates a new master from the interpolated outlines and metrics of the selected instance and adds it to the Masters tab. Instances on either side then interpolate against the new master, and the source instance uses it directly."
 ref = "Font Info › Exports"
 status = "handbook"
-notes = "Documented, not yet observed. The new master holds what the instance exports: outlines, widths, metrics, stems, numbers and kerning, interpolated as static export interpolates them."
+notes = "Documented, not yet observed. The new master holds what the instance exports: outlines, widths, metrics, stems, numbers and kerning, interpolated as static export interpolates them. M7.30: the new master becomes the Masters tab's selection."
 guesses = [
   "The new master goes to the end of the master list; settle with F1 in the reference app.",
   "An instance on a master's location is refused, since two masters at one location cannot interpolate; settle by trying it in the reference app.",
@@ -1965,13 +1997,16 @@ label = "Reorder Exports"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{instance: id|name|index, toIndex: integer}"
+params = "{instances: [id|name|index] or instance: id|name|index, toIndex: integer}"
 area = "font-info"
 milestone = "M7"
 summary = "Moves an export entry within the list, as dragging does. The order is organisational only and has no effect on exported files."
 ref = "Font Info › Exports"
 status = "handbook"
-notes = "Documented, not yet observed. M7 plan § 4: M7.7."
+notes = "Documented, not yet observed. M7 plan § 4: M7.7. M7.30: several entries move together in list order, as one undo step; `toIndex` counts the entries that stay."
+guesses = [
+  "Dragging one of several selected entries moves all of them, next to each other in list order; dragging two selected entries in the reference app settles it.",
+]
 
 [[command]]
 id = "font.instance.setActive"
@@ -2016,6 +2051,24 @@ status = "inferred"
 notes = "A query of ours for the warning under the Axes Coordinates in Font Info › Exports. It makes the static export's test, so the panel, the command's warnings and the export report agree. A variable font setting has no placement."
 guesses = [
   "A query of ours: the reference app shows extrapolation only in the Exports tab and in the export; the reply's shape is ours.",
+]
+
+[[command]]
+id = "font.instance.names"
+label = "Exported Names"
+menu = []
+shortcut = ""
+kind = "engine"
+params = "{instances?: [id|name|index]}"
+area = "font-info"
+milestone = "M7"
+summary = "Returns what the export of each entry writes besides the glyphs: the file name, the name records with their tokens expanded, the classes and style flags, the style-linked family, a variable font's named instances and axis values, the tokens that name nothing, and the entries that take the same file name, PostScript name or style-linked style."
+ref = "Font Info › Exports"
+status = "inferred"
+notes = "A query of ours (M7.32) for the As Exported section of Font Info › Exports. It runs the compiler's own rules (crates/compile/src/exported.rs) on the font without the glyphs no token reads, so it agrees with the export: crates/engine/tests/engine/instance_names.rs compares it with the compiled tables. Not in it: names that feature code, colour palettes and autohinting add, linked sources (Import Font, Import Master), and what Filter, PreFilter and Scale to UPM change in a glyph or the UPM a token reads."
+guesses = [
+  "A query of ours: the reference app shows no exported names before export; the section, its place below Custom Parameters and the marks in the list are ours.",
+  "Entries of one kind (static or variable) conflict when both are active; a variable font may share its PostScript name with a static instance.",
 ]
 
 [[command]]
@@ -2227,10 +2280,10 @@ milestone = "M7"
 summary = "In the export list Cmd+click toggles single entries and Shift+click selects a range; the selection is what the minus button and the Instance as Master entry act on."
 ref = "Font Info › Exports"
 status = "handbook"
-notes = "Documented, not yet observed. M7 plan § 4: M7.18."
+notes = "Documented, not yet observed. M7 plan § 4: M7.18. M7.30: several selected entries drag together, what a command adds or moves becomes the selection (`shell::font_info::after_run`), and Delete, Backspace or Cmd+Delete on the focused list run the minus."
 guesses = [
   "With nothing selected the tab acts on the first entry, and Cmd-click on the only selected entry leaves the first entry shown; the reference app settles what an empty selection shows.",
-  "Dropping a dragged entry onto another moves it to that entry's place, and the moved entry becomes the selection; dragging in the reference app settles it.",
+  "Dropping a dragged entry onto another moves it to that entry's place, and the moved entries become the selection; dragging in the reference app settles it.",
 ]
 
 [[behavior]]
@@ -2308,7 +2361,7 @@ milestone = "M7"
 summary = "Style linking connects only fonts with an identical family name. All instances inherit the Font tab's family name unless they carry a familyNames field, and instances from different source files (a roman and an italic file) can share a family name and link to each other."
 ref = "Font Info › Exports › Style Linking"
 status = "handbook"
-notes = "Documented, not yet observed. M7 plan § 4: M7.7 (test over the compiled name tables of two linked instances). The message comes from fontcraft_fontinfo::warnings (M7.23): the linking commands return it, and font.instance.list, font.instance.get and font.info.get list it under `warnings` with field styleLinking, for the Exports tab to show under Style Linking."
+notes = "Documented, not yet observed. M7 plan § 4: M7.7 (test over the compiled name tables of two linked instances). The message comes from fontcraft_fontinfo::warnings (M7.23): the linking commands return it, and font.instance.list, font.instance.get and font.info.get list it under `warnings` with field styleLinking, for the Exports tab to show under Style Linking. The Exports tab names the style-linked family, the exports linked in it and the entries that take the same style (M7.32)."
 guesses = [
   "font.instance.setStyleLinking and font.instance.set link anyway but warn when the base instance named in the same file exports under another family name (its familyNames field); a base in another file is not checked. Linking two instances with different familyNames in the reference app settles whether it warns.",
 ]
@@ -2332,6 +2385,7 @@ id = "fontInfo.features"
 label = "Features"
 location = "window"
 controls = [
+  "filter field over the sidebar",
   "sidebar in three groups: Prefix, Classes, Features, each heading with a plus button",
   "update button beside each automatic entry; error icon beside entries with errors",
   "minus button (bottom-left): delete selected sidebar entries",
@@ -2560,7 +2614,7 @@ milestone = "M8"
 summary = "Regenerates every automatic prefix, class and feature in one step and adds entries that have become possible since the last run, for example liga after ligature glyphs with underscore names were added. Manual entries are left alone, and optional ones such as the All class or cpsp are never added by this command."
 ref = "Font Info › Features › Automatic Feature Code"
 status = "handbook"
-notes = "Documented, not yet observed. Measured against the reference's stored code in the corpus (`crates/features/tests/corpus_auto.rs`, M8.9): 69 stored entries are equal; the differences are sources older than their glyph sets (Inter), forms of other reference versions (locl and ccmp before version 4, Oswald Heavy from version 2), hand-written fixtures, salt (which the handbook gives and no corpus source has), and 11 small capitals in Inter's Lowercase class (`autoClass.general`)."
+notes = "Documented, not yet observed. Measured against the reference's stored code in the corpus (`crates/features/tests/corpus_auto.rs`, M8.9): 69 stored entries are equal; the differences are sources older than their glyph sets (Inter), forms of other reference versions (locl and ccmp before version 4, Oswald Heavy from version 2), hand-written fixtures, salt (which the handbook gives and no corpus source has), and 11 small capitals in Inter's Lowercase class (`autoClass.general`). The window reports the numbers of entries added, changed and removed in its status line, and Compile the numbers of errors and warnings (M8.51)."
 guesses = [
   "An automatic entry whose generator no longer writes it (its glyphs are gone) is removed, as the handbook says automatic classes are at export; Update after deleting every .sc glyph would settle it.",
   "A new feature goes before the first feature that sorts after it in this order, else last: aalt, ccmp, locl, the Indic features, subs, sinf, sups, numr, dnom, frac, afrc, ordn, lnum, pnum, tnum, onum, case, the positional forms, dlig, liga, hlig, rlig, c2sc, smcp, c2pc, pcap, hist, titl, swsh, ornm, salt, ss01 to ss20, cv01 to cv99, the width and kana features, vrt2, cpsp; aalt and the Languagesystems prefix go first. Oswald and Markow store their features in this order; Update on F1 (Latin features) would settle it.",
@@ -2656,17 +2710,18 @@ label = "Compile"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{master?: id|name, instance?: index|id|name, force?: bool}"
+params = "{master?: id|name, targets?: 'all'|'variable'|[{master}|{instance}|'variable'], instance?: index|id|name, force?: bool}"
 area = "features"
 milestone = "M8"
 summary = "Compiles the feature code so that Edit View can preview it and returns the errors found. Edit View previews hand-written substitution rules but not hand-written positioning rules."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
-notes = "Documented, not yet observed. The compile checks the whole code, positioning included, for one master and keeps the result as the document's feature state (session only, no undo step); the preview font Edit View shapes with holds substitutions only. One compile of the code gives the diagnostics, Edit View's font and Text Preview's font (generated kerning and marks included); a Text Preview build of the same document revision and master is taken without compiling. When that build fails outside the code's entries, the code is compiled on its own for its diagnostics. Compiling unchanged code again reuses the last result. With `instance` (M8.31) the code is compiled as that instance exports it, its Add, Replace and Remove parameters applied one by one, on its own and kept nowhere: the document's feature state stays the master's. A diagnostic in code an Add or Replace parameter wrote names it (`param: {name, index}`, the index among the instance's parameters of that name; the line counted in the parameter's code), and a parameter value that cannot be applied comes back under `refused`."
+notes = "Documented, not yet observed. The compile checks the whole code, positioning included, for one master and keeps the result as the document's feature state (session only, no undo step); the preview font Edit View shapes with holds substitutions only. One compile of the code gives the diagnostics, Edit View's font and Text Preview's font (generated kerning and marks included); a Text Preview build of the same document revision and master is taken without compiling. When that build fails outside the code's entries, the code is compiled on its own for its diagnostics. Compiling unchanged code again reuses the last result. With `instance` (M8.31) the code is compiled as that instance exports it, its Add, Replace and Remove parameters applied one by one, on its own and kept nowhere: the document's feature state stays the master's. A diagnostic in code an Add or Replace parameter wrote names it (`param: {name, index}`, the index among the instance's parameters of that name; the line counted in the parameter's code), and a parameter value that cannot be applied comes back under `refused`. With `targets` (M8.51) the code is also checked for other builds, assembled as each exports it and compiled on its own: a master's values, an instance's parameters and interpolated values, the variable font's blocks and variable syntax. Targets with the same assembled text compile once, and an instance between the masters is interpolated only when the code has a `$` token. A check of `all` is kept for font.features.listErrors. The Compile button and the compile after each change check every target on a worker thread; an edit stops that check before its next target. Every target is checked against the font's own glyph order: an instance's Remove Glyphs and Rename Glyphs parameters are not reflected, so code that names a glyph the instance leaves out or renames gives no error here."
 observe = [
   "In any font, look for a shortcut or menu item for Compile in Font Info › Features: note both.",
 ]
 guesses = [
+  "Compile checks every master, every exported instance and the variable font; compiling code with an error inside #ifdef VARIABLE, and code whose token fails at one instance only, in the reference app would settle which builds its Compile reads.",
   "Compile reads the master the Features tab passes (the active Edit View tab's), else the first master; compiling in a two-master font whose masters differ in a number value used by the code, with the second master showing, would settle it.",
   "Compile checks the code without the generated kerning and mark features; an error the reference app reports only when the generated code is added would show the difference.",
 ]
@@ -2683,7 +2738,7 @@ milestone = "M8"
 summary = "Returns the current compile errors with entry, text range, message, expanded description and, where one exists, the suggested fix. The UI shows the same data as inline markers and sidebar icons."
 ref = "Font Info › Features › Manual Feature Code"
 status = "inferred"
-notes = "Returns the last compile's diagnostics with ids, entry, byte range, line, column and fix labels, and whether they still describe the font; it never compiles on its own (M8.15). They do while the compiler's input is unchanged: the assembled code, the stored code of the entries, the glyph order with the code points, the master and the included files (M8.25). A node move or a width edit keeps them; an edit to the code or the glyph set does not."
+notes = "Returns the last compile's diagnostics with ids, entry, byte range, line, column and fix labels, and whether they still describe the font; it never compiles on its own (M8.15). They do while the compiler's input is unchanged: the assembled code, the stored code of the entries, the glyph order with the code points, the master and the included files (M8.25). A node move or a width edit keeps them; an edit to the code or the glyph set does not. `targetDiagnostics` lists what the last check of every target found beyond the compiled master's diagnostics, each with the names of its targets, and a diagnostic found in some targets only names them (M8.51); `previewMessage` says why the preview font could not be built."
 guesses = [
   "The error list is the one of the last Compile and is marked out of date after an edit rather than recomputed; editing code after a compile in the reference app and watching whether the error markers move or vanish would settle it.",
 ]
@@ -2700,7 +2755,7 @@ milestone = "M8"
 summary = "Compiles the font's feature code with one entry's code replaced by a draft and returns the errors found in it, placed in the draft, without changing the font. The Features tab checks the code as it is typed."
 ref = "Font Info › Features › Manual Feature Code"
 status = "inferred"
-notes = "A query (M8.25). The draft is at most 1 MB, the most one entry may hold; the code is compiled on its own, without generated kerning and marks, and the answer has the shape of font.features.listErrors without fixes. The Features tab runs it on a worker thread (at once on the web) once the typed code has stood for half a second, one check at a time, and drops an answer whose draft is no longer the one typed. After setCode, Update and Update Entry the tab builds the preview fonts in the background and then runs font.features.compile, which takes that build. Measured on the corpus: on Inter Roman's largest feature entry (ss07, 9,530 bytes; 49 entries, 3,017 glyphs) a check takes 15.5 ms median of 5 runs in a release build (target 250 ms)."
+notes = "A query (M8.25). The draft is at most 1 MB, the most one entry may hold; the code is compiled on its own, without generated kerning and marks, and the answer has the shape of font.features.listErrors without fixes. The Features tab runs it on a worker thread (at once on the web) once the typed code has stood for half a second, one check at a time, and drops an answer whose draft is no longer the one typed. After setCode, Update and Update Entry the tab builds the preview fonts in the background and then runs font.features.compile, which takes that build. Measured on the corpus: on Inter Roman's largest feature entry (ss07, 9,530 bytes; 49 entries, 3,017 glyphs) a check takes 15.5 ms median of 5 runs in a release build (target 250 ms). With `targets` (M8.51) the draft is checked for the builds named; while code is typed the tab checks the current master only."
 guesses = [
   "The Features tab checks the code as it is typed, half a second after the last keystroke; watching the error markers while typing a misspelt glyph name in the reference app would settle whether it checks before Compile and after what pause.",
   "Diagnostics stay valid while the compiler's input (assembled code, stored code, glyph order with code points, master) is unchanged, so a node move keeps them; moving a node after a compile with an error in the reference app would settle it.",
@@ -2746,7 +2801,7 @@ milestone = "M8"
 summary = "Selects the entry and scrolls the editor to the faulty code, as clicking the error icon of an entry in the sidebar does."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
-notes = "Documented, not yet observed. An engine query returning the entry, range, line and column of the error; the Features tab selects the entry and scrolls to that place (M8.17)."
+notes = "Documented, not yet observed. An engine query returning the entry, range, line and column of the error; a click on the error icon of a sidebar row runs it, and the Features tab shows the entry, selects the range in its code and scrolls to it (M8.50). In an automatic entry, whose code cannot be edited, the code scrolls to the place without taking the keyboard. An entry whose only errors are those of other targets jumps to the first of them."
 
 [[command]]
 id = "font.features.listSnippets"
@@ -2794,7 +2849,7 @@ milestone = "M8"
 summary = "Opens the specification page of the selected feature on Microsoft's OpenType site in the browser. The button is shown at the top-right only while a feature is selected."
 ref = "Font Info › Features › Editing Feature Code"
 status = "handbook"
-notes = "Documented, not yet observed. The engine command returns the section's address and the Features tab opens it in the browser."
+notes = "Documented, not yet observed. The engine command returns the section's address and the Spec button of the Features tab opens it in the browser (M8.50)."
 
 [[command]]
 id = "font.features.setLabel"
@@ -2856,7 +2911,7 @@ milestone = "M8"
 summary = "Shows a popover with a drawing of the glyph, or with all member glyphs of the class, for the glyph or class name that was Alt-clicked in the code editor."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
-notes = "Documented, not yet observed. An engine query returning the glyph, or the member glyphs of a class with nested classes and tokens resolved (M8.17). Classes are class entries, `@Name = …;` definitions in the code of prefix and feature entries, and `markClass` classes, whose reply adds each statement's glyphs and anchor; a lookup name returns its first 50 rules and whether it has more (M8.30). Alt-click in the code editor opens the popover (M8.30b)."
+notes = "Documented, not yet observed. An engine query returning the glyph, or the member glyphs of a class with nested classes and tokens resolved (M8.17). Classes are class entries, `@Name = …;` definitions in the code of prefix and feature entries, and `markClass` classes, whose reply adds each statement's glyphs and anchor; a lookup name returns its first 50 rules and whether it has more (M8.30). Alt-click in the code editor opens the popover (M8.30b), which draws the glyph or the members (M8.52)."
 guesses = [
   "A class entry wins over a class of the same name defined in code, and the first definition in code wins over later ones.",
   "Alt-clicking a lookup name shows its first 50 rules, whitespace collapsed and each cut at 300 characters.",
@@ -2872,7 +2927,10 @@ milestone = "M8"
 summary = "The sidebar always has three groups in fixed order: Prefix (arbitrary code outside features), Classes (whitespace-separated glyph name lists) and Features (rules under a four-character tag)."
 ref = "Font Info › Features › Editing Feature Code"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. The sidebar scrolls on its own between the filter field and the buttons under it (M8.50). A feature's row shows its registered name after its tag while the row is wide enough."
+guesses = [
+  "A feature's registered name shows after its tag; the sidebar in the reference app settles what it shows beside the tag.",
+]
 
 [[behavior]]
 id = "fontInfo.features.automaticIndicator"
@@ -2881,7 +2939,10 @@ milestone = "M8"
 summary = "Automatic entries carry an update button beside their name in the sidebar; manual entries do not."
 ref = "Font Info › Features › Automatic Feature Code"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. A refresh icon at the end of the row; a click runs font.features.updateEntry and leaves the selection (M8.50)."
+observe = [
+  "In F1 (Latin features), in Font Info › Features, note which icons an automatic row and a row with an error show and in which order, and what a click on each does to the selection.",
+]
 
 
 [[behavior]]
@@ -2909,9 +2970,10 @@ milestone = "M8"
 summary = "A search field above the sidebar shows only the entries whose name or code holds the typed text, ignoring case; the groups stay in their order and clearing the field shows every entry."
 ref = "Font Info › Features"
 status = "inferred"
-notes = "Not in the handbook. View state only: it filters what font.features.list and font.features.get return."
+notes = "Not in the handbook. View state only: it filters what font.features.list and font.features.get return. A class matches with its @ too. While the field holds text the groups cannot be reordered and Select All takes the rows shown; the shown entry stays when its row is hidden (M8.50)."
 guesses = [
   "The filter matches code as well as names; typing a glyph name into the reference app's sidebar search, if it has one, would settle it.",
+  "Entries cannot be reordered while the filter hides some of them; dragging a row of a filtered sidebar in the reference app, if it has a filter, would settle it.",
 ]
 observe = [
   "In F1 (Latin features), in Font Info › Features, look for a search field over the sidebar; type a glyph name used in one feature's code and note which entries stay.",
@@ -2978,7 +3040,7 @@ milestone = "M8"
 summary = "Code that fails to compile is flagged inline. Clicking the error icon expands the message, a wrench icon signals an available Fix, and every entry with errors also gets an icon in the sidebar."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
-notes = "Documented, not yet observed. The markers, messages, wrench and sidebar icons read `font.features.listErrors` (and the `errors` flag of `font.features.list`) for the last compile while it still describes the font (an outline edit keeps it). While code is typed, they come from `font.features.check` of exactly the text shown, half a second after the last keystroke, without storing the code (M8.25). A gutter left of the code numbers each line and marks a line with diagnostics with one icon (an error disc if any is an error, else a warning triangle) and a wrench when one has a fix; the line's first message is drawn dimmed after its text, and error ranges are underlined. A click on the icon opens `fontInfo.featureErrorDetails`; nothing is listed under the code (M8.26). The coloured runs are kept while the text, the underlined ranges and the colours stay the same."
+notes = "Documented, not yet observed. The markers, messages, wrench and sidebar icons read `font.features.listErrors` (and the `errors` flag of `font.features.list`) for the last compile while it still describes the font (an outline edit keeps it). While code is typed, they come from `font.features.check` of exactly the text shown, half a second after the last keystroke, without storing the code (M8.25). A gutter left of the code numbers each line and marks a line with diagnostics with one icon (an error disc if any is an error, else a warning triangle) and a wrench when one has a fix; the line's first message is drawn dimmed after its text, and error ranges are underlined. A click on the icon opens `fontInfo.featureErrorDetails`; nothing is listed under the code (M8.26). The coloured runs are kept while the text, the underlined ranges and the colours stay the same. An error that only other targets have is drawn like the others with the names of its targets after its message; what the compile found outside the entries (generated features, the glyph order, a preview font that could not be built, code an instance's parameter writes) is listed over the code (M8.51)."
 guesses = [
   "The code editor has a gutter with line numbers; a wrapped row gets no number.",
   "One icon per line, whatever the number of diagnostics on it, with the error icon winning over the warning icon.",
@@ -2993,9 +3055,9 @@ milestone = "M8"
 summary = "The notes field under the editor is resized by dragging the gray divider line above it."
 ref = "Font Info › Features › Manual Feature Code"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. The line stands between the code, which fills the height the rest of the pane leaves and scrolls in it, and the notes, which scroll in theirs. The height is kept per window (M8.50)."
 guesses = [
-  "The notes field starts four rows tall and the divider keeps it between two rows and half the tab's height; dragging the divider in the reference app settles the limits.",
+  "The notes field starts four rows tall and the divider keeps it between two rows and half the pane's height; dragging the divider in the reference app settles the limits.",
 ]
 
 [[behavior]]
@@ -3005,7 +3067,7 @@ milestone = "M8"
 summary = "Selecting one of ss01 to ss20 shows name rows above the editor, each with a language and a text. The Default language is the fallback, which many systems treat as English, so the usual set-up is Default for English plus rows for other languages. The texts accept text tokens."
 ref = "Font Info › Features › Naming Stylistic Sets"
 status = "handbook"
-notes = "Documented, not yet observed. The names are written as a `featureNames` block at the start of the feature, the default language as `name \"…\";` and the others as Windows names in their language, as glyphsLib writes them."
+notes = "Documented, not yet observed. The names are written as a `featureNames` block at the start of the feature, the default language as `name \"…\";` and the others as Windows names in their language, as glyphsLib writes them. The language menu shows the languages by their registered names, Default first (M8.50)."
 guesses = [
   "A name in a language without a Windows language id is left out, as fontc does (glyphsLib stops with an error), and text tokens in names are not expanded yet; a name in such a language exported from the reference app settles it.",
   "Choosing another language for a name row removes the name and adds it in the new language, as two undo steps; changing a row's language in the reference app settles whether it is one step.",
@@ -3269,9 +3331,9 @@ milestone = "M7"
 summary = "The note field highlights Markdown as plain text styling: italic with single asterisks or underscores, bold with double ones, inline links and angle-bracket autolinks, and headings of level one to six marked with number signs. The text is stored unrendered."
 ref = "Font Info › Notes"
 status = "handbook"
-notes = "Documented, not yet observed. M7 plan § 4: M7.16 (`notes_tab::highlight`)."
+notes = "Documented, not yet observed. Built in M7.35 (`notes_tab::highlight`)."
 guesses = [
-  "Headings of every level take the section heading size and the strong text colour, bold takes the strong text colour, italic slants, links take the accent colour, and the Markdown syntax itself is dimmed; the reference app's Notes tab settles the styles.",
+  "Headings of every level and bold take the accent colour, italic is underlined, links take the accent colour and an underline, and the Markdown syntax itself is dimmed, all in the field's own font and size; the reference app's Notes tab settles the styles.",
   "Underscore emphasis needs a word boundary on both sides and asterisk emphasis does not, emphasis and links stay within one line, and an autolink needs an http, https or mailto address; typing the edge cases in the reference app settles them.",
   "A note longer than 256 KiB is shown without highlighting so typing stays fast; a long note in the reference app settles whether it stops highlighting.",
 ]
@@ -3286,9 +3348,9 @@ milestone = "M7"
 summary = "The Exports tab shows a short preview of the selected instance drawn in its own outlines: the glyphs of Aang126 by default, or the glyphs an Instance Preview parameter lists."
 ref = "Appendix › Custom Parameters (Instance Preview)"
 status = "handbook"
-notes = "Documented in the description of the Instance Preview parameter, which calls the tab Instances; not yet observed. M7 plan § 4: M7.18. An instance between masters is drawn from the session's interpolated instance view (X.ui3, crates/ui/src/panels/font_info/exports_tab.rs)."
+notes = "Documented in the description of the Instance Preview parameter, which calls the tab Instances; not yet observed. M7 plan § 4: M7.18. Built in M7.35 (`panels/font_info/instance_preview.rs`, `app/models/instance_preview.rs`): the outlines of the engine's kept instance view, side by side without kerning."
 guesses = [
-  "The preview sits above the instance's fields, one line high, and draws the first selected instance; an instance between masters is drawn interpolated, and a variable font setting shows none; the Exports tab of the reference app settles placement.",
+  "The preview sits above the instance's fields, one line high, and draws the first selected instance; an instance between masters is drawn interpolated, without kerning, and a variable font setting shows none; the Exports tab of the reference app settles placement.",
   "The default `Aang126` is read as characters and drawn with the glyphs mapped to them, skipping characters the font lacks; the reference app settles whether it names glyphs instead.",
 ]
 observe = [

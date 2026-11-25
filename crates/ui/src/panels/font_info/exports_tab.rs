@@ -4,9 +4,9 @@
 //! | Control | Posts |
 //! |---|---|
 //! | an entry: click, Cmd-click, Shift-click | `font.info.exports.select` |
-//! | drag an entry | `font.instance.reorder` |
+//! | drag entries | `font.instance.reorder` with every dragged one |
 //! | plus menu: Add Instance, Add Instance for Each Master, Instance as Master, Add Variable Font Setting | their `font.instance.*` command; disabled while the engine has none |
-//! | minus | `font.instance.remove` on the selected entries |
+//! | minus, or Delete, Backspace or Cmd+Delete on the list | `font.instance.remove` on the selected entries |
 //! | Active | `font.instance.setActive` |
 //! | Style Name (Name for a variable font setting) | `font.instance.set` with `styleName` |
 //! | Weight Class, Width Class and their menus of standard values | `font.instance.setWeightClass`, `font.instance.setWidthClass` |
@@ -15,10 +15,20 @@
 //! | General plus, Custom Parameters plus | `font.info.openDialog` with the field or parameter picker |
 //! | added fields and parameters | the shared rows ([`super::rows`]) |
 //!
+//! A preview of the first selected static instance ([`super::instance_preview`]) stands above its fields.
+//!
+//! The list takes Copy and Paste for the selected rows ([`rows::list_edits`]).
+//!
+//! The list and the fields scroll apart, so the list stays while the fields move. The reply of a run that adds or moves
+//! entries selects them (`shell::font_info::after_run`).
+//!
 //! Every edit goes to all selected entries; a field whose entries differ shows mixed. The static-only fields (classes,
 //! coordinates, style linking) edit the selected static instances and do not show when the first selected entry is
 //! a variable font setting. A selected instance beyond the masters on some axis shows the extrapolation warning; the
 //! warnings `font.instance.list` gives (style name, weight class, style linking) show under their fields.
+//!
+//! The As Exported section ([`exported_names`]) shows what the first selected entry's export writes; the list marks the
+//! entries that take a name another active entry takes.
 
 use std::borrow::Cow;
 
@@ -26,7 +36,9 @@ use craft::behavior::{EditEvent, GesturePhase, IconId, Mixed, Selection, keyed};
 use craft::theme::variant::Tone;
 use craft::ui::buttons::IconButton;
 use craft::ui::choice::Checkbox;
-use craft::ui::contract::{Bind, CollectionEvent, Entry, Props as _, ReorderRule, Show as _, ShowCollection as _, ShowContainer as _, Trigger};
+use craft::ui::contract::{
+    Bind, CollectionEvent, Entry, Props as _, ReorderRule, Scroll, Show as _, ShowCollection as _, ShowContainer as _, Trigger,
+};
 use craft::ui::display::{Shade, Text};
 use craft::ui::form::Field;
 use craft::ui::layout_components::{Row, Stack};
@@ -39,6 +51,8 @@ use egui::Ui;
 use fontcraft_engine::fontinfo::Scope;
 use serde_json::{Value, json};
 
+use super::exported_names::{self, ExportedWords};
+use super::instance_preview;
 use super::param_value::number_json;
 use super::rows;
 use crate::app::Msg;
@@ -60,6 +74,7 @@ craft::ui::words! {
         not_yet: "fontcraftExports.notYet" = "Not available yet";
         remove: "fontcraftExports.remove" = "Remove the selected exports";
         no_exports: "fontcraftExports.noExports" = "This font has no exports. Add one with the plus button below the list.";
+        preview: "fontcraftExports.preview" = "Instance Preview";
         general: "fontcraftExports.general" = "General";
         add_field: "fontcraftExports.addField" = "Add a field";
         active: "fontcraftExports.active" = "Active";
@@ -141,8 +156,14 @@ fn done<T>(event: &EditEvent<T>) -> Option<&T> {
 pub fn view(ui: &mut Ui, model: &ExportsModel, masters: &[(String, String)], sent: &mut Vec<Msg>) {
     let words = Env::of(ui).words::<ExportsWords>();
     Row::new().show(ui, |ui, _| {
-        Stack::new().id_salt("fontcraftExports.list").show(ui, |ui, _| export_list(ui, model, &words, sent));
-        Stack::new().id_salt("fontcraftExports.fields").fill_width().show(ui, |ui, _| {
+        let mut buttons = Vec::new();
+        Stack::new()
+            .id_salt("fontcraftExports.list")
+            .scroll(Scroll::vertical())
+            .footer(|ui, _| list_buttons(ui, model, &words, &mut buttons))
+            .show(ui, |ui, _| export_list(ui, model, &words, sent));
+        sent.append(&mut buttons);
+        Stack::new().id_salt("fontcraftExports.fields").scroll(Scroll::vertical()).fill().show(ui, |ui, _| {
             let Some(fields) = &model.fields else {
                 Text::new(words.no_exports.clone()).shade(Shade::Muted).show(ui);
                 return;
@@ -150,6 +171,9 @@ pub fn view(ui: &mut Ui, model: &ExportsModel, masters: &[(String, String)], sen
             let target = Target { scope: Scope::Instance, indices: model.selected.clone() };
             let open = |dialog: InfoDialog| Msg::Shell(CommandRef::with_params("font.info.openDialog", open_params(&dialog)));
             let mut posted = Vec::new();
+            if let Some(preview) = &model.preview {
+                instance_preview::view(ui, &words.preview, preview);
+            }
             let plus = rows::section(ui, "exportsGeneral", words.general.clone(), words.add_field.clone(), |ui| {
                 general(ui, fields, &model.selected, &words, &mut posted);
                 rows::rows(ui, &model.rows, &target, masters, &mut posted);
@@ -163,14 +187,23 @@ pub fn view(ui: &mut Ui, model: &ExportsModel, masters: &[(String, String)], sen
             if plus {
                 posted.push(open(InfoDialog::ParameterPicker(target)));
             }
+            if let Some(exported) = &model.exported {
+                exported_names::view(ui, exported);
+            }
             sent.extend(posted);
         });
     });
 }
 
-/// The list with its plus menu and minus button.
+/// The message that removes the selected entries; none without entries.
+fn remove_selected(model: &ExportsModel) -> Option<Msg> {
+    (!model.entries.is_empty()).then(|| Msg::run("font.instance.remove", json!({ "instances": model.selected })))
+}
+
+/// The list: selects, drags and removes entries.
 fn export_list(ui: &mut Ui, model: &ExportsModel, words: &ExportsWords, sent: &mut Vec<Msg>) {
     let entries = &model.entries;
+    let conflict = Env::of(ui).words::<ExportedWords>().conflict.clone();
     let lead = model.selected.first().copied();
     let before = Selection::new(model.selected.clone(), lead, lead);
     let mut after = before.clone();
@@ -183,6 +216,7 @@ fn export_list(ui: &mut Ui, model: &ExportsModel, words: &ExportsWords, sent: &m
         .header(false)
         .natural_height(true)
         .reorder(ReorderRule::new())
+        .deletable(true)
         .selection(Bind::bound(&mut after))
         .show_items(ui, &source, &mut |at, icx| {
             let Some(e) = entries.get(*at) else { return ListRow::new(Label::Empty) };
@@ -193,6 +227,9 @@ fn export_list(ui: &mut Ui, model: &ExportsModel, words: &ExportsWords, sent: &m
             if e.variable {
                 row = row.trailing_strong(words.variable.clone(), words.variable.clone());
             }
+            if model.conflicts.contains(at) {
+                row = row.trailing_icon(IconId::new("warning"), conflict.clone());
+            }
             row
         });
     if after.items != before.items {
@@ -201,16 +238,21 @@ fn export_list(ui: &mut Ui, model: &ExportsModel, words: &ExportsWords, sent: &m
         sent.push(Msg::Shell(select_exports(&picked)));
     }
     for event in &out.events {
-        if let CollectionEvent::Reorder(edit) = event
-            && let Some(moved) = done(edit)
-            && moved.keys.len() == 1
-            && moved.to != moved.key
-        {
-            sent.push(Msg::run("font.instance.reorder", json!({ "instance": moved.key, "toIndex": moved.to })));
-            sent.push(Msg::Shell(select_exports(&[moved.to])));
+        match event {
+            CollectionEvent::Reorder(edit) => {
+                if let Some(moved) = done(edit) {
+                    sent.push(Msg::run("font.instance.reorder", json!({ "instances": moved.keys, "toIndex": moved.to })));
+                }
+            }
+            CollectionEvent::Delete(_) => sent.extend(remove_selected(model)),
+            _ => {}
         }
     }
-    let count = entries.len();
+    sent.extend(rows::list_edits(ui, &out, remove_selected(model)));
+}
+
+/// The plus menu and the minus button under the list.
+fn list_buttons(ui: &mut Ui, model: &ExportsModel, words: &ExportsWords, sent: &mut Vec<Msg>) {
     Row::new().show(ui, |ui, _| {
         let plus = IconButton::new(IconId::new("plus")).label(words.add.clone()).tooltip(words.add.clone()).show(ui);
         let items: Vec<Entry<&'static str>> = PLUS_MENU
@@ -227,14 +269,11 @@ fn export_list(ui: &mut Ui, model: &ExportsModel, words: &ExportsWords, sent: &m
                 _ => json!({}),
             };
             sent.push(Msg::run(command, params));
-            if command == "font.instance.add" {
-                sent.push(Msg::Shell(select_exports(&[count])));
-            }
         }
-        let minus = IconButton::new(IconId::new("minus")).label(words.remove.clone()).tooltip(words.remove.clone()).enabled(count > 0);
-        if minus.show(ui).clicked() && count > 0 {
-            sent.push(Msg::run("font.instance.remove", json!({ "instances": model.selected })));
-            sent.push(Msg::Shell(select_exports(&[])));
+        let remove = remove_selected(model);
+        let minus = IconButton::new(IconId::new("minus")).label(words.remove.clone()).tooltip(words.remove.clone()).enabled(remove.is_some());
+        if minus.show(ui).clicked() {
+            sent.extend(remove);
         }
     });
 }

@@ -48,6 +48,7 @@ pub mod color;
 pub mod components_opt;
 pub mod drawing;
 pub mod export_params;
+pub mod exported;
 pub mod extras;
 pub mod gasp;
 pub mod info;
@@ -535,7 +536,7 @@ pub fn with_instance_feature_axes<'a>(options: &'a Options, font: &Font, target:
 }
 
 /// The instance font of the static instance at `index`, its notes added to `warnings`.
-fn instance_source(font: &Font, index: usize, warnings: &mut Vec<String>) -> Result<Font, CompileError> {
+pub(crate) fn instance_source(font: &Font, index: usize, warnings: &mut Vec<String>) -> Result<Font, CompileError> {
     let options = fontcraft_interp::instance::options_for(font, index)?;
     let staged = tt_hints::with_tt_values(font);
     let (mut out, notes) = fontcraft_interp::instance::instance_font_with_notes(staged.as_ref().unwrap_or(font), index, &options)?;

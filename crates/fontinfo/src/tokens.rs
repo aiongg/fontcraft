@@ -167,6 +167,26 @@ pub fn expand(text: &str, ctx: &TokenContext) -> Expanded {
     out
 }
 
+/// The inner texts of the tokens of `text`, trimmed, in order: at most [`MAX_TOKENS`].
+pub fn keys(text: &str) -> Vec<&str> {
+    let mut out = Vec::new();
+    let mut finds = Finds::default();
+    let mut from = 0usize;
+    while out.len() < MAX_TOKENS
+        && let Some(open) = text.get(from..).and_then(|s| s.find(OPEN)).and_then(|found| from.checked_add(found))
+    {
+        match token_at(text, open, &mut finds) {
+            Some((inner, end)) => {
+                out.push(inner.trim());
+                from = end;
+            }
+            // `{` is one byte, so `open + 1` is a character boundary.
+            None => from = open.saturating_add(1),
+        }
+    }
+    out
+}
+
 /// The last search for `}}}` and for a line break in one text, each as (searched from, found at).
 /// The scan only moves forward, so a later search is answered from the last one while that one
 /// found nothing or found a place at or after the new start: a text of many `{{{` without their

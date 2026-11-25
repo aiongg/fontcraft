@@ -658,8 +658,9 @@ The ID column of List View shows the resulting index. Sidebar filters and search
 The tutorials "Alter the glyph order in Font view" and "Roll your own glyph data" add: the default
 orders glyphs alphabetically within their category; glyph data can set a `sortName` (and a
 `sortNameKeep` for *Keep Alternates Next to Base Glyph*); and a `glyphOrder` line written `**Title**`
-shows as a section header in Font View. The published data has no sort names, so FontCraft's key is
-its own (`glyphOrder.default` guesses). An opened file keeps its stored order, which is also the
+shows as a section header in Font View. From version 4 the reference sorts by script first, with the
+numbers and the punctuation of each script in a group of their own (question 23). The published
+data has no sort names, so FontCraft's key is its own (`glyphOrder.default` guesses). An opened file keeps its stored order, which is also the
 order the oracles compile; a glyph added, renamed or given a sort name later takes the place the key
 gives it.
 
@@ -776,14 +777,14 @@ FontCraft differs. Every guess left that the reference could settle has a step i
     character by the code points alone (`fontView.search.fields`).
 23. **Sort key.** **Answered in part (release notes of version 4, tutorial):** script before
     category, numbers and punctuation in a group per script, alphabetical order within a category,
-    and a sort name compared in that order in place of the glyph name. The order of the scripts
-    and of the categories stays open. Code change: `GlyphData::sort_key` in
-    `crates/glyphdata/src/order.rs`, which has no script, orders by code point and puts glyphs with
-    a sort name last (`group: 2`) (`glyphOrder.default`).
+    and a sort name compared in that order in place of the glyph name. `GlyphData::sort_key`
+    in `crates/glyphdata/src/order.rs` follows it. The order of the scripts and of the categories
+    stays open, and so does the order of numbers, whose sort names are not published
+    (`glyphOrder.default`).
 24. **The user's glyph data files.** **Answered (tutorial, release notes):** the user's Info folder
-    and, from build 3837, a system-wide one are read. Code change: nothing in `crates/ui` calls
-    `Session::set_user_glyph_data` (`crates/engine/src/lib.rs`), so only files beside the document
-    apply (`glyphData.customFile`).
+    and, from build 3837, a system-wide one are read. The window reads `GlyphData*.xml` and
+    `Groups*.plist` in the `Info` folder of its settings folder at launch
+    (`Session::load_user_info`, `glyphData.customFile`). FontCraft has no system-wide folder.
 25. **Features of the release notes without a row.** The detail view between grid and list
     (build 3831), the note as a tooltip (3835), the Unicode information popover (3841), the option
     that hides sidebar counts (3852), CJK blocks in the sidebar (3845), the smart filter rules

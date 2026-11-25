@@ -1673,6 +1673,68 @@ fn feature_code_is_compiled_with_the_generated_kerning() {
     assert!(font.gsub().is_err() && font.gpos().is_err());
 }
 
+/// Vertical kerning is written as `vkrn` beside `kern`, in the scripts of both, and leaves the horizontal values alone; a
+/// `vkrn` feature in the code keeps it out.
+#[test]
+fn vertical_kerning_is_exported_as_vkrn() {
+    use fontcraft_model::Snippet;
+    let mut f = kern_font();
+    fontcraft_spacing::kerning::Direction::Vertical.table_mut(Arc::make_mut(&mut f.kerning)).set("m01", "A", "V", 25.0);
+    let out = compile_ttf(&f, &Options::default()).unwrap();
+    assert_eq!(latn_av(&out), -80, "{:?}", out.warnings);
+    let gpos = FontRef::new(&out.bytes).unwrap().gpos().unwrap();
+    let features = gpos.feature_list().unwrap();
+    let mut tags: Vec<String> = features.feature_records().iter().map(|r| r.feature_tag().to_string()).collect();
+    tags.sort();
+    assert_eq!(tags, ["kern", "vkrn"]);
+    let scripts = gpos.script_list().unwrap();
+    let mut seen = Vec::new();
+    for record in scripts.script_records() {
+        let lang = record.script(scripts.offset_data()).unwrap().default_lang_sys().unwrap().unwrap();
+        let has_vkrn = lang.feature_indices().iter().any(|i| features.feature_records()[usize::from(i.get())].feature_tag().to_string() == "vkrn");
+        seen.push((record.script_tag().to_string(), has_vkrn));
+    }
+    assert!(seen.iter().all(|(tag, vkrn)| *vkrn && tag != "~fc~") && seen.iter().any(|(tag, _)| tag == "latn"), "{seen:?}");
+
+    // A script with vertical kerning alone has no record, so it reads the default script's, `kern` included; one whose
+    // code positions glyphs keeps its record as it is and has `vkrn` in it.
+    let mut cjk = f.clone();
+    for (name, cp) in [("uni4E00", 0x4E00), ("uni5341", 0x5341)] {
+        cjk.add_glyph(name, vec![cp], 1000.0).unwrap();
+    }
+    fontcraft_spacing::kerning::Direction::Vertical.table_mut(Arc::make_mut(&mut cjk.kerning)).set("m01", "uni4E00", "uni5341", -40.0);
+    let systems = "languagesystem DFLT dflt;\nlanguagesystem latn dflt;\nlanguagesystem hani dflt;\nlanguagesystem hani JAN;";
+    Arc::make_mut(&mut cjk.features).prefixes[0].code = systems.into();
+    let records = |f: &Font| -> Vec<(String, Vec<String>)> {
+        let out = compile_ttf(f, &Options::default()).unwrap();
+        let gpos = FontRef::new(&out.bytes).unwrap().gpos().unwrap();
+        let (features, scripts) = (gpos.feature_list().unwrap(), gpos.script_list().unwrap());
+        let tags = |lang: &skrifa::raw::tables::layout::LangSys| -> Vec<String> {
+            lang.feature_indices().iter().map(|i| features.feature_records()[usize::from(i.get())].feature_tag().to_string()).collect()
+        };
+        let mut seen = Vec::new();
+        for record in scripts.script_records() {
+            let script = record.script(scripts.offset_data()).unwrap();
+            seen.push((record.script_tag().to_string(), tags(&script.default_lang_sys().unwrap().unwrap())));
+            for lang in script.lang_sys_records() {
+                seen.push((format!("{}/{}", record.script_tag(), lang.lang_sys_tag()), tags(&lang.lang_sys(script.offset_data()).unwrap())));
+            }
+        }
+        seen
+    };
+    let row = |script: &str, tags: &[&str]| (script.to_string(), tags.iter().map(|t| (*t).to_string()).collect::<Vec<_>>());
+    assert_eq!(records(&cjk), [row("DFLT", &["kern", "vkrn"]), row("latn", &["kern", "vkrn"])]);
+    let palt = "feature palt { script hani; pos uni4E00 <0 0 -10 0>; } palt;";
+    Arc::make_mut(&mut cjk.features).prefixes.push(Snippet { code: palt.into(), ..Default::default() });
+    assert_eq!(records(&cjk), [row("DFLT", &["kern", "vkrn"]), row("hani", &["palt", "vkrn"]), row("latn", &["kern", "vkrn"])]);
+
+    let mut hand = f.clone();
+    Arc::make_mut(&mut hand.features).prefixes.push(Snippet { code: "feature vkrn { pos A V <0 0 0 7>; } vkrn;".into(), ..Default::default() });
+    let out = compile_ttf(&hand, &Options::default()).unwrap();
+    let gpos = FontRef::new(&out.bytes).unwrap().gpos().unwrap();
+    assert_eq!(gpos.lookup_list().unwrap().lookup_count(), 2, "the code's vkrn and the generated kern: {:?}", out.warnings);
+}
+
 #[test]
 fn the_generated_kerning_reaches_the_code_s_language_systems_and_substitutions() {
     use fontcraft_model::Snippet;

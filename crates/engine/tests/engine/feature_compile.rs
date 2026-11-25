@@ -6,9 +6,11 @@
 
 use std::sync::Arc;
 
-use fontcraft_engine::feature_state::{SharedBuild, build_previews};
+use fontcraft_engine::cmd::features_check::check_context;
+use fontcraft_engine::cmd::features_targets::{all_targets, check_targets};
+use fontcraft_engine::feature_state::{SharedBuild, build_previews, compile_ahead};
 use fontcraft_engine::prelude::*;
-use fontcraft_engine::{EngineError, Session};
+use fontcraft_engine::{EngineError, Session, work};
 use serde_json::{Value, json};
 
 fn run(s: &mut Session, id: &str, p: Value) -> Value {
@@ -748,4 +750,200 @@ fn an_instance_compile_reports_a_broken_replace_feature_at_its_parameter() {
     assert!(Arc::ptr_eq(&font, &s.doc().unwrap().font), "an instance compile changes nothing");
     let master = run(&mut s, "font.features.compile", json!({}));
     assert_eq!(master["ok"], true, "{master}");
+}
+
+/// Regular at 400 and Bold at 700 with a number value `gap` of -100 and 100, and the instance Middle between them, where
+/// `gap` is zero.
+fn two_masters() -> Session {
+    use fontcraft_engine::model::{Axis, Font, Glyph, GlyphTable, Instance, NumberDef};
+    let mut f = Font::new("Targets Sans");
+    f.axes = Arc::new(vec![Axis { name: "Weight".into(), tag: "wght".into(), ..Default::default() }]);
+    f.numbers = Arc::new(vec![NumberDef { name: "gap".into(), ..Default::default() }]);
+    let mut masters = (*f.masters).clone();
+    masters[0].name = "Regular".into();
+    masters[0].location = vec![400.0];
+    masters[0].number_values = vec![-100.0];
+    let mut bold = masters[0].clone();
+    bold.id = "m02".into();
+    bold.name = "Bold".into();
+    bold.location = vec![700.0];
+    bold.number_values = vec![100.0];
+    masters.push(bold);
+    f.masters = Arc::new(masters);
+    let glyphs = f
+        .glyphs
+        .iter()
+        .map(|g| {
+            let mut g = Glyph::clone(g);
+            let mut layer = g.layers[0].clone();
+            layer.id = "m02".into();
+            layer.master = "m02".into();
+            g.layers.push(layer);
+            Arc::new(g)
+        })
+        .collect();
+    f.glyphs = GlyphTable::from_glyphs(glyphs);
+    Arc::make_mut(&mut f.instances).push(Instance { name: "Middle".into(), location: vec![550.0], exports: true, ..Default::default() });
+    let mut s = Session::new();
+    s.add_document(f, None).unwrap();
+    s
+}
+
+/// The target diagnostics of the last compile, as (message, targets).
+fn by_target(s: &mut Session) -> Vec<(String, Vec<String>)> {
+    let listed = run(s, "font.features.listErrors", json!({}));
+    let list = listed["targetDiagnostics"].as_array().unwrap().clone();
+    list.iter()
+        .map(|d| {
+            let names = d["targets"].as_array().unwrap().iter().map(|t| t.as_str().unwrap().to_string()).collect();
+            (d["message"].as_str().unwrap().to_string(), names)
+        })
+        .collect()
+}
+
+/// Targets whose code assembles to the same text compile once; the variable font, whose values vary, apart.
+#[test]
+fn equal_targets_compile_once() {
+    let mut s = two_masters();
+    run(&mut s, "font.features.addFeature", json!({"tag": "liga", "code": "sub a by b;"}));
+    let r = run(&mut s, "font.features.compile", json!({"targets": "all"}));
+    assert_eq!(r["targets"], json!(["master Regular", "master Bold", "instance Middle", "variable font"]), "{r}");
+    assert_eq!(r["targetsCompiled"], 2, "{r}");
+    assert_eq!((r["ok"].clone(), r["targetErrors"].clone()), (json!(true), json!(0)), "{r}");
+}
+
+/// The check of every target goes with the names of the number values, which variable code may use.
+#[test]
+fn a_renamed_number_drops_the_check_of_every_target() {
+    let mut s = two_masters();
+    run(&mut s, "font.features.addFeature", json!({"tag": "liga", "code": "sub a by b;"}));
+    run(&mut s, "font.features.compile", json!({"targets": "all"}));
+    s.edit("date", |font| {
+        Arc::make_mut(&mut font.info).date = Some("2026-01-02 03:04:05 +0000".into());
+        Ok(())
+    })
+    .unwrap();
+    assert!(s.target_check().is_some(), "the code does not read the date");
+    s.edit("number", |font| {
+        Arc::make_mut(&mut font.numbers)[0].name = "space".into();
+        Ok(())
+    })
+    .unwrap();
+    assert!(s.target_check().is_none());
+}
+
+/// A cancelled check of every target gives nothing, nor does the compile ahead that asked for it, and its stopped build
+/// is not kept for others.
+#[test]
+fn a_cancelled_check_of_every_target_gives_nothing() {
+    let mut s = two_masters();
+    run(&mut s, "font.features.addFeature", json!({"tag": "liga", "code": "sub a by b;"}));
+    let cx = check_context(&s).unwrap();
+    let (id, revision, font) = s.active().map(|d| (d.id, d.revision, Arc::clone(&d.font))).unwrap();
+    let master = font.masters[0].id.clone();
+    let token = work::Token::new();
+    assert!(token.cancel());
+    let builds = s.preview_builds();
+    work::with(token, None, || {
+        let found = check_targets(&font, &font.features, &cx, all_targets(&font));
+        assert!(matches!(found, Err(EngineError::Cancelled)), "{found:?}");
+        assert!(compile_ahead(&font, id, revision, &master, &cx, None, &builds, true).is_none());
+    });
+    assert!(builds.get(id, revision, &master).is_none());
+    assert!(compile_ahead(&font, id, revision, &master, &cx, None, &builds, true).is_some_and(|c| c.targets.is_some()));
+}
+
+/// An error inside `#ifdef VARIABLE` is the variable font's alone, and a jump to the entry finds it; the check of a draft
+/// finds it too.
+#[test]
+fn an_error_in_a_variable_block_is_the_variable_fonts() {
+    let mut s = two_masters();
+    let code = "sub a by b;\n#ifdef VARIABLE\nsub c by zzz;\n#endif";
+    run(&mut s, "font.features.addFeature", json!({"tag": "liga", "code": "sub a by b;"}));
+    set_code(&mut s, "feature", "liga", code);
+    let r = run(&mut s, "font.features.compile", json!({"targets": "all"}));
+    assert_eq!((r["ok"].clone(), r["errors"].clone(), r["targetErrors"].clone()), (json!(false), json!(0), json!(1)), "{r}");
+    assert_eq!(by_target(&mut s), vec![("glyph not in font".to_string(), vec!["variable font".to_string()])]);
+    let jump = run(&mut s, "font.features.jumpToError", json!({"kind": "feature", "name": "liga"}));
+    let range = jump["range"].as_array().unwrap();
+    let (start, end) = (range[0].as_u64().unwrap() as usize, range[1].as_u64().unwrap() as usize);
+    assert_eq!(&code[start..end], "zzz", "{jump}");
+    // The check stays with the code it read.
+    set_code(&mut s, "feature", "liga", "sub a by b;");
+    assert!(by_target(&mut s).is_empty());
+
+    let draft = json!({"kind": "feature", "name": "liga", "code": code, "targets": "all"});
+    let checked = run(&mut s, "font.features.check", draft);
+    assert_eq!(checked["errors"], 1, "{checked}");
+    assert_eq!(checked["diagnostics"][0]["targets"], json!(["variable font"]), "{checked}");
+    refused(&mut s, "font.features.check", json!({"kind": "feature", "name": "liga", "code": code, "targets": ["nothing"]}), "`targets`");
+}
+
+/// A token's value in every build, at an instance by name and by a glyph's interpolated width; a predicate lists glyphs.
+#[test]
+fn a_tokens_value_is_given_for_each_master_and_instance() {
+    let mut s = two_masters();
+    s.edit("width", |font| {
+        let mut a = font.glyphs.get_mut("a").unwrap();
+        a.layers[0].width = 500.0;
+        a.layers[1].width = 600.0;
+        Ok(())
+    })
+    .unwrap();
+    let values = |s: &mut Session, token: &str| -> Vec<(String, Value)> {
+        let r = run(s, "font.features.evaluateToken", json!({"token": token, "targets": "all"}));
+        r["targets"].as_array().unwrap().iter().map(|t| (t["name"].as_str().unwrap().to_string(), t["value"].clone())).collect()
+    };
+    let named = |regular: i64, bold: i64, middle: i64| {
+        vec![("master Regular".to_string(), json!(regular)), ("master Bold".to_string(), json!(bold)), ("instance Middle".to_string(), json!(middle))]
+    };
+    assert_eq!(values(&mut s, "$gap"), named(-100, 100, 0));
+    assert_eq!(values(&mut s, "${a:width * 2}"), named(1000, 1200, 1100));
+    let r = run(&mut s, "font.features.evaluateToken", json!({"token": "${a:width}", "instance": "Middle"}));
+    assert_eq!(r, json!({"token": "${a:width}", "instance": 0, "kind": "number", "value": 550}));
+    let r = run(&mut s, "font.features.evaluateToken", json!({"token": "$[name == \"a\"]", "instance": 0, "targets": "all"}));
+    assert_eq!(r, json!({"token": "$[name == \"a\"]", "instance": 0, "kind": "glyphs", "glyphs": ["a"]}));
+    // A token with no value at one build still shows the others'.
+    let r = run(&mut s, "font.features.evaluateToken", json!({"token": "${gap / gap}", "targets": "all"}));
+    assert_eq!(r["targets"][1]["value"], 1, "{r}");
+    assert!(r["targets"][2]["problem"].is_string(), "{r}");
+    refused(&mut s, "font.features.evaluateToken", json!({"token": "$gap", "targets": ["variable"]}), "expandCode");
+}
+
+/// The expanded code of an instance and of the variable font; with the generated features it is what an export compiles.
+#[test]
+fn code_expands_for_an_instance_and_the_variable_font() {
+    let mut s = two_masters();
+    run(&mut s, "font.features.addFeature", json!({"tag": "cpsp", "code": "pos a 10;"}));
+    set_code(&mut s, "feature", "cpsp", "pos a ${gap + 5};\n#ifdef VARIABLE\npos b 7;\n#endif");
+    let code = |s: &mut Session, params: Value| run(s, "font.features.expandCode", params)["code"].as_str().unwrap().to_string();
+    let middle = code(&mut s, json!({"target": {"instance": "Middle"}}));
+    assert!(middle.contains("pos a 5;") && !middle.contains("pos b"), "{middle}");
+    let variable = code(&mut s, json!({"target": {"variable": true}}));
+    assert!(variable.contains("pos b 7;"), "{variable}");
+    let exported = code(&mut s, json!({"target": {"instance": 0}, "includeImplicit": true}));
+    let plan = run(&mut s, "font.compilePlan", json!({"formats": ["ttf"], "instances": ["Middle"], "sections": ["outputs", "features"]}));
+    assert_eq!(plan["outputs"][0]["features"], json!(exported), "{plan}");
+    refused(&mut s, "font.features.expandCode", json!({"target": {"instance": "Nowhere"}}), "target.instance");
+    refused(&mut s, "font.features.expandCode", json!({"target": {"master": "Bold", "variable": true}}), "one of");
+}
+
+/// A token that fails at one instance, and a parameter that breaks one instance's code, name that instance.
+#[test]
+fn a_token_or_parameter_that_fails_at_an_instance_names_it() {
+    let mut s = two_masters();
+    run(&mut s, "font.features.addFeature", json!({"tag": "cpsp", "code": "pos a 10;"}));
+    set_code(&mut s, "feature", "cpsp", "pos a ${gap/gap};");
+    run(&mut s, "font.features.compile", json!({"targets": "all"}));
+    let found = by_target(&mut s);
+    assert!(found.iter().any(|(_, targets)| *targets == ["instance Middle"]), "{found:?}");
+
+    set_code(&mut s, "feature", "cpsp", "pos a 10;");
+    let value = "liga; sub a by zzz;";
+    run(&mut s, "font.customParameters.add", json!({"scope": "instance", "targets": ["Middle"], "name": "Add Feature", "value": value}));
+    run(&mut s, "font.features.compile", json!({"targets": [{"instance": {"name": "Middle"}}]}));
+    let r = run(&mut s, "font.features.compile", json!({"targets": "all"}));
+    let d = &r["targetDiagnostics"][0];
+    assert_eq!((d["entry"].clone(), d["targets"].clone()), (Value::Null, json!(["instance Middle"])), "{r}");
+    assert!(d["message"].as_str().unwrap().starts_with("liga: "), "{d}");
 }

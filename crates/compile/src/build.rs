@@ -524,15 +524,7 @@ pub fn assemble(
     warnings: &mut Vec<String>,
 ) -> Result<Vec<u8>, CompileError> {
     let mut info = info::derive(font, &options.style_name, warnings);
-    for (id, text) in &extra.names {
-        if *id < crate::var::names::FIRST_FONT_NAME_ID {
-            info.names.retain(|r| r.id != *id);
-        }
-        info.names.push(info::NameRecord { platform: 3, encoding: 1, language: 0x409, id: *id, text: text.clone() });
-    }
-    if !extra.names.is_empty() {
-        info.names.sort_by_key(|r| (r.platform, r.encoding, r.language, r.id));
-    }
+    info::add_names(&mut info, &extra.names);
     let blocks = &layout.compiled;
     let generated_version = info.name(5);
     let generated_unique = info.name(3);

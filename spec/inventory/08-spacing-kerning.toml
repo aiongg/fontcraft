@@ -1247,11 +1247,13 @@ milestone = "M5"
 summary = "Glyphs set top to bottom use a top group and a bottom group in place of left and right. The chapter gives no further detail on vertical kerning (pair storage, shortcuts, feature output)."
 ref = "Spacing & Kerning › Kerning › Kerning Groups"
 status = "handbook"
-notes = "Neither oracle exports vertical kerning: a test font with a `kerningVertical` pair compiles to a GPOS table with only `kern` in fontc 1.0.0 and fontmake 3.12.1. The reference exports vertical kerning: release notes (\"What's new in Glyphs\", updates.glyphsapp.com/Glyphs3.4-3434.html) fix its export (version 3, build 3117) and its variation (builds 3119 and 3120). FontCraft writes none (08 question 22). The prefixes: thread \"Importing vertical kerning from OTFs\" (forum.glyphsapp.com/t/35157, 2025-09-17, fixed in build 3430); the scripting API has topKerningKey and bottomKerningKey (version 3, docu.glyphsapp.com)."
+notes = "Neither oracle exports vertical kerning: a test font with a `kerningVertical` pair compiles to a GPOS table with only `kern` in fontc 1.0.0 and fontmake 3.12.1. The reference exports vertical kerning: release notes (\"What's new in Glyphs\", updates.glyphsapp.com/Glyphs3.4-3434.html) fix its export (version 3, build 3117) and its variation (builds 3119 and 3120). FontCraft writes one `vkrn` lookup of y advances, static and variable, skipping marks unless a pair names one (08 question 22); a `vkrn` feature in the code without an automatic-code marker, or a feature-writer setting that names its features, keeps it out, as `kern`. The prefixes: thread \"Importing vertical kerning from OTFs\" (forum.glyphsapp.com/t/35157, 2025-09-17, fixed in build 3430); the scripting API has topKerningKey and bottomKerningKey (version 3, docu.glyphsapp.com)."
 guesses = [
+  "The `vkrn` feature is in the default script, in every script and language with generated kerning, and in the code's language systems of the scripts of the vertically kerned glyphs when they hold another positioning feature; the rest read the default script's, with its `kern`.",
   "A vertical group side is written `@MMK_T_` with the upper glyph's bottom group and `@MMK_B_` with the lower glyph's top group, by analogy with the left-to-right prefixes. The two prefixes are confirmed by a user's report, where an import that listed `@MMK_B` first was a bug that was then fixed (notes); the order in a saved file is not documented.",
 ]
 observe = [
+  "Export a font with vertical kerning between kana and between Latin capitals and note the scripts and the lookups of its `vkrn` feature.",
   "In top-to-bottom text kern the bottom group of one glyph against the top group of another, save and read the pair in the file.",
 ]
 

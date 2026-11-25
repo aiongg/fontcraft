@@ -1068,6 +1068,19 @@ fn names(
     out
 }
 
+/// Adds English Windows records to `info`'s: one with an ID below 256 replaces every record of that ID.
+pub(crate) fn add_names(info: &mut Info, names: &[(u16, String)]) {
+    for (id, text) in names {
+        if *id < crate::var::names::FIRST_FONT_NAME_ID {
+            info.names.retain(|r| r.id != *id);
+        }
+        info.names.push(NameRecord { platform: 3, encoding: 1, language: 0x409, id: *id, text: text.clone() });
+    }
+    if !names.is_empty() {
+        info.names.sort_by_key(|r| (r.platform, r.encoding, r.language, r.id));
+    }
+}
+
 /// The first name ID the feature code's own names may take (M8.8, `compile.nameFeaOverrides`):
 /// one above the highest ID of 256 or more among the names [`derive`] gives `font`, else 256, as
 /// fontc moves them (`fontbe/src/features.rs`). Never above 32,767.

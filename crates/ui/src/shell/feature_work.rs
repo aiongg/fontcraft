@@ -1,16 +1,21 @@
 //! The Features tab's work off the window's thread (M8.25): the check of the code as typed, and the compile after the
 //! code changed.
 //!
+//! - **Expansion.** While the Features tab shows the expanded code of a build (`FeaturesView::expanded`),
+//!   `font.features.expandCode` runs the same way (`fontcraft_engine::cmd::features_expand::expand_font`): at once for a
+//!   build or setting not expanded yet, after the pause when the document changed.
 //! - **Check.** The code editor reports the code as typed (`ViewMsg::FeatureDraft`). Once the draft has stood for
 //!   [`CHECK_PAUSE`] seconds, `font.features.check` runs on it through the host's jobs (a thread of its own on the
 //!   desktop; at once on the web and in tests with inline jobs), with the font of the revision shown then. One check
 //!   runs at a time; a check whose draft is no longer the one typed when it lands is dropped, and the newest draft is
 //!   checked next. The answer goes to the view state (`FeaturesView::checked`), which the code editor underlines.
-//! - **Compile.** After `font.features.setCode`, `update` or `updateEntry`, the current master is compiled in the
-//!   background once the document has stood still for [`CHECK_PAUSE`] seconds, and at once when the tab's Compile button
+//! - **Compile.** After a command that changes the feature entries, and when they changed in another way (undo, a macro),
+//!   the current master is compiled in the background, and the code checked for every other master, instance and the
+//!   variable font, once the document has stood still for [`CHECK_PAUSE`] seconds, and at once when the tab's Compile button
 //!   asks ([`ask`]; the button is busy meanwhile). The job runs all of `font.features.compile` but the keeping of its
 //!   result (`fontcraft_engine::feature_state::compile_ahead`). When it lands on the revision it read,
-//!   `font.features.compile` runs on the window's thread and takes that result; an edit in between starts it again.
+//!   `font.features.compile` runs on the window's thread and takes that result. An edit in between stops the check of the
+//!   targets before the next one and starts the compile again; so does the Compile button for another master.
 //! - **Instance compile.** While the Exports tab shows one instance with feature-code parameters, that instance's code
 //!   is compiled the same way (`fontcraft_engine::cmd::features_check::compile_instance`): at once for an instance not
 //!   compiled yet, after the pause when the document changed. A result of a revision or an instance no longer shown is
@@ -20,13 +25,16 @@ use std::sync::{Arc, Mutex};
 
 use craft::behavior::dock::PanelState;
 use fontcraft_engine::cmd::features_check::{CheckContext, check_context, check_font, compile_instance};
+use fontcraft_engine::cmd::features_expand::expand_font;
 use fontcraft_engine::feature_state::{AheadCompile, SessionFeaturesExt as _, compile_ahead};
+use fontcraft_engine::model::{Features, Font, Snippet};
+use fontcraft_engine::work::{self, Token};
 use serde_json::{Value, json};
 
 use crate::app::{FontCraftApp, Msg};
 use crate::shell::dock::PanelId;
 use crate::shell::font_info::FontInfoTab;
-use crate::shell::font_info_tabs::{CheckedDraft, FeatureDraft, InstanceProblems, ParamProblem};
+use crate::shell::font_info_tabs::{CheckedDraft, ExpandKey, ExpandTarget, Expansion, FeatureDraft, InstanceProblems, ParamProblem};
 
 /// How long, in seconds, a draft or a document must stand still before it is checked or compiled.
 pub const CHECK_PAUSE: f64 = 0.5;
@@ -38,6 +46,9 @@ type Landing<T> = Arc<Mutex<Option<T>>>;
 
 /// What a compile job read: the document's id and revision, and the master.
 type CompileKey = (u64, u64, String);
+
+/// A compile under way: what it reads, what stops it, and its result to come.
+type CompileJob = (CompileKey, Arc<Token>, Landing<Option<AheadCompile>>);
 
 /// What an instance compile reads: the document's id and revision, and the instance's index.
 type InstanceKey = (u64, u64, usize);
@@ -54,16 +65,22 @@ pub struct FeatureWork {
     check: Option<(FeatureDraft, Landing<Result<Value, String>>)>,
     /// New code waits for a compile.
     compile_wanted: bool,
+    /// The active document and its feature entries as last seen.
+    entries: Option<(u64, Arc<Features>)>,
     /// The document revision last seen while a compile waits, and the time it was first seen.
     still: Option<((u64, u64), f64)>,
     /// The compile under way.
-    compile: Option<(CompileKey, Landing<Option<AheadCompile>>)>,
+    compile: Option<CompileJob>,
     /// The document and master the Compile button asked for, until that compile lands.
     asked: Option<(u64, String)>,
     /// The instance the Exports tab shows, and the time it was first seen at this revision.
     shown: Option<(InstanceKey, f64)>,
     /// The instance compile under way.
     instance: Option<InstanceJob>,
+    /// The expansion the Features tab shows, and the time it was first seen at this revision.
+    expand_seen: Option<(ExpandKey, f64)>,
+    /// The expansion under way.
+    expand: Option<(ExpandKey, Landing<Result<Value, String>>)>,
 }
 
 impl FeatureWork {
@@ -79,14 +96,45 @@ impl FeatureWork {
         if let Some((_, since)) = &mut self.shown {
             *since = f64::NEG_INFINITY;
         }
+        if let Some((_, since)) = &mut self.expand_seen {
+            *since = f64::NEG_INFINITY;
+        }
     }
 }
 
+/// The commands of the feature entries that change no code.
+const KEEP_CODE: [&str; 3] = ["font.features.compile", "font.features.setNotes", "font.features.showSnippetFolder"];
+
 /// After a run of `id`: code that changed is compiled in the background.
 pub fn after_run(app: &mut FontCraftApp, id: &str) {
-    if matches!(id, "font.features.setCode" | "font.features.update" | "font.features.updateEntry") {
+    let changes = id.starts_with("font.features.") && !KEEP_CODE.contains(&id) && fontcraft_engine::find_command(id).is_some_and(|c| c.journal);
+    if changes {
         app.feature_work.compile_wanted = true;
     }
+}
+
+/// Whether the two sets of entries hold the same code under the same names.
+fn same_code(a: &Features, b: &Features) -> bool {
+    let same = |a: &[Snippet], b: &[Snippet]| {
+        let one = |e: &Snippet| (e.name.clone(), e.disabled, e.labels.clone());
+        a.len() == b.len() && a.iter().zip(b).all(|(a, b)| a.code == b.code && one(a) == one(b))
+    };
+    same(&a.prefixes, &b.prefixes) && same(&a.classes, &b.classes) && same(&a.features, &b.features)
+}
+
+/// Feature entries of the document that changed since the last look are compiled in the background, however they
+/// changed: an undo, a macro or an agent's command. A document looked at for the first time is left as it is.
+fn watch_entries(app: &mut FontCraftApp) {
+    let now = app.session.active().map(|d| (d.id, Arc::clone(&d.font.features)));
+    let work = &mut app.feature_work;
+    let changed = match (&work.entries, &now) {
+        (Some((seen, before)), Some((id, entries))) if seen == id => !Arc::ptr_eq(before, entries) && !same_code(before, entries),
+        _ => false,
+    };
+    if changed {
+        work.compile_wanted = true;
+    }
+    work.entries = now;
 }
 
 /// Compiles the active document's current master in the background now: the Features tab's Compile button. A compile
@@ -101,6 +149,8 @@ pub fn ask(app: &mut FontCraftApp) -> Result<(), String> {
         app.feature_work.compile_wanted = false;
         app.feature_work.still = None;
         start_compile(app);
+    } else {
+        stop_unwanted(app);
     }
     show_busy(app);
     Ok(())
@@ -125,7 +175,8 @@ pub fn logic(app: &mut FontCraftApp, ctx: &egui::Context) {
 
 /// [`logic`] at time `now`, in seconds; returns how many seconds until a frame should look again.
 pub fn step(app: &mut FontCraftApp, now: f64) -> Option<f64> {
-    let waits = [step_check(app, now), step_compile(app, now), step_instance(app, now)];
+    watch_entries(app);
+    let waits = [step_check(app, now), step_compile(app, now), step_instance(app, now), step_expand(app, now)];
     show_busy(app);
     waits.into_iter().flatten().reduce(f64::min)
 }
@@ -209,18 +260,19 @@ fn step_compile(app: &mut FontCraftApp, now: f64) -> Option<f64> {
     if app.feature_work.asked.as_ref().is_some_and(|(id, _)| active.map(|a| a.0) != Some(*id)) {
         app.feature_work.asked = None;
     }
-    if let Some((key, landing)) = &app.feature_work.compile
+    stop_unwanted(app);
+    if let Some((key, token, landing)) = &app.feature_work.compile
         && let Some(result) = take(landing)
     {
-        let key = key.clone();
+        let (key, stopped) = (key.clone(), token.is_cancelled());
         app.feature_work.compile = None;
-        if active == Some((key.0, key.1)) {
-            land_compile(app, key, result);
-        } else {
+        if active != Some((key.0, key.1)) || (stopped && app.feature_work.asked.is_none()) {
             app.feature_work.compile_wanted = true;
+        } else if !stopped {
+            land_compile(app, key, result);
         }
         if app.feature_work.asked.is_some() && !app.feature_work.compile_wanted {
-            // The compile that landed was of another master.
+            // The compile that landed, or was stopped, was of another master.
             start_compile(app);
         }
     }
@@ -250,13 +302,28 @@ fn step_compile(app: &mut FontCraftApp, now: f64) -> Option<f64> {
     app.feature_work.compile.is_some().then_some(POLL)
 }
 
+/// Stops the compile under way when its result would be dropped: the document it read changed or is no longer the active
+/// one, or the Compile button asked for another master.
+fn stop_unwanted(app: &FontCraftApp) {
+    let Some(((doc, revision, master), token, _)) = &app.feature_work.compile else { return };
+    let current = app.session.active().is_some_and(|d| d.id == *doc && d.revision == *revision);
+    let other = app.feature_work.asked.as_ref().is_some_and(|(d, m)| d == doc && m != master);
+    if !current || other {
+        token.cancel();
+    }
+}
+
 /// Keeps the compile that landed on the revision it read: `font.features.compile` takes it and only maps the
 /// diagnostics. A compile that failed has no result; the command then says why.
 fn land_compile(app: &mut FontCraftApp, (doc, _, master): CompileKey, result: Option<AheadCompile>) {
-    if let Some(compile) = result {
-        app.session.keep_ahead_compile(compile);
-    }
-    let params = json!({ "master": master });
+    let params = match result {
+        Some(compile) => {
+            app.session.keep_ahead_compile(compile);
+            json!({ "master": master, "targets": "all" })
+        }
+        // The command fails as the job did, before it checks the other targets here on the window's thread.
+        None => json!({ "master": master }),
+    };
     if app.feature_work.asked.as_ref().is_some_and(|(d, m)| *d == doc && *m == master) {
         app.feature_work.asked = None;
         if let Err(error) = app.apply_msg(Msg::run("font.features.compile", params)) {
@@ -284,8 +351,11 @@ fn start_compile(app: &mut FontCraftApp) {
     let wake = app.window.clone();
     let key: CompileKey = (id, revision, master);
     let job_master = key.2.clone();
+    let token = Token::new();
+    let stop = Arc::clone(&token);
     let job = move || {
-        let result = fontcraft_engine::guard::catch_panic(|| compile_ahead(&font, id, revision, &job_master, &cx, previous, &builds));
+        let compile = || compile_ahead(&font, id, revision, &job_master, &cx, previous, &builds, true);
+        let result = fontcraft_engine::guard::catch_panic(|| work::with(stop, None, compile));
         if let Ok(mut slot) = out.lock() {
             *slot = Some(result.ok().flatten());
         }
@@ -293,13 +363,116 @@ fn start_compile(app: &mut FontCraftApp) {
             ctx.request_repaint();
         }
     };
-    app.feature_work.compile = Some((key, landing));
+    app.feature_work.compile = Some((key, token, landing));
     app.host.jobs().spawn("feature code compile", Box::new(job));
+}
+
+/// The build the expanded-code view shows: the one picked, else the current master, also when the one picked is gone.
+pub fn expand_target(font: &Font, layers: &crate::shell::masters::LayersView, picked: Option<&ExpandTarget>) -> Option<ExpandTarget> {
+    let there = picked.filter(|t| match t {
+        ExpandTarget::Master(id) => font.masters.iter().any(|m| m.id == *id),
+        ExpandTarget::Instance(at) => font.instances.get(*at).is_some_and(|i| i.kind.is_none()),
+        ExpandTarget::Variable => true,
+    });
+    there.cloned().or_else(|| crate::shell::masters::current_master_id(font, layers).map(ExpandTarget::Master))
+}
+
+/// What the Features tab's expanded-code view needs, while it shows.
+fn wanted_expansion(app: &FontCraftApp) -> Option<ExpandKey> {
+    if app.view.font_info.tab != FontInfoTab::Features || app.view.workspace.layout.panel_state(&PanelId::FontInfo) == PanelState::Hidden {
+        return None;
+    }
+    let shown = app.view.font_info.features.expanded.as_ref()?;
+    let doc = app.session.active()?;
+    Some((doc.id, doc.revision, expand_target(&doc.font, &app.view.layers, shown.target.as_ref())?, shown.generated))
+}
+
+fn step_expand(app: &mut FontCraftApp, now: f64) -> Option<f64> {
+    let wanted = wanted_expansion(app);
+    if let Some((key, landing)) = &app.feature_work.expand
+        && let Some(result) = take(landing)
+    {
+        let key = key.clone();
+        app.feature_work.expand = None;
+        if wanted.as_ref() == Some(&key) {
+            app.view.font_info.features.expansion = Some(expansion(key, result));
+            app.view_changed();
+        }
+    }
+    let Some(wanted) = wanted else {
+        app.feature_work.expand_seen = None;
+        if app.view.font_info.features.expansion.take().is_some() {
+            app.view_changed();
+        }
+        return None;
+    };
+    if app.feature_work.expand.is_some() {
+        return Some(POLL);
+    }
+    let known = app.view.font_info.features.expansion.as_ref().map(|e| e.key.clone());
+    if known.as_ref() == Some(&wanted) {
+        return None;
+    }
+    let since = match &app.feature_work.expand_seen {
+        Some((seen, since)) if *seen == wanted => *since,
+        _ => {
+            app.feature_work.expand_seen = Some((wanted.clone(), now));
+            now
+        }
+    };
+    // The build shown before waits until the document stands still.
+    let wait = CHECK_PAUSE - (now - since);
+    if known.is_some_and(|(doc, _, target, generated)| (doc, &target, generated) == (wanted.0, &wanted.2, wanted.3)) && wait > 0.0 {
+        return Some(wait.max(POLL));
+    }
+    start_expand(app, wanted);
+    app.feature_work.expand.is_some().then_some(POLL)
+}
+
+/// The expansion that `result`, `font.features.expandCode`'s answer, is.
+fn expansion(key: ExpandKey, result: Result<Value, String>) -> Expansion {
+    match result {
+        Ok(reply) => Expansion {
+            key,
+            code: Arc::new(reply.get("code").and_then(Value::as_str).unwrap_or_default().to_string()),
+            refused: crate::app::models::font_features::strings(reply.get("refused")),
+            problem: None,
+        },
+        Err(problem) => Expansion { key, code: Arc::default(), refused: Vec::new(), problem: Some(problem) },
+    }
+}
+
+/// Starts the expansion of `key`.
+fn start_expand(app: &mut FontCraftApp, key: ExpandKey) {
+    let Some(doc) = app.session.active() else { return };
+    let font = Arc::clone(&doc.font);
+    let Ok(cx) = check_context(&app.session) else { return };
+    let landing: Landing<Result<Value, String>> = Arc::default();
+    let out = Arc::clone(&landing);
+    let wake = app.window.clone();
+    let raw = json!({ "target": key.2.param(), "includeImplicit": key.3 });
+    let job = move || {
+        let result = fontcraft_engine::guard::catch_panic(|| expand_font(&font, &cx, &raw).map_err(|e| e.to_string()))
+            .unwrap_or_else(|e| Err(format!("the expansion stopped: {e}")));
+        if let Ok(mut slot) = out.lock() {
+            *slot = Some(result);
+        }
+        if let Some(ctx) = wake {
+            ctx.request_repaint();
+        }
+    };
+    app.feature_work.expand = Some((key, landing));
+    app.host.jobs().spawn("feature code expansion", Box::new(job));
+}
+
+/// Font Info shows its Exports tab.
+pub fn exports_tab_shows(app: &FontCraftApp) -> bool {
+    app.view.font_info.tab == FontInfoTab::Exports && app.view.workspace.layout.panel_state(&PanelId::FontInfo) != PanelState::Hidden
 }
 
 /// The one instance the Exports tab shows while Font Info shows that tab.
 fn shown_instance(app: &FontCraftApp) -> Option<InstanceKey> {
-    if app.view.font_info.tab != FontInfoTab::Exports || app.view.workspace.layout.panel_state(&PanelId::FontInfo) == PanelState::Hidden {
+    if !exports_tab_shows(app) {
         return None;
     }
     let doc = app.session.active()?;

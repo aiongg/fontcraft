@@ -32,6 +32,7 @@ use crate::{Budget, FeatureError, KernLimits, KernTags, MarkSpacing};
 
 pub(crate) const KERN: Tag = Tag::new(b"kern");
 pub(crate) const DIST: Tag = Tag::new(b"dist");
+pub(crate) const VKRN: Tag = Tag::new(b"vkrn");
 
 /// The lookups of each group of scripts.
 type LookupsByScripts = BTreeMap<BTreeSet<ScriptCode>, Vec<PendingLookup>>;
@@ -107,11 +108,12 @@ pub(crate) struct Skipped {
     pub(crate) mixed_direction: usize,
 }
 
-/// The lookups and features of `pairs` (sorted). `char_map` maps code points to glyphs;
+/// The lookups and features of `pairs` and of the `vertical` ones (both sorted). `char_map` maps code points to glyphs;
 /// `marks` gives the glyphs of the mark class and whether they have an advance.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn finalize_kerning(
     pairs: &[KernPair],
+    vertical: &[KernPair],
     code: &KernCode,
     char_map: &HashMap<u32, GlyphId16>,
     marks: HashMap<GlyphId16, MarkSpacing>,
@@ -121,7 +123,7 @@ pub(crate) fn finalize_kerning(
     skipped: &mut Skipped,
     axes: &[Tag],
 ) -> Result<Kerns, FeatureError> {
-    if pairs.is_empty() {
+    if pairs.is_empty() && vertical.is_empty() {
         return Ok(Kerns::default());
     }
     let fea_scripts: Vec<Tag> = code.languages.keys().copied().collect();
@@ -137,7 +139,37 @@ pub(crate) fn finalize_kerning(
         .collect();
     dedupe_lookups(&mut features);
     let (lookups, features) = prune_unreferenced_lookups(lookups, features);
-    Ok(Kerns { lookups, features })
+    let mut kerns = Kerns { lookups, features };
+    if !vertical.is_empty() {
+        let lookup = split_ctx.vertical_lookup(vertical, budget)?;
+        add_vertical(&mut kerns, lookup, vertical, code, char_map);
+    }
+    Ok(kerns)
+}
+
+/// Adds the vertical kerning's `lookup` as the `vkrn` feature of the default script, of every script
+/// and language with generated kerning (shapers read one script's record, so a script of its own must
+/// name the feature again), and of the code's language systems of the scripts of the kerned glyphs.
+/// `fontcraft_fea` leaves out the language systems that would hold nothing else.
+fn add_vertical(kerns: &mut Kerns, lookup: PendingLookup, pairs: &[KernPair], code: &KernCode, char_map: &HashMap<u32, GlyphId16>) {
+    let mut kerned: IntSet<GlyphId16> = IntSet::empty();
+    for pair in pairs {
+        kerned.extend(pair.side1.iter().chain(pair.side2.iter()));
+    }
+    let scripts: BTreeSet<Tag> =
+        char_map.iter().filter(|(_, gid)| kerned.contains(**gid)).flat_map(|(cp, _)| crate::evaluate::script_tags(*cp)).collect();
+    let mut systems: BTreeSet<(Tag, Tag)> = kerns.features.keys().map(|key| (key.script, key.language)).collect();
+    for (script, languages) in &code.languages {
+        if *script == DFLT_SCRIPT || scripts.contains(script) {
+            systems.extend(languages.iter().map(|language| (*script, *language)));
+        }
+    }
+    systems.insert((DFLT_SCRIPT, DFLT_LANG));
+    let index = kerns.lookups.len();
+    kerns.lookups.push(lookup);
+    for (script, language) in systems {
+        kerns.features.insert(FeatureKey { feature: VKRN, language, script }, vec![index]);
+    }
 }
 
 /// Each feature's lookups once and in order, as fea-rs leaves them (`dedupe_lookups` in
@@ -417,6 +449,26 @@ impl KernSplitContext {
             lookups_by_script.insert(scripts, vec![lookup]);
         }
         Ok(lookups_by_script)
+    }
+
+    /// The lookup of the vertical rules, which have one direction and need no split by script; it
+    /// skips marks unless a rule names one.
+    fn vertical_lookup(&self, pairs: &[KernPair], budget: &mut Budget) -> Result<PendingLookup, FeatureError> {
+        let mut builder = Rules { axes: self.axes.clone(), ..Rules::default() };
+        let (mut size, mut totals) = (LookupSize::default(), Totals::default());
+        let mut marks = false;
+        for pair in pairs {
+            budget.spend_glyphs(pair.side1.len().saturating_add(pair.side2.len()))?;
+            marks |= pair.side1.iter().chain(pair.side2.iter()).any(|gid| self.mark_glyphs.contains_key(&gid));
+            self.add_to(pair.clone(), &mut builder, &mut size, &mut totals, budget)?;
+        }
+        let cells = class_cells(&builder.builder, budget)?;
+        let limit = self.limits.class_cells.min(self.limits.total_class_cells);
+        if cells > limit {
+            return Err(FeatureError::TooMany { what: "vertical kerning class cells", limit });
+        }
+        budget.spend(cells)?;
+        Ok(self.make_lookup(builder, !marks))
     }
 
     fn make_lookup(&self, rules: Rules, ignore_marks: bool) -> PendingLookup {

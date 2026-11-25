@@ -7,18 +7,25 @@
 //! (`curs`; `kern` with `dist`; each mark feature on its own), when a mark builder gets a base
 //! before any mark of its class, and when a builder with no rules is built. [`check`] refuses
 //! the first two; [`Provider`] leaves out lookups without rules.
+//!
+//! The lookups of `vkrn`, which fea-rs does not merge, are placed with the `kern` group: they are
+//! also claimed for a script of our own ([`CLAIM_SCRIPT`]), which [`drop_claim`] takes out of the
+//! finished table.
 
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use fea_rs::GlyphSet;
 use fea_rs::compile::{FeatureBuilder, FeatureKey as FeaKey, FeatureProvider, LookupId, PendingLookup};
+use write_fonts_052::tables::gpos::Gpos;
 use write_fonts_052::tables::gpos::builders::{
     AnchorBuilder, CursivePosBuilder, MarkToBaseBuilder, MarkToLigBuilder, MarkToMarkBuilder, PairPosBuilder, ValueRecordBuilder,
 };
 use write_fonts_052::tables::gsub::Gsub;
 use write_fonts_052::tables::gsub::builders::SingleSubBuilder;
 use write_fonts_052::tables::layout::builders::{CaretValueBuilder, DeviceOrDeltas};
-use write_fonts_052::tables::layout::{Condition as RawCondition, ConditionFormat1, ConditionSet, FeatureVariationRecord, LookupFlag};
+use write_fonts_052::tables::layout::{
+    Condition as RawCondition, ConditionFormat1, ConditionSet, FeatureVariationRecord, LangSys, LookupFlag, Script,
+};
 use write_fonts_052::tables::variations::{RegionAxisCoordinates, VariationRegion};
 use write_fonts_052::types::F2Dot14;
 
@@ -28,12 +35,19 @@ use crate::{Anchor, Condition, Diagnostic, GeneratedLookup, GeneratedLookups, Ge
 /// these share one 16-bit index space.
 const MAX_FILTER_SETS: usize = 4_096;
 
+/// Vertical kerning.
+const VKRN: Tag = Tag::new(b"vkrn");
+/// The script shapers read for a script without a record.
+const DEFAULT_SCRIPT: Tag = Tag::new(b"DFLT");
+/// The script `vkrn`'s lookups are claimed for until the table is finished.
+const CLAIM_SCRIPT: Tag = Tag::new(b"~fc~");
+
 /// Which merge group of fea-rs a generated feature belongs to; `None` for a tag fea-rs does
 /// not merge.
 fn merge_group(tag: Tag) -> Option<&'static str> {
     match &tag.to_be_bytes() {
         b"curs" => Some("curs"),
-        b"kern" | b"dist" => Some("kern"),
+        b"kern" | b"dist" | b"vkrn" => Some("kern"),
         b"abvm" => Some("abvm"),
         b"blwm" => Some("blwm"),
         b"mark" => Some("mark"),
@@ -291,6 +305,18 @@ impl FeatureProvider for Provider<'_> {
                 builder.add_feature(FeaKey::new(key.feature, key.language, key.script), lookups);
             }
         }
+        let vertical: BTreeSet<LookupId> = generated
+            .features
+            .iter()
+            .filter(|(key, _)| key.feature == VKRN)
+            .flat_map(|(_, indices)| indices.iter().filter_map(|&i| ids.get(i).copied().flatten()))
+            .collect();
+        if !vertical.is_empty() {
+            let has = |tag: Tag| generated.features.keys().any(|key| key.feature == tag);
+            // A tag the kern group holds anyway, so the claim does not change where the group goes.
+            let tag = if !has(Tag::new(b"kern")) && has(Tag::new(b"dist")) { Tag::new(b"dist") } else { Tag::new(b"kern") };
+            builder.add_feature(FeaKey::new(tag, Tag::new(b"dflt"), CLAIM_SCRIPT), vertical.into_iter().collect());
+        }
         for &tag in &generated.append {
             builder.force_append(tag);
         }
@@ -305,6 +331,87 @@ impl FeatureProvider for Provider<'_> {
                 .collect();
             builder.add_lig_carets(carets);
         }
+    }
+}
+
+/// Whether `generated` holds vertical kerning, whose lookups are claimed for [`CLAIM_SCRIPT`].
+pub(crate) fn has_claim(generated: &GeneratedLookups) -> bool {
+    generated.features.keys().any(|key| key.feature == VKRN)
+}
+
+/// Takes the script `vkrn`'s lookups were claimed for out of `gpos`, with the features only it has, and the language
+/// systems that hold nothing but the generated `vkrn`: shapers read one record, so one of those would hide the kerning
+/// and the other positioning of the record it stands before, which has `vkrn` too.
+pub(crate) fn drop_claim(gpos: &mut Gpos) {
+    let scripts = &mut gpos.script_list.script_records;
+    let Some(at) = scripts.iter().position(|r| r.script_tag == CLAIM_SCRIPT) else { return };
+    let mut dropped: BTreeSet<u16> = BTreeSet::new();
+    for_lang_systems(&mut scripts.remove(at).script, |lang| dropped.extend(lang.feature_indices.iter().copied()));
+    let features = &gpos.feature_list.feature_records;
+    let lookups = move |index: usize| features.get(index).map(|r| r.feature.lookup_list_indices.as_slice());
+    let claimed: Vec<&[u16]> = dropped.iter().filter_map(|i| lookups(usize::from(*i))).collect();
+    let vertical: BTreeSet<u16> = features
+        .iter()
+        .enumerate()
+        .filter(|(at, r)| r.feature_tag == VKRN && lookups(*at).is_some_and(|l| claimed.contains(&l)))
+        .filter_map(|(at, _)| u16::try_from(at).ok())
+        .collect();
+    let bare = |lang: &LangSys| {
+        lang.required_feature_index == u16::MAX && !lang.feature_indices.is_empty() && lang.feature_indices.iter().all(|i| vertical.contains(i))
+    };
+    scripts.retain_mut(|r| {
+        let default = r.script_tag == DEFAULT_SCRIPT;
+        let script: &mut Script = &mut r.script;
+        let languages = script.lang_sys_records.iter().map(|l| &*l.lang_sys);
+        if !default && script.default_lang_sys.as_ref().into_iter().chain(languages).all(bare) {
+            return false;
+        }
+        if script.default_lang_sys.as_ref().is_some() {
+            script.lang_sys_records.retain(|l| !bare(&l.lang_sys));
+        }
+        true
+    });
+    for record in scripts.iter_mut() {
+        for_lang_systems(&mut record.script, |lang| {
+            dropped.remove(&lang.required_feature_index);
+            lang.feature_indices.iter().for_each(|i| {
+                dropped.remove(i);
+            });
+        });
+    }
+    if dropped.is_empty() {
+        return;
+    }
+    let renumber = |i: &mut u16| *i = i.saturating_sub(u16::try_from(dropped.range(..*i).count()).unwrap_or(0));
+    for record in scripts.iter_mut() {
+        for_lang_systems(&mut record.script, |lang| {
+            if lang.required_feature_index != u16::MAX {
+                renumber(&mut lang.required_feature_index);
+            }
+            lang.feature_indices.iter_mut().for_each(renumber);
+        });
+    }
+    let mut index = 0u16;
+    gpos.feature_list.feature_records.retain(|_| {
+        let keep = !dropped.contains(&index);
+        index = index.saturating_add(1);
+        keep
+    });
+    if let Some(variations) = gpos.feature_variations.as_mut() {
+        for record in &mut variations.feature_variation_records {
+            if let Some(table) = record.feature_table_substitution.as_mut() {
+                table.substitutions.iter_mut().for_each(|s| renumber(&mut s.feature_index));
+            }
+        }
+    }
+}
+
+fn for_lang_systems(script: &mut Script, mut f: impl FnMut(&mut LangSys)) {
+    if let Some(lang) = script.default_lang_sys.as_mut() {
+        f(lang);
+    }
+    for record in &mut script.lang_sys_records {
+        f(&mut record.lang_sys);
     }
 }
 

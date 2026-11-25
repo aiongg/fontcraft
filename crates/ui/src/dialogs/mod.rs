@@ -14,6 +14,7 @@ pub mod after;
 pub mod audit_profile;
 pub mod axis_mappings;
 pub mod changed_on_disk;
+pub mod cid;
 pub mod collection_members;
 pub mod color_palettes;
 mod component_name;
@@ -31,6 +32,7 @@ mod filters;
 pub mod find_glyphs;
 pub mod font_data;
 pub mod form;
+pub mod glyph_list;
 pub mod glyph_picker;
 mod glyph_set;
 mod guide_properties;
@@ -48,6 +50,7 @@ pub mod overlay_fonts;
 pub mod panose;
 pub mod path;
 pub mod primitive_measurements;
+pub mod record_table;
 pub mod print;
 pub mod rename_by_namelist;
 pub mod report_list;
@@ -100,6 +103,8 @@ pub const MODULES: &[Module] = &[
     actions::run_dialog,
     audit_profile::run,
     glyph_picker::run_dialog,
+    glyph_list::run,
+    record_table::run,
     smart_settings::run,
     sample_strings::run_dialog,
     find_glyphs::run_dialog,
@@ -127,6 +132,7 @@ pub const SPECS: &[&[DialogSpec]] = &[
     sidebar_filters::SPECS,
     component_name::SPECS,
     interp::SPECS,
+    cid::SPECS,
     primitive_measurements::SPECS,
     add_pixel_glyph::SPECS,
     rename_by_namelist::SPECS,

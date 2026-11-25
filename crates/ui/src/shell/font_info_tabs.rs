@@ -9,6 +9,8 @@
 //! The selection is view state: the projection resolves it against the font (an entry that moved or was renamed
 //! keeps its place in the selection), so a stale selection never names an entry the font lacks.
 
+use std::sync::Arc;
+
 use craft::ui::contract::PlainData;
 use craft::ui::runtime::commands::CommandRef;
 use fontcraft_engine::model::{Features, Snippet};
@@ -160,6 +162,13 @@ pub struct FeaturesView {
     /// Where the caret goes in the entry's code field, in characters: after a snippet went in
     /// (`font.features.insertSnippet`'s `caret`). The code editor places it and drops it.
     pub caret: Option<(EntryKey, usize)>,
+    /// The place of an error in an entry's stored code, as characters, start and end: after a click on the entry's
+    /// error icon (`font.features.jumpToError`). The code editor selects it, scrolls to it and drops it.
+    pub jump: Option<(EntryKey, usize, usize)>,
+    /// The text the sidebar's filter field holds: the sidebar lists the entries whose name or code holds it.
+    pub filter: String,
+    /// The height of the notes field in points, once its divider was dragged.
+    pub notes_height: Option<f32>,
     /// The code as typed in the code editor, while it differs from the entry's stored code; checked after a pause
     /// (`crate::shell::feature_work`).
     pub draft: Option<FeatureDraft>,
@@ -169,6 +178,10 @@ pub struct FeaturesView {
     pub checked: Option<CheckedDraft>,
     /// The name Alt-clicked in the code editor, which the projection previews with `font.features.previewName`.
     pub preview: Option<PreviewAsk>,
+    /// The expanded-code view, while it is open in place of the entry.
+    pub expanded: Option<ExpandedView>,
+    /// The last expansion for that view (`crate::shell::feature_work`).
+    pub expansion: Option<Expansion>,
     /// The code editor's find bar, while it is open; the projection lists its matches with `font.features.find`.
     pub find: Option<FindState>,
 }
@@ -202,13 +215,62 @@ impl FindState {
     }
 }
 
-/// A name Alt-clicked in an entry's code: its text and its characters in the code as shown.
+/// A name or `$` token Alt-clicked in an entry's code: its text and its characters in the code as shown.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct PreviewAsk {
     pub key: EntryKey,
     pub name: String,
     pub start: usize,
     pub end: usize,
+    /// It is a token.
+    pub token: bool,
+}
+
+/// The build the expanded-code view shows the code of.
+#[derive(PlainData, Clone, Debug, PartialEq, Eq, Hash)]
+pub enum ExpandTarget {
+    /// The master with this id.
+    Master(String),
+    /// The instance at this index.
+    Instance(usize),
+    /// The variable font of the whole designspace.
+    Variable,
+}
+
+impl ExpandTarget {
+    /// The `target` parameter of `font.features.expandCode`.
+    pub fn param(&self) -> Value {
+        match self {
+            ExpandTarget::Master(id) => json!({ "master": id }),
+            ExpandTarget::Instance(index) => json!({ "instance": index }),
+            ExpandTarget::Variable => json!({ "variable": true }),
+        }
+    }
+}
+
+/// What the expanded-code view is set to.
+#[derive(PlainData, Clone, Debug, Default, PartialEq)]
+pub struct ExpandedView {
+    /// The build shown; `None` is the current master.
+    pub target: Option<ExpandTarget>,
+    /// With the automatic code regenerated and the generated features, as an export compiles it.
+    pub generated: bool,
+    /// The text of the find field.
+    pub query: String,
+}
+
+/// What an expansion reads: the document's id and revision, the build, and whether with the generated features.
+pub type ExpandKey = (u64, u64, ExpandTarget, bool);
+
+/// What `font.features.expandCode` gave.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Expansion {
+    pub key: ExpandKey,
+    pub code: Arc<String>,
+    /// An instance's feature parameters that cannot be applied.
+    pub refused: Vec<String>,
+    /// Why there is no code.
+    pub problem: Option<String>,
 }
 
 /// The code as typed in an entry's code editor.
@@ -225,13 +287,44 @@ pub struct CheckedDraft {
     pub diagnostics: Vec<crate::app::models::font_features::DiagnosticModel>,
 }
 
-/// After a run of `id` the person asked for: an inserted snippet leaves the caret after itself; new code is compiled in
-/// the background.
+/// After a run of `id` the person asked for: an inserted snippet leaves the caret after itself; an error jumped to shows
+/// its entry with the faulty code selected; a feature's specification opens in the browser; new code is compiled in the
+/// background.
 pub fn after_run(app: &mut crate::app::FontCraftApp, id: &str, reply: &Value) {
     crate::shell::feature_work::after_run(app, id);
-    if id != "font.features.insertSnippet" {
-        return;
+    match id {
+        "font.features.insertSnippet" => place_caret(app, reply),
+        "font.features.jumpToError" => show_error(app, reply),
+        "font.features.openSpec" => {
+            if let Some(url) = reply.get("url").and_then(Value::as_str)
+                && let Err(error) = app.opener.open_url(url)
+            {
+                app.status = error;
+            }
+        }
+        _ => {}
     }
+}
+
+/// Shows the entry of `font.features.jumpToError`'s reply; the code editor then selects the range it names.
+fn show_error(app: &mut FontCraftApp, reply: &Value) {
+    let Some(key) = reply.get("entry").and_then(EntryKey::from_json) else { return };
+    let Ok(font) = app.session.font() else { return };
+    let Some(code) = key.snippet(&font.features).map(|e| e.code.as_str()) else { return };
+    let byte = |at: usize| reply.get("range").and_then(|r| r.get(at)).and_then(Value::as_u64).and_then(|b| usize::try_from(b).ok());
+    let jump = byte(0).zip(byte(1)).map(|(start, end)| {
+        let chars = |byte: usize| code.char_indices().take_while(|(at, _)| *at < byte).count();
+        (key.clone(), chars(start), chars(end.max(start)))
+    });
+    let view = &mut app.view.font_info.features;
+    view.selected = vec![key];
+    view.expanded = None;
+    view.jump = jump;
+    app.view_changed();
+}
+
+/// The caret goes after the inserted snippet.
+fn place_caret(app: &mut FontCraftApp, reply: &Value) {
     let caret = reply.get("caret").and_then(Value::as_u64).and_then(|c| usize::try_from(c).ok());
     if let (Some(key), Some(caret)) = (EntryKey::from_json(reply), caret) {
         app.view.font_info.features.caret = Some((key, caret));
@@ -253,6 +346,16 @@ pub struct ExportsView {
     pub selected: Vec<usize>,
     /// What the last instance compile found (`crate::shell::feature_work`).
     pub problems: Option<InstanceProblems>,
+    /// What the exports write, as last computed (`crate::shell::export_names`).
+    pub names: Option<ExportedNames>,
+}
+
+/// The reply of `font.instance.names` for a document revision.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExportedNames {
+    pub doc: u64,
+    pub revision: u64,
+    pub reply: Arc<Value>,
 }
 
 /// What the compile of one instance's code found in its feature-code parameters.
@@ -300,6 +403,7 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
                 }
             }
             app.view.font_info.features.selected = selected;
+            app.view.font_info.features.expanded = None;
             Ok(())
         }
         "font.info.exports.select" => {

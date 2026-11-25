@@ -142,6 +142,24 @@ fn text_preview_shapes_through_the_preview_font_and_rebuilds_once_editing_pauses
     assert!((x[1] - x[0] - 600.0).abs() < 0.01, "the new width, kerned: {x:?}");
 }
 
+/// A column is kerned once, by the compiled `vkrn`: a vertical pair of -100 moves V up by 100.
+#[test]
+fn a_vertical_pair_moves_the_shaped_column_once() {
+    let mut app = app();
+    shell(&mut app, "textPreview.setText", json!({"text": "AV"})).unwrap();
+    shell(&mut app, "textPreview.setLayoutOrientation", json!({"orientation": "vertical"})).unwrap();
+    let drop = |app: &FontCraftApp| {
+        let p = page(app);
+        assert_eq!(p.shaped, 1, "the column is shaped: {:?}", app.models.text_preview.view.message);
+        p.glyphs[0].y - p.glyphs[1].y
+    };
+    let plain = drop(&app);
+    exec(&mut app, "kerning.setPair", json!({"left": "A", "right": "V", "value": -100, "direction": "vertical"}));
+    set_now(&mut app.models.text_preview, 1.0);
+    app.drain();
+    assert!((drop(&app) - (plain - 100.0)).abs() < 0.01, "{} from {plain}", drop(&app));
+}
+
 /// A colour glyph draws from the compiled colour font: palette row 0 of `CPAL` fills A's square, V (no colour) draws
 /// its outline. When the colour font cannot be built, every glyph is an outline and the reason shows under the text.
 #[test]

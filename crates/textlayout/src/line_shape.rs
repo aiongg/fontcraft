@@ -12,9 +12,8 @@
 //!
 //! A vertical layout's columns are shaped top to bottom ([`vertical_features`]): `vert` (or
 //! `vrt2` when the font has it), vertical kerning (`vkrn`) and mark positioning from the compiled
-//! font, vertical advances and origins live from the model (`live.rs`). The model's own
-//! vertical kerning, which the compiled font does not hold, adds the layout's kerning between
-//! neighbours.
+//! font, vertical advances and origins live from the model (`live.rs`). Between items that were not
+//! measured through that font, the layout's kerning from the model stands.
 //!
 //! A cluster's glyphs all belong to its first item; the other items of the cluster (a ligature's
 //! components after the first, the marks shaped with their base) take no room and draw nothing.

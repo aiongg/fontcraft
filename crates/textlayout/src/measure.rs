@@ -10,8 +10,7 @@
 //! cluster are marked as joined to it, and a line never breaks before them.
 //!
 //! Vertical text is measured top to bottom with the features [`crate::shape_line`] shapes its
-//! columns with, on the vertical advances; the model's vertical kerning, which the compiled font
-//! does not hold, is added by the layout.
+//! columns with, on the vertical advances and with the compiled vertical kerning.
 //!
 //! Context across a break opportunity is not seen: a kerning pair or a contextual substitution
 //! between a space and the next word does not change the widths lines break on. The line itself

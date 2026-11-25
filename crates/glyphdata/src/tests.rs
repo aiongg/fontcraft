@@ -173,7 +173,7 @@ fn hostile_and_empty_inputs_are_harmless() {
         let _ = d.split_suffix(name);
         let _ = d.name_to_text(name);
         let _ = d.search(name, None, usize::MAX);
-        let _ = d.sort_key(name, &[u32::MAX], None, Some(name), true);
+        let _ = d.sort_key(name, &[u32::MAX], None, Some(name), Some(name), true);
         let _ = crate::validate(name, true);
     }
     let many: Vec<u32> = (0..100_000).collect();

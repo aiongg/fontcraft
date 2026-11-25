@@ -95,3 +95,25 @@ fn edits_stamp_last_changed_unless_the_font_says_not_to() {
     run(&mut s, "spacing.setWidth", json!({"glyphs": ["B"], "value": 650}));
     assert_eq!(stamp(&s, "B"), None);
 }
+
+/// The files of the settings folder's `Info` folder apply to new and opened documents, the groups named through them; a
+/// broken one is reported and the others hold.
+#[test]
+fn the_settings_folders_info_folder_is_read() {
+    let dir = std::env::temp_dir().join(format!("fontcraft-info-{}", std::process::id()));
+    let info = dir.join("Info");
+    std::fs::create_dir_all(&info).unwrap();
+    let data: &[u8] = br#"<glyphData><glyph unicode="E123" name="myGlyph" category="Letter" script="latin"/></glyphData>"#;
+    std::fs::write(info.join("GlyphData.xml"), data).unwrap();
+    std::fs::write(info.join("GlyphData-bad.xml"), b"<glyphData><glyph").unwrap();
+    std::fs::write(info.join("Other.xml"), b"<glyphData><glyph").unwrap();
+    std::fs::write(info.join("Groups.plist"), b"\xff\xfe").unwrap();
+    let mut s = Session::new();
+    let problems = s.load_user_info(&dir);
+    assert_eq!(problems.len(), 2, "{problems:?}");
+    assert!(problems.iter().any(|p| p.contains("GlyphData-bad.xml")) && problems.iter().any(|p| p.contains("Groups.plist")), "{problems:?}");
+    run(&mut s, "file.new", json!({}));
+    run(&mut s, "glyph.newGlyph", json!({"name": "myGlyph"}));
+    assert_eq!(s.font().unwrap().glyph("myGlyph").unwrap().unicodes, [0xE123]);
+    let _ = std::fs::remove_dir_all(&dir);
+}

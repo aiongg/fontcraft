@@ -45,8 +45,10 @@ mod features;
 pub mod features_check;
 pub(crate) mod features_compile;
 mod features_entries;
+pub mod features_expand;
 mod features_find;
 mod features_io;
+pub mod features_targets;
 mod file;
 pub mod filter;
 pub mod fit_curve;
@@ -73,6 +75,7 @@ mod image;
 mod import_naming;
 mod inspect;
 mod instance_masters;
+pub mod instance_names;
 mod instances;
 mod interpolation;
 mod kerning;
@@ -409,6 +412,7 @@ pub const COMMAND_TABLES: &[CommandTable] = &[
     masters::specs,
     metric_defs::specs,
     instances::specs,
+    instance_names::specs,
     clipboard_scale::specs,
     tokens::specs,
     project::specs,

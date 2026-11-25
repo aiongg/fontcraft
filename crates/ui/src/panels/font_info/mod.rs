@@ -7,11 +7,16 @@
 //! | [`param_value`] | the value editor of each row |
 //! | [`font_tab`] | General (Family Name, Units per Em, Version, Creation Date, added fields), Axes, Custom Parameters |
 //! | [`other_tab`] | Other Settings |
-//! | [`notes_tab`] | the font note |
+//! | [`notes_tab`] | the font note, its Markdown coloured |
+//! | [`instance_preview`] | the Exports tab's preview of the selected instance |
 //! | [`exports_tab`] | Exports: the export list and the selected entries' fields and parameters |
+//! | [`exported_names`] | the Exports tab's As Exported section |
 //! | [`features_tab`] | Features: the sidebar of prefixes, classes and features, and the shown entry |
 //! | [`code_editor`] | the Features tab's code field and its diagnostics |
 //! | [`masters_tab`] | Masters: the master list and the selected masters' sections |
+//!
+//! Each tab scrolls in its own pane under the tab strip; the Masters and Exports tabs scroll their list and their
+//! fields apart.
 //!
 //! A tab click posts `font.info.selectTab`; every edit posts an engine command.
 
@@ -19,13 +24,19 @@ pub mod code_editor;
 pub mod code_find;
 #[cfg(test)]
 mod dialogs_tests;
+pub mod expanded_code;
+pub mod exported_names;
 pub mod exports_tab;
+pub mod feature_previews;
 pub mod features_tab;
 pub mod font_tab;
+pub mod instance_preview;
 pub mod masters_tab;
 pub mod notes_tab;
 pub mod other_tab;
 pub mod param_value;
+#[cfg(test)]
+mod previews_tests;
 pub mod rows;
 #[cfg(test)]
 mod tabs_tests;
@@ -46,6 +57,7 @@ use serde_json::json;
 
 use crate::app::Msg;
 use crate::app::models::font_info::FontInfoModel;
+use crate::panels::widgets::scrolling;
 use crate::shell::font_info::FontInfoTab;
 
 craft::ui::words! {
@@ -76,6 +88,8 @@ craft::ui::words! {
         /// The button of a value edited in its own dialog.
         edit: "fontcraftFontInfo.edit" = "Edit…";
         edit_tip: "fontcraftFontInfo.editTip" = "Edit the value in its dialog";
+        /// The tooltip of the mark of a row only some of the selected masters or exports hold.
+        some_lack: "fontcraftFontInfo.someLack" = "Not every selected entry has this row. Editing it adds it to the others.";
         /// The language menu of a localizable field.
         language: "fontcraftFontInfo.language" = "Language";
         add_language: "fontcraftFontInfo.addLanguage" = "Add a language";
@@ -115,14 +129,14 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
         return;
     }
     let sent = &mut *props.sent;
-    Stack::new().fill_width().show(ui, |ui, _| {
+    Stack::new().fill().show(ui, |ui, _| {
         if let Some(tab) = tab_strip(ui, model.tab, &words) {
             sent.push(Msg::Shell(CommandRef::with_params("font.info.selectTab", json!({ "tab": tab.name() }))));
         }
         match model.tab {
-            FontInfoTab::Font => font_tab::view(ui, model, sent),
-            FontInfoTab::Other => other_tab::view(ui, &model.other, sent),
-            FontInfoTab::Notes => notes_tab::view(ui, &model.note, sent),
+            FontInfoTab::Font => scrolling(ui, |ui| font_tab::view(ui, model, sent)),
+            FontInfoTab::Other => scrolling(ui, |ui| other_tab::view(ui, &model.other, sent)),
+            FontInfoTab::Notes => scrolling(ui, |ui| notes_tab::view(ui, &model.note, sent)),
             FontInfoTab::Exports => exports_tab::view(ui, &model.exports, &model.masters, sent),
             FontInfoTab::Features => features_tab::view(ui, &model.features, sent),
             FontInfoTab::Masters => masters_tab::view(ui, &model.masters_tab, &model.masters, sent),

@@ -267,10 +267,11 @@ fn localized_value(entries: &[(String, String)], at: usize, typed: &str) -> Json
     Json::Array(items)
 }
 
-/// One line per language of a localizable field: the language menu, the text and the minus button; then the plus
-/// button that adds the next free language.
+/// One line per language of a localizable field: the language menu, the text and the plus button that adds the next
+/// free language. While Alt is held each line shows the minus button that removes its language instead.
 fn languages(ui: &mut Ui, name: &str, entries: &[(String, String)], all: &[Entry<String>], mixed: bool, words: &FontInfoWords) -> Option<Edit> {
     let mut edit = None;
+    let alt = ui.input(|i| i.modifiers.alt);
     let next_free = all.iter().filter_map(|e| e.value()).find(|l| !entries.iter().any(|(e, _)| e == *l)).cloned();
     Stack::new().show(ui, |ui, _| {
         for (at, (language, text)) in entries.iter().enumerate() {
@@ -288,26 +289,28 @@ fn languages(ui: &mut Ui, name: &str, entries: &[(String, String)], all: &[Entry
                 if let Some(typed) = field.show(ui).events.committed() {
                     edit = Some(Edit::Language { language: language.clone(), text: typed.clone() });
                 }
-                if IconButton::new(IconId::new("minus"))
-                    .label(words.remove_language.clone())
-                    .tooltip(words.remove_language.clone())
-                    .show(ui)
-                    .clicked()
-                {
-                    edit = Some(Edit::RemoveLanguage(language.clone()));
+                if alt {
+                    let minus = IconButton::new(IconId::new("minus")).label(words.remove_language.clone()).tooltip(words.remove_language.clone());
+                    if minus.id_salt((name, "remove", at)).show(ui).clicked() {
+                        edit = Some(Edit::RemoveLanguage(language.clone()));
+                    }
+                } else if let Some(added) = add_language(ui, (name, at), next_free.as_deref(), words) {
+                    edit = Some(added);
                 }
             });
         }
-        if let Some(free) = &next_free
-            && IconButton::new(IconId::new("plus"))
-                .label(words.add_language.clone())
-                .tooltip(words.add_language.clone())
-                .id_salt((name, "add"))
-                .show(ui)
-                .clicked()
+        if entries.is_empty()
+            && let Some(added) = add_language(ui, (name, 0), next_free.as_deref(), words)
         {
-            edit = Some(Edit::AddLanguage(free.clone()));
+            edit = Some(added);
         }
     });
     edit
+}
+
+/// The plus button that adds the language `free`, disabled when the field has every language.
+fn add_language(ui: &mut Ui, salt: (&str, usize), free: Option<&str>, words: &FontInfoWords) -> Option<Edit> {
+    let plus = IconButton::new(IconId::new("plus")).label(words.add_language.clone()).tooltip(words.add_language.clone());
+    let clicked = plus.enabled(free.is_some()).id_salt((salt, "add")).show(ui).clicked();
+    free.filter(|_| clicked).map(|free| Edit::AddLanguage(free.to_string()))
 }
