@@ -3,7 +3,10 @@
 
 use std::sync::Arc;
 
-use fontcraft_model::{Axis, Component, Font, Glyph, GlyphTable, Instance, Layer, Master, Node, NodeKind, Param, Path, Shape, Transform};
+use fontcraft_model::{
+    Axis, Component, Font, Glyph, GlyphTable, Hoi, HoiAxis, HoiCenter, HoiCurve, HoiDirection, HoiTiming, Instance, Layer, Master, Node, NodeKind,
+    Param, Path, Rare, Shape, Transform,
+};
 use skrifa::instance::Size;
 use skrifa::outline::{DrawSettings, OutlinePen};
 use skrifa::raw::TableProvider;
@@ -617,6 +620,7 @@ fn cff2_sources_without_an_outline_each_are_refused() {
         locations: vec![vec![0.0], vec![1.0]],
         paths: vec![vec![fontcraft_geom::BezPath::new()]],
         layers: Vec::new(),
+        samples: 0,
     };
     let err = cff2::cff2_font(1, &[glyph], &[master(0.0), master(1.0)], 1000, None, &mut Vec::new()).unwrap_err();
     assert!(matches!(&err, CompileError::Glyph { glyph, .. } if glyph == "a"), "{err}");
@@ -895,4 +899,215 @@ fn open_corners_go_only_when_every_master_has_them() {
     assert_eq!(at(&one, "a", &[("wght", 100.0)]).0, (0.0, 0.0, 140.0, 140.0));
     assert_eq!(at(&one, "a", &[("wght", 900.0)]).0, (0.0, 0.0, 250.0, 250.0));
     assert!(one.compiled.warnings.iter().any(|w| w.contains("open corners were kept") && w.contains(": a")), "{:?}", one.compiled.warnings);
+}
+
+/// Thin and Black with vertical metrics: typographic ascender 800 and 860, descender -200 and
+/// -240.
+/// - `A`: its own vertical width (1000, 1100) and origin (20 and 50 below the ascender);
+/// - `B`: neither;
+/// - `C`: a composite of both, with neither;
+/// - `D`: like `A`, with an intermediate layer at 500 (1010, 90 below);
+/// - `E`: like `B`, with an intermediate layer at 500.
+fn vertical_font() -> Font {
+    use fontcraft_model::plist::{Number, Value};
+    let mut f = two_masters();
+    let param = |name: &str, v: i64| Param::new(name, Value::Number(Number::int(v)));
+    Arc::make_mut(&mut f.info).params.0.extend([param("vheaVertAscender", 500), param("vheaVertDescender", -500), param("vheaVertLineGap", 0)]);
+    for (m, (ascender, descender)) in Arc::make_mut(&mut f.masters).iter_mut().zip([(800, -200), (860, -240)]) {
+        m.params.0.extend([param("typoAscender", ascender), param("typoDescender", descender)]);
+    }
+    let own = |mut l: Layer, width: f64, origin: f64| {
+        l.info.vert_width = Some(width);
+        l.info.vert_origin = Some(origin);
+        l
+    };
+    let brace = |mut l: Layer| {
+        l.id = "brace".into();
+        l.info.attrs.coordinates = vec![Some(500.0)];
+        l
+    };
+    let (thin, black) = (|| layer("thin", 600.0, vec![rect(500.0)]), || layer("black", 640.0, vec![rect(560.0)]));
+    let pair = |w: f64, dx: f64, master: &str| {
+        layer(master, w, vec![Shape::Component(Component::new("A", 0.0, 0.0)), Shape::Component(Component::new("B", dx, 0.0))])
+    };
+    let glyphs = vec![
+        glyph("A", 0x41, vec![own(thin(), 1000.0, 20.0), own(black(), 1100.0, 50.0)]),
+        glyph("B", 0x42, vec![thin(), black()]),
+        glyph("C", 0x43, vec![pair(900.0, 300.0, "thin"), pair(980.0, 340.0, "black")]),
+        glyph("D", 0x44, vec![own(thin(), 1000.0, 20.0), own(black(), 1100.0, 50.0), brace(own(thin(), 1010.0, 90.0))]),
+        glyph("E", 0x45, vec![thin(), black(), brace(thin())]),
+    ];
+    f.glyphs = GlyphTable::from_glyphs(glyphs.into_iter().map(Arc::new).collect());
+    f
+}
+
+// The numbers are fontc 1.0.0's and fontmake 3.12.1's on this source (`gvar`, `VVAR`, `VORG`),
+// but for the vertical origins of glyphs without an intermediate layer in a CFF2 font (see
+// docs/spec/40-compile.md § 4a).
+#[test]
+fn vertical_metrics_vary_through_vvar_and_the_phantom_points() {
+    use skrifa::raw::types::F2Dot14;
+    let gid = |v: &VariableFont, name: &str| GlyphId::new(v.compiled.glyph_order.iter().position(|g| g == name).unwrap() as u32);
+    // Per glyph: the deltas of the advance, the vertical origin and the bottom at 500 and at 900.
+    let expected = [
+        (".notdef", [(50.0, 30.0, -20.0), (100.0, 60.0, -40.0)]),
+        ("A", [(50.0, 15.0, -35.0), (100.0, 30.0, -70.0)]),
+        ("B", [(50.0, 30.0, -20.0), (100.0, 60.0, -40.0)]),
+        ("C", [(50.0, 30.0, -20.0), (100.0, 60.0, -40.0)]),
+        ("D", [(10.0, -70.0, -80.0), (100.0, 30.0, -70.0)]),
+        ("E", [(0.0, 0.0, 0.0), (100.0, 60.0, -40.0)]),
+    ];
+    let coords = [[F2Dot14::from_f32(0.5)], [F2Dot14::from_f32(1.0)]];
+
+    let f = vertical_font();
+    let tt = build(&f, None);
+    let font = FontRef::new(&tt.compiled.bytes).unwrap();
+    let (vmtx, vvar, gvar) = (font.vmtx().unwrap(), font.vvar().unwrap(), font.gvar().unwrap());
+    let (glyf, loca) = (font.glyf().unwrap(), font.loca(None).unwrap());
+    assert!(font.vhea().is_ok() && font.vorg().is_err() && vvar.v_org_mapping().is_none());
+    for (name, deltas) in expected {
+        let g = gid(&tt, name);
+        assert_eq!(vmtx.advance(g), Some(1000), "{name}");
+        for (at, (height, top, bottom)) in coords.iter().zip(deltas) {
+            assert_eq!(vvar.advance_delta(g, at).unwrap().to_f64(), height, "{name} advance at {at:?}");
+            let phantoms = gvar.phantom_point_deltas(&glyf, &loca, at, g).unwrap();
+            assert_eq!((phantoms[2].y.to_f64(), phantoms[3].y.to_f64()), (top, bottom), "{name} phantom points at {at:?}");
+        }
+    }
+
+    let cff2 = build_cff2(&f, None);
+    let font = FontRef::new(&cff2.compiled.bytes).unwrap();
+    let (vvar, vorg) = (font.vvar().unwrap(), font.vorg().unwrap());
+    assert!(font.vhea().is_ok() && font.gvar().is_err());
+    for (name, deltas) in expected {
+        let g = gid(&cff2, name);
+        assert_eq!(vorg.vertical_origin_y(g), if matches!(name, "A" | "D") { 780 } else { 800 }, "{name}");
+        for (at, (height, top, _)) in coords.iter().zip(deltas) {
+            assert_eq!(vvar.advance_delta(g, at).unwrap().to_f64(), height, "{name} CFF2 advance at {at:?}");
+            assert_eq!(vvar.v_origin_y_delta(g, at).unwrap().to_f64(), top, "{name} CFF2 origin at {at:?}");
+        }
+    }
+
+    // Without vertical metrics there is no table and the phantom points stay put.
+    let plain = build(&two_masters(), None);
+    let font = FontRef::new(&plain.compiled.bytes).unwrap();
+    assert!(font.vvar().is_err() && font.vmtx().is_err());
+    let (glyf, loca) = (font.glyf().unwrap(), font.loca(None).unwrap());
+    let phantoms = font.gvar().unwrap().phantom_point_deltas(&glyf, &loca, &coords[1], gid(&plain, "a")).unwrap();
+    assert_eq!((phantoms[2].y.to_f64(), phantoms[3].y.to_f64()), (0.0, 0.0));
+}
+
+/// A 700-high rectangle `right` wide whose bottom right node keeps `curve` on the weight axis.
+fn curved(right: f64, curve: Option<HoiCurve>) -> Shape {
+    let mut nodes: Vec<Node> =
+        [(0.0, 0.0), (right, 0.0), (right, 700.0), (0.0, 700.0)].into_iter().map(|(x, y)| Node::new(x, y, NodeKind::Line)).collect();
+    if let Some(curve) = curve {
+        let mut info = (*nodes[1].info).clone();
+        info.hoi = Hoi(vec![HoiAxis { axis: "wght".into(), curve }]);
+        nodes[1].info = Rare::new(info);
+    }
+    Shape::Path(Path::new(true, nodes))
+}
+
+/// [`two_masters`] with `a` bent by `curve` (so its composites `c`, decomposed, and `d` are too).
+fn with_curve(curve: Option<HoiCurve>) -> Font {
+    let mut f = two_masters();
+    f.glyph_mut("a").unwrap().layers[0].shapes = vec![curved(100.0, curve)];
+    f.glyph_mut("a").unwrap().layers[1].shapes = vec![curved(300.0, None)];
+    f
+}
+
+type Box4 = (f64, f64, f64, f64);
+
+/// The bounds of the nodes of `a` in a static instance at `wght`.
+fn instance_bounds(f: &Font, wght: f64) -> Box4 {
+    let designspace = fontcraft_interp::Designspace::new(f).unwrap();
+    let sources = fontcraft_interp::GlyphSources::of(f, &designspace, "a").unwrap();
+    let options = fontcraft_interp::InterpOptions::default();
+    let layer = fontcraft_interp::instance::interpolate_layer(f, &sources, &fontcraft_interp::Location(vec![wght]), &options).unwrap();
+    let Some(Shape::Path(p)) = layer.shapes.first() else { panic!("no path") };
+    p.nodes.iter().fold((f64::MAX, f64::MAX, f64::MIN, f64::MIN), |b, n| (b.0.min(n.x), b.1.min(n.y), b.2.max(n.x), b.3.max(n.y)))
+}
+
+/// The widest difference between drawn bounds and expected ones.
+fn off(drawn: (f32, f32, f32, f32), expected: Box4) -> f64 {
+    let pairs = [(drawn.0, expected.0), (drawn.1, expected.1), (drawn.2, expected.2), (drawn.3, expected.3)];
+    pairs.into_iter().map(|(a, b)| (f64::from(a) - b).abs()).fold(0.0, f64::max)
+}
+
+#[test]
+fn interpolation_curves_are_followed_along_their_span() {
+    let amplitudes = HoiTiming { lower_time: Some(0.6), upper_time: Some(0.2), lower_amplitude: Some(-40.0), upper_amplitude: Some(-70.0) };
+    let curves = [
+        HoiCurve::Point { x: 450.0, y: -120.0 },
+        HoiCurve::Timing(amplitudes),
+        HoiCurve::Rotation { center: Some(HoiCenter::At { x: 200.0, y: 0.0 }), direction: Some(HoiDirection::CounterClockwise) },
+    ];
+    for curve in curves {
+        let f = with_curve(Some(curve.clone()));
+        let (tt, cff2) = (build(&f, None), build_cff2(&f, None));
+        assert!(instance_bounds(&f, 500.0).1 < -40.0, "{curve:?} bends the outline");
+        for k in 0..=32u8 {
+            let wght = 100.0 + 25.0 * f32::from(k);
+            let expected = instance_bounds(&f, f64::from(wght));
+            for (what, v) in [("TrueType", &tt), ("CFF2", &cff2)] {
+                let drawn = drawn_at(v, "a", wght).0;
+                assert!(off(drawn, expected) <= 1.05, "{what} {curve:?} at {wght}: {drawn:?} against {expected:?}");
+                // `d` moves `a` by up to 50; `c` scales it by up to a half.
+                let s = f64::from(k) / 32.0;
+                let moved = (expected.0 + 50.0 * s, expected.1, expected.2 + 50.0 * s, expected.3);
+                assert!(off(drawn_at(v, "d", wght).0, moved) <= 1.55, "{what} {curve:?}: the composite at {wght}");
+                let m = 1.0 + 0.5 * s;
+                let scaled = (expected.0 * m, expected.1 * m, expected.2 * m, expected.3 * m);
+                assert!(off(drawn_at(v, "c", wght).0, scaled) <= 2.5, "{what} {curve:?}: the decomposed composite at {wght}");
+            }
+        }
+    }
+}
+
+#[test]
+fn curves_that_bend_nothing_add_nothing_and_advances_keep_their_own_regions() {
+    let table = |v: &VariableFont, tag: &[u8; 4]| {
+        let font = FontRef::new(&v.compiled.bytes).unwrap();
+        font.table_data(skrifa::raw::types::Tag::new(tag)).unwrap().as_bytes().to_vec()
+    };
+    let plain = build(&with_curve(None), None);
+    let straight = build(&with_curve(Some(HoiCurve::Timing(HoiTiming::default()))), None);
+    let bent = build(&with_curve(Some(HoiCurve::Point { x: 200.0, y: -120.0 })), None);
+    for tag in [b"gvar", b"HVAR", b"glyf"] {
+        assert_eq!(table(&plain, tag), table(&straight, tag), "{}", String::from_utf8_lossy(tag));
+    }
+    assert_ne!(table(&plain, b"gvar"), table(&bent, b"gvar"));
+    assert_eq!(table(&plain, b"HVAR"), table(&bent, b"HVAR"), "advances vary with the glyph's own layers");
+}
+
+#[test]
+fn a_curve_fades_along_the_other_axes_as_in_instances() {
+    let mut f = two_masters();
+    let axis = |name: &str, tag: &str| Axis { name: name.into(), tag: tag.into(), ..Axis::default() };
+    f.axes = Arc::new(vec![axis("Weight", "wght"), axis("Width", "wdth")]);
+    let master = |id: &str, location: [f64; 2]| Master { id: id.into(), name: id.into(), location: location.to_vec(), ..Master::default() };
+    f.masters = Arc::new(vec![
+        master("thin", [100.0, 0.0]),
+        master("black", [900.0, 0.0]),
+        master("wide", [100.0, 100.0]),
+        master("wideblack", [900.0, 100.0]),
+    ]);
+    let curve = HoiCurve::Point { x: 200.0, y: -120.0 };
+    let a = glyph(
+        "a",
+        0x61,
+        vec![
+            layer("thin", 300.0, vec![curved(100.0, Some(curve))]),
+            layer("black", 500.0, vec![curved(300.0, None)]),
+            layer("wide", 400.0, vec![curved(200.0, None)]),
+            layer("wideblack", 700.0, vec![curved(500.0, None)]),
+        ],
+    );
+    f.glyphs = GlyphTable::from_glyphs(vec![Arc::new(a)]);
+    let v = build(&f, None);
+    for (wdth, bottom) in [(0.0, -120.0), (25.0, -90.0), (50.0, -60.0), (100.0, 0.0)] {
+        let (drawn, _) = at(&v, "a", &[("wght", 500.0), ("wdth", wdth)]);
+        assert!((drawn.1 - bottom).abs() <= 1.05, "at width {wdth}: {drawn:?}");
+    }
 }

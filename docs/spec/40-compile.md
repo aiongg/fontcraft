@@ -100,7 +100,7 @@ convert curves.
      go first.
 2. **Overlaps.** Removed for static output by default, kept for variable output
    (`compile.removeOverlapsStatic`); variable TrueType glyphs get the overlap flags
-   (`compile.overlapFlags`, our choice). Before this step, a layer with strokes or masks is
+   (`compile.overlapFlags`, our choice: simple glyphs only). Before this step, a layer with strokes or masks is
    replaced by the composite of its shapes (`compositing.shapesCombineInOrder`): strokes
    expanded, masks applied in shape order. Details in § 3.8.
 3. **Curves** (TrueType only). Cubic to quadratic at 0.001 em tolerance (`compile.cu2quTolerance`),
@@ -242,7 +242,15 @@ Only when at least one axis has a range (`compile.variableOnlyTables`).
 - gvar: per-glyph deltas with phantom points, IUP at 0.5 units, shared tuples
   (`compile.gvarEveryGlyph`, `compile.gvarPhantomPoints`, `compile.gvarIupOptimisation`,
   `compile.gvarSharedTuples`).
-- HVAR and VVAR, smaller of direct and mapped stores (`compile.hvarStoreChoice`).
+- HVAR and VVAR, smaller of direct and mapped stores (`compile.hvarStoreChoice`). With vertical
+  metrics (`vhea` and `vmtx` at the origin by the static rule, `compile.verticalMetrics`): the
+  vertical phantom points of every source and VVAR. A layer without its own vertical width or
+  origin takes its master's typographic ascender and descender, an intermediate layer those of
+  the master it belongs to. CFF2 has VORG at the origin and the origin map in VVAR, always with
+  index maps.
+- Higher-order interpolation curves: added sources for the glyphs whose nodes keep them
+  (`hoi.appliesToAllExports`, § 9.1 of 10-interpolation.md). Their IUP tolerance is 0, as the
+  regions lie close together and errors add up.
 - MVAR for tagged global metrics.
 - Variable kerning and mark positions in GPOS, their deltas in the GDEF variation store
   (`compile.instanceLayoutInterpolation`). Kerning: the rules of every master; a master's value
@@ -602,7 +610,7 @@ all five.
 |---|---|---|---|---|
 | Output flavours | TTF, CFF, CFF2, variable TTF and CFF2 | TrueType-flavoured static or variable only | CFF from one source; CFF2 by merging masters | all four |
 | Overlap removal | on for static, off for variable; two backends | never | not part of makeotf | on for static, off for variable; off in a project compile |
-| Overlap flag bits | not stated in the docs read | never set | n/a | set on variable TTF glyphs |
+| Overlap flag bits | never set | never set | n/a | `OVERLAP_SIMPLE` on variable TTF glyphs, `OVERLAP_COMPOUND` never |
 | cu2qu tolerance | 0.001 em, `-e` to change | upm/1000, fixed | n/a | 0.001 em, option |
 | Curve modes | cu2qu, mixed, keep-quad, keep-cubic | cu2qu only | n/a | cu2qu, keep-quad |
 | Contour direction | reversed for TTF | reversed for TTF | source direction | reversed for TTF |
@@ -701,6 +709,8 @@ table says otherwise. Each row is also on `crates/oracle/allow.toml` with the so
 | A designspace axis whose range is wider than its map (range 100–900, map 300–700) | refused: the map must reach the axis minimum, default and maximum (fontmake 3.12.1 refuses it too) | compiled: the map is read past its ends as fontTools' `piecewiseLinearMap` reads it (the same offset as the nearest point), and the `avar` points are those fontTools' normalization gives | refusing would leave such a source with no variable font; the result is a valid table and matches what fontTools computes before its check. Pinned by `an_axis_range_wider_than_the_map_extends_the_map` |
 | Rounding of `gvar` deltas | each delta rounded on its own, so a source's coordinates can come back one unit off | region by region, each later region taken from the rounded earlier ones, as fontmake's varLib rounds them | every master and intermediate layer comes back exactly as `glyf` would store it; fontmake gives the same font (`compile.gvarIupOptimisation`) |
 | Overlap flags in a variable font | never set | `OVERLAP_SIMPLE` on every simple glyph | a variable font keeps its overlaps, and some rasterizers need the flag to draw them (`compile.overlapFlags`) |
+| Vertical phantom points of the drawn `.notdef` at an intermediate location | unchanged, as FontCraft; fontmake moves them by the ascender (−800), because the temporary font it builds for a sparse master has no OS/2 table | vary with the masters' metrics only | an artefact of fontmake's build: `.notdef` has no layer there (`compile.gvarPhantomPoints`) |
+| Vertical origins (VVAR) of a CFF2 font with intermediate layers | no CFF2; fontmake gives every glyph without a layer at the intermediate location that sparse master's default vertical origin | interpolated from the glyph's own sources | the default belongs to other glyphs (`VVAR`) |
 | Kerning of alternate (bracket) glyphs in a variable font, for a pair between two glyphs that both have alternate layers | the pair is copied to every combination of the two glyphs and their alternate glyphs (`x x.BRACKET.varAlt01` −50 in `BracketTestFontKerning`) | copied as glyphsLib copies it, one alternate glyph at a time: (parent, x) gives (alternate, x), (x, parent) gives (x, alternate), (parent, parent) gives only (alternate, alternate) | fontmake builds the same pairs (`compile.bracketLayerGlyphs`, a guess until the reference app is checked). The variable measure counts the source as different in `GPOS` kerning against fontc |
 | Feature variations of a decreasing axis (`decreasing_axis/axis.glyphs`, whose `opsz` masters fall from 144 to 9) | `fvar` gives the axis as 144 to 9 and `avar` from-coordinates of −2, so no alternate glyph applies at any location | the axis ascends from 9 to 144, and `bar.BRACKET.varAlt01` applies inside its range | fontc's tables are outside what the format allows; fontmake does not build the source. The variable measure counts it as different against fontc |
 | `CPAL` of a source with `Color Palettes` and no colour layers | written on its own | not written, as fontmake writes it | no table refers to the palettes, so they change nothing in the font (`CPAL`) |
@@ -1064,9 +1074,9 @@ the binary only; compilation never changes the source.
 
 ## Open questions
 
-1. **Overlap flags in fontmake.** fontc never sets OVERLAP_SIMPLE / OVERLAP_COMPOUND. Whether the
-   fontmake/ufo2ft pipeline sets them on variable fonts was not determinable from the files read.
-   Check a fontmake-built variable font before fixing our default.
+1. **Overlap flags in fontmake.** Answered (M9.38): neither fontc 1.0.0 nor fontmake 3.12.1 sets
+   OVERLAP_SIMPLE or OVERLAP_COMPOUND in a variable font; `compile.overlapFlags` keeps
+   OVERLAP_SIMPLE as our choice.
 2. **Mac names and Mac cmap.** makeotf writes them by default; modern pipelines do not. Decide
    whether the AFDKO-compatible preset needs them at all, and which Mac encodings to support.
 3. **Measured versus fixed x-height and cap height.** The source model normally stores both, so the

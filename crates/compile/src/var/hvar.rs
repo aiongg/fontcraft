@@ -1,10 +1,13 @@
-//! The `HVAR` and `VVAR` tables (M9.6).
+//! The `HVAR` and `VVAR` tables (M9.6, M9.38).
 //!
 //! Rows: the `HVAR` and `VVAR` table rows, `compile.hvarStoreChoice`.
 //!
 //! Contract: the advance of each glyph (in glyph order) as a [`VarValue`]; the deltas go into an
 //! item variation store, written with an advance-width mapping or as direct rows, whichever is
-//! smaller, as fontc chooses. Side-bearing variations are left to `gvar`'s phantom points.
+//! smaller, as fontc chooses. Side-bearing variations are left to `gvar`'s phantom points, which
+//! a CFF2 font has not: its `VVAR` also holds the vertical origins, for which the store always
+//! has index maps, the advances first and the origins after them, as fontTools' `varLib` builds
+//! them (MIT).
 //!
 //! The choice follows fontc (`fontbe` `hvar.rs`, `vvar.rs`, `metric_variations.rs`, Apache-2.0):
 //! the store indexed by glyph id is built only when every glyph that varies has the same regions
@@ -17,7 +20,7 @@ use std::collections::BTreeSet;
 
 use write_fonts::dump_table;
 use write_fonts::tables::hvar::Hvar;
-use write_fonts::tables::variations::ivs_builder::VariationStoreBuilder;
+use write_fonts::tables::variations::ivs_builder::{VariationIndexRemapping, VariationStoreBuilder};
 use write_fonts::tables::variations::{DeltaSetIndexMap, ItemVariationStore, RegionAxisCoordinates, VariationRegion};
 use write_fonts::tables::vvar::Vvar;
 use write_fonts::types::F2Dot14;
@@ -67,6 +70,31 @@ pub(crate) fn store_deltas(values: &[&VarValue], axis_count: u16, table: &'stati
         .collect()
 }
 
+/// The delta-set indices `ids` as a map.
+fn index_map(ids: &[u32], remap: &VariationIndexRemapping, table: &'static str) -> Result<DeltaSetIndexMap, CompileError> {
+    let mut indices = ids
+        .iter()
+        .map(|id| remap.get(*id).ok_or_else(|| CompileError::Table { table, message: "a delta set was lost while building the store".into() }))
+        .collect::<Result<Vec<_>, _>>()?;
+    // Glyphs past the end of the map use its last entry, so repeats at the end are dropped, as
+    // fontTools and fontc do.
+    while indices.len() > 1 && indices.get(indices.len() - 2) == indices.last() {
+        indices.pop();
+    }
+    Ok(indices.into_iter().collect())
+}
+
+/// Refuses a font without axes and more values than a table indexes.
+fn check_counts(axis_count: u16, values: usize, table: &'static str) -> Result<(), CompileError> {
+    if axis_count == 0 {
+        return Err(CompileError::Table { table, message: "a variable font needs at least one axis".into() });
+    }
+    if values > MAX_GLYPHS {
+        return Err(CompileError::Table { table, message: format!("{values} glyphs are more than the table indexes") });
+    }
+    Ok(())
+}
+
 fn size<T: write_fonts::FontWrite + write_fonts::validate::Validate>(table: &T, name: &'static str) -> Result<usize, CompileError> {
     dump_table(table).map(|b| b.len()).map_err(|e| CompileError::Table { table: name, message: e.to_string() })
 }
@@ -77,12 +105,7 @@ fn advance_store(
     advances: &[VarValue],
     table: &'static str,
 ) -> Result<(ItemVariationStore, Option<DeltaSetIndexMap>), CompileError> {
-    if axis_count == 0 {
-        return Err(CompileError::Table { table, message: "a variable font needs at least one axis".into() });
-    }
-    if advances.len() > MAX_GLYPHS {
-        return Err(CompileError::Table { table, message: format!("{} glyphs are more than the table indexes", advances.len()) });
-    }
+    check_counts(axis_count, advances.len(), table)?;
     let refs: Vec<&VarValue> = advances.iter().collect();
     let deltas = store_deltas(&refs, axis_count, table)?;
 
@@ -110,17 +133,7 @@ fn advance_store(
     let mut builder = VariationStoreBuilder::new(axis_count);
     let ids: Vec<_> = deltas.into_iter().map(|d| builder.add_deltas(d)).collect();
     let (store, remap) = builder.build();
-    let indices = ids
-        .into_iter()
-        .map(|id| remap.get(id).ok_or_else(|| CompileError::Table { table, message: "a delta set was lost while building the store".into() }))
-        .collect::<Result<Vec<_>, _>>()?;
-    // Glyphs past the end of the map use its last entry, so repeats at the end are dropped, as
-    // fontTools and fontc do.
-    let mut indices = indices;
-    while indices.len() > 1 && indices.get(indices.len() - 2) == indices.last() {
-        indices.pop();
-    }
-    let map: DeltaSetIndexMap = indices.into_iter().collect();
+    let map = index_map(&ids, &remap, table)?;
 
     if let Some(direct) = direct
         && size(&direct, table)? <= size(&store, table)? + size(&map, table)?
@@ -136,10 +149,24 @@ pub fn build_hvar(axis_count: u16, advances: &[VarValue]) -> Result<Hvar, Compil
     Ok(Hvar::new(store, map, None, None))
 }
 
-/// The `VVAR` table of vertical `advances` (one per glyph, in glyph order).
-pub fn build_vvar(axis_count: u16, advances: &[VarValue]) -> Result<Vvar, CompileError> {
-    let (store, map) = advance_store(axis_count, advances, "VVAR")?;
-    Ok(Vvar::new(store, map, None, None, None))
+/// The `VVAR` table of vertical `advances` (one per glyph, in glyph order); for a font without
+/// `gvar`, with its vertical `origins` (the y of each, in the same order).
+pub fn build_vvar(axis_count: u16, advances: &[VarValue], origins: Option<&[VarValue]>) -> Result<Vvar, CompileError> {
+    const TABLE: &str = "VVAR";
+    let Some(origins) = origins else {
+        let (store, map) = advance_store(axis_count, advances, TABLE)?;
+        return Ok(Vvar::new(store, map, None, None, None));
+    };
+    check_counts(axis_count, advances.len().max(origins.len()), TABLE)?;
+    let mut builder = VariationStoreBuilder::new(axis_count);
+    let mut add = |values: &[VarValue]| -> Result<Vec<u32>, CompileError> {
+        let refs: Vec<&VarValue> = values.iter().collect();
+        Ok(store_deltas(&refs, axis_count, TABLE)?.into_iter().map(|d| builder.add_deltas(d)).collect())
+    };
+    let (advance_ids, origin_ids) = (add(advances)?, add(origins)?);
+    let (store, remap) = builder.build();
+    let (advance_map, origin_map) = (index_map(&advance_ids, &remap, TABLE)?, index_map(&origin_ids, &remap, TABLE)?);
+    Ok(Vvar::new(store, Some(advance_map), None, None, Some(origin_map)))
 }
 
 #[cfg(test)]
@@ -183,7 +210,24 @@ mod tests {
             hex(&dump_table(&hvar).unwrap()),
             "000100000000001400000000000000000000000000010000000c00010000001c00010002c000c0000000000040004000000500000002000000010000ce32000000000000"
         );
-        assert!(build_vvar(1, &advances).unwrap().advance_height_mapping.is_none());
+        assert!(build_vvar(1, &advances, None).unwrap().advance_height_mapping.is_none());
+    }
+
+    // Expected bytes: fontc 1.0.0 on a source of seven glyphs, two with an intermediate layer,
+    // one of which keeps the default height there.
+    #[test]
+    fn vvar_matches_the_oracle() {
+        let sparse = |a: i32| VarValue { default: 1000, deltas: vec![(region(0.0, 0.5, 1.0), a), (region(0.5, 1.0, 1.0), 100)] };
+        let heights = [up(100), up(100), up(100), up(100), sparse(10), sparse(0), up(100)];
+        let vvar = build_vvar(1, &heights, None).unwrap();
+        assert_eq!(
+            hex(&dump_table(&vvar).unwrap()),
+            "00010000000000180000004f00000000000000000000000000010000000c00010000002200010003000040004000000020004000200040004000000300000003000000010002000064000a646400000001000702020202010002"
+        );
+        // With origins, both have a map into one store.
+        let origins = [up(60), up(30), up(60), up(60), sparse(-70), sparse(0), up(60)];
+        let vvar = build_vvar(1, &heights, Some(&origins)).unwrap();
+        assert!(vvar.advance_height_mapping.is_some() && vvar.v_org_mapping.is_some());
     }
 
     #[test]
