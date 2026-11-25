@@ -6,6 +6,20 @@ _Updated: 2026-11-24: M12.81 (the FontBakery verdict measure), M13.41 (segment c
 
 ## State of the tree
 
+- **Batch 27 (20 branches merged): where it stands.** What each package does is in `ROADMAP.md`, Shipped so far, batch 27.
+  - Measures are not run: each package's plan section has the commands. First the oracle runs of M2.10 and M3.31
+    (`fontcraft-cli oracle --corpus --against fontmake`, TrueType and CFF; the numbers below may be older than the code) and the variable run of M9.38.
+    `crates/oracle` allow-list rows "Open corners (M6)" for `/OpenCorners.ufo` go when that run shows no difference.
+  - Check on a desktop: the window's move, resize and maximise come back; an unplugged monitor; an empty
+    `FONTCRAFT_SETTINGS_DIR` writes nothing; Print to a printer; Show All Masters and the Higher-Order Interpolation tool
+    (nothing of either has been seen); the timing graph's dots run while Animate Axis does.
+  - Known gaps: interpolatable masters of a font with inactive sources (M2.9 with M9.37) are untested; previews close
+    open corners on the resolved outline, so a mirrored component's ears show; window tools cannot be stopped by a cancel;
+    a batch cancelled after a step wrote files keeps them; `path.correctPathDirection` would reverse overlapping
+    crossbars (decide with the M3.32 measure); overshoots stay flat up to 200 PPM in autohinted builds.
+  - Follow-ups of M4.20 are in specs 05 (Q21 to Q25) and 08 (Q20 to Q27); the first is that nothing in the window calls
+    `Session::set_user_glyph_data`.
+
 - **M12.81 (FontBakery verdict measure): built and run.** `python3 -I crates/audit/crosscheck/fontbakery_verdicts.py
   --cli target/release/fontcraft-cli --corpus <main checkout>/corpus --out <dir>` (FontBakery 1.1.0 as a uv tool,
   the afdko uv tool's fontTools for WOFF, fontc for the sources; reports are reused unless `--fresh`). Last run: 394
@@ -25,10 +39,9 @@ _Updated: 2026-11-24: M12.81 (the FontBakery verdict measure), M13.41 (segment c
     Decompose Cap and Decompose Brush only when that kind is on the selection.
   - The wave bends into the square (the host's left normal); the brush is a bar about 80 units wide centred on the
     right side.
-  - The cap looks lopsided. The origin-only flag under Fit ends about 260 units right of the top-left corner, just inside the square. The left
-    side, cut to the cap's end node, becomes a diagonal down to the bottom-left node. This follows the § 8.4
-    guesses; check it against the reference app's export of the cap test font before changing it.
-  - The cap's band also covers the two cut sides.
+  - Fit sizes an origin-only cap by the distance between the ends of its path, alignment is right on clockwise paths, and
+    the highlight leaves out the stem's sides (X.fix103, X.fix103b); the check in the reference app is the observe step of
+    `capComponent.setFit`.
   - Not tried: copy and paste of attachments, and the pickers' Add and replace flows.
 
 - **M13.42b (attachment hints follow node edits): built.** `crates/hinting/src/remap.rs`: the
@@ -192,7 +205,7 @@ _Updated: 2026-11-24: M12.81 (the FontBakery verdict measure), M13.41 (segment c
     include folder and files), kept per document revision in the features slot; a node move keeps the diagnostics,
     a code or glyph-set edit drops them. `font.features.check` (`cmd/features_check.rs`, query) compiles the code
     with one entry replaced by a draft (at most `MAX_DRAFT_BYTES`, 1 MB), code only, and changes nothing;
-    `check_font` runs it without a session. `feature_state::prebuild` builds the preview fonts and keeps them under
+    `check_font` runs it without a session. `feature_state::compile_ahead` builds the preview fonts and keeps them under
     the compile's hash.
   - Window: the code editor sends `ViewMsg::FeatureDraft` while the shown text differs from the stored code and
     underlines the check of exactly that text (`EntryPane::check`), or the last compile's diagnostics while it is
@@ -1199,10 +1212,7 @@ linked file is checked against it, and a linked file outside the read root reads
      at both canvas edges runs its filters again on every frame). Colour drawing: screenshots.
    - Table Viewer (M12.38): the source of the last export, a control-channel measure and screenshots.
    - Small UI leftovers: the Exports tab's aliases (not yet defined).
-   - Wave 1: the project asked about in the save question is not brought forward; `ui.text` can type into a
-     dialog behind the question, and Tab does not move focus inside it; check that tool letters stay blocked while
-     it is open (M14.3). `ui.contextMenu.invoke` does not notice a master switch since the menu opened, and a
-     multi-step item is not one transaction (M13.78). The Text tool moves the measurement line with Cmd+Ctrl+Alt,
+   - Wave 1: the project asked about in the save question is not brought forward; 78). The Text tool moves the measurement line with Cmd+Ctrl+Alt,
      which is AltGr off the Mac (`canvas/text.rs`); off the Mac a Ctrl-drag also turns on the lever, as Ctrl reports
      as Cmd (M3.19, M3.21). Cmd+Delete on an axis row; command warnings do not reach the panels (M9.27). The
      extrapolation audit check (`instanceOutsideAxisRange`) keeps its own tolerance rule: decide whether it shares
@@ -1295,7 +1305,7 @@ Requests the integrations left for the builder packages:
 | M12.44 | `checkOutlines` decimal output and keepContourOrder, `compareFamily -l`; source-field names beyond the common fields; the outline checks' many warnings on decoded compiled fonts |
 | M12.17 | `VARC`, compressed `SVG ` documents and composite bitmaps (M12.19c); several pyftsubset options; subsetting sources |
 | M13.2 | module commands, export filters and check modules call the runtime; installing a module by dropping a file on the window or File › Open, and web storage of modules, are open |
-| M12 checks | the engine's external-validator and source-file services (both answer Unavailable); M12.46's three unregistered checks (misaligned components, missing anchors, marks without attachment) need the components or glyph-data dependency; a font-wide work budget for rasterising in the file checks and for static instancing in the variable-font checks |
+| M12 checks | the engine's external-validator and source-file services (both answer Unavailable) need the components or glyph-data dependency; a font-wide work budget for rasterising in the file checks and for static instancing in the variable-font checks |
 | M12 tools | `tables.list` splitting a WOFF2 collection by face; glyph renames in a source's feature code (`font.renameGlyphs` lists the glyphs still named there); commands to delete tabular and redundant kerning pairs and to clear info fields; `fontcraft-cli proof` defaults to PDF and exits with status 4 until M12.36; `metrics --location` waits for M12.20; dehint refuses sources until M10's model is used; outline repairs refuse CFF and `gvar` fonts except rounding |
 
 Open from M10: otfautohint keeps every input point through its overlap union, so a glyph such
