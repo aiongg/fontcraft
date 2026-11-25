@@ -524,7 +524,7 @@ fn post(element: &Element, ctx: &ReadContext) -> Result<Vec<u8>> {
 
 /// What follows the header of a `post` table of `format`: the names of the glyph order, or their codes. `mapping` is
 /// the glyph names that stand for another name, `extra` the names that come first in the name list.
-fn post_name_data(format: i32, ctx: &ReadContext, mapping: &HashMap<&str, &str>, mut extra: Vec<String>) -> Result<Vec<u8>> {
+fn post_name_data(format: i64, ctx: &ReadContext, mapping: &HashMap<&str, &str>, mut extra: Vec<String>) -> Result<Vec<u8>> {
     use read_fonts::tables::post::DEFAULT_GLYPH_NAMES;
     let mut out = Out::default();
     match format {
@@ -578,7 +578,7 @@ pub(crate) fn reload_post(data: &[u8], count: usize, ctx: &ReadContext) -> Resul
         return Err(TablesError::invalid(format!("the glyph order names {} glyphs of {count}", order.len())));
     }
     let header = data.get(..32).ok_or_else(|| TablesError::invalid("the 'post' table is cut off"))?;
-    let format = header.get(..4).and_then(|b| <[u8; 4]>::try_from(b).ok()).map_or(0, i32::from_be_bytes);
+    let format = header.get(..4).and_then(|b| <[u8; 4]>::try_from(b).ok()).map_or(0, |b| i64::from(i32::from_be_bytes(b)));
     let mapping: HashMap<&str, &str> = names.mapping.iter().flatten().map(|(k, v)| (k.as_str(), v.as_str())).collect();
     let mut out = header.to_vec();
     out.extend(post_name_data(format, ctx, &mapping, names.extra_names.clone().unwrap_or_default())?);

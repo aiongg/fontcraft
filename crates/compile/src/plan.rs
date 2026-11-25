@@ -171,6 +171,7 @@ pub fn with_expanded_names<'a>(font: Option<&Font>, resolved: &'a Resolved) -> C
         instance: resolved.instance,
         instance_classes: resolved.instance_classes,
         production_names: resolved.production_names,
+        vertical_layers: resolved.vertical_layers,
         glyphs: Vec::new(),
         notes: Vec::new(),
     };

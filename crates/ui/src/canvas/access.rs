@@ -20,10 +20,10 @@ use crate::app::models::canvas::{ComponentMark, EditedGlyph};
 craft::ui::words! {
     /// The names of what the canvas shows. `path` and `point` count from 1.
     pub struct AccessWords {
-        node: "fontcraftCanvasAccess.node" = "Path {path}, node {point}";
-        handle: "fontcraftCanvasAccess.handle" = "Path {path}, handle {point}";
-        component: "fontcraftCanvasAccess.component" = "Component {name}";
-        anchor: "fontcraftCanvasAccess.anchor" = "Anchor {name}";
+        node: template "fontcraftCanvasAccess.node" = "Path {path}, node {point}";
+        handle: template "fontcraftCanvasAccess.handle" = "Path {path}, handle {point}";
+        component: template "fontcraftCanvasAccess.component" = "Component {name}";
+        anchor: template "fontcraftCanvasAccess.anchor" = "Anchor {name}";
     }
 }
 

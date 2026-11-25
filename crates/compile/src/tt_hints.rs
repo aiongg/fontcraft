@@ -181,7 +181,7 @@ fn restricted(fs_type: u16, options: &TtAutohintOptions) -> bool {
 /// autohinted TrueType build, every composite is written as contours, so it is hinted as one
 /// outline.
 pub(crate) fn component_options(source: Option<&Font>, resolved: &Resolved, flavour: Flavour, options: &Options) -> ComponentOptions {
-    let mut out = options.components;
+    let mut out = options.components.clone();
     if flavour == Flavour::TrueType
         && !out.decompose_all
         && !options.hinting.strip

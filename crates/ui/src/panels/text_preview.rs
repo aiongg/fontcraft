@@ -34,7 +34,7 @@ use craft::ui::runtime::commands::CommandRef;
 use craft::ui::runtime::env::{Env, Label};
 use craft::ui::style::TypeRole;
 use craft::ui::text::TextField;
-use craft_ext::ui::runtime::access::{Drawn, listening, report};
+use craft_ext::ui::runtime::access::{self, Drawn, listening};
 use craft_ext::ui::text::{FieldSelection as _, TextSelection};
 use egui::{Align2, Color32, ColorImage, FontId, Pos2, Rect, Sense, TextureOptions, Ui, pos2, vec2};
 use fontcraft_geom::{Affine, BezPath, Shape as _};
@@ -416,7 +416,7 @@ fn area(ui: &mut Ui, model: &TextPreviewModel, words: &TextPreviewWords, selecti
             painter.text(place.screen(c.x, c.y), Align2::CENTER_CENTER, c.c, FontId::proportional(model.size as f32), fallback);
         }
         if listening(&response) {
-            report(&response, visible, MAX_ACCESS_GLYPHS, drawn_glyphs(page, place, lines));
+            access::report(&response, visible, MAX_ACCESS_GLYPHS, drawn_glyphs(page, place, lines));
         }
         context_menu(ui, model, words, selection, &response, sent);
     });
