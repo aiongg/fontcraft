@@ -53,6 +53,8 @@ craft::ui::words! {
         selected: "fontcraftFontView.selected" = "selected";
         shown: "fontcraftFontView.shown" = "shown";
         in_font: "fontcraftFontView.inFont" = "in font";
+        /// What assistive technology reads after the name of a glyph whose layers cannot interpolate.
+        incompatible: "fontcraftFontView.incompatible" = "incompatible layers";
         /// The grid or list of a font with no glyph shown.
         no_glyphs: "fontcraftFontView.noGlyphs" = "No glyphs";
         /// Without an open font.

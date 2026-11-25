@@ -27,7 +27,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Query Glyphs",
             [],
             None,
-            "{entries?: [path], rules?: ruleTree, search?: {query, fields?, matchCase?, regex?}, master?: id, sidebar?: bool} the glyphs that sidebar entries, ad-hoc smart-filter rules and a search term show together. A path is text such as categories/Letter/Uppercase, languages/latin or filters/Folder/Name, or a list of names. Categories add up, scripts add up, filters narrow each other; sections, rules and search narrow each other. A rule tree is {all|any|none: [rule or group]} with rule {property, op, value}; the Custom rule takes predicate text. `search` may also be plain text; fields are name, unicode and note. Layer rules read `master` (default: the first master); the count rules always read the first master. sidebar: true adds every entry with its count and its present/expected badge → {glyphs: [names] in glyph order (list order while a list filter is selected), count, total, sidebar?}",
+            "{entries?: [path], rules?: ruleTree, search?: {query, fields?, matchCase?, regex?}, master?: id, sidebar?: bool, knownCompatibility?: bool} the glyphs that sidebar entries, ad-hoc smart-filter rules and a search term show together. A path is text such as categories/Letter/Uppercase, languages/latin or filters/Folder/Name, or a list of names. Categories add up, scripts add up, filters narrow each other; sections, rules and search narrow each other. A rule tree is {all|any|none: [rule or group]} with rule {property, op, value}; the Custom rule takes predicate text. `search` may also be plain text; fields are name, unicode and note. Layer rules read `master` (default: the first master); the count rules always read the first master. sidebar: true adds every entry with its count and its present/expected badge → {glyphs: [names] in glyph order (list order while a list filter is selected), count, total, sidebar?, compatibilityPending?}. knownCompatibility: true answers the Master Compatible rule from the glyphs already checked (the others count as compatible, and `compatibilityPending` says how many they are) instead of checking every glyph first",
             has_doc,
             query_glyphs
         ),
@@ -257,7 +257,12 @@ fn query_glyphs(s: &mut Session, v: &Value) -> Result<Value> {
     let sources = Sources::read(s, wants_filters)?;
     // Rules, ours or a smart filter's, may ask for out-of-sync metrics keys.
     let stale = if rules.is_some() || wants_filters { out_of_sync(s)? } else { HashSet::new() };
-    let incompatible = if rules.is_some() || wants_filters { s.incompatible_glyphs() } else { HashSet::new() };
+    let known_only = p.bool_or("knownCompatibility", false)?;
+    let (incompatible, pending) = match (rules.is_some() || wants_filters, known_only) {
+        (false, _) => (HashSet::new(), 0),
+        (true, true) => s.known_incompatible(),
+        (true, false) => (s.incompatible_glyphs(), 0),
+    };
     let props = s.effective_props()?;
     let data = s.glyph_data()?;
     let font = s.font()?;
@@ -269,6 +274,9 @@ fn query_glyphs(s: &mut Session, v: &Value) -> Result<Value> {
     out.insert("count".into(), json!(glyphs.len()));
     out.insert("glyphs".into(), json!(glyphs));
     out.insert("total".into(), json!(font.glyphs.len()));
+    if known_only {
+        out.insert("compatibilityPending".into(), json!(pending));
+    }
     if with_sidebar {
         let sidebar = serde_json::to_value(catalog.sidebar()).map_err(|e| EngineError::Internal(e.to_string()))?;
         out.insert("sidebar".into(), sidebar);

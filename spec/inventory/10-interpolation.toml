@@ -342,9 +342,13 @@ milestone = "M9"
 summary = "In Edit View a glyph whose layers are incompatible shows a red bar above its ascender line."
 ref = "Interpolation › Outline Compatibility › Identifying Incompatible Outlines"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft: crates/ui/src/canvas/compatibility.rs, over every glyph of the tab whose layers cannot interpolate, hidden while Enforce Compatibility Check is present and off."
+notes = "Documented, not yet observed. FontCraft: crates/ui/src/canvas/compatibility.rs (paint_bars) from crates/ui/src/app/models/incompatibility.rs, over every glyph of the tab whose layers cannot interpolate, hidden while Enforce Compatibility Check is present and off. The first difference of each pair of layers, with the layers' names, shows beside the pointer over the bar, and in the status line while that glyph is edited and there is no error or notice to show. A click on the bar edits its glyph and turns Show Master Compatibility on."
 guesses = [
   "The bar spans the glyph's advance a few screen points above the ascender, a few points high. Settle by measuring it in a screenshot of the reference app.",
+  "The reason under the pointer, in the status line, and the click on the bar are ours; the handbook gives the bar no action. Settle by hovering and clicking the bar in the reference app.",
+]
+observe = [
+  "In F5 (incompatible), hover and click the red bar: note any text or action; repeat with two incompatible glyphs in one tab.",
 ]
 
 [[behavior]]

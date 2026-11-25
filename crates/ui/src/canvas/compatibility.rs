@@ -9,12 +9,121 @@
 //! | anchors | a dashed line across the layers of a group |
 //! | a component base or anchor name the group disagrees on | written in red at its point |
 //! | the edited layer's shapes | their index beside the start node or centre |
+//!
+//! It also paints the incompatibility bars (`compatibility.editViewRedBar`, projected by `app::models::incompatibility`
+//! whether or not the view is on) and, under the pointer, a bar's reason. A click on a bar edits its glyph and turns the
+//! view on ([`pointer`]).
 
-use egui::{Align2, FontId, Shape, Stroke, Vec2};
+use craft::ui::runtime::commands::CommandRef;
+use egui::{Align2, FontId, Pos2, Rect, Shape, Stroke, Vec2, vec2};
+use fontcraft_geom::Point;
+use fontcraft_tools::{PointerEvent, PointerKind};
+use serde_json::json;
 
+use super::camera::Camera;
 use super::layers::PaintCx;
 use super::paint::{flatten, screen};
+use super::tokens::CompatTokens;
+use super::tools::tokens::ToolTokens;
 use crate::app::models::compatibility::{LinkKind, SegmentState};
+use crate::app::models::incompatibility::Bar;
+use crate::app::{FontCraftApp, Msg};
+
+/// A press this module took.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Press {
+    /// On an incompatibility bar.
+    Bar(Bar),
+}
+
+/// Where a bar is drawn: above the ascender, the glyph's advance wide. `None` when it does not lie on a screen.
+pub fn bar_rect(camera: &Camera, bar: &Bar, t: &CompatTokens) -> Option<Rect> {
+    let a = camera.to_screen(Point::new(bar.x0, bar.y));
+    let b = camera.to_screen(Point::new(bar.x1, bar.y));
+    let mut rect = Rect::from_min_max(Pos2::new(a.x.min(b.x), a.y - t.bar_gap - t.bar_height), Pos2::new(a.x.max(b.x), a.y - t.bar_gap));
+    if rect.width() < t.bar_min_width {
+        rect = Rect::from_center_size(rect.center(), vec2(t.bar_min_width, rect.height()));
+    }
+    rect.is_finite().then_some(rect)
+}
+
+/// The bar at `at` (screen points), a little room around it included.
+fn bar_at<'a>(bars: &'a [Bar], camera: &Camera, t: &CompatTokens, at: Pos2) -> Option<&'a Bar> {
+    let reach = t.bar_gap / 2.0;
+    bars.iter().find(|bar| bar_rect(camera, bar, t).is_some_and(|rect| rect.expand(reach).contains(at)))
+}
+
+/// Paints the bars.
+pub fn paint_bars(cx: &PaintCx<'_>) {
+    let t = &cx.tokens.compat;
+    for bar in &cx.compatibility.bars {
+        if let Some(rect) = bar_rect(&cx.camera, bar, t).filter(|r| r.intersects(cx.rect)) {
+            cx.painter.rect_filled(rect, 0.0, t.bad);
+        }
+    }
+}
+
+/// Paints the reason of the bar under the resting pointer, as the drag badges are drawn.
+pub fn paint_reason(cx: &PaintCx<'_>) {
+    if cx.compatibility.bars.is_empty() {
+        return;
+    }
+    let (at, pressed) = cx.painter.ctx().input(|i| (i.pointer.hover_pos(), i.pointer.any_down()));
+    let Some(at) = at.filter(|at| !pressed && cx.rect.contains(*at)) else { return };
+    let Some(bar) = bar_at(&cx.compatibility.bars, &cx.camera, &cx.tokens.compat, at) else { return };
+    let t = ToolTokens::standard();
+    let galley = cx.painter.layout(bar.reason.clone(), FontId::proportional(t.badge_text_size), t.badge_text, cx.tokens.compat.reason_width);
+    let pad = vec2(t.badge_padding, t.badge_padding);
+    let size = galley.size() + pad * 2.0;
+    // Below the pointer, moved to stay on the canvas.
+    let right = (cx.rect.right() - size.x).max(cx.rect.left());
+    let bottom = (cx.rect.bottom() - size.y).max(cx.rect.top());
+    let corner = Pos2::new((at.x + t.badge_offset).min(right), (at.y + t.badge_offset).min(bottom));
+    cx.painter.rect_filled(Rect::from_min_size(corner, size), t.badge_padding, t.badge_fill);
+    cx.painter.galley(corner + pad, galley, t.badge_text);
+}
+
+/// The indicators' part of a pointer event, before the tools see it: a press on a bar and what follows until the
+/// release. Returns the errors; `None` when the event is the tools'.
+pub fn pointer(app: &mut FontCraftApp, ev: &PointerEvent) -> Option<Vec<String>> {
+    if app.compat_press.is_some() {
+        return match ev.kind {
+            PointerKind::Up => app.compat_press.take().map(|press| release(app, press, ev)),
+            PointerKind::Down => {
+                app.compat_press = None;
+                pressed(app, ev)
+            }
+            PointerKind::Drag | PointerKind::Move | PointerKind::DoubleClick => Some(Vec::new()),
+        };
+    }
+    if ev.kind == PointerKind::Down { pressed(app, ev) } else { None }
+}
+
+fn pressed(app: &mut FontCraftApp, ev: &PointerEvent) -> Option<Vec<String>> {
+    if app.tools.toolbox.busy() || app.session.interaction().is_some() {
+        return None;
+    }
+    let camera = super::tools::apply::camera(app);
+    let at = camera.to_screen(ev.pos);
+    let bar = bar_at(&app.models.compatibility.bars, &camera, &app.models.canvas_tokens.compat, at)?.clone();
+    app.compat_press = Some(Press::Bar(bar));
+    Some(Vec::new())
+}
+
+fn release(app: &mut FontCraftApp, press: Press, ev: &PointerEvent) -> Vec<String> {
+    let Press::Bar(bar) = press;
+    let camera = super::tools::apply::camera(app);
+    let on_it = bar_rect(&camera, &bar, &app.models.canvas_tokens.compat).is_some_and(|r| r.expand(2.0).contains(camera.to_screen(ev.pos)));
+    if !on_it {
+        return Vec::new();
+    }
+    let mut commands = Vec::new();
+    if let Some(item) = bar.item.filter(|i| Some(*i) != app.view.text.edited_index()) {
+        commands.push(CommandRef::with_params("editView.setCursor", json!({"index": item})));
+    }
+    commands.push(CommandRef::with_params("view.showMasterCompatibility", json!({"on": true})));
+    commands.into_iter().filter_map(|c| app.apply_msg(Msg::Shell(c)).err()).collect()
+}
 
 pub fn paint(cx: &PaintCx<'_>) {
     cx.painter.extend(shapes(cx));

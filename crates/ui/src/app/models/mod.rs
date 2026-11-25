@@ -28,6 +28,7 @@ pub mod hint_canvas;
 pub mod hinting;
 pub mod hoi;
 pub mod image_box;
+pub mod incompatibility;
 pub mod info_box_kerning;
 pub mod kerning_review;
 pub mod kerning_tools;
@@ -119,6 +120,8 @@ pub struct Models {
     pub selection_info: Tracked<glyph_props::GlyphPropsModel>,
     /// The Master Compatibility view (`canvas::compatibility`).
     pub compatibility: Tracked<compatibility::CompatibilityModel>,
+    /// Where the compatibility checks behind the indicators stand.
+    pub compat_scan: incompatibility::Scan,
     /// The Info box and the Palette sections (`panels::info_box`, `panels::transformations`, …); projected outside the
     /// stamp, since they read the canvas's selection.
     pub palette: palette::PaletteModels,
@@ -243,6 +246,11 @@ impl Models {
         shape_order::project(&mut self.shape_order, cx);
         bitmap_editor::project(&mut self.bitmap_editor, cx);
         true
+    }
+
+    /// Brings the incompatibility indicators up to date; `projected` is [`Self::project`]'s answer on this pass.
+    pub fn project_indicators(&mut self, projected: bool, cx: &mut ProjectCx<'_>) {
+        incompatibility::project(&mut self.compat_scan, &mut self.font_view, &mut self.compatibility, &self.text, projected, cx);
     }
 
     /// Where the axis sweep is along its axis, 0 to 1: the clock of the timing graph's dots. `None` while no axis is

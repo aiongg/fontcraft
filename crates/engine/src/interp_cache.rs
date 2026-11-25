@@ -194,6 +194,64 @@ impl InterpCache {
         Ok(out)
     }
 
+    /// The compatibility of `glyph` if it has been worked out for this font; nothing is worked out.
+    pub fn known_compat(&mut self, font: &Arc<Font>, revision: u64, glyph: &str) -> Option<Arc<Compat>> {
+        self.sync(font, revision);
+        self.compat.get(glyph).cloned()
+    }
+
+    /// Works out the compatibility of glyphs not checked yet, those of `first` in their order and then, with `rest`, the
+    /// font's others in glyph order, until about `work` nodes were compared; at least one glyph while one waits. Returns
+    /// whether glyphs still wait. Without a usable designspace nothing can be checked and nothing waits.
+    ///
+    /// The window calls it once a pass, so a large font's indicators never take a frame of their own.
+    pub fn check_some(&mut self, font: &Arc<Font>, revision: u64, first: &[String], rest: bool, work: usize) -> bool {
+        self.sync(font, revision);
+        if self.designspace_and_scope(font).is_err() {
+            return false;
+        }
+        let others = font.glyphs.iter().filter(|_| rest).map(|g| g.name.as_str());
+        let mut spent = 0usize;
+        let mut checked = false;
+        for name in first.iter().map(String::as_str).chain(others) {
+            if self.compat.contains_key(name) {
+                continue;
+            }
+            let Some(glyph) = font.glyph(name) else { continue };
+            if checked && spent >= work {
+                return true;
+            }
+            checked = true;
+            spent = spent.saturating_add(check_work(glyph));
+            let _ = self.compat(font, revision, name);
+        }
+        false
+    }
+
+    /// The glyphs known to be incompatible and how many have not been checked; none of either without a designspace.
+    pub fn known_incompatible(&mut self, font: &Arc<Font>, revision: u64) -> (HashSet<String>, usize) {
+        self.sync(font, revision);
+        if self.designspace_and_scope(font).is_err() {
+            return (HashSet::new(), 0);
+        }
+        let known = self.compat.iter().filter(|(_, c)| !c.ok).map(|(name, _)| name.clone()).collect();
+        (known, font.glyphs.len().saturating_sub(self.compat.len()))
+    }
+
+    /// Why `glyph`'s layers cannot interpolate, with the layers' names: the first difference of each pair of layers
+    /// that differ. Empty when they can.
+    pub fn reasons(&mut self, font: &Arc<Font>, revision: u64, glyph: &str) -> Vec<String> {
+        let Ok(c) = self.compat(font, revision, glyph) else { return Vec::new() };
+        if c.ok {
+            return Vec::new();
+        }
+        if c.first_mismatch.is_empty() {
+            let unread = self.designspace_of(font).ok().and_then(|ds| GlyphSources::of(font, &ds, glyph).err());
+            return vec![unread.map_or_else(|| "one of its layers cannot be read".to_string(), |e| e.to_string())];
+        }
+        c.first_mismatch.iter().map(|m| m.describe(font)).collect()
+    }
+
     /// The designspace and the compatibility scope, built once per font revision. The
     /// designspace is shared with [`InterpCache::designspace`]'s entry when that is already built.
     fn designspace_and_scope(&mut self, font: &Font) -> Result<(Arc<Designspace>, Arc<MasterPairs>), InterpError> {
@@ -490,6 +548,17 @@ impl InterpCache {
     }
 }
 
+/// About how much work checking `glyph` is, in nodes: its nodes, components and anchors, and a fixed share per layer for
+/// reading its sources.
+fn check_work(glyph: &Glyph) -> usize {
+    const PER_LAYER: usize = 64;
+    let of = |l: &Layer| {
+        let shapes: usize = l.shapes.iter().map(|s| if let Shape::Path(p) = s { p.nodes.len() } else { 1 }).sum();
+        shapes.saturating_add(l.anchors.len()).saturating_add(PER_LAYER)
+    };
+    glyph.layers.iter().map(of).fold(1, usize::saturating_add)
+}
+
 /// `names` of `font` at `instance`, through the static instance of a copy of the font that holds
 /// only those glyphs and no kerning. A glyph the instance leaves out has no entry.
 fn interpolate_glyphs(font: &Font, instance: usize, options: &InterpOptions, names: &[String]) -> Result<Vec<(String, Layer)>, InterpError> {
@@ -630,6 +699,24 @@ pub trait SessionInterpExt {
     /// interpolate and the font does not turn the indicators off.
     fn shows_incompatible(&mut self, glyph: &str) -> bool;
 
+    /// The compatibility of `glyph` in the active document if it is already worked out
+    /// ([`InterpCache::known_compat`]).
+    fn known_compat(&mut self, glyph: &str) -> Option<Arc<Compat>>;
+
+    /// Per glyph of `glyphs`, whether its layers can interpolate; `None` when it has not been checked.
+    fn known_compat_states(&mut self, glyphs: &[&str]) -> Vec<Option<bool>>;
+
+    /// Works out the compatibility of some of the active document's glyphs and returns whether others still wait
+    /// ([`InterpCache::check_some`]).
+    fn check_some_compat(&mut self, first: &[String], rest: bool, work: usize) -> bool;
+
+    /// The active document's glyphs known to be incompatible and how many are not checked yet
+    /// ([`InterpCache::known_incompatible`]).
+    fn known_incompatible(&mut self) -> (HashSet<String>, usize);
+
+    /// Why `glyph`'s layers cannot interpolate, with the layers' names ([`InterpCache::reasons`]); empty when they can.
+    fn compat_reasons(&mut self, glyph: &str) -> Vec<String>;
+
     /// The active document's glyphs whose layers cannot interpolate (empty without a
     /// designspace), which the Master Compatible smart-filter rule reads.
     fn incompatible_glyphs(&mut self) -> HashSet<String>;
@@ -672,6 +759,32 @@ impl SessionInterpExt for crate::Session {
     fn shows_incompatible(&mut self, glyph: &str) -> bool {
         let Some((cache, font, revision)) = interp_cache(self) else { return false };
         cache.indicators(&font, revision).unwrap_or(false) && cache.compat(&font, revision, glyph).is_ok_and(|c| !c.ok)
+    }
+
+    fn known_compat(&mut self, glyph: &str) -> Option<Arc<Compat>> {
+        let (cache, font, revision) = interp_cache(self)?;
+        cache.known_compat(&font, revision, glyph)
+    }
+
+    fn known_compat_states(&mut self, glyphs: &[&str]) -> Vec<Option<bool>> {
+        let Some((cache, font, revision)) = interp_cache(self) else { return vec![None; glyphs.len()] };
+        cache.sync(&font, revision);
+        glyphs.iter().map(|g| cache.compat.get(*g).map(|c| c.ok)).collect()
+    }
+
+    fn check_some_compat(&mut self, first: &[String], rest: bool, work: usize) -> bool {
+        let Some((cache, font, revision)) = interp_cache(self) else { return false };
+        cache.check_some(&font, revision, first, rest, work)
+    }
+
+    fn known_incompatible(&mut self) -> (HashSet<String>, usize) {
+        let Some((cache, font, revision)) = interp_cache(self) else { return Default::default() };
+        cache.known_incompatible(&font, revision)
+    }
+
+    fn compat_reasons(&mut self, glyph: &str) -> Vec<String> {
+        let Some((cache, font, revision)) = interp_cache(self) else { return Vec::new() };
+        cache.reasons(&font, revision, glyph)
     }
 
     fn incompatible_glyphs(&mut self) -> HashSet<String> {
@@ -783,12 +896,55 @@ mod tests {
         assert!(Arc::ptr_eq(&cache.compat(&edited, 2, "b").unwrap(), &compat_b));
         assert!(Arc::ptr_eq(&cache.designspace(&edited, 2).unwrap(), &ds), "the designspace is kept");
 
+        // An edit to one glyph leaves one glyph to check, however little work a pass may do.
+        assert!(cache.known_compat(&edited, 2, "a").is_none(), "the edited glyph waits for its check");
+        assert!(!cache.check_some(&edited, 2, &[], true, 0), "it is the only one");
+
         // A change to the masters drops everything.
         let mut moved = Font::clone(&edited);
         Arc::make_mut(&mut moved.masters)[1].location = vec![700.0];
         let moved = Arc::new(moved);
         assert!(!Arc::ptr_eq(&cache.designspace(&moved, 3).unwrap(), &ds));
         assert!(!Arc::ptr_eq(&cache.instance_layer(&moved, 3, "b", 0).unwrap(), &b));
+    }
+
+    /// A font of many glyphs is checked in slices: the glyphs asked for come first, the rest wait for later passes, and
+    /// an edit of one glyph leaves only that glyph to check.
+    #[test]
+    fn a_large_font_is_checked_in_slices_with_the_glyphs_in_view_first() {
+        let count = 3_000;
+        let name = |i: usize| format!("g{i}");
+        let mut f = Font::clone(&font());
+        // Glyph 2,990 has a second path on Black.
+        let mut glyphs: Vec<Arc<Glyph>> = (0..count).map(|i| glyph(&name(i), 100.0, 300.0)).collect();
+        let mut broken = Glyph::clone(&glyphs[2_990]);
+        broken.layers[1].shapes.push(Shape::Path(Path::rect(400.0, 0.0, 500.0, 700.0)));
+        glyphs[2_990] = Arc::new(broken);
+        f.glyphs = GlyphTable::from_glyphs(glyphs.clone());
+        let f = Arc::new(f);
+        let mut cache = InterpCache::new();
+        let in_view: Vec<String> = (2_980..3_000).map(name).collect();
+        let work = 20 * check_work(&glyphs[0]);
+        assert!(cache.check_some(&f, 1, &in_view, true, work), "the rest of the font waits");
+        assert!(in_view.iter().all(|n| cache.known_compat(&f, 1, n).is_some()), "every glyph in view is answered");
+        let (bad, waiting) = cache.known_incompatible(&f, 1);
+        assert_eq!(bad.into_iter().collect::<Vec<_>>(), [name(2_990)]);
+        assert!((count - 22..=count - 20).contains(&waiting), "one pass checks the glyphs in view and no more: {waiting} wait");
+        assert_eq!(cache.reasons(&f, 1, &name(2_990)), ["thin and black differ: 1 shapes against 2"]);
+
+        let mut passes = 1;
+        while cache.check_some(&f, 1, &[], true, work) {
+            passes += 1;
+            assert!(passes < count, "the passes come to an end");
+        }
+        assert_eq!(cache.known_incompatible(&f, 1).1, 0);
+
+        let mut edited = Font::clone(&f);
+        glyphs[7] = glyph(&name(7), 120.0, 300.0);
+        edited.glyphs = GlyphTable::from_glyphs(glyphs);
+        let edited = Arc::new(edited);
+        assert_eq!(cache.known_incompatible(&edited, 2).1, 1, "one glyph is checked again");
+        assert!(!cache.check_some(&edited, 2, &[], true, 0), "one pass does it");
     }
 
     #[test]

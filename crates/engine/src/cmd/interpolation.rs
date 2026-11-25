@@ -371,7 +371,7 @@ fn describe_designspace(s: &mut Session, p: &Value) -> Result<Value> {
 
 // ── interpolation.checkCompatibility ────────────────────────────────────────────────────────────
 
-fn mismatch_json(m: &Mismatch) -> Value {
+fn mismatch_json(font: &Font, m: &Mismatch) -> Value {
     let mut v = match &m.kind {
         MismatchKind::ShapeCount { a, b } => json!({"kind": "shapeCount", "a": a, "b": b}),
         MismatchKind::ShapeKind { shape } => json!({"kind": "shapeKind", "shape": shape}),
@@ -384,7 +384,7 @@ fn mismatch_json(m: &Mismatch) -> Value {
     if let Some(o) = v.as_object_mut() {
         o.insert("layerA".into(), json!(m.layer_a));
         o.insert("layerB".into(), json!(m.layer_b));
-        o.insert("message".into(), json!(m.to_string()));
+        o.insert("message".into(), json!(m.describe(font)));
     }
     v
 }
@@ -430,7 +430,7 @@ fn check_compatibility(s: &mut Session, p: &Value) -> Result<Value> {
                     .iter()
                     .map(|w| json!({"layerA": w.layer_a, "layerB": w.layer_b, "shape": w.shape, "node": w.node, "degrees": w.degrees}))
                     .collect();
-                (c.ok, c.first_mismatch.iter().map(mismatch_json).collect::<Vec<_>>(), warnings)
+                (c.ok, c.first_mismatch.iter().map(|m| mismatch_json(font, m)).collect::<Vec<_>>(), warnings)
             }
             // A glyph whose sources cannot be read cannot interpolate either.
             Err(e) => (false, vec![json!({"kind": "sources", "message": e.to_string()})], Vec::new()),

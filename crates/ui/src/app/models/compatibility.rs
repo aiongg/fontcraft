@@ -14,6 +14,7 @@ use fontcraft_engine::model::{Component, Font, Glyph, Layer, Path, Shape};
 use fontcraft_geom::{Affine, BezPath, PathSeg, Piece, Point, segments};
 
 use super::ProjectCx;
+use super::incompatibility::Bar;
 
 /// Most layers the view draws.
 pub const MAX_PLACED: usize = 64;
@@ -30,6 +31,11 @@ const GROUP_GAP_EM: f64 = 0.75;
 pub struct CompatibilityModel {
     pub layers: Vec<PlacedLayer>,
     pub links: Vec<Link>,
+    /// The bars over the text's glyphs that cannot interpolate, whether or not the view is on.
+    pub bars: Vec<Bar>,
+    /// Why the edited glyph, or the one selected in Font View, cannot interpolate: the status line's text while it has
+    /// no other. Empty when it can.
+    pub reason: String,
 }
 
 /// One layer drawn beside the edited one.
@@ -95,7 +101,14 @@ pub struct Link {
 }
 
 pub fn project(model: &mut Tracked<CompatibilityModel>, cx: &mut ProjectCx<'_>) {
-    let value = if cx.view.display.master_compatibility && !cx.view.edit_background { compute(cx).unwrap_or_default() } else { Default::default() };
+    let mut value = if cx.view.display.master_compatibility && !cx.view.edit_background {
+        compute(cx).unwrap_or_default()
+    } else {
+        CompatibilityModel::default()
+    };
+    // `incompatibility::project` keeps these.
+    value.bars.clone_from(&model.bars);
+    value.reason.clone_from(&model.reason);
     super::set(model, value);
 }
 

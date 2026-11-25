@@ -21,6 +21,10 @@ const FILL_SHARE: f32 = 0.8;
 /// The status bar's height: this share of the cell, at least [`STATUS_MIN`] points.
 const STATUS_SHARE: f32 = 0.06;
 const STATUS_MIN: f32 = 2.0;
+/// The incompatibility corner's legs: this share of the cell, between the two lengths in points.
+const CORNER_SHARE: f32 = 0.14;
+const CORNER_MIN: f32 = 6.0;
+const CORNER_MAX: f32 = 14.0;
 /// Widest and tallest strike bitmap a cell draws, in pixels; a larger one leaves the cell empty.
 pub const MAX_STRIKE_CELL_SIDE: u16 = 512;
 
@@ -159,6 +163,22 @@ pub fn status_bar(rect: Rect) -> Rect {
 /// Draws the status bar in the status colour `[r, g, b, a]`.
 pub fn paint_status(cx: &ContentPainterCx<'_>, rect: Rect, [r, g, b, a]: [u8; 4]) {
     cx.painter.rect_filled(status_bar(rect), 0.0, egui::Color32::from_rgba_unmultiplied(r, g, b, a));
+}
+
+/// The corner that marks a glyph whose layers cannot interpolate: the triangle at the cell's top left.
+pub fn incompatible_corner(rect: Rect) -> [Pos2; 3] {
+    let side = (rect.height().min(rect.width()).max(0.0) * CORNER_SHARE).clamp(CORNER_MIN, CORNER_MAX);
+    [rect.min, rect.min + egui::vec2(side, 0.0), rect.min + egui::vec2(0.0, side)]
+}
+
+/// Draws the incompatibility corner.
+pub fn paint_incompatible(cx: &ContentPainterCx<'_>, rect: Rect) {
+    let mut mesh = Mesh::default();
+    for p in incompatible_corner(rect) {
+        mesh.colored_vertex(p, crate::canvas::tokens::CompatTokens::standard().bad);
+    }
+    mesh.add_triangle(0, 1, 2);
+    cx.painter.add(Shape::mesh(mesh));
 }
 
 /// The nonzero fill of `edges` inside `rect` as one mesh; `None` when nothing is filled.

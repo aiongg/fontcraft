@@ -256,10 +256,16 @@ pub struct CompatTokens {
     /// Dash and gap lengths of component outlines and anchor lines.
     pub dash: f32,
     pub dash_gap: f32,
+    /// The incompatibility bar: its height, how far above the ascender it sits and its least width.
+    pub bar_height: f32,
+    pub bar_gap: f32,
+    pub bar_min_width: f32,
+    /// Widest line of the reason shown under the pointer.
+    pub reason_width: f32,
 }
 
 impl CompatTokens {
-    fn standard() -> CompatTokens {
+    pub fn standard() -> CompatTokens {
         CompatTokens {
             ok: Color32::from_rgb(0x2f, 0xa8, 0x4f),
             warn: Color32::from_rgb(0xe0, 0xb0, 0x20),
@@ -280,6 +286,10 @@ impl CompatTokens {
             label_gap: 4.0,
             dash: 4.0,
             dash_gap: 3.0,
+            bar_height: 5.0,
+            bar_gap: 3.0,
+            bar_min_width: 12.0,
+            reason_width: 320.0,
         }
     }
 

@@ -866,7 +866,7 @@ label = "Query Glyphs"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{entries?: [path], rules?: ruleTree, search?: {query, fields?, matchCase?, regex?} | string, master?: id, sidebar?: bool}"
+params = "{entries?: [path], rules?: ruleTree, search?: {query, fields?, matchCase?, regex?} | string, master?: id, sidebar?: bool, knownCompatibility?: bool}"
 area = "font-view"
 milestone = "M4"
 summary = "Our headless filter evaluation: returns the glyph names matching the given sidebar entries, an ad-hoc smart-filter rule tree and/or a search query, without touching the window state."
@@ -875,7 +875,7 @@ status = "inferred"
 guesses = [
   "Our own query for agents; it must give the glyphs the sidebar and search would show for the same entries and text.",
 ]
-notes = "Paths name the section first (all, categories/Letter/Uppercase, languages/latin/<language>, filters/<folder>/<filter>), as text or as a list of names. `master` picks the layer the layer rules read (default the first master). `sidebar: true` adds every entry with its count and, for entries that know their full set, how many of the expected glyphs the font has. The evaluator is crates/glyphquery. The engine gives it the built-in language sets (crates/glyphdata/data/sets.bin) and the entries of the user's Groups*.plist files (Session::set_user_groups; the desktop app reads them from the Info folder of its settings folder)."
+notes = "Paths name the section first (all, categories/Letter/Uppercase, languages/latin/<language>, filters/<folder>/<filter>), as text or as a list of names. `master` picks the layer the layer rules read (default the first master). `sidebar: true` adds every entry with its count and, for entries that know their full set, how many of the expected glyphs the font has. The evaluator is crates/glyphquery. The engine gives it the built-in language sets (crates/glyphdata/data/sets.bin) and the entries of the user's Groups*.plist files (Session::set_user_groups; the desktop app reads them from the Info folder of its settings folder). `knownCompatibility: true` takes the Master Compatible rule's answers from the glyphs already checked, which the window uses while it checks a large font in slices; `compatibilityPending` counts the others."
 
 [[command]]
 id = "fontView.setVisibleScripts"
@@ -1618,7 +1618,10 @@ milestone = "M9"
 summary = "A red top-left corner marks a glyph whose layers are not all compatible for interpolation."
 ref = "Font View › Grid View"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft: crates/ui/src/panels/font_view/cells.rs, a triangle of one badge size in the cell's top-left corner, hidden while Enforce Compatibility Check is present and off."
+notes = "Documented, not yet observed. FontCraft: crates/ui/src/panels/font_view/cells.rs, a triangle in the cell's top-left corner, hidden while Enforce Compatibility Check is present and off. The reason (the first difference of each pair of layers) is the cell's tooltip, and the status line's text while that glyph alone is selected. crates/ui/src/app/models/incompatibility.rs checks a large font in slices, the cells in view first; a cell not checked yet has no corner."
+guesses = [
+  "The corner's legs are a seventh of the cell, 6 to 14 points, and it appears in Grid View only. Settle by comparing a screenshot of the reference app's grid at the smallest and the largest cell size, and its List View.",
+]
 
 [[behavior]]
 id = "fontView.cell.badgeNonExporting"
@@ -3094,7 +3097,7 @@ milestone = "M9"
 summary = "Rule Master Compatible is true when the glyph's master layers can be interpolated."
 ref = "Font View › Filtering Font View › Smart Filters"
 status = "handbook"
-notes = "Documented, not yet observed. FontCraft: the engine computes the incompatible glyphs with the same check as interpolation.checkCompatibility (its default scope, special layers included) and hands them to the rule (Env::with_incompatible); the predicate key masterCompatible reads the same set."
+notes = "Documented, not yet observed. FontCraft: the engine computes the incompatible glyphs with the same check as interpolation.checkCompatibility (its default scope, special layers included) and hands them to the rule (Env::with_incompatible); the predicate key masterCompatible reads the same set. The window asks with knownCompatibility: while a large font is still being checked, glyphs without an answer count as compatible, and the lists are made again when the last answer is in."
 
 [[behavior]]
 id = "smartFilter.rule.exportGlyph"

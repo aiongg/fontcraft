@@ -10,9 +10,10 @@ use egui::{Key, Modifiers};
 use serde_json::json;
 
 use super::{Props, show};
-use crate::app::Msg;
 use crate::app::font_view::{Column, ViewMode};
 use crate::app::models::font_view::{FontViewModel, GlyphRow};
+use crate::app::models::incompatibility::CellCompat;
+use crate::app::{Msg, ViewMsg};
 
 fn model(mode: ViewMode, selected: Vec<usize>) -> FontViewModel {
     model_of(&["A", "B", "C"], mode, selected)
@@ -71,6 +72,21 @@ fn open(model: FontViewModel) -> (Fixture, Rc<RefCell<Vec<Msg>>>) {
 
 fn shell(id: &str, params: serde_json::Value) -> Msg {
     Msg::Shell(CommandRef::with_params(id, params))
+}
+
+/// A cell drawn before its glyph was checked asks for the answer; one whose layers cannot interpolate says so beside its
+/// red corner.
+#[test]
+fn an_unchecked_cell_asks_and_an_incompatible_one_says_so() {
+    let mut m = model(ViewMode::Grid, Vec::new());
+    let states = [CellCompat::Fine, CellCompat::Unchecked, CellCompat::Differs("Light and Bold differ: 1 shapes against 2".into())];
+    for (row, state) in m.rows.iter_mut().zip(states) {
+        row.compat = state;
+    }
+    let (fixture, posted) = open(m);
+    assert!(posted.borrow().contains(&Msg::View(ViewMsg::UncheckedCells(vec!["B".into()]))));
+    assert!(fixture.by_label("C, incompatible layers").is_some());
+    assert!(fixture.by_label("A").is_some(), "a cell that interpolates keeps its name");
 }
 
 /// A click on a cell selects its glyph; Return on the selection opens it in Edit View.
