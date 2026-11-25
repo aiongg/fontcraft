@@ -1,5 +1,5 @@
 //! Auto-spacing, Center in Width, Copy Metrics and the metrics beam of the sidebearing setters
-//! (M13.20): `spacing.autoSpace` with each method, calibration and the options; centring with a
+//! (M13.20, M13.20b): `spacing.autoSpace` with each method and model, calibration and the options; centring with a
 //! ratio; copying metrics onto several glyphs; one undo step each, and refusals that change
 //! nothing.
 // Integration tests may unwrap and panic, unlike shipped code (AGENTS.md › Never crash).
@@ -65,8 +65,82 @@ fn lock(s: &mut Session, glyph: &str) {
     .unwrap();
 }
 
+/// The controls n, o and v, unequally spaced, and the x-height band from -16 to 516.
+fn controls(s: &mut Session) {
+    draw(s, "n", rect(60.0, 0.0, 440.0, 500.0), 500.0);
+    draw(s, "o", oval(250.0, 250.0, 200.0, 266.0), 500.0);
+    draw(s, "v", triangle(), 400.0);
+}
+
 #[test]
-fn spacing_auto_space_optical_calibrates_on_n_and_o() {
+fn spacing_auto_space_classes_take_the_spacing_of_the_similar_control_side() {
+    let mut s = Session::with_document();
+    controls(&mut s);
+    // b: a straight left and a round right; d mirrors it; c is a narrower o.
+    run(&mut s, "path.addPath", json!({"glyph": "b", "nodes": rect(100.0, 0.0, 180.0, 500.0)}));
+    draw(&mut s, "b", oval(250.0, 250.0, 150.0, 266.0), 700.0);
+    run(&mut s, "path.addPath", json!({"glyph": "d", "nodes": rect(320.0, 0.0, 400.0, 500.0)}));
+    draw(&mut s, "d", oval(250.0, 250.0, 150.0, 266.0), 700.0);
+    draw(&mut s, "c", oval(250.0, 250.0, 180.0, 266.0), 700.0);
+    draw(&mut s, "I", rect(0.0, 0.0, 100.0, 700.0), 100.0);
+    let all = json!({"glyphs": ["n", "o", "v", "b", "c", "d", "I"]});
+    let out = undo_restores(&mut s, "spacing.autoSpace", all.clone());
+    assert_eq!(out["models"], json!({"m01": "classes"}));
+    assert_eq!(out["areas"]["m01"], json!({"lowercase": 60.0, "capitals": 60.0}), "the n's white; without H, O and V capitals take it");
+    assert_eq!(out["weights"], json!({}));
+    let class = |glyph: &str, side: &str| out["classes"][glyph]["m01"][side].as_str().unwrap().to_string();
+    assert_eq!((class("b", "left"), class("b", "right")), ("n left".into(), "o right".into()));
+    assert_eq!((class("d", "left"), class("d", "right")), ("o left".into(), "n right".into()));
+    assert_eq!(class("c", "left"), "o left");
+    assert_eq!(class("I", "right"), "n right");
+    // The controls keep their spacing; the v stays where its tips meet the edges.
+    assert_eq!(lrw(&s, "n"), (60.0, 60.0, 500.0));
+    assert_eq!(lrw(&s, "o"), (50.0, 50.0, 500.0));
+    assert_eq!(lrw(&s, "v"), (0.0, 0.0, 400.0));
+    // Straight sides get the n's, round ones the o's, a little more or less as they curve.
+    assert_eq!(lrw(&s, "b").0, 60.0);
+    assert_eq!(lrw(&s, "d").1, 60.0);
+    assert_eq!(lrw(&s, "I"), (60.0, 60.0, 220.0));
+    for v in [lrw(&s, "b").1, lrw(&s, "d").0, lrw(&s, "c").0, lrw(&s, "c").1] {
+        assert!((46.0..=56.0).contains(&v), "{v}");
+    }
+
+    // `area` moves the whole group; an explicit separation is twice the area per side.
+    run(&mut s, "spacing.autoSpace", json!({"glyphs": ["n", "b"], "separation": 100}));
+    assert_eq!(lrw(&s, "n"), (50.0, 50.0, 480.0));
+    assert_eq!(lrw(&s, "b").0, 50.0);
+    run(&mut s, "edit.undo", json!({}));
+    // Without glyphs: every exported letter and figure; the empty ones are skipped.
+    let out = run(&mut s, "spacing.autoSpace", json!({"area": 40}));
+    assert_eq!(lrw(&s, "n"), (40.0, 40.0, 460.0));
+    assert!(out["skipped"].as_array().unwrap().iter().any(|v| v["glyph"] == "x" && v["reason"] == "the layer is empty"), "{out}");
+}
+
+#[test]
+fn spacing_auto_space_references_change_the_match() {
+    let mut s = Session::with_document();
+    controls(&mut s);
+    draw(&mut s, "c", oval(250.0, 250.0, 180.0, 266.0), 700.0);
+    draw(&mut s, "e", oval(250.0, 250.0, 180.0, 266.0), 500.0);
+    // The same shape as c, with 90 units on the left.
+    run(&mut s, "spacing.setLeftSidebearing", json!({"glyphs": ["e"], "value": 90}));
+    let out = run(&mut s, "spacing.autoSpace", json!({"glyphs": ["c", "e"], "references": ["e", "n"]}));
+    assert_eq!(out["classes"]["c"]["m01"]["left"], "e left", "{out}");
+    assert_eq!(lrw(&s, "c").0, 90.0);
+    assert_eq!(lrw(&s, "e").0, 90.0, "a reference keeps its spacing");
+    // A reference without ink is reported; a master without n, o and v can space by references.
+    let out = run(&mut s, "spacing.autoSpace", json!({"glyphs": ["c"], "references": ["x"]}));
+    assert!(out["skipped"].as_array().unwrap().iter().any(|v| v["glyph"] == "x" && v["reason"].as_str().unwrap().contains("reference")), "{out}");
+    assert_ne!(out["classes"]["c"]["m01"]["left"], "e left");
+    let mut s = Session::with_document();
+    draw(&mut s, "e", rect(30.0, 0.0, 130.0, 500.0), 160.0);
+    draw(&mut s, "z", rect(0.0, 0.0, 130.0, 500.0), 160.0);
+    run(&mut s, "spacing.autoSpace", json!({"glyphs": ["z"], "references": ["e"]}));
+    assert_eq!(lrw(&s, "z"), (30.0, 30.0, 190.0));
+}
+
+#[test]
+fn spacing_auto_space_area_model_calibrates_on_n_and_o() {
     // x-height 500 and baseline 0, both with 16 units of overshoot: the lowercase band runs from
     // -16 to 516. n has 60 units each side; o is round, 50 units at its extremes.
     let mut s = Session::with_document();
@@ -74,13 +148,14 @@ fn spacing_auto_space_optical_calibrates_on_n_and_o() {
     draw(&mut s, "o", oval(250.0, 250.0, 200.0, 266.0), 500.0);
     draw(&mut s, "l", rect(0.0, 0.0, 80.0, 700.0), 80.0);
     draw(&mut s, "I", rect(0.0, 0.0, 100.0, 700.0), 100.0);
-    let out = undo_restores(&mut s, "spacing.autoSpace", json!({"glyphs": ["n", "o", "l", "I"]}));
+    let out = undo_restores(&mut s, "spacing.autoSpace", json!({"glyphs": ["n", "o", "l", "I"], "model": "area"}));
     let area = out["areas"]["m01"]["lowercase"].as_f64().unwrap();
     let weight = out["weights"]["m01"]["lowercase"].as_f64().unwrap();
     // A straight and a round control: the fitted line runs through both, so the area is the
     // n's 60 units and the weight what makes the o's clipped depth (50 units deep) give its 50.
     assert!((area - 60.0).abs() < 1e-9, "{out}");
     assert!(weight > 0.2 && weight < 1.0, "{out}");
+    assert_eq!((&out["models"], &out["classes"]), (&json!({"m01": "area"}), &json!({})));
     // Without H, O and V, capitals take the lowercase calibration.
     assert_eq!(out["areas"]["m01"]["capitals"].as_f64(), Some(area), "{out}");
     assert_eq!(out["weights"]["m01"]["capitals"].as_f64(), Some(weight), "{out}");
@@ -93,14 +168,8 @@ fn spacing_auto_space_optical_calibrates_on_n_and_o() {
     assert_eq!(out["values"]["n"]["m01"], json!({"left": 60.0, "right": 60.0}));
     let changed: Vec<&str> = out["glyphs"].as_array().unwrap().iter().map(|v| v.as_str().unwrap()).collect();
     assert_eq!(changed, ["o", "l", "I"]);
-
-    // An explicit separation is twice the area per side.
-    run(&mut s, "spacing.autoSpace", json!({"glyphs": ["n"], "separation": 100}));
+    run(&mut s, "spacing.autoSpace", json!({"glyphs": ["n"], "model": "area", "separation": 100}));
     assert_eq!(lrw(&s, "n"), (50.0, 50.0, 480.0));
-    // Without glyphs: every exported letter and figure; the empty ones are skipped.
-    let out = run(&mut s, "spacing.autoSpace", json!({"area": 40}));
-    assert_eq!(lrw(&s, "n"), (40.0, 40.0, 460.0));
-    assert!(out["skipped"].as_array().unwrap().iter().any(|v| v["glyph"] == "x" && v["reason"] == "the layer is empty"), "{out}");
 }
 
 #[test]
@@ -161,11 +230,22 @@ fn spacing_auto_space_refusals_change_nothing() {
         (json!({"glyphs": ["x"], "percentOfUpm": 1e9, "method": "custom"}), "percentOfUpm"),
         // No n, o, H or O has ink to calibrate on.
         (json!({"glyphs": ["x"]}), "calibrate"),
+        (json!({"glyphs": ["x"], "model": "area"}), "calibrate"),
+        // Nor has a reference that is empty on every side.
+        (json!({"glyphs": ["x"], "references": ["n"]}), "calibrate"),
+        (json!({"glyphs": ["x"], "references": vec!["x"; 10_000]}), "at most"),
+        (json!({"glyphs": ["x"], "references": ["nope"]}), "nope"),
+        (json!({"glyphs": ["x"], "references": ["x"], "model": "area"}), "references"),
+        (json!({"glyphs": ["x"], "references": ["x"], "method": "tight"}), "references"),
+        (json!({"glyphs": ["x"], "model": "classes", "method": "tight"}), "model"),
+        (json!({"glyphs": ["x"], "model": "rounder"}), "model"),
     ] {
         let e = refused(&mut s, "spacing.autoSpace", p.clone());
         assert!(e.contains(says), "{p}: {e}");
     }
-    run(&mut s, "spacing.autoSpace", json!({"glyphs": ["x"], "area": 30}));
+    // Without a control the area model takes over, and the result says so.
+    let out = run(&mut s, "spacing.autoSpace", json!({"glyphs": ["x"], "area": 30}));
+    assert_eq!(out["models"], json!({"m01": "area"}));
     assert_eq!(lrw(&s, "x"), (30.0, 30.0, 360.0));
 }
 
