@@ -2,7 +2,7 @@
 
 The short note the next session reads first. Keep it current; sessions end without warning.
 
-_Updated: 2026-11-24: M12.81 (the FontBakery verdict measure), M13.41 (segment components and brushes), X.fix102, M13.42 (the cap, segment and brush interface) and M13.42b (attachment hints follow node edits) built, with integration fixes X.integ177 to X.integ181. Gate: the 11 steps of `cargo xtask ci` passed one at a time on dd35125 (5,038 tests passed, 43 skipped)_
+_Updated: 2026-11-25: batch 27 (20 branches: M2.9, M2.10, M3.25, M3.30, M4.20, M6.23, M8.33, M8.34, M9.28, M9.37, M9.38, M10.38, M12.71, M12.84, M13.20b, M13.67, M13.79, M13.79b, X.fix104, X.suite3) built, with integration fixes X.integ183 to X.integ197. Gate: the 11 steps of `cargo xtask ci` passed one at a time on 221babe (5,193 tests passed, 50 skipped)_
 
 ## State of the tree
 
