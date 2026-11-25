@@ -102,7 +102,7 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
 /// The anchor `name` of the edited side of the edited layer.
 fn anchor(app: &FontCraftApp, edit: (&str, &str, LayerSide), name: &str) -> Option<Anchor> {
     let (glyph, layer, side) = edit;
-    let layer = app.session.font().ok()?.glyph(glyph)?.layer(layer)?;
+    let layer = app.session.font().ok()?.glyph(glyph)?.layers.iter().find(|l| l.id == layer)?;
     layer.parts(side).anchors.iter().find(|a| a.name == name).cloned()
 }
 

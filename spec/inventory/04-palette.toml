@@ -1064,6 +1064,13 @@ milestone = "M3"
 summary = "The reference point is set by clicking the canvas with the Scale or Rotate tool. While one of those tools is active it appears as a crosshair inside a red ring, and as a bare crosshair with any other tool."
 ref = "Palette › Transformations › Transformation Origin"
 status = "handbook"
+notes = "Documented, not yet observed. M6.32 draws it (`crates/ui/src/canvas/bounding_box.rs`); the placed point is the Rotate and Scale tools' common fixed point. While none is placed, those tools show the centre of the selection's box, which a drag is about."
+guesses = [
+  "With other tools the crosshair shows only while the Transformations section works about the reference point; placing a point and switching to the Select tool in the reference app settles it.",
+]
+observe = [
+  "Click with the Rotate tool, then choose the Select tool with the box origin and with the reference point chosen in the Palette: note when the crosshair shows.",
+]
 
 [[behavior]]
 id = "transform.originMetricsChoices"

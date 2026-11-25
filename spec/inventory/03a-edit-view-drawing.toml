@@ -1306,7 +1306,7 @@ milestone = "M3"
 summary = "Toggles the selection bounding box with its scale knobs in Edit View."
 ref = "Edit View › Scaling & Rotating"
 status = "handbook"
-notes = "Drawing built in M3.5: with the Select tool, a rectangle 6 screen points outside the selection's box and eight square knobs on its corners and side centres."
+notes = "With the Select tool, a rectangle 6 screen points outside the selection's box and eight square knobs on its corners and side centres; a locked glyph shows the box without knobs. The window draws it since M6.32 (`crates/ui/src/canvas/bounding_box.rs`)."
 
 [[behavior]]
 id = "boundingBox.scaleKnobs"

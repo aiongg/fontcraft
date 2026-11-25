@@ -47,6 +47,16 @@ pub struct ToolTokens {
     pub badge_text_size: f32,
     pub badge_padding: f32,
     pub badge_offset: f32,
+    /// The selection's box and its knobs.
+    pub bounding_box: Color32,
+    pub bounding_box_width: f32,
+    /// Side of a knob, in points.
+    pub knob_size: f32,
+    /// The point transformations are about.
+    pub transform_origin: Color32,
+    pub transform_origin_radius: f32,
+    /// The handles of selected smart components (`smart.handlesFromPropertyAnchors`).
+    pub smart_handle: Color32,
 }
 
 impl ToolTokens {
@@ -76,6 +86,12 @@ impl ToolTokens {
             badge_text_size: 11.0,
             badge_padding: 3.0,
             badge_offset: 14.0,
+            bounding_box: Color32::from_rgb(0x5a, 0x6e, 0x8c),
+            bounding_box_width: 1.0,
+            knob_size: 6.0,
+            transform_origin: Color32::from_rgb(0xe8, 0x40, 0x40),
+            transform_origin_radius: 6.0,
+            smart_handle: Color32::from_rgb(0x96, 0x96, 0x96),
         }
     }
 }

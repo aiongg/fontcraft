@@ -564,6 +564,7 @@ impl FontCraftApp {
     pub fn project(&mut self) {
         // First: the Info box reads whether the image is still selected.
         crate::canvas::images::refresh(self);
+        crate::canvas::bounding_box::refresh(self);
         let stamp = Stamp::of(&self.session, self.view_revision);
         let mut cx = ProjectCx { session: &mut self.session, view: &self.view };
         self.models.project(stamp, &mut cx);
