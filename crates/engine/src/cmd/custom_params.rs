@@ -60,7 +60,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Set Custom Parameter",
             [],
             None,
-            "{scope: \"font\"|\"master\"|\"instance\", targets?: id|name|index or a list, name: string, index?: integer (which of the rows called name, from 0; needed when there are several), value?: any, enabled?: bool} change the value and/or the checkbox of an existing row on each target, as one undo step; the value is checked as for add. A name property that is not a row changes the property's value. A value naming a master or palette the font lacks is kept with a warning → {scope, targets, name, property, value?, enabled?, warnings?: [string]}",
+            "{scope: \"font\"|\"master\"|\"instance\", targets?: id|name|index or a list, name: string, index?: integer (which of the rows called name, from 0; needed when there are several), value?: any, enabled?: bool, addMissing?: bool} change the value and/or the checkbox of an existing row on each target, as one undo step; the value is checked as for add. addMissing: a target without the row gets it with `value`, which is then required; otherwise a target without it refuses the whole command. A name property that is not a row changes the property's value. A value naming a master or palette the font lacks is kept with a warning → {scope, targets, name, property, value?, enabled?, warnings?: [string]}",
             has_doc,
             set
         ),
@@ -409,8 +409,16 @@ fn set(s: &mut Session, p: &Value) -> Result<Value> {
     if json_value.is_none() && enabled.is_none() {
         return Err(p.bad("give `value`, `enabled` or both"));
     }
+    let add_missing = p.bool_or("addMissing", false)?;
+    if add_missing && json_value.is_none() {
+        return Err(p.bad("`addMissing` needs `value`"));
+    }
     let spec = catalog::lookup(name);
     let value = json_value.map(|j| value_for(&p, spec, name, Some(j))).transpose()?;
+    if let Some(spec) = spec.filter(|spec| add_missing && catalog::property(spec).is_none()) {
+        fv::check_scope(spec, scope).map_err(|e| p.bad(e.to_string()))?;
+    }
+    let index = p.opt_int("index", 0, i64::from(u32::MAX))?.and_then(|n| usize::try_from(n).ok());
     let indexes = targets(&p, s.font()?, scope, "targets")?;
     let mut property = false;
     s.edit("Set Custom Parameter", |font| {
@@ -425,12 +433,31 @@ fn set(s: &mut Session, p: &Value) -> Result<Value> {
                 }
                 let Some(value) = &value else { continue };
                 let pv = property_value(&p, spec.name, localized, value)?;
+                if add_missing && properties.get(spec.name).is_none() {
+                    if scope == Scope::Master {
+                        return Err(p.bad(format!("`{}` is a name property, which masters do not hold", spec.name)));
+                    }
+                    if properties.0.len() >= fontcraft_fontinfo::MAX_PROPERTIES_PER_SCOPE {
+                        return Err(p.bad(format!("{at} holds at most {} properties", fontcraft_fontinfo::MAX_PROPERTIES_PER_SCOPE)));
+                    }
+                    properties.0.push(fontcraft_model::Property { key: spec.name.to_string(), value: pv, extra: Extra::new() });
+                    continue;
+                }
                 let entry = properties
                     .0
                     .iter_mut()
                     .find(|q| q.key == spec.name)
                     .ok_or_else(|| p.bad(format!("{at} has no `{}`: add it first", spec.name)))?;
                 entry.value = pv;
+                continue;
+            }
+            if let Some(v) = value.as_ref().filter(|_| add_missing && rows_of(params, name).len() <= index.unwrap_or(0)) {
+                if params.0.len() >= fontcraft_fontinfo::MAX_PARAMS_PER_SCOPE {
+                    return Err(p.bad(format!("{at} holds at most {} custom parameters", fontcraft_fontinfo::MAX_PARAMS_PER_SCOPE)));
+                }
+                let mut param = Param::new(spec.map_or(name, |s| s.name), v.clone());
+                param.disabled = enabled == Some(false);
+                params.0.push(param);
                 continue;
             }
             let row = pick(&p, params, name, &at)?;

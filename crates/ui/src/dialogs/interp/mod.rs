@@ -1,6 +1,7 @@
 //! The masters and interpolation dialogs: the Masters tab's dialogs ([`masters`]), Axis Location and Virtual Master
 //! ([`location`]), and the interpolation commands of the Path, Glyph and Font menus ([`variation`]). All are specs.
 
+pub mod fonts;
 pub mod location;
 pub mod masters;
 #[cfg(test)]
@@ -24,6 +25,8 @@ pub const SPECS: &[DialogSpec] = &[
     variation::SET_MASTER_LOCATIONS,
     variation::ADD_VARIATION,
     variation::MERGE_FONTS,
+    fonts::INTERPOLATE_FONTS,
+    fonts::GENERATE_INSTANCES,
 ];
 
 /// A dialog whose fields keep no step with each other.

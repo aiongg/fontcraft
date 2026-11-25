@@ -73,6 +73,7 @@ mod image;
 mod import_naming;
 mod inspect;
 mod instance_masters;
+pub mod instance_names;
 mod instances;
 mod interpolation;
 mod kerning;
@@ -405,6 +406,7 @@ pub const COMMAND_TABLES: &[CommandTable] = &[
     masters::specs,
     metric_defs::specs,
     instances::specs,
+    instance_names::specs,
     clipboard_scale::specs,
     tokens::specs,
     project::specs,

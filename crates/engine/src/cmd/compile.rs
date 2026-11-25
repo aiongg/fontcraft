@@ -369,7 +369,7 @@ const UNNAMED_GLYPHS_FAMILY: &str = "Unnamed font";
 /// comes from), else family and style; characters that cannot be in a file name are dropped. A missing family name is
 /// glyphsLib's `Unnamed font` for a Glyphs source (fontmake then writes `Unnamedfont-Regular`),
 /// else `source`, the document's file name without extension.
-fn stem(font: &Font, resolved: &Resolved, options: &Options, source: &str, postscript_names: bool) -> String {
+pub(super) fn stem(font: &Font, resolved: &Resolved, options: &Options, source: &str, postscript_names: bool) -> String {
     let source = if matches!(resolved.format, SourceFormat::Glyphs | SourceFormat::GlyphsPackage) { UNNAMED_GLYPHS_FAMILY } else { source };
     let wanted = resolved
         .params

@@ -127,3 +127,58 @@ fn the_ttf_rows_open_their_editors() {
     assert!(app.status.is_empty(), "{}", app.status);
     assert_eq!(app.tt.asks, vec![Ask::Definitions(Kind::Stems, first.clone()), Ask::Definitions(Kind::Zones, first)]);
 }
+
+/// The glyph picker of a glyph list: a search and a tick add the glyph to the list; a list that names a glyph the font
+/// lacks is kept and its row says so.
+#[test]
+fn the_glyph_picker_posts_the_list_with_the_glyph_and_an_unknown_one_warns() {
+    let app = Rc::new(RefCell::new(app_with("Keep Glyphs", json!(["A", "nowhere.sc"]))));
+    {
+        let mut app = app.borrow_mut();
+        app.sent.push(Msg::Shell(CommandRef::with_params("font.info", json!({ "tab": "font" }))));
+        app.drain();
+        let row = app.models.font_info.font.params.iter().find(|r| r.key == "Keep Glyphs").cloned().expect("the row");
+        assert_eq!(row.picker, Some(RowDialog::Glyphs));
+        assert_eq!(row.warnings, ["the font has no glyph named nowhere.sc"]);
+    }
+    let mut fixture = window(&app, &InfoDialog::Glyphs { target: Target::font(), name: "Keep Glyphs".into(), index: 0 });
+    let search = fixture.by_label("Search").expect("the search field");
+    fixture.click(&search).type_text("B").settle();
+    press(&mut fixture, "B");
+    press(&mut fixture, "OK");
+    let list = "A\nnowhere.sc\nB";
+    assert_eq!(sets(&app), vec![Msg::run(SET, json!({"scope": "font", "name": "Keep Glyphs", "index": 0, "value": list}))]);
+}
+
+/// The row table of gasp Table: a flag ticked in the first record and OK post the whole dictionary.
+#[test]
+fn the_gasp_table_posts_its_records() {
+    let app = Rc::new(RefCell::new(app_with("gasp Table", json!({"65535": 10}))));
+    let mut fixture = window(&app, &InfoDialog::Records { target: Target::font(), name: "gasp Table".into(), index: 0 });
+    press(&mut fixture, "Grid-fit");
+    press(&mut fixture, "OK");
+    let value = json!({"65535": 11});
+    assert_eq!(sets(&app), vec![Msg::run(SET, json!({"scope": "font", "name": "gasp Table", "index": 0, "value": value}))]);
+}
+
+/// Values that name an axis or masters are menus and check boxes of the font's own.
+#[test]
+fn axis_and_master_values_are_chosen_from_the_font() {
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    app.session.execute("font.axes.add", &json!({"name": "Weight", "tag": "wght"})).expect("an axis");
+    let added = app.session.execute("font.instance.add", &json!({"styleName": "Light"})).expect("an instance");
+    let index = added["index"].as_u64().and_then(|i| usize::try_from(i).ok()).expect("its index");
+    for (name, value) in [("Style Name as STAT entry", json!("wgth")), ("Disable Masters", json!(["Regular", "Nowhere"]))] {
+        let p = json!({"scope": "instance", "targets": [index], "name": name, "value": value});
+        app.session.execute("font.customParameters.add", &p).expect(name);
+    }
+    let font = app.session.font().expect("a font");
+    let target = Target { scope: Scope::Instance, indices: vec![index] };
+    let rows = crate::app::models::font_info::rows(font, &target, fontcraft_engine::fontinfo::rows::RowKind::Param);
+    let editor = |key: &str| rows.iter().find(|r| r.key == key).map(|r| r.editor.clone()).expect(key);
+    let axes: Vec<String> = font.axes.iter().map(|a| a.tag.clone()).chain(["wgth".into()]).collect();
+    assert_eq!(editor("Style Name as STAT entry"), Editor::Choice { choices: axes, value: "wgth".into() });
+    let masters: Vec<String> = font.masters.iter().map(|m| m.name.clone()).chain(["Nowhere".into()]).collect();
+    assert_eq!(editor("Disable Masters"), Editor::Choices { choices: masters, on: vec!["Regular".into(), "Nowhere".into()] });
+    assert!(rows.iter().all(|r| r.warnings.len() == 1), "each names one thing the font lacks");
+}

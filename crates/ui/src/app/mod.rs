@@ -280,6 +280,8 @@ pub struct FontCraftApp {
     /// holds the keyboard focus ([`clipboard::to_focused_list`]).
     /// The Features tab's checks and compiles off the window's thread.
     pub(crate) feature_work: crate::shell::feature_work::FeatureWork,
+    /// The Exports tab's names as exported, computed off the window's thread.
+    pub(crate) export_names: crate::shell::export_names::ExportNamesWork,
     pub(crate) window: Option<egui::Context>,
     #[cfg(not(target_arch = "wasm32"))]
     file_panels: Option<craft::dialogs::service::FilePanels>,
@@ -339,6 +341,7 @@ impl FontCraftApp {
             graphics: None,
             control: crate::control::Control::default(),
             feature_work: Default::default(),
+            export_names: Default::default(),
             window: None,
             #[cfg(not(target_arch = "wasm32"))]
             file_panels: None,
@@ -754,14 +757,15 @@ impl ShellApp for FontCraftApp {
 
     fn output(&mut self, output: FrameOutput) {
         for fired in output.fired {
+            let by_key = fired.source == FireSource::Key;
             // A numbered shortcut fires its catalog definition, whose id holds the parameters.
             let command = craft_ext::ui::runtime::commands::fired_command(fired.command);
             // A key fires only the commands whose shortcut works where the window is (a tool's keys not in Font View).
-            if fired.source == FireSource::Key && !catalog::shortcut_works(&command.id, self.font_view_shows(), self.view.tool) {
+            if by_key && !catalog::shortcut_works(&command.id, self.font_view_shows(), self.view.tool) {
                 continue;
             }
             // A held tool key fires again on release; the tool stays.
-            if fired.phase != FirePhase::Release && !clipboard::to_focused_list(self, &command) {
+            if fired.phase != FirePhase::Release && !clipboard::to_focused_list(self, &command, by_key) {
                 self.fire(command);
             }
         }
@@ -774,6 +778,7 @@ impl ShellApp for FontCraftApp {
         self.set_system_dark(appearance::system_dark(&self.root, ctx));
         models::text_preview::logic(&mut self.models.text_preview, ctx);
         crate::shell::feature_work::logic(self, ctx);
+        crate::shell::export_names::logic(self, ctx);
         dropped::take(self, ctx);
         crate::shell::external_changes::on_focus(self, ctx);
         crate::canvas::images::logic(self, ctx);

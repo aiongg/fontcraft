@@ -221,7 +221,7 @@ fn remove_takes_layers_and_kerning_and_refuses_the_last_master() {
 fn reorder_moves_a_master_and_undoes() {
     let mut s = two_masters();
     let r = run(&mut s, "font.master.reorder", json!({"master": "Bold", "toIndex": 0}));
-    assert_eq!(r, json!({"master": "m02", "index": 0}));
+    assert_eq!(r, json!({"master": "m02", "masters": ["m02"], "index": 0, "indices": [0]}));
     assert_eq!(master_ids(&s), vec!["m02".to_string(), "m01".into()]);
     refused(&mut s, "font.master.reorder", json!({"master": "Bold", "toIndex": 2}), "toIndex");
     run(&mut s, "edit.undo", json!({}));

@@ -149,6 +149,66 @@ fn other_settings_boxes_post_settings_set() {
     assert_eq!(*posted.borrow(), vec![Msg::run("font.settings.set", json!({ "useCustomNaming": true }))]);
 }
 
+/// A click on a row's label selects the row and puts the keyboard nowhere, so the edit commands go to the selected
+/// rows; a click into a field takes them back. Cmd-click toggles, Shift-click adds the rows from the last selected one.
+#[test]
+fn a_rows_label_selects_it_and_the_rows_take_the_edit_commands() {
+    use super::rows::takes_edits;
+    use crate::app::models::font_info::RowMark;
+    use crate::shell::font_info::{RowKey, select_rows};
+    let text = |key: &str| param(key, Editor::Text(String::new()));
+    let mut rows = vec![text("vendorID"), text("note"), text("trademark")];
+    rows[0].mark = RowMark::Lead;
+    let (mut fixture, posted) = panel(font_model(rows));
+    let key = |key: &str| RowKey { param: true, key: key.into(), index: 0 };
+    let click = |fixture: &mut Fixture, label: &str, held: Modifiers| {
+        let at = fixture.texts().iter().find(|t| t.text.starts_with(label)).expect(label).rect.center();
+        fixture.hold(held).click_at(at).hold(Modifiers::NONE).settle();
+    };
+    click(&mut fixture, "note", Modifiers::NONE);
+    assert!(takes_edits(fixture.ctx()), "a selected row shows and nothing has the keyboard");
+    click(&mut fixture, "note", Modifiers::COMMAND);
+    click(&mut fixture, "trademark", Modifiers::SHIFT);
+    let wanted = [
+        select_rows(fontcraft_engine::fontinfo::Scope::Font, &[key("note")], "set"),
+        select_rows(fontcraft_engine::fontinfo::Scope::Font, &[key("note")], "toggle"),
+        select_rows(fontcraft_engine::fontinfo::Scope::Font, &[key("vendorID"), key("note"), key("trademark")], "add"),
+    ];
+    let wanted: Vec<Msg> = wanted.into_iter().map(Msg::Shell).collect();
+    assert_eq!(*posted.borrow(), wanted);
+    let field = fixture.by_label("trademark").expect("the field");
+    fixture.click(&field).settle();
+    assert!(!takes_edits(fixture.ctx()), "the focused field keeps its own Copy");
+}
+
+/// A localizable field shows a plus per language, and the minus of each while Alt is held.
+#[test]
+fn alt_reveals_the_minus_of_a_language() {
+    let mut model = font_model(Vec::new());
+    let languages = vec![("dflt".to_string(), "Sample".to_string()), ("DEU".into(), "Muster".into())];
+    model.font.fields = vec![RowModel {
+        key: "familyNames".into(),
+        label: "Family Names".into(),
+        enabled: true,
+        removable: true,
+        editor: Editor::Languages(languages),
+        ..RowModel::default()
+    }];
+    let (mut fixture, posted) = panel(model);
+    assert!(fixture.by_label("Remove this language").is_none());
+    let plus = fixture.by_label("Add a language").expect("a plus");
+    fixture.click(&plus).settle();
+    fixture.hold(Modifiers::ALT).settle();
+    let minus = fixture.by_label("Remove this language").expect("the minus while Alt is held");
+    assert!(fixture.by_label("Add a language").is_none());
+    fixture.click(&minus).hold(Modifiers::NONE).settle();
+    let got = posted.borrow().clone();
+    let adds = |m: &Msg| m.command_id() == Some("font.info.setLocalizedValue");
+    assert!(got.iter().any(adds), "{got:?}");
+    let removal = json!({ "scope": "font", "key": "familyNames", "language": "dflt" });
+    assert!(got.contains(&Msg::run("font.info.removeLocalizedValue", removal)), "{got:?}");
+}
+
 /// Notes: the typed note is committed when the field loses the keyboard.
 #[test]
 fn the_note_commits_when_the_field_loses_the_keyboard() {

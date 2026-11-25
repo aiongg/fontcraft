@@ -10,16 +10,19 @@
 //! | the plus beside General or Custom Parameters | `font.info.openDialog` with the field or parameter picker |
 //! | the plus beside Axes | `font.axes.add` |
 //! | an axis's name, predefined axis, tag, Hidden | `font.axes.set` by index |
-//! | an axis's up button | `font.axes.reorder` |
+//! | a drag in the axis list (with several axes) | `font.axes.reorder` |
 //! | an axis's minus | `font.axes.remove` |
 
-use craft::behavior::IconId;
+use std::borrow::Cow;
+
+use craft::behavior::{GesturePhase, IconId, keyed};
 use craft::ui::buttons::{Button, IconButton};
 use craft::ui::choice::Checkbox;
-use craft::ui::contract::{Bind, Props as _, Show as _, ShowContainer as _};
+use craft::ui::contract::{Bind, CollectionEvent, Props as _, ReorderRule, Show as _, ShowCollection as _, ShowContainer as _};
 use craft::ui::display::{Shade, Text};
 use craft::ui::form::Field;
 use craft::ui::layout_components::{Row, Stack};
+use craft::ui::list::{List, ListRow};
 use craft::ui::pickers::{TreeEntry, TreePicker};
 use craft::ui::runtime::commands::CommandRef;
 use craft::ui::runtime::env::Env;
@@ -64,7 +67,7 @@ craft::ui::words! {
         axis_tag: "fontcraftFontInfoFont.axisTag" = "Axis Tag";
         hidden: "fontcraftFontInfoFont.hidden" = "Hidden";
         hidden_tip: "fontcraftFontInfoFont.hiddenTip" = "Hide this axis from font users";
-        move_up: "fontcraftFontInfoFont.moveUp" = "Move this axis up";
+        axis_order: "fontcraftFontInfoFont.axisOrder" = "Axis Order";
         remove_axis: "fontcraftFontInfoFont.removeAxis" = "Remove this axis and every coordinate on it";
         parameters: "fontcraftFontInfoFont.parameters" = "Custom Parameters";
         add_parameter: "fontcraftFontInfoFont.addParameter" = "Add a custom parameter";
@@ -165,8 +168,35 @@ pub fn view(ui: &mut Ui, model: &FontInfoModel, sent: &mut Vec<Msg>) {
     sent.extend(posted);
 }
 
-/// The axes: per axis the name, the predefined-axis picker, the tag, Hidden, the up button and minus, then its
-/// warnings. Every control addresses its axis by index, so two axes of one tag each edit their own.
+/// The axes in order, one row each: a drag, or the stacking keys on the focused list, reorders them.
+fn axis_order(ui: &mut Ui, axes: &[AxisModel], words: &FontTabWords, sent: &mut Vec<Msg>) {
+    let positions: Vec<usize> = (0..axes.len()).collect();
+    let name = |at: usize| axes.get(at).map_or_else(String::new, |a| format!("{} ({})", a.name, a.tag));
+    let source = keyed(&positions, |at| *at).with_text(|at| Cow::Owned(name(*at)));
+    let out = List::<usize>::new(words.axis_order.clone()).header(false).natural_height(true).reorder(ReorderRule::new()).show_items(
+        ui,
+        &source,
+        &mut |at, icx| ListRow::new(name(*at)).state(icx.row.clone()),
+    );
+    for event in &out.events {
+        let CollectionEvent::Reorder(edit) = event else { continue };
+        let moved = match edit.phase() {
+            Some(GesturePhase::Commit) | None => edit.value(),
+            _ => None,
+        };
+        let Some(moved) = moved else { continue };
+        let mut order: Vec<usize> = (0..axes.len()).filter(|i| !moved.keys.contains(i)).collect();
+        let tail = order.split_off(moved.to.min(order.len()));
+        order.extend(moved.keys.iter().copied());
+        order.extend(tail);
+        if order.iter().enumerate().any(|(at, old)| at != *old) {
+            sent.push(Msg::run("font.axes.reorder", json!({"order": order})));
+        }
+    }
+}
+
+/// The axes: their order list when there are several, then per axis the name, the predefined-axis picker, the tag,
+/// Hidden and minus, then its warnings. Every control addresses its axis by index, so two axes of one tag each edit their own.
 fn axes(ui: &mut Ui, axes: &[AxisModel], predefined: &[PredefinedAxis], words: &FontTabWords, sent: &mut Vec<Msg>) {
     if axes.is_empty() {
         Text::new(words.no_axes.clone()).shade(Shade::Muted).show(ui);
@@ -178,7 +208,9 @@ fn axes(ui: &mut Ui, axes: &[AxisModel], predefined: &[PredefinedAxis], words: &
         let folder = if p.registered { REGISTERED } else { CUSTOM };
         TreeEntry::new(p.tag.clone(), format!("{} ({})", p.name, p.tag)).within(folder.to_string())
     }));
-    let count = axes.len();
+    if axes.len() > 1 {
+        axis_order(ui, axes, words, sent);
+    }
     for (at, axis) in axes.iter().enumerate() {
         let set = |key: &str, value: Json| Msg::run("font.axes.set", json!({"axis": at, key: value}));
         Stack::new().id_salt(("axis", at)).show(ui, |ui, _| {
@@ -199,12 +231,6 @@ fn axes(ui: &mut Ui, axes: &[AxisModel], predefined: &[PredefinedAxis], words: &
                 let hidden = Checkbox::new(Bind::given(axis.hidden)).label(words.hidden.clone()).tooltip(words.hidden_tip.clone()).show(ui);
                 if let Some(on) = hidden.events.committed() {
                     sent.push(set("hidden", json!(on)));
-                }
-                let up = IconButton::new(IconId::new("chevron_up")).label(words.move_up.clone()).tooltip(words.move_up.clone()).enabled(at > 0);
-                if up.show(ui).clicked() && at > 0 {
-                    let mut order: Vec<usize> = (0..count).collect();
-                    order.swap(at.saturating_sub(1), at);
-                    sent.push(Msg::run("font.axes.reorder", json!({"order": order})));
                 }
                 if IconButton::new(IconId::new("minus")).label(words.remove_axis.clone()).tooltip(words.remove_axis.clone()).show(ui).clicked() {
                     sent.push(Msg::run("font.axes.remove", json!({"axis": at})));

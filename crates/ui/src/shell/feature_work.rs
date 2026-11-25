@@ -465,9 +465,14 @@ fn start_expand(app: &mut FontCraftApp, key: ExpandKey) {
     app.host.jobs().spawn("feature code expansion", Box::new(job));
 }
 
+/// Font Info shows its Exports tab.
+pub fn exports_tab_shows(app: &FontCraftApp) -> bool {
+    app.view.font_info.tab == FontInfoTab::Exports && app.view.workspace.layout.panel_state(&PanelId::FontInfo) != PanelState::Hidden
+}
+
 /// The one instance the Exports tab shows while Font Info shows that tab.
 fn shown_instance(app: &FontCraftApp) -> Option<InstanceKey> {
-    if app.view.font_info.tab != FontInfoTab::Exports || app.view.workspace.layout.panel_state(&PanelId::FontInfo) == PanelState::Hidden {
+    if !exports_tab_shows(app) {
         return None;
     }
     let doc = app.session.active()?;

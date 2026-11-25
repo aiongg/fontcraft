@@ -3,6 +3,7 @@
 //! | Reply | Notice |
 //! |---|---|
 //! | `glyph.matchMasters`, `glyph.relocateStartPoints`: `skipped` | the label, then each skipped glyph with its reason |
+//! | `font.info.pasteRows`: `skipped` | the label, then each skipped row with its reason |
 //! | `color.generateDarkPalette`: `palette`, `name` | the new palette's number and name |
 //! | `font.features.compile`: `errors`, `warnings`, `targetErrors`, `targetWarnings` | how many errors and warnings the code has |
 //! | `font.features.update`: `added`, `updated`, `removed` | how many entries it added, changed and removed |
@@ -51,6 +52,9 @@ pub fn notice(id: &str, reply: &Value) -> Option<String> {
     if id == "font.features.update" {
         return Some(updated(reply));
     }
+    if id == "font.info.pasteRows" {
+        return skipped_rows(id, reply);
+    }
     if id == "color.generateDarkPalette" {
         return dark_palette(reply);
     }
@@ -59,6 +63,33 @@ pub fn notice(id: &str, reply: &Value) -> Option<String> {
 
 fn label(id: &str) -> &str {
     fontcraft_engine::find_command(id).map_or(id, |spec| spec.label)
+}
+
+/// `Paste Rows: skipped Filter (cannot be set on the font), …`; each key once, with its first reason.
+fn skipped_rows(id: &str, reply: &Value) -> Option<String> {
+    let entries = reply.get("skipped")?.as_array()?;
+    let mut named: Vec<(&str, &str)> = Vec::new();
+    let mut more = false;
+    for entry in entries {
+        let (Some(key), Some(reason)) = (entry.get("key").and_then(Value::as_str), entry.get("reason").and_then(Value::as_str)) else { continue };
+        if named.iter().any(|(k, _)| *k == key) {
+            continue;
+        }
+        if named.len() < MAX_NOTICE_NAMES {
+            named.push((key, reason));
+        } else {
+            more = true;
+        }
+    }
+    if named.is_empty() {
+        return None;
+    }
+    let mut list: Vec<String> = named.iter().map(|(key, reason)| format!("{key} ({reason})")).collect();
+    if more {
+        list.push("…".into());
+    }
+    let words = ReplyNoticeWords::english();
+    Some(format!("{}: {} {}", label(id), words.skipped.as_str(), list.join(", ")))
 }
 
 /// `Match Masters: skipped B (reason), C …`.
