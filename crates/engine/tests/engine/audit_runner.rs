@@ -167,6 +167,21 @@ fn check_outlines_takes_the_reference_options() {
     }
 }
 
+/// As the reference checker: at tolerance 0 only exactly collinear lines, and every one of them.
+#[test]
+fn check_outlines_lists_every_exactly_collinear_line() {
+    let mut s = Session::with_document();
+    let point = |x: f64, y: f64| json!({"x": x, "y": y});
+    let nearly = [(0.0, 0.0), (200.0, 1.0), (400.0, 0.0), (400.0, 300.0), (0.0, 300.0)].map(|(x, y)| point(x, y));
+    run(&mut s, "path.addPath", json!({"glyph": "A", "nodes": nearly}));
+    let mut comb: Vec<Value> = (0..=110).map(|i| point(f64::from(i) * 10.0, 0.0)).collect();
+    comb.extend([point(1100.0, 300.0), point(0.0, 300.0)]);
+    run(&mut s, "path.addPath", json!({"glyph": "B", "nodes": comb}));
+    let r = run(&mut s, "audit.checkOutlines", json!({"overlapChecks": false}));
+    let of = |glyph: &str| results(&r).iter().filter(|x| x["check"] == "check.outlines.collinearLines" && x["location"]["glyph"] == glyph).count();
+    assert_eq!((of("A"), of("B")), (0, 109));
+}
+
 /// After a fix, each changed layer is rounded half to even (three decimals with `decimal`) and
 /// its contours go back in the reference's order: AFDKO 5.0.1's checkoutlinesufo -e on the same
 /// outline gives the low square, the top square, then the union of the two rectangles.
