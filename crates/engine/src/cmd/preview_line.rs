@@ -22,7 +22,6 @@ use super::preview::{MAX_RENDER_GLYPHS, preview_range};
 use super::stroke::{OpenCorners, layer_outline};
 use super::*;
 use crate::color_drawing::{ColorArt, ColorFiles, Content, Mode, PlacedColor, Sources, cell_color, cell_mode, content, raster};
-use crate::interp_cache::view_master_id;
 use crate::params::Params;
 use crate::prelude::*;
 use crate::preview_shapers::{PreviewPlace, shaper};

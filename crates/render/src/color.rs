@@ -358,16 +358,68 @@ fn over(d: &mut [u8], s: [u8; 4]) {
     }
 }
 
-/// Lays `bitmap` (straight RGBA, rows top to bottom) over `target`, smoothed: `place` maps the
-/// bitmap's pixels, y up from its bottom left, to the target's pixels. A bitmap drawn at less
-/// than half its size is averaged down first. Nothing is drawn for a transform without an
-/// inverse or a bitmap whose pixels do not fit its size.
-pub fn draw_bitmap(target: &mut Image, bitmap: &fontcraft_imagery::Rgba8, place: Affine) {
-    let det = place.determinant();
-    let (mut w, mut h) = (bitmap.width as usize, bitmap.height as usize);
-    if !(det.is_finite() && det.abs() > 1e-12) || w == 0 || h == 0 || bitmap.pixels.len() != w.saturating_mul(h).saturating_mul(4) {
-        return;
+/// Most pixels [`Bitmaps`] keeps ready.
+const MAX_READY_PIXELS: usize = 32 << 20;
+
+/// A bitmap averaged down and premultiplied.
+struct Reduced {
+    pixels: Vec<[u8; 4]>,
+    w: usize,
+    h: usize,
+    /// Its pixels to the bitmap's.
+    to_full: Affine,
+}
+
+/// Lays bitmaps over images, and keeps each ready to be laid again at the same reduction.
+#[derive(Default)]
+pub struct Bitmaps<'a> {
+    ready: Vec<(&'a fontcraft_imagery::Rgba8, u32, Reduced)>,
+    pixels: usize,
+}
+
+impl<'a> Bitmaps<'a> {
+    /// Lays `bitmap` (straight RGBA, rows top to bottom) over `target`, smoothed: `place` maps the
+    /// bitmap's pixels, y up from its bottom left, to the target's pixels. A bitmap drawn at less
+    /// than half its size is averaged down first. Nothing is drawn for a transform without an
+    /// inverse, a bitmap outside the target or one whose pixels do not fit its size.
+    pub fn draw(&mut self, target: &mut Image, bitmap: &'a fontcraft_imagery::Rgba8, place: Affine) {
+        let det = place.determinant();
+        let (w, h) = (bitmap.width as usize, bitmap.height as usize);
+        if !(det.is_finite() && det.abs() > 1e-12) || w == 0 || h == 0 || bitmap.pixels.len() != w.saturating_mul(h).saturating_mul(4) {
+            return;
+        }
+        let area = place.transform_rect_bbox(fontcraft_geom::Rect::new(0.0, 0.0, w as f64, h as f64));
+        let (tw, th) = (f64::from(target.width), f64::from(target.height));
+        // One pixel of smoothing past the edge.
+        if !(area.x1 > -1.0 && area.y1 > -1.0 && area.x0 < tw + 1.0 && area.y0 < th + 1.0) {
+            return;
+        }
+        let (mut halvings, mut scale, mut size) = (0, det.abs().sqrt(), (w, h));
+        while scale < 0.5 && size.0 > 1 && size.1 > 1 {
+            halvings += 1;
+            scale *= 2.0;
+            size = (size.0 / 2, size.1 / 2);
+        }
+        let known = self.ready.iter().position(|(of, n, _)| std::ptr::eq(*of, bitmap) && *n == halvings);
+        let at = known.unwrap_or_else(|| {
+            if self.pixels > MAX_READY_PIXELS {
+                self.ready.clear();
+                self.pixels = 0;
+            }
+            let reduced = reduce(bitmap, halvings);
+            self.pixels = self.pixels.saturating_add(reduced.pixels.len());
+            self.ready.push((bitmap, halvings, reduced));
+            self.ready.len().saturating_sub(1)
+        });
+        if let Some((_, _, reduced)) = self.ready.get(at) {
+            draw_reduced(target, reduced, place * reduced.to_full);
+        }
     }
+}
+
+/// `bitmap` premultiplied, then averaged down to half its size `halvings` times.
+fn reduce(bitmap: &fontcraft_imagery::Rgba8, halvings: u32) -> Reduced {
+    let (mut w, mut h) = (bitmap.width as usize, bitmap.height as usize);
     let mut pixels: Vec<[u8; 4]> = bitmap
         .pixels
         .as_chunks::<4>()
@@ -378,9 +430,11 @@ pub fn draw_bitmap(target: &mut Image, bitmap: &fontcraft_imagery::Rgba8, place:
             [m(r), m(g), m(b), a]
         })
         .collect();
-    let mut place = place;
-    let mut scale = det.abs().sqrt();
-    while scale < 0.5 && w > 1 && h > 1 {
+    let mut to_full = Affine::IDENTITY;
+    for _ in 0..halvings {
+        if w < 2 || h < 2 {
+            break;
+        }
         let (nw, nh) = (w / 2, h / 2);
         let mut halved = Vec::with_capacity(nw * nh);
         for y in 0..nh {
@@ -395,11 +449,16 @@ pub fn draw_bitmap(target: &mut Image, bitmap: &fontcraft_imagery::Rgba8, place:
                 halved.push(sum.map(|s| (s / 4) as u8));
             }
         }
-        place *= Affine::scale_non_uniform(w as f64 / nw as f64, h as f64 / nh as f64);
+        to_full *= Affine::scale_non_uniform(w as f64 / nw as f64, h as f64 / nh as f64);
         (pixels, w, h) = (halved, nw, nh);
-        scale *= 2.0;
     }
-    let (fw, fh) = (w as f64, h as f64);
+    Reduced { pixels, w, h, to_full }
+}
+
+fn draw_reduced(target: &mut Image, bitmap: &Reduced, place: Affine) {
+    let Reduced { pixels, w, h, .. } = bitmap;
+    let w = *w;
+    let (fw, fh) = (w as f64, *h as f64);
     let area = place.transform_rect_bbox(fontcraft_geom::Rect::new(0.0, 0.0, fw, fh));
     if ![area.x0, area.y0, area.x1, area.y1].iter().all(|v| v.is_finite()) {
         return;
@@ -2482,6 +2541,26 @@ mod tests {
         composite(&mut page, &raster(2, 2, [0, 0, 255, 255]), i64::MAX, i64::MIN);
         composite(&mut page, &raster(2, 2, [0, 0, 255, 255]), -100, 100);
         assert_eq!(page.pixel(3, 3), Some([0, 0, 0, 0]));
+    }
+
+    /// A bitmap outside the target is not prepared; one laid twice is prepared once and drawn the same.
+    #[test]
+    fn a_bitmap_is_prepared_once_and_only_when_it_shows() {
+        let bitmap = fontcraft_imagery::Rgba8 { width: 4, height: 4, pixels: [255, 0, 0, 255].repeat(16) };
+        let blank = || Image::from_rgba_premultiplied(8, 4, vec![0; 8 * 4 * 4]).unwrap();
+        let (mut page, mut twice) = (blank(), blank());
+        let mut bitmaps = Bitmaps::default();
+        bitmaps.draw(&mut page, &bitmap, Affine::translate((100.0, 0.0)));
+        assert!(bitmaps.ready.is_empty());
+        let small = Affine::scale(0.25);
+        bitmaps.draw(&mut page, &bitmap, small);
+        bitmaps.draw(&mut page, &bitmap, Affine::translate((5.0, 0.0)) * small);
+        assert_eq!(bitmaps.ready.len(), 1);
+        assert!(page.pixel(0, 0).is_some_and(|p| p[0] > 0 && p[1] == 0), "{:?}", page.pixel(0, 0));
+        for place in [small, Affine::translate((5.0, 0.0)) * small] {
+            Bitmaps::default().draw(&mut twice, &bitmap, place);
+        }
+        assert_eq!(page.pixels, twice.pixels);
     }
 
     #[test]

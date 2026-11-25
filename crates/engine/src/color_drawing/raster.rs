@@ -7,7 +7,7 @@
 use fontcraft_geom::{Affine, BezPath, Rect, Shape as _};
 use fontcraft_render::Image;
 use fontcraft_render::color::artwork::{self, Drawable, Item, Leaf};
-use fontcraft_render::color::{composite_image, draw_bitmap};
+use fontcraft_render::color::{Bitmaps, composite_image};
 
 use super::{Content, PlacedColor};
 
@@ -82,11 +82,12 @@ pub fn rasterise(items: &[Item], to_pixels: Affine, width: u32, height: u32, pla
 /// font units to pixels. A drawing outside the image is passed over. `plain` is the colour of a glyph past its work
 /// budget, straight RGBA.
 pub fn draw_over(image: &mut Image, colors: &[PlacedColor], to_pixels: Affine, plain: [f32; 4]) {
+    let mut bitmaps = Bitmaps::default();
     for placed in colors {
         let place = to_pixels * Affine::translate((placed.at[0], placed.at[1]));
         match &placed.art.content {
             Content::Items(items) => items_over(image, items, place, plain),
-            Content::Bitmap { bitmap, place: own } => draw_bitmap(image, &bitmap.image, place * *own),
+            Content::Bitmap { bitmap, place: own } => bitmaps.draw(image, &bitmap.image, place * *own),
         }
     }
 }

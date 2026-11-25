@@ -135,10 +135,7 @@ impl PreviewShaping {
                 let Some(done) = landing.lock().ok().and_then(|mut l| l.take()) else { return finished };
                 finished = true;
                 if let (Some(key), Some(built)) = (key.clone(), done) {
-                    while self.fonts.len() >= MAX_FONTS {
-                        self.fonts.pop_front();
-                    }
-                    self.fonts.push_back((key, built));
+                    self.keep(key, built);
                 }
                 self.running = None;
             }
@@ -147,8 +144,23 @@ impl PreviewShaping {
                 self.taken.clear();
                 return finished;
             };
-            self.running = start(job, session, host);
+            self.running = match start(job, session, host) {
+                Ok(running) => Some(running),
+                // Kept for the key, as a build that failed is: it is not asked again for the revision.
+                Err((key, error)) => {
+                    finished = true;
+                    self.keep(key, Err(error));
+                    None
+                }
+            };
         }
+    }
+
+    fn keep(&mut self, key: InstanceKey, built: Built) {
+        while self.fonts.len() >= MAX_FONTS {
+            self.fonts.pop_front();
+        }
+        self.fonts.push_back((key, built));
     }
 
     /// How long until a frame should look for a finished job, in seconds.
@@ -158,12 +170,15 @@ impl PreviewShaping {
 }
 
 /// Runs `job` through the host's jobs (a thread on the desktop, at once on the web and in tests with inline jobs).
-fn start(job: Job, session: &Session, host: &Host) -> Option<(Option<InstanceKey>, Landing)> {
+fn start(job: Job, session: &Session, host: &Host) -> Result<(Option<InstanceKey>, Landing), (InstanceKey, String)> {
     let landing: Landing = Arc::default();
     let out = Arc::clone(&landing);
     let (key, work): (_, Work) = match job {
         Job::Build(key, font) => {
-            let options = build_options(session).ok()?;
+            let options = match build_options(session) {
+                Ok(options) => options,
+                Err(e) => return Err((key, e.to_string())),
+            };
             let instance = key.instance;
             let build = move || Some(instance_layout_font(&font, instance, &options).map_err(|e| e.to_string()).and_then(|f| shaper_of(&f)));
             let work: Work = Box::new(build);
@@ -186,7 +201,7 @@ fn start(job: Job, session: &Session, host: &Host) -> Option<(Option<InstanceKey
         }
     };
     host.jobs().spawn("preview shaping", Box::new(run));
-    Some((key, landing))
+    Ok((key, landing))
 }
 
 /// The colour drawings of one document revision.

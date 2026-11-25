@@ -28,12 +28,13 @@ use craft::behavior::dock::PanelState;
 use craft::ui::contract::{PlainData, Tracked};
 use fontcraft_engine::Session;
 use fontcraft_engine::cmd::preview::{MAX_RENDER_GLYPHS, preview_range};
+use fontcraft_engine::cmd::preview_line::MAX_FEATURES;
 use fontcraft_engine::cmd::stroke::OpenCorners;
 use fontcraft_engine::interp_cache::view_master_id;
 use fontcraft_engine::model::Font;
 use fontcraft_engine::prelude::*;
 use fontcraft_geom::{Affine, BezPath};
-use fontcraft_textlayout::{Direction, Item, Layout, Options, PreviewShaper, Shaping, Text};
+use fontcraft_textlayout::{Direction, Item, Layout, Options, PreviewShaper, Shaping, Text, tag};
 
 use super::ProjectCx;
 use super::preview_shaping::{InstanceKey, LineColors, PreviewCache};
@@ -367,13 +368,17 @@ pub fn shown_line(session: &Session, view: &ViewState) -> Option<ShownLine> {
     let glyphs = (0..text.len()).filter_map(|i| text_glyph(&text, i)).filter(|g| font.glyph(g).is_some()).take(MAX_RENDER_GLYPHS).collect();
     let features = &view.text.features;
     let (script, language) = match features.localized {
-        true => (Some(features.script.clone().unwrap_or_else(|| "DFLT".into())), Some(features.language.clone().unwrap_or_else(|| "dflt".into()))),
+        true => {
+            // As Edit View shapes: a tag it cannot take is the default.
+            let known = |t: &Option<String>, default: &str| t.clone().filter(|t| tag(t).is_some()).unwrap_or_else(|| default.into());
+            (Some(known(&features.script, "DFLT")), Some(known(&features.language, "dflt")))
+        }
         false => (None, None),
     };
     Some(ShownLine {
         glyphs,
         master: crate::shell::masters::current_master(font, &view.layers).map(|m| m.id.clone()),
-        features: features.active.clone(),
+        features: features.active.iter().filter(|t| tag(t).is_some()).take(MAX_FEATURES).cloned().collect(),
         script,
         language,
         rtl: direction(view) == Direction::Rtl,
