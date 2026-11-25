@@ -43,6 +43,7 @@ pub const KEYMAP: &[KeyBinding] = &[
     KeyBinding { keys: "Return", when: "editView", command: "path.toggleNodeType", note: "the selected on-curve nodes" },
     KeyBinding { keys: "Alt+Return", when: "editView", command: "path.toggleNodeTypeKeepingOutline", note: "the selected on-curve nodes" },
     KeyBinding { keys: "Delete", when: "editView", command: "edit.delete", note: "the selection" },
+    KeyBinding { keys: "Backspace", when: "tool:draw", command: "edit.delete", note: "the last node of the path being drawn" },
     KeyBinding { keys: "Shift+Delete", when: "editView", command: "path.deleteAndBreak", note: "the selected points" },
     KeyBinding { keys: "Alt+Delete", when: "editView", command: "edit.deleteInAllMasters", note: "the selected points and shapes" },
     KeyBinding { keys: "Tab", when: "editView", command: "selection.selectNext", note: "" },

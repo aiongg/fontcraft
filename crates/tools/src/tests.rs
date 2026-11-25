@@ -442,6 +442,11 @@ fn alt_click_on_a_line_segment_makes_it_a_curve() {
     assert_eq!(run.len(), 1);
     assert_eq!(run[0].id, "path.convertSegmentToCurve");
     assert_eq!(run[0].params["segments"], json!([[0, 1]]));
+    assert!(run[0].params.get("orthogonal").is_none());
+    h.actions.clear();
+    h.click(&mut t, 50.0, 1.0, Modifiers::SHIFT.with_alt());
+    let Some(Action::Run { invocation }) = h.actions.last() else { panic!("{:?}", h.actions) };
+    assert_eq!((invocation.id.as_str(), &invocation.params["orthogonal"]), ("path.convertSegmentToCurve", &json!(true)));
 }
 
 #[test]

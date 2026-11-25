@@ -127,6 +127,29 @@ fn moving_carries_handles_keeps_smooth_nodes_in_line_and_nudges() {
     assert_eq!(xy(&nodes(&mut s, "B", 0)), [(0.0, 0.0), (100.0, 20.0), (100.0, 70.0), (50.0, 100.0), (0.0, 100.0)]);
 }
 
+#[test]
+fn orthogonal_conversion_continues_the_neighbours_and_follows_the_glyphs_curve_type() {
+    let mut s = Session::with_document();
+    let up_and_over = [(0.0, 0.0), (0.0, 100.0), (50.0, 200.0), (150.0, 200.0)];
+    add(&mut s, "A", line(&up_and_over), false);
+    run(&mut s, "path.convertSegmentToCurve", json!({"glyph": "A", "segments": [[0, 2]], "orthogonal": true}));
+    let n = nodes(&mut s, "A", 0);
+    assert_eq!(xy(&n), [(0.0, 0.0), (0.0, 100.0), (0.0, 155.0), (22.0, 200.0), (50.0, 200.0), (150.0, 200.0)]);
+    assert_eq!(n[4].kind, "curve");
+    // A horizontal segment has no oval to become: its handles lie on it.
+    run(&mut s, "path.convertSegmentToCurve", json!({"glyph": "A", "segments": [[0, 5]], "orthogonal": true}));
+    assert!(nodes(&mut s, "A", 0)[4..].iter().all(|n| n.y == 200.0));
+
+    // In a glyph drawn with quadratic curves the new curve is quadratic, with two handles.
+    let quad = json!([{"x": 300, "y": 0}, {"x": 350, "y": 50, "type": "offcurve"}, {"x": 400, "y": 0, "type": "qcurve"}]);
+    add(&mut s, "B", quad, false);
+    add(&mut s, "B", line(&up_and_over), false);
+    run(&mut s, "path.convertSegmentToCurve", json!({"glyph": "B", "segments": [[1, 2]], "orthogonal": true}));
+    let n = nodes(&mut s, "B", 1);
+    assert_eq!(xy(&n[2..5]), [(0.0, 141.0), (29.0, 200.0), (50.0, 200.0)]);
+    assert_eq!(n[4].kind, "qcurve");
+}
+
 /// A corner, a line up to a smooth node, and a curve from it.
 fn tangent_path() -> Value {
     json!([

@@ -157,6 +157,9 @@ are in decision 0004 › How commands name their targets. In short:
   - `Cmd` during the drag: only the outgoing handle's length changes; both handles keep their
     common angle (asymmetric smooth node).
   - `Space` during the drag: move the node instead of shaping handles.
+- In a glyph (else a font) with quadratic curves, the drawn curves are quadratic
+  (`draw.curveTypeFollowsGlyph`).
+- Undo and redo keep the drawing; `Backspace` removes its last node (`draw.undoKeepsDrawing`).
 - Click the path's first node: close the path.
 - Click a node of an existing closed path: open the path there (`paths.openAtNodeWithDrawTool`).
 - `Shift`+click a segment: insert a node at the nearest extremum or inflection (section 14).
@@ -361,7 +364,9 @@ Construction details where the handbook is silent (our design, `inferred`):
   nodes. Corner → smooth adds missing handles on both sides and may move points so the handles
   line up, which can change the outline.
 - `path.toggleNodeTypeKeepingOutline` (`Alt+Return`, `Alt`+double-click): same, but nothing moves.
-- `path.convertSegmentToCurve` (`Alt`+click a line segment): adds a handle at each end node.
+- `path.convertSegmentToCurve` (`Alt`+click a line segment): adds a handle at each end node. With
+  `Shift` too, one handle is horizontal and the other vertical (`orthogonal: true`,
+  `segments.orthogonalHandles`).
 - Curve → line: delete one or both handles of the segment (`segments.deleteHandleMakesLine`).
 
 ### Tidy up Paths (`path.tidyUpPaths` `Cmd+Shift+T`, `path.tidyUpPathsForAllMasters` `Cmd+Alt+Shift+T`)

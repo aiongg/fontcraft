@@ -88,7 +88,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Convert Segment to Curve",
             [],
             None,
-            "{glyph: name, layer?: id, side?, segments: [[shape, node]] (or segment: [shape, node])} turns each straight segment into a curve with handles at a third and two thirds of it (one handle at the middle in a path with quadratic segments); the outline keeps its shape. Curve segments are left alone → {selection}",
+            "{glyph: name, layer?: id, side?, segments: [[shape, node]] (or segment: [shape, node]), orthogonal?: bool} turns each straight segment into a curve with handles at a third and two thirds of it (one handle at the middle of a quadratic one); the outline keeps its shape. The curve is quadratic in a path with quadratic segments, and in a path without curves when the layer's curves, else the font's, are. `orthogonal: true` bends a diagonal segment into a quarter of an oval instead: one handle horizontal and one vertical, the way round that continues the neighbouring segments better. Curve segments are left alone → {selection}",
             has_doc,
             convert_segment_to_curve
         )
@@ -596,6 +596,7 @@ fn toggle(s: &mut Session, v: &Value, command: &'static str, keep_outline: bool)
         return Err(p.bad("give `points`: the nodes to switch"));
     }
     let step = grid(s.font()?);
+    let quadratic = draws_quadratic(s.font()?, &t)?;
     let points = s.edit("Toggle Node Type", |font| {
         t.edit_layer(font, |layer| {
             let mut parts = layer.parts_mut(t.side);
@@ -609,7 +610,7 @@ fn toggle(s: &mut Session, v: &Value, command: &'static str, keep_outline: bool)
                     continue;
                 }
                 any = true;
-                let (new, map) = ops::toggle(path, &nodes, to, keep, step);
+                let (new, map) = ops::toggle(path, &nodes, to, keep, step, quadratic);
                 *path = new;
                 out.extend(set.iter().filter_map(|&i| map.get(i).map(|&k| (shape, k))));
             }
@@ -624,13 +625,21 @@ fn toggle(s: &mut Session, v: &Value, command: &'static str, keep_outline: bool)
     Ok(json!({ "selection": sel.to_json() }))
 }
 
+/// Whether new curves on the layer `t` names are quadratic: as its own curves, else as the font's.
+fn draws_quadratic(font: &Font, t: &Targets) -> Result<bool> {
+    let r = t.resolve(font)?;
+    Ok(fontcraft_model::curve_type::quadratic_curves(r.parts.shapes).unwrap_or_else(|| font.draws_quadratic()))
+}
+
 fn convert_segment_to_curve(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("path.convertSegmentToCurve", v)?;
     let t = Targets::parse(&p)?;
     if t.segments.is_empty() {
         return Err(p.bad("give `segments`: the straight segments to curve"));
     }
+    let orthogonal = p.bool_or("orthogonal", false)?;
     let step = grid(s.font()?);
+    let quadratic = draws_quadratic(s.font()?, &t)?;
     let segments = s.edit("Convert to Curve", |font| {
         t.edit_layer(font, |layer| {
             let mut parts = layer.parts_mut(t.side);
@@ -644,7 +653,7 @@ fn convert_segment_to_curve(s: &mut Session, v: &Value) -> Result<Value> {
                     continue;
                 }
                 any = true;
-                let (new, map) = ops::curves_from_lines(path, &lines, step);
+                let (new, map) = ops::curves_from_lines(path, &lines, step, quadratic, orthogonal);
                 *path = new;
                 out.extend(ends.iter().filter_map(|&e| map.get(e).map(|&k| (shape, k))));
             }

@@ -204,29 +204,31 @@ pub(super) fn selected_segments(path: &Path, selected: &BTreeSet<usize>) -> Vec<
 }
 
 /// `path` with each straight segment that ends at a node of `ends` turned into a curve whose
-/// handles lie on the line (at one third and two thirds; one handle at the middle in a path with
-/// quadratic segments), so the outline keeps its shape. Returns the new path and the new index
-/// of every old node.
-pub(super) fn curves_from_lines(path: &Path, ends: &BTreeSet<usize>, step: f64) -> (Path, Vec<usize>) {
-    let quad = path.nodes.iter().any(|n| n.kind == NodeKind::QCurve);
+/// handles lie on the line (at one third and two thirds; one handle at the middle of a quadratic
+/// segment), so the outline keeps its shape. With `orthogonal`, see [`orthogonal_handles`]. The
+/// curves are quadratic in a path with quadratic segments, and in one without curves when
+/// `quadratic` says so. Returns the new path and the new index of every old node.
+pub(super) fn curves_from_lines(path: &Path, ends: &BTreeSet<usize>, step: f64, quadratic: bool, orthogonal: bool) -> (Path, Vec<usize>) {
+    let has = |kind: NodeKind| path.nodes.iter().any(|n| n.kind == kind);
+    let quad = has(NodeKind::QCurve) || (quadratic && !has(NodeKind::Curve));
     let mut nodes = Vec::with_capacity(path.nodes.len() + 2 * ends.len());
     let mut map = Vec::with_capacity(path.nodes.len());
     let mut tail = Vec::new();
     for (i, node) in path.nodes.iter().enumerate() {
         let start = if ends.contains(&i) && node.on_curve() && path.ends_segment(i) {
-            prev(path, i).filter(|&s| on(path, s)).and_then(|s| point(path, s))
+            prev(path, i).filter(|&s| on(path, s)).and_then(|s| Some((s, point(path, s)?)))
         } else {
             None
         };
         let mut node = node.clone();
-        if let Some(s) = start {
+        if let Some((k, s)) = start {
             let e = node.point();
-            let handles = if quad {
-                node.kind = NodeKind::QCurve;
-                vec![off(s.lerp(e, 0.5), step)]
-            } else {
-                node.kind = NodeKind::Curve;
-                vec![off(s.lerp(e, 1.0 / 3.0), step), off(s.lerp(e, 2.0 / 3.0), step)]
+            node.kind = if quad { NodeKind::QCurve } else { NodeKind::Curve };
+            let turned = if orthogonal { orthogonal_handles(path, k, i, quad) } else { None };
+            let handles = match turned {
+                Some((h1, h2)) => vec![off(h1, step), off(h2, step)],
+                None if quad => vec![off(s.lerp(e, 0.5), step)],
+                None => vec![off(s.lerp(e, 1.0 / 3.0), step), off(s.lerp(e, 2.0 / 3.0), step)],
             };
             // The handles of the segment that ends at a closed path's first node go at the end.
             if i == 0 && path.closed {
@@ -242,6 +244,32 @@ pub(super) fn curves_from_lines(path: &Path, ends: &BTreeSet<usize>, step: f64) 
     let mut out = path.clone();
     out.nodes = nodes;
     (out, map)
+}
+
+/// The handles that turn the line from node `s` to node `e` into a quarter of an oval, one
+/// horizontal and one vertical: the way round that continues the neighbouring segments better,
+/// horizontal at the start when both do equally well. `None` for a horizontal or vertical line.
+fn orthogonal_handles(path: &Path, s: usize, e: usize, quad: bool) -> Option<(Point, Point)> {
+    /// The length of an oval's handles, as a share of its radii: for a cubic quarter, and for a
+    /// quadratic quarter of two pieces (the tangent of 22.5 degrees).
+    const CUBIC: f64 = 0.552_284_749_830_793_6;
+    const QUADRATIC: f64 = std::f64::consts::SQRT_2 - 1.0;
+    let (a, b) = (point(path, s)?, point(path, e)?);
+    let d = b - a;
+    if !(d.x.abs() > EPS && d.y.abs() > EPS && d.x.is_finite() && d.y.is_finite()) {
+        return None;
+    }
+    let unit = |v: Vec2| {
+        let l = v.hypot();
+        if l > EPS && l.is_finite() { v / l } else { Vec2::ZERO }
+    };
+    let before = prev(path, s).filter(|&k| k != e).and_then(|k| point(path, k)).map_or(Vec2::ZERO, |p| unit(a - p));
+    let after = next(path, e).filter(|&k| k != s).and_then(|k| point(path, k)).map_or(Vec2::ZERO, |p| unit(p - b));
+    let (across, up) = (Vec2::new(d.x.signum(), 0.0), Vec2::new(0.0, d.y.signum()));
+    let start_horizontal = before.dot(across) + after.dot(up) + EPS >= before.dot(up) + after.dot(across);
+    let corner = if start_horizontal { Point::new(b.x, a.y) } else { Point::new(a.x, b.y) };
+    let k = if quad { QUADRATIC } else { CUBIC };
+    Some((a.lerp(corner, k), b.lerp(corner, k)))
 }
 
 /// Turns the two handles of the on-curve node `i` onto one line through it, along the bisector
@@ -335,8 +363,8 @@ pub(in crate::cmd) fn keep_tangents(path: &mut Path, old: &[Point], step: f64, s
 
 /// `path.toggleNodeType` on one path: switches each on-curve node of `nodes` to `to` (or to the
 /// other type). A node turning smooth gets handles on straight sides and its handles lined up,
-/// unless `keep_outline`. Returns the new path and the new index of every old node.
-pub(super) fn toggle(path: &Path, nodes: &BTreeSet<usize>, to: Option<bool>, keep_outline: bool, step: f64) -> (Path, Vec<usize>) {
+/// unless `keep_outline`; `quadratic` as for [`curves_from_lines`]. Returns the new path and the new index of every old node.
+pub(super) fn toggle(path: &Path, nodes: &BTreeSet<usize>, to: Option<bool>, keep_outline: bool, step: f64, quadratic: bool) -> (Path, Vec<usize>) {
     let mut out = path.clone();
     let mut smoothed = Vec::new();
     for &i in nodes {
@@ -367,7 +395,7 @@ pub(super) fn toggle(path: &Path, nodes: &BTreeSet<usize>, to: Option<bool>, kee
             ends.insert(b);
         }
     }
-    let (mut out, map) = curves_from_lines(&out, &ends, step);
+    let (mut out, map) = curves_from_lines(&out, &ends, step, quadratic, false);
     for &i in &smoothed {
         if let Some(&k) = map.get(i) {
             align_handles(&mut out, k, step);

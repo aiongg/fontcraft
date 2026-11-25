@@ -14,6 +14,7 @@
 //! | click a node, not drawing | open a closed path there (two coincident ends); split an open path there |
 //! | click a segment | a node there, as on empty canvas (the clicked path is left alone) |
 //! | `Shift`+click a segment | `path.insertNode` at the extremum or inflection nearest to the click |
+//! | `Backspace` (the end node selected, or nothing) | `edit.delete` of the last node; the drawing goes on from the one before |
 //! | `Escape`, another tool | end the path |
 //!
 //! Each node placed is one interaction, so one undo step, of existing commands: `path.addPath`
@@ -22,11 +23,18 @@
 //! handle that leaves the last node, from the drag that placed it, stays with the tool until the
 //! next node uses it. A segment with a handle at one end only gets the other one a third of the
 //! way from its node towards the first.
+//!
+//! In a glyph (else a font) with quadratic curves the drawn curves are quadratic: the dragged
+//! handles are the segment's off-curve points, two of them or the only one there is.
+//!
+//! Undo and redo keep the drawing: the tool follows its path by its end nodes, and goes on from
+//! the end the path has. It ends when the path is gone or closed.
 
+use std::collections::BTreeMap;
 use std::f64::consts::FRAC_PI_4;
 
-use fontcraft_geom::{CubicBez, ParamCurve, Point, Vec2};
-use fontcraft_model::NodeKind;
+use fontcraft_geom::{CubicBez, ParamCurve, Point, QuadBez, Vec2};
+use fontcraft_model::{Node, NodeKind};
 use serde_json::{Map, Value, json};
 
 use crate::event::{Key, KeyEvent, Modifiers, PointerEvent, PointerKind};
@@ -44,6 +52,8 @@ use crate::view::View;
 const PREVIEW_STEPS: usize = 16;
 /// Handles shorter than this, in font units, count as none.
 const MIN_HANDLE: f64 = 1e-6;
+/// How far, in font units, an end node may be from where the tool put it: placed nodes are rounded.
+const SAME_PLACE: f64 = 1.0;
 /// Segment parameters this close to an end are the end node, not a place to insert.
 const END_T: f64 = 1e-6;
 
@@ -93,19 +103,49 @@ fn off(p: Point) -> Value {
     json!({"x": p.x, "y": p.y, "type": "offcurve"})
 }
 
-/// The nodes of a path from `a` to `b` (`path.addPath`), and how many there are.
-fn piece(a: Point, hs: Option<(Point, Point)>, b: Point, b_smooth: bool) -> (Value, usize) {
-    let mut nodes = vec![json!({"x": a.x, "y": a.y})];
-    match hs {
-        Some((h1, h2)) => {
-            nodes.push(off(h1));
-            nodes.push(off(h2));
-            nodes.push(json!({"x": b.x, "y": b.y, "type": "curve", "smooth": b_smooth}));
-        }
-        None => nodes.push(json!({"x": b.x, "y": b.y, "smooth": b_smooth})),
+/// The off-curve points of the segment from `a` to `b`, given the handle at each end that is
+/// known; none for a straight segment. A quadratic segment takes the handles there are.
+fn off_curves(a: Point, ha: Option<Point>, hb: Option<Point>, b: Point, quadratic: bool) -> Vec<Point> {
+    if quadratic {
+        return [ha, hb].into_iter().flatten().collect();
     }
+    handles_between(a, ha, hb, b).map_or_else(Vec::new, |(h1, h2)| vec![h1, h2])
+}
+
+/// The nodes of a path from `a` to `b` (`path.addPath`), and how many there are.
+fn piece(a: Point, hs: &[Point], b: Point, b_smooth: bool, quadratic: bool) -> (Value, usize) {
+    let mut nodes = vec![json!({"x": a.x, "y": a.y})];
+    nodes.extend(hs.iter().map(|&h| off(h)));
+    nodes.push(if hs.is_empty() {
+        json!({"x": b.x, "y": b.y, "smooth": b_smooth})
+    } else {
+        json!({"x": b.x, "y": b.y, "type": if quadratic { "qcurve" } else { "curve" }, "smooth": b_smooth})
+    });
     let len = nodes.len();
     (Value::Array(nodes), len)
+}
+
+/// Points along the segment from `a` to `b` with the off-curve points `hs`, without `a`.
+fn samples(a: Point, hs: &[Point], b: Point, quadratic: bool) -> Vec<Point> {
+    let at = |k: usize| k as f64 / PREVIEW_STEPS as f64;
+    match hs {
+        [] => vec![b],
+        &[h1, h2] if !quadratic => {
+            let c = CubicBez::new(a, h1, h2, b);
+            (1..=PREVIEW_STEPS).map(|k| c.eval(at(k))).collect()
+        }
+        _ => {
+            let mut out = Vec::new();
+            let mut from = a;
+            for (i, &h) in hs.iter().enumerate() {
+                let to = hs.get(i + 1).map_or(b, |next| h.midpoint(*next));
+                let q = QuadBez::new(from, h, to);
+                out.extend((1..=PREVIEW_STEPS).map(|k| q.eval(at(k))));
+                from = to;
+            }
+            out
+        }
+    }
 }
 
 /// `base` (glyph and layer) with the entries of `extra`.
@@ -135,8 +175,7 @@ struct Drawing {
     shape: usize,
     /// New nodes go before the first node (the path was continued at its start).
     at_start: bool,
-    /// The path's node count when the tool last changed it. Another count means something else
-    /// changed the path (an edit, an undo), and the drawing ends.
+    /// The path's node count when the tool last saw it.
     count: usize,
     /// The handle leaving the end node towards the next node, from the drag that placed it.
     pending: Option<Point>,
@@ -151,14 +190,16 @@ impl Drawing {
         if self.at_start { self.count.saturating_sub(1) } else { 0 }
     }
 
-    /// Where the end node is, when the path is still the one the tool left.
-    fn end(&self, scene: &Scene) -> Option<Point> {
-        let path = scene.path(self.shape)?;
-        if path.closed || path.nodes.len() != self.count || !scene.shape_editable(self.shape) {
+    /// The path `shape` as one this drawing could go on with: its node count, where its end node
+    /// is, and where the node at its other end is. `None` for a closed path.
+    fn ends(&self, scene: &Scene, shape: usize) -> Option<(usize, Point, Point)> {
+        let path = scene.path(shape)?;
+        if path.closed || !scene.shape_editable(shape) {
             return None;
         }
-        let node = path.nodes.get(self.end_index())?;
-        node.on_curve().then(|| node.point())
+        let (first, last) = (path.nodes.first()?, path.nodes.last()?);
+        let (end, other) = if self.at_start { (first, last) } else { (last, first) };
+        (end.on_curve() && other.on_curve()).then(|| (path.nodes.len(), end.point(), other.point()))
     }
 }
 
@@ -296,6 +337,8 @@ struct Placing {
     base: Map<String, Value>,
     /// The layer's shape count at the press: the index a path added now gets.
     shapes: usize,
+    /// The drawn curves are quadratic.
+    quadratic: bool,
     sent: Option<Value>,
 }
 
@@ -303,13 +346,15 @@ impl Placing {
     fn invocation(&self) -> Invocation {
         let h = &self.h;
         let m = self.shapes;
+        let quadratic = self.quadratic;
         match &self.kind {
             Kind::Start { .. } => {
                 let node = json!({"x": h.node.x, "y": h.node.y, "smooth": h.smooth});
                 Invocation::new("path.addPath", params(&self.base, json!({"closed": false, "nodes": [node]})))
             }
             Kind::Append { d, end } => {
-                let (nodes, _) = piece(*end, handles_between(*end, d.pending, h.inn, h.node), h.node, h.smooth);
+                let hs = off_curves(*end, d.pending, h.inn, h.node, quadratic);
+                let (nodes, _) = piece(*end, &hs, h.node, h.smooth, quadratic);
                 let mut steps = vec![
                     step("path.addPath", &self.base, json!({"closed": false, "nodes": nodes})),
                     step("path.connectNodes", &self.base, json!({"points": [[d.shape, d.end_index()], [m, 0]]})),
@@ -323,7 +368,7 @@ impl Placing {
             Kind::Close { d, end, other } => {
                 // The closing segment runs from the last node to the first.
                 let (a, ha, b, hb) = if d.at_start { (other.at, h.inn, *end, d.pending) } else { (*end, d.pending, other.at, h.inn) };
-                let (nodes, _) = piece(a, handles_between(a, ha, hb, b), b, false);
+                let (nodes, _) = piece(a, &off_curves(a, ha, hb, b, quadratic), b, false, quadratic);
                 let mut steps = self.far_handle(other);
                 steps.push(step("path.addPath", &self.base, json!({"closed": false, "nodes": nodes})));
                 steps.push(step("path.connectNodes", &self.base, json!({"points": [[d.shape, d.count.saturating_sub(1)], [m, 0]]})));
@@ -332,7 +377,8 @@ impl Placing {
             }
             Kind::Join { d, end, other } => {
                 let smooth = if self.shapes_far_handle(other) { h.smooth } else { other.smooth };
-                let (nodes, len) = piece(*end, handles_between(*end, d.pending, h.inn, other.at), other.at, smooth);
+                let hs = off_curves(*end, d.pending, h.inn, other.at, quadratic);
+                let (nodes, len) = piece(*end, &hs, other.at, smooth, quadratic);
                 let mut steps = self.far_handle(other);
                 steps.push(step("path.addPath", &self.base, json!({"closed": false, "nodes": nodes})));
                 steps.push(step("path.connectNodes", &self.base, json!({"points": [[d.shape, d.end_index()], [m, 0]]})));
@@ -377,8 +423,8 @@ impl Placing {
         match &self.kind {
             Kind::Start { shape } => (Some(Drawing { shape: *shape, at_start: false, count: 1, pending: h.out }), Some((*shape, 0))),
             Kind::Append { d, end } => {
-                let len = if handles_between(*end, d.pending, h.inn, h.node).is_some() { 4 } else { 2 };
-                let next = Drawing { count: d.count + len - 1, pending: h.out, ..*d };
+                let added = off_curves(*end, d.pending, h.inn, h.node, self.quadratic).len() + 1;
+                let next = Drawing { count: d.count + added, pending: h.out, ..*d };
                 (Some(next), Some((next.shape, next.end_index())))
             }
             Kind::Close { d, .. } => (None, Some((d.shape, d.other_index()))),
@@ -409,18 +455,111 @@ pub struct DrawTool {
     drawing: Option<Drawing>,
     /// Where the end of the path being drawn is.
     end_pos: Option<Point>,
+    /// Where the node at its other end is.
+    other_pos: Option<Point>,
+    /// The handle that left the end node when the path had each node count: what an undo or a
+    /// redo to that count gives back.
+    trail: BTreeMap<usize, Option<Point>>,
+    /// The drawn curves are quadratic.
+    quadratic: bool,
     hover: Option<Point>,
     /// `Space` is held during the press.
     space: bool,
 }
 
 impl DrawTool {
-    /// Ends the drawing when its path is no longer the one the tool left.
+    /// Brings the drawing in line with the scene: another edit, an undo or a redo may have
+    /// changed its path. Ends it when the path is gone.
     fn refresh(&mut self, scene: &Scene) {
-        self.end_pos = self.drawing.and_then(|d| d.end(scene));
-        if self.end_pos.is_none() {
-            self.drawing = None;
+        match self.drawing.and_then(|d| self.follow(scene, d)) {
+            Some((d, end, other)) => self.resume(d, Some(end), Some(other)),
+            None => self.stop(),
         }
+        if self.drawing.is_some() {
+            self.quadratic = scene.draws_quadratic();
+        }
+    }
+
+    fn resume(&mut self, d: Drawing, end: Option<Point>, other: Option<Point>) {
+        self.drawing = Some(d);
+        self.end_pos = end;
+        self.other_pos = other;
+        self.trail.insert(d.count, d.pending);
+    }
+
+    fn stop(&mut self) {
+        self.drawing = None;
+        self.end_pos = None;
+        self.other_pos = None;
+        self.trail.clear();
+    }
+
+    /// The drawing `d` in `scene`, and where its two ends are: its path by the place of either
+    /// end node; a path of another index that has the other end node and a node count the drawing
+    /// had; else the path at its index with its node count (moved as a whole).
+    fn follow(&self, scene: &Scene, d: Drawing) -> Option<(Drawing, Point, Point)> {
+        let is = |known: Option<Point>, p: Point| known.is_some_and(|q| dist(p, q) <= SAME_PLACE);
+        let found = |shape: usize, (count, end, other): (usize, Point, Point)| {
+            let pending = if count == d.count || is(self.end_pos, end) { d.pending } else { self.trail.get(&count).copied().flatten() };
+            (Drawing { shape, count, pending, ..d }, end, other)
+        };
+        let here = d.ends(scene, d.shape);
+        if let Some(path) = here.filter(|&(_, end, other)| is(self.end_pos, end) || is(self.other_pos, other)) {
+            return Some(found(d.shape, path));
+        }
+        let elsewhere = (0..scene.layer.shapes.len())
+            .filter(|&shape| shape != d.shape)
+            .filter_map(|shape| Some((shape, d.ends(scene, shape)?)))
+            .find(|&(_, (count, _, other))| self.trail.contains_key(&count) && is(self.other_pos, other));
+        match elsewhere {
+            Some((shape, path)) => Some(found(shape, path)),
+            None => here.filter(|&(count, _, _)| count == d.count).map(|path| found(d.shape, path)),
+        }
+    }
+
+    /// `Backspace` while drawing: the last node goes, and the drawing goes on from the one before.
+    /// `None` when something else is selected.
+    fn remove_last(&mut self, cx: &Context<'_>) -> Option<Output> {
+        self.refresh(cx.scene);
+        let d = self.drawing?;
+        let own = Selection::from_items([Item::Point(d.shape, d.end_index())]);
+        if !(cx.selection.is_empty() || *cx.selection == own) {
+            return None;
+        }
+        let path = cx.scene.path(d.shape)?;
+        let mut left: Vec<(usize, &Node)> = path.nodes.iter().enumerate().filter(|(_, n)| n.on_curve()).collect();
+        if d.at_start {
+            left.reverse();
+        }
+        left.pop()?;
+        let base = Selection::new().targets(cx.scene);
+        let mut out = Output::handled();
+        let Some(&(before, node)) = left.last() else {
+            self.stop();
+            out.push(Action::Run { invocation: Invocation::new("edit.delete", params(&base, json!({"shapes": [d.shape]}))) });
+            out.push(Action::Select { selection: Selection::new() });
+            return Some(out);
+        };
+        let (next, invocation) = if left.len() == 1 {
+            // A path of one node is not what `edit.delete` leaves: the node starts a path anew.
+            let start = json!({"x": node.x, "y": node.y, "smooth": node.smooth});
+            let steps = vec![
+                step("edit.delete", &base, json!({"shapes": [d.shape]})),
+                step("path.addPath", &base, json!({"closed": false, "nodes": [start]})),
+            ];
+            let next = Drawing { shape: cx.scene.layer.shapes.len().saturating_sub(1), count: 1, ..d };
+            (next, batch("Delete", steps))
+        } else {
+            let count = if d.at_start { path.nodes.len().saturating_sub(before) } else { before + 1 };
+            let delete = params(&base, json!({"points": [[d.shape, d.end_index()]]}));
+            (Drawing { count, ..d }, Invocation::new("edit.delete", delete))
+        };
+        let next = Drawing { pending: self.trail.get(&next.count).copied().flatten(), ..next };
+        let other = if next.count == 1 { Some(node.point()) } else { self.other_pos };
+        self.resume(next, Some(node.point()), other);
+        out.push(Action::Run { invocation });
+        out.push(select_point(next.shape, next.end_index()));
+        Some(out)
     }
 
     /// Where a click puts a node: on the node or segment it hit, else snapped (unless `Ctrl`),
@@ -443,6 +582,7 @@ impl DrawTool {
         self.space = false;
         let scene = cx.scene;
         self.refresh(scene);
+        let quadratic = scene.draws_quadratic();
         let base = Selection::new().targets(scene);
         let shapes = scene.layer.shapes.len();
         let hit = hit_test(scene, &cx.view, ev.pos, cx.settings.hit_tolerance).filter(|h| !h.locked);
@@ -463,6 +603,7 @@ impl DrawTool {
             h: Handles::new(node, ev.pos, ev.mods, inn),
             base: base.clone(),
             shapes,
+            quadratic,
             sent: None,
         };
         let placing = match (self.drawing, self.end_pos) {
@@ -543,8 +684,11 @@ impl DrawTool {
                 if h.dragging {
                     d.pending = h.out;
                 }
-                self.drawing = Some(d);
-                self.end_pos = Some(h.node);
+                if self.drawing.is_none_or(|old| old.shape != d.shape) {
+                    self.stop();
+                }
+                self.resume(d, Some(h.node), self.other_pos);
+                self.refresh(cx.scene);
                 out.push(select_point(d.shape, d.end_index()));
             }
             Gesture::Placing(mut p) => {
@@ -554,8 +698,18 @@ impl DrawTool {
                 }
                 out.push(Action::Commit);
                 let (drawing, select) = p.finish();
-                self.drawing = drawing;
-                self.end_pos = drawing.map(|_| p.h.node);
+                match (drawing, &p.kind) {
+                    (Some(d), Kind::Start { .. }) => {
+                        self.stop();
+                        self.resume(d, Some(p.h.node), Some(p.h.node));
+                    }
+                    (Some(d), _) => {
+                        // What was undone beyond this node cannot be redone.
+                        self.trail.retain(|&count, _| count < d.count);
+                        self.resume(d, Some(p.h.node), self.other_pos);
+                    }
+                    (None, _) => self.stop(),
+                }
                 out.push(match select {
                     Some((s, n)) => select_point(s, n),
                     None => Action::Select { selection: Selection::new() },
@@ -584,17 +738,10 @@ impl DrawTool {
             v.push(Overlay::Marker { kind: OverlayKind::DrawHandle, at: p });
         }
         let Some(to) = self.hover.filter(|p| finite(*p)) else { return v };
-        match handles_between(end, d.pending, None, to) {
-            Some((h1, h2)) => {
-                let c = CubicBez::new(end, h1, h2, to);
-                let mut from = end;
-                for k in 1..=PREVIEW_STEPS {
-                    let p = c.eval(k as f64 / PREVIEW_STEPS as f64);
-                    v.push(Overlay::Line { kind: OverlayKind::DrawPreview, from, to: p });
-                    from = p;
-                }
-            }
-            None => v.push(Overlay::Line { kind: OverlayKind::DrawPreview, from: end, to }),
+        let mut from = end;
+        for p in samples(end, &off_curves(end, d.pending, None, to, self.quadratic), to, self.quadratic) {
+            v.push(Overlay::Line { kind: OverlayKind::DrawPreview, from, to: p });
+            from = p;
         }
         v
     }
@@ -696,9 +843,11 @@ impl Tool for DrawTool {
                     out.handled = true;
                     return out;
                 }
-                self.end_pos = None;
-                if self.drawing.take().is_some() { Output::handled() } else { Output::default() }
+                let drawing = self.drawing.is_some();
+                self.stop();
+                if drawing { Output::handled() } else { Output::default() }
             }
+            Key::Backspace if ev.pressed && !self.busy() && ev.mods == Modifiers::NONE => self.remove_last(cx).unwrap_or_default(),
             _ => Output::default(),
         }
     }
@@ -725,8 +874,7 @@ impl Tool for DrawTool {
 
     fn cancel(&mut self) -> Output {
         let out = self.end_gesture();
-        self.drawing = None;
-        self.end_pos = None;
+        self.stop();
         self.hover = None;
         self.space = false;
         out

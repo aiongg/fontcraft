@@ -18,7 +18,7 @@
 //! | drag handles only, `Ctrl+Alt` held | the opposite handle of a smooth node mirrors the moved one (`mode: mirror`) |
 //! | `Alt`+drag a curve segment, selected alone | `path.reshapeSegment`: the handle lengths change, the nodes stay |
 //! | an open end dropped on another open end | the move and `path.connectNodes` as one step |
-//! | `Alt`+click a line segment | `path.convertSegmentToCurve` |
+//! | `Alt`+click a line segment | `path.convertSegmentToCurve`; with `Shift` one handle is horizontal and the other vertical (`orthogonal`) |
 //! | double-click a node | `path.toggleNodeType` (`Alt`: `path.toggleNodeTypeKeepingOutline`) |
 //! | double-click a segment | select its whole path |
 //! | double-click a component | `component.editBaseGlyph`: its base glyph joins the tab text, edited |
@@ -473,6 +473,9 @@ impl SelectTool {
                 {
                     let mut params = Selection::new().targets(cx.scene);
                     params.insert("segments".into(), json!([[shape, node]]));
+                    if press.mods.shift {
+                        params.insert("orthogonal".into(), json!(true));
+                    }
                     out.push(Action::Run { invocation: Invocation::new("path.convertSegmentToCurve", Value::Object(params)) });
                 } else if let Some(selection) = press.on_click {
                     out.push(Action::Select { selection });

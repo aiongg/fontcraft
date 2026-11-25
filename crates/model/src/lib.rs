@@ -18,6 +18,7 @@ pub mod axes;
 pub mod cid;
 pub mod corner;
 mod corner_join;
+pub mod curve_type;
 mod extra;
 pub mod fc_keys;
 mod features;

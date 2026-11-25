@@ -11,7 +11,7 @@ use craft::ui::canvas::{CanvasTool, ToolContext, ToolPointer};
 use craft::ui::runtime::commands::CommandRef;
 use egui::{Pos2, Rect, vec2};
 use fontcraft_engine::Session;
-use fontcraft_engine::model::{Layer, Shape};
+use fontcraft_engine::model::{Layer, NodeKind, Shape};
 use fontcraft_tools::{Key, KeyEvent, Modifiers, PointerEvent, PointerKind};
 use serde_json::{Value, json};
 
@@ -103,6 +103,95 @@ fn a_drag_moves_like_the_command_in_one_undo_step_and_escape_undoes_it() {
     assert_eq!(selection(&app), json!({"points": [[0, 2], [0, 3]]}));
     pointer(&mut app, json!([{"kind": "up", "x": 340, "y": 340}]));
     assert_eq!(layer(&app), before, "the release after Escape does nothing");
+}
+
+fn press_and_release(app: &mut FontCraftApp, x: f64, y: f64) {
+    pointer(app, json!([{"kind": "move", "x": x, "y": y}, {"kind": "down", "x": x, "y": y}, {"kind": "up", "x": x, "y": y}]));
+}
+
+fn path_xy(app: &FontCraftApp, shape: usize) -> Vec<(f64, f64)> {
+    match layer(app).shapes.get(shape) {
+        Some(Shape::Path(p)) => p.nodes.iter().map(|n| (n.x, n.y)).collect(),
+        other => panic!("shape {shape} is not a path: {other:?}"),
+    }
+}
+
+/// Undo and redo go through the nodes of the path being drawn, and the next click goes on from the end it has then.
+/// Backspace removes the last node the same way.
+#[test]
+fn undo_redo_and_backspace_keep_the_drawing() {
+    let mut app = edit_app();
+    call(&mut app, "ui.tool.select", json!({"tool": "draw"}));
+    let clicks = [(420.0, 150.0), (430.0, 220.0), (460.0, 260.0), (520.0, 240.0), (540.0, 170.0)];
+    for (x, y) in clicks {
+        press_and_release(&mut app, x, y);
+    }
+    assert_eq!(path_xy(&app, 2), clicks);
+    run(&mut app, "edit.undo", json!({}));
+    run(&mut app, "edit.undo", json!({}));
+    press_and_release(&mut app, 500.0, 190.0);
+    assert_eq!(path_xy(&app, 2), [clicks[0], clicks[1], clicks[2], (500.0, 190.0)], "the path goes on from its third node");
+    run(&mut app, "edit.undo", json!({}));
+    run(&mut app, "edit.redo", json!({}));
+    press_and_release(&mut app, 560.0, 210.0);
+    assert_eq!(path_xy(&app, 2).len(), 5);
+    assert_eq!(layer(&app).shapes.len(), 3);
+
+    // Backspace, down to the first node and beyond.
+    for left in [4, 3, 2, 1] {
+        call(&mut app, "ui.key", json!({"key": "Backspace"}));
+        assert_eq!(path_xy(&app, 2).len(), left);
+    }
+    press_and_release(&mut app, 430.0, 220.0);
+    assert_eq!(path_xy(&app, 2), clicks[..2], "the path goes on from the node that is left");
+    for _ in 0..2 {
+        call(&mut app, "ui.key", json!({"key": "Backspace"}));
+    }
+    assert_eq!(layer(&app).shapes.len(), 2, "the path is gone, the others are untouched");
+
+    // Undone to nothing, the drawing has ended: the next click starts a path.
+    press_and_release(&mut app, 420.0, 150.0);
+    press_and_release(&mut app, 430.0, 220.0);
+    run(&mut app, "edit.undo", json!({}));
+    run(&mut app, "edit.undo", json!({}));
+    press_and_release(&mut app, 520.0, 240.0);
+    assert_eq!(path_xy(&app, 2), [(520.0, 240.0)]);
+}
+
+/// In a glyph with quadratic curves the Draw tool draws quadratic curves: a circle of four dragged nodes stays within
+/// a unit of the true one.
+#[test]
+fn drawn_curves_take_the_glyphs_curve_type() {
+    let mut app = edit_app();
+    let quad = json!([{"x": 800, "y": 620}, {"x": 850, "y": 670, "type": "offcurve"}, {"x": 900, "y": 620, "type": "qcurve"}]);
+    run(&mut app, "path.addPath", json!({"glyph": "A", "closed": false, "nodes": quad}));
+    call(&mut app, "ui.tool.select", json!({"tool": "draw"}));
+    let h = 100.0 * (2f64.sqrt() - 1.0);
+    let drags = [
+        ((550.0, 450.0), (550.0, 450.0 + h)),
+        ((450.0, 550.0), (450.0 - h, 550.0)),
+        ((350.0, 450.0), (350.0, 450.0 - h)),
+        ((450.0, 350.0), (450.0 + h, 350.0)),
+    ];
+    for ((x, y), (hx, hy)) in drags {
+        pointer(
+            &mut app,
+            json!([{"kind": "move", "x": x, "y": y}, {"kind": "down", "x": x, "y": y}, {"kind": "drag", "x": hx, "y": hy}, {"kind": "up", "x": hx, "y": hy}]),
+        );
+    }
+    press_and_release(&mut app, 550.0, 450.0);
+    let layer = layer(&app);
+    let Some(Shape::Path(p)) = layer.shapes.get(3) else { panic!("no drawn path: {:?}", layer.shapes) };
+    assert!(p.closed);
+    assert_eq!(p.nodes.iter().filter(|n| n.kind == NodeKind::QCurve).count(), 4, "{:?}", p.nodes);
+    assert_eq!(p.nodes.iter().filter(|n| n.kind == NodeKind::OffCurve).count(), 8, "{:?}", p.nodes);
+    for seg in p.segments() {
+        for k in 0..=20 {
+            let at = seg.eval(f64::from(k) / 20.0).unwrap();
+            let r = (at.x - 450.0).hypot(at.y - 450.0);
+            assert!((r - 100.0).abs() < 1.0, "{at:?} is {r} from the centre");
+        }
+    }
 }
 
 /// A marquee drag shows its rectangle as an overlay while it runs and selects what it encloses.
