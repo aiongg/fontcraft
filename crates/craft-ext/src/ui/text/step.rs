@@ -4,11 +4,16 @@
 //! Meant for craft-ui-widgets, `src/text/text_field.rs`: there it is a `steps(ArrowSteps)` prop that sets
 //! `TextOptions::steps_value`, so the text part keeps the arrows, and turns the arrow intents into a stepped value as
 //! `NumberField` does. `TextField` has no such prop, and its single-line text part leaves the arrows alone, so this
-//! stand-in takes Up and Down from the pass's input while the field's text has focus, right after the field has shown.
+//! stand-in claims Up and Down while the field's text has focus, right after the field has shown: a field in a list's
+//! row would hand them to the list, which takes the focus back to its rows. The first pass with focus has no claim yet
+//! and takes them from the pass's input.
 //! `NumberField` steps by its step and ten steps with Shift; the huge step (Cmd+Shift) is this piece's only.
 
+use craft::keymap::{Chord, Key as ChordKey, Mods};
 use craft::ui::contract::EditResponse;
 use egui::{Key, Modifiers, Response, Ui};
+
+use crate::ui::runtime::keys::focused_claims;
 
 /// How far one arrow press moves the number: plain, with Shift, with Cmd+Shift (Ctrl+Shift off macOS).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -49,8 +54,18 @@ fn take(ui: &Ui, field: egui::Id, steps: ArrowSteps) -> Option<f64> {
     if !super::text_focused(ui.ctx(), field) {
         return None;
     }
+    let command = Mods { cmd: true, shift: true, ..Mods::NONE };
+    let moves = [(ChordKey::Up, 1.0), (ChordKey::Down, -1.0)]
+        .into_iter()
+        .flat_map(|(key, sign)| {
+            [(command, steps.huge), (Mods::SHIFT, steps.large), (Mods::NONE, steps.step)].map(|(mods, by)| (Chord::new(mods, key), sign * by))
+        })
+        .collect::<Vec<_>>();
+    let chords: Vec<Chord> = moves.iter().map(|(chord, _)| *chord).collect();
+    let claimed: f64 =
+        focused_claims(ui.ctx(), field, &chords).into_iter().filter_map(|got| moves.iter().find(|(chord, _)| *chord == got).map(|(_, by)| *by)).sum();
     let delta = ui.input_mut(|input| {
-        let mut delta = 0.0;
+        let mut delta = claimed;
         for (key, sign) in [(Key::ArrowUp, 1.0), (Key::ArrowDown, -1.0)] {
             // The most modifiers first: a plain pattern also matches presses with Shift held.
             for (mods, by) in [(Modifiers::COMMAND | Modifiers::SHIFT, steps.huge), (Modifiers::SHIFT, steps.large), (Modifiers::NONE, steps.step)] {

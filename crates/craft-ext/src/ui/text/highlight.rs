@@ -153,9 +153,19 @@ impl HighlightText for Response {
 
 /// Where the field of `response` painted its text in this pass, and how it laid the text out: the text shape's
 /// position and layout (the coloured one once [`HighlightText::highlight_text`] ran). Rows sit at `pos + row.pos`.
-/// `None` for an empty field. A gutter beside a code field reads its line positions from it.
+/// `None` for an empty field. A gutter beside a code field reads its line positions from it. A pass egui is going to
+/// discard paints no text but takes the frame's clicks: there it is the layout of the last pass that painted.
 pub fn field_layout(ui: &Ui, response: &Response) -> Option<(egui::Pos2, Arc<Galley>)> {
-    field_text(ui, response).map(|(_, shape)| (shape.pos, shape.galley))
+    let kept = response.id.with("craft_ext.text.layout");
+    if let Some((_, shape)) = field_text(ui, response) {
+        ui.ctx().data_mut(|d| d.insert_temp(kept, (shape.pos - response.rect.min, Arc::clone(&shape.galley))));
+        return Some((shape.pos, shape.galley));
+    }
+    if !ui.ctx().will_discard() || ui.is_sizing_pass() || !response.rect.is_positive() {
+        return None;
+    }
+    let (offset, galley) = ui.ctx().data(|d| d.get_temp::<(egui::Vec2, Arc<Galley>)>(kept))?;
+    Some((response.rect.min + offset, galley))
 }
 
 /// The last text shape painted inside `response`'s rect on its layer, and its place in the layer's list.

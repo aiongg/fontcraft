@@ -214,7 +214,8 @@ fn field(ui: &mut Ui, entry: &EntryPane, action: Option<FindAction>, height: f32
         }
         runs
     });
-    let typed = typed.filter(|_| !entry.automatic);
+    // A pass egui is going to discard paints no text to read the draft from.
+    let typed = if ui.ctx().will_discard() { entry.draft.clone() } else { typed.filter(|_| !entry.automatic) };
     if typed != entry.draft {
         sent.push(Msg::View(ViewMsg::FeatureDraft(typed.clone().map(|code| FeatureDraft { key: key.clone(), code }))));
     }
@@ -238,8 +239,7 @@ fn field(ui: &mut Ui, entry: &EntryPane, action: Option<FindAction>, height: f32
     {
         sent.push(Msg::run("font.features.setCode", key.with(&[("code", json!(text))])));
     }
-    // Without a layout of the field the open details stay as they are: closing them there would lose them in a pass
-    // egui discards.
+    // Without a layout of the field (its first pass) the open details stay as they are.
     if let Some(opener) = gutter(ui, &out.response, gutter_width, &number_font, listed, &words) {
         details(ui, &out.response, opener, listed, &words, &mut sent);
     }

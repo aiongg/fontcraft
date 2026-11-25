@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
 use crate::MAX_SELECTION_LIST;
+use crate::attachment::AttachmentKind;
 use crate::geometry::point_in_polygon;
 use crate::scene::Scene;
 
@@ -121,6 +122,20 @@ impl Selection {
             }
         }
         serde_json::from_value(Value::Object(object)).map_err(|e| format!("selection: {e}"))
+    }
+
+    /// The selection a command's reply names: [`from_value`](Self::from_value), with the attachments the commands list
+    /// by kind (`corners`, `caps`, `segmentComponents`, `brushes`) as the hints they are.
+    pub fn from_reply(value: &Value) -> Result<Self, String> {
+        let mut out = Self::from_value(value)?;
+        for key in AttachmentKind::ALL.map(AttachmentKind::list_key) {
+            let Some(list) = value.get(key).and_then(Value::as_array) else { continue };
+            if list.len() > MAX_SELECTION_LIST {
+                return Err(format!("`{key}` holds {} entries; at most {MAX_SELECTION_LIST} are allowed", list.len()));
+            }
+            out.hints.extend(list.iter().filter_map(Value::as_u64).filter_map(|i| usize::try_from(i).ok()));
+        }
+        Ok(out)
     }
 
     pub fn is_empty(&self) -> bool {

@@ -342,7 +342,7 @@ pub fn adopt(app: &mut FontCraftApp, value: &Value) {
     if sel.get("glyph").and_then(Value::as_str) != Some(target.glyph.as_str()) || side != target.side.as_str() {
         return;
     }
-    if let Ok(selection) = Selection::from_value(sel) {
+    if let Ok(selection) = Selection::from_reply(sel) {
         app.tools.selection = selection;
     }
 }

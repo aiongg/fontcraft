@@ -39,6 +39,8 @@ pub enum AttachmentKind {
 }
 
 impl AttachmentKind {
+    pub const ALL: [AttachmentKind; 4] = [AttachmentKind::Corner, AttachmentKind::Cap, AttachmentKind::Segment, AttachmentKind::Brush];
+
     /// The key under which `edit.copy` and the kind's commands take hint indices of this kind.
     pub fn list_key(self) -> &'static str {
         match self {
@@ -312,10 +314,7 @@ pub fn selected_corners(scene: &Scene, selection: &Selection) -> Vec<usize> {
 /// The kind of the selected attachments that `edit.copy` takes, and their hint indices: corners
 /// first, then caps, segment components and brushes. The clipboard holds one kind at a time.
 pub fn copied_kind(scene: &Scene, selection: &Selection) -> Option<(AttachmentKind, Vec<usize>)> {
-    [AttachmentKind::Corner, AttachmentKind::Cap, AttachmentKind::Segment, AttachmentKind::Brush]
-        .into_iter()
-        .map(|k| (k, selected(scene, selection, k)))
-        .find(|(_, list)| !list.is_empty())
+    AttachmentKind::ALL.into_iter().map(|k| (k, selected(scene, selection, k))).find(|(_, list)| !list.is_empty())
 }
 
 /// The selection items of the selected attachments, for keeping them through a change that
