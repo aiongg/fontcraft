@@ -489,9 +489,10 @@ step in `observe`.
     to the master's layer, and its callers in `crates/spacing/src/eval.rs`, which need the
     interpolated metric (`metricsKey.glyphLevelByDefault`).
 22. **Vertical kerning export.** **Answered (release notes):** the reference exports vertical
-    kerning, static and variable (builds 3117, 3119, 3120). Code change: a vertical pass in
-    `finalize_kerning` (`crates/features/src/kern.rs`) that writes the vertical pairs as a `vkrn`
-    feature; the oracles write none, so a test reads the GPOS itself (`kerning.verticalGroups`).
+    kerning, static and variable (builds 3117, 3119, 3120). FontCraft writes the
+    vertical pairs as one `vkrn` lookup of y advances (`crates/features/src/kern.rs`,
+    `kerning.verticalGroups`). The oracles write none, so the tests read the GPOS itself. Which
+    scripts the reference gives the feature is open.
 23. **Out-of-sync threshold.** **Answered in part (release notes):** the reference allows a
     difference up to a threshold, a little larger when a layer has a width and a sidebearing key
     (build 3855), with a parameter for linked masters (build 3822). The numbers are not documented.

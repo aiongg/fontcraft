@@ -70,5 +70,6 @@ pub(crate) fn tags(font: &Font, master: &str, declared_without_marker: &[&str], 
     let mut tags = kern_tags(setting, warnings);
     tags.kern &= !declared_without_marker.contains(&"kern");
     tags.dist &= !declared_without_marker.contains(&"dist");
+    tags.vkrn &= !declared_without_marker.contains(&"vkrn");
     tags
 }

@@ -179,7 +179,10 @@ of scripts (rules with marks in lookups of their own), and assigned to `kern`, o
 the Indic and Universal Shaping Engine scripts, Khmer and Myanmar. Glyph pairs come before class
 pairs in each lookup; write-fonts splits subtables and moves lookups to extension lookups when
 offsets overflow. Each feature lists each of its lookups once, in order, as fea-rs leaves them.
-Vertical kerning is not written: neither reference writes `vkrn`.
+Vertical kerning becomes one `vkrn` lookup of y advances (`kerning.verticalGroups`, 08 question 22).
+Neither reference compiler writes `vkrn`, so the `GPOS` of a font with vertical pairs differs from
+theirs by that lookup and feature: the reference app exports vertical kerning, and its release notes
+are the source.
 
 Built by M8.7 (`crates/compile/src/layout.rs`), for static builds:
 

@@ -1673,6 +1673,36 @@ fn feature_code_is_compiled_with_the_generated_kerning() {
     assert!(font.gsub().is_err() && font.gpos().is_err());
 }
 
+/// Vertical kerning is written as `vkrn` beside `kern`, in the scripts of both, and leaves the horizontal values alone; a
+/// `vkrn` feature in the code keeps it out.
+#[test]
+fn vertical_kerning_is_exported_as_vkrn() {
+    use fontcraft_model::Snippet;
+    let mut f = kern_font();
+    fontcraft_spacing::kerning::Direction::Vertical.table_mut(Arc::make_mut(&mut f.kerning)).set("m01", "A", "V", 25.0);
+    let out = compile_ttf(&f, &Options::default()).unwrap();
+    assert_eq!(latn_av(&out), -80, "{:?}", out.warnings);
+    let gpos = FontRef::new(&out.bytes).unwrap().gpos().unwrap();
+    let features = gpos.feature_list().unwrap();
+    let mut tags: Vec<String> = features.feature_records().iter().map(|r| r.feature_tag().to_string()).collect();
+    tags.sort();
+    assert_eq!(tags, ["kern", "vkrn"]);
+    let scripts = gpos.script_list().unwrap();
+    let mut seen = Vec::new();
+    for record in scripts.script_records() {
+        let lang = record.script(scripts.offset_data()).unwrap().default_lang_sys().unwrap().unwrap();
+        let has_vkrn = lang.feature_indices().iter().any(|i| features.feature_records()[usize::from(i.get())].feature_tag().to_string() == "vkrn");
+        seen.push((record.script_tag().to_string(), has_vkrn));
+    }
+    assert!(seen.iter().all(|(tag, vkrn)| *vkrn && tag != "~fc~") && seen.iter().any(|(tag, _)| tag == "latn"), "{seen:?}");
+
+    let mut hand = f.clone();
+    Arc::make_mut(&mut hand.features).prefixes.push(Snippet { code: "feature vkrn { pos A V <0 0 0 7>; } vkrn;".into(), ..Default::default() });
+    let out = compile_ttf(&hand, &Options::default()).unwrap();
+    let gpos = FontRef::new(&out.bytes).unwrap().gpos().unwrap();
+    assert_eq!(gpos.lookup_list().unwrap().lookup_count(), 2, "the code's vkrn and the generated kern: {:?}", out.warnings);
+}
+
 #[test]
 fn the_generated_kerning_reaches_the_code_s_language_systems_and_substitutions() {
     use fontcraft_model::Snippet;

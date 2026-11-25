@@ -42,7 +42,9 @@
 //!
 //! The source's feature-writer setting ([`kern_tags`]) can turn `kern` or `dist` off.
 //!
-//! Vertical kerning is not written: neither reference compiler writes `vkrn`.
+//! 6. Vertical kerning becomes one `vkrn` lookup, in the default script, every script that has
+//!    generated kerning, and the code's language systems of the scripts of the kerned glyphs. The
+//!    reference compilers write none; the reference app does.
 //!
 //! [`evaluate::PairEvaluator`] reads the pair kerning of a compiled font back, for tests and the
 //! oracle comparison.
@@ -289,11 +291,14 @@ fn kern_rules(req: &KernRequest) -> Result<(kern::Kerns, Vec<String>), FeatureEr
     if !req.tags.any() {
         return Ok((kern::Kerns::default(), warnings));
     }
-    let mut pairs = resolve::kern_pairs(req, &mut budget, &mut warnings)?;
-    if pairs.is_empty() {
+    let horizontal = req.tags.kern || req.tags.dist;
+    let mut pairs = if horizontal { resolve::kern_pairs(req, false, &mut budget, &mut warnings)? } else { Vec::new() };
+    let mut vertical = if req.tags.vkrn { resolve::kern_pairs(req, true, &mut budget, &mut warnings)? } else { Vec::new() };
+    if pairs.is_empty() && vertical.is_empty() {
         return Ok((kern::Kerns::default(), warnings));
     }
     pairs.sort();
+    vertical.sort();
 
     let mut char_map: HashMap<u32, GlyphId16> = HashMap::new();
     let mut marks: HashMap<GlyphId16, MarkSpacing> = HashMap::new();
@@ -311,7 +316,7 @@ fn kern_rules(req: &KernRequest) -> Result<(kern::Kerns, Vec<String>), FeatureEr
     let code = kern::KernCode::new(req.language_systems, req.gsub);
     let mut skipped = kern::Skipped::default();
     let axes = req.variable.map(|v| v.axes().to_vec()).unwrap_or_default();
-    let kerns = kern::finalize_kerning(&pairs, &code, &char_map, marks, req.tags, &req.limits, &mut budget, &mut skipped, &axes)?;
+    let kerns = kern::finalize_kerning(&pairs, &vertical, &code, &char_map, marks, req.tags, &req.limits, &mut budget, &mut skipped, &axes)?;
     if skipped.ambiguous_direction > 0 {
         warnings.push(format!(
             "{} kerning rules were left out: their glyphs mix left-to-right and right-to-left characters",

@@ -312,8 +312,9 @@ pub fn build(input: &LayoutInput, opts: &LayoutOptions, warnings: &mut Vec<Strin
         let kern_glyphs = crate::kern::glyphs(input.order, &sources, first.gdef_classes.as_ref());
         let kern_request = match (input.font, &index) {
             (Some(font), Some(index)) => {
-                let has_kerning =
-                    [Direction::Ltr, Direction::Rtl].into_iter().any(|d| index.table(d, &resolved.master).is_ok_and(|t| t.pairs().next().is_some()));
+                let has_kerning = [Direction::Ltr, Direction::Rtl, Direction::Vertical]
+                    .into_iter()
+                    .any(|d| index.table(d, &resolved.master).is_ok_and(|t| t.pairs().next().is_some()));
                 has_kerning.then(|| KernRequest {
                     font,
                     index,

@@ -152,6 +152,27 @@ fn kern_participant(
     gids.contains_key(side).then(|| IrSide::Glyph(side.to_string()))
 }
 
+/// The group a stored side of a vertical pair names: the first glyph of a pair is the upper one,
+/// whose bottom group `@MMK_T_` names, the second the lower one with its top group `@MMK_B_`.
+fn parse_vertical_group(name: &str) -> Option<KernGroup> {
+    let group = side_group(name)?.to_string();
+    if name.starts_with("@MMK_T_") {
+        Some(KernGroup::Side1(group))
+    } else if name.starts_with("@MMK_B_") {
+        Some(KernGroup::Side2(group))
+    } else {
+        None
+    }
+}
+
+fn upper_side(side: &str) -> Option<KernGroup> {
+    parse_vertical_group(side).filter(|g| matches!(g, KernGroup::Side1(_)))
+}
+
+fn lower_side(side: &str) -> Option<KernGroup> {
+    parse_vertical_group(side).filter(|g| matches!(g, KernGroup::Side2(_)))
+}
+
 fn first_side(side: &str) -> Option<KernGroup> {
     parse_kern_group(side).filter(|g| matches!(g, KernGroup::Side1(_)))
 }
@@ -235,6 +256,19 @@ fn derive_kern_groups(req: &KernRequest, rtl_glyphs: &HashSet<String>) -> BTreeM
     groups
 }
 
+/// The vertical kerning groups by pair side, with their members.
+fn vertical_groups(req: &KernRequest) -> BTreeMap<KernGroup, BTreeSet<String>> {
+    let mut groups: BTreeMap<KernGroup, BTreeSet<String>> = BTreeMap::new();
+    for g in req.glyphs {
+        let bottom = req.index.group(g.name, GroupSide::Bottom).map(|n| KernGroup::Side1(n.to_string()));
+        let top = req.index.group(g.name, GroupSide::Top).map(|n| KernGroup::Side2(n.to_string()));
+        for group in [bottom, top].into_iter().flatten() {
+            groups.entry(group).or_default().insert(g.name.to_string());
+        }
+    }
+    groups
+}
+
 /// The value that applies to a pair: the pair itself, then each glyph side tried as itself and
 /// as its group, then 0 (fontTools' `ufoLib.kerning.lookupKerningValue`).
 fn lookup_kerning_value(
@@ -269,16 +303,21 @@ fn lookup_kerning_value(
 
 /// Every rule of the master's kerning, by glyph ids, with its value rounded half up. Glyph–group
 /// pairs become one glyph pair per member, each with the value that applies to it; group–group
-/// pairs of 0 are left out; zero exceptions stay.
-pub(crate) fn kern_pairs(req: &KernRequest, budget: &mut Budget, warnings: &mut Vec<String>) -> Result<Vec<KernPair>, FeatureError> {
+/// pairs of 0 are left out; zero exceptions stay. `vertical`: the pairs of top-to-bottom text, whose
+/// values move the advance down, in place of the horizontal ones.
+pub(crate) fn kern_pairs(req: &KernRequest, vertical: bool, budget: &mut Budget, warnings: &mut Vec<String>) -> Result<Vec<KernPair>, FeatureError> {
     let mut gids: HashMap<&str, GlyphId16> = HashMap::with_capacity(req.glyphs.len());
     for (i, g) in req.glyphs.iter().enumerate() {
         let id = u16::try_from(i).map_err(|_| FeatureError::TooMany { what: "glyphs", limit: usize::from(u16::MAX) })?;
         gids.entry(g.name).or_insert(GlyphId16::new(id));
     }
 
-    let rtl_glyphs = glyphs_with_rtl_kerning(req, budget)?;
-    let groups = derive_kern_groups(req, &rtl_glyphs);
+    let rtl_glyphs = if vertical { HashSet::new() } else { glyphs_with_rtl_kerning(req, budget)? };
+    let groups = if vertical { vertical_groups(req) } else { derive_kern_groups(req, &rtl_glyphs) };
+    let (first_side, second_side): (fn(&str) -> Option<KernGroup>, fn(&str) -> Option<KernGroup>) =
+        if vertical { (upper_side, lower_side) } else { (first_side, second_side) };
+    let directions: &[(Direction, bool)] =
+        if vertical { &[(Direction::Vertical, false)] } else { &[(Direction::Ltr, false), (Direction::Rtl, true)] };
 
     // Each master's left-to-right pairs, then its right-to-left pairs in left-to-right spelling.
     // A static font has the one master compiled; a variable font every master, the origin first.
@@ -293,7 +332,7 @@ pub(crate) fn kern_pairs(req: &KernRequest, budget: &mut Budget, warnings: &mut 
     for master in &masters {
         let mut kerns: BTreeMap<IrPair, f64> = BTreeMap::new();
         let mut any = false;
-        for (direction, flip) in [(Direction::Ltr, false), (Direction::Rtl, true)] {
+        for &(direction, flip) in directions {
             let table = req.index.table(direction, master).map_err(|e| FeatureError::Kerning(e.to_string()))?;
             for (first, second, value) in table.pairs() {
                 budget.spend(1)?;
@@ -420,13 +459,14 @@ pub(crate) fn kern_pairs(req: &KernRequest, budget: &mut Budget, warnings: &mut 
         budget.spend_glyphs(group_len(first).saturating_add(group_len(second)))?;
         let (Some(side1), Some(side2)) = (side(first), side(second)) else { continue };
         let rounded = if value.is_finite() { (value + 0.5).floor() } else { 0.0 };
-        let x_advance = rounded.clamp(f64::from(i16::MIN), f64::from(i16::MAX));
-        if x_advance != rounded {
+        let advance = rounded.clamp(f64::from(i16::MIN), f64::from(i16::MAX));
+        if advance != rounded {
             clamped = clamped.saturating_add(1);
         }
-        let mut record = ValueRecordBuilder::new().with_x_advance(x_advance as i16);
+        let record = ValueRecordBuilder::new();
+        let mut record = if vertical { record.with_y_advance(advance as i16) } else { record.with_x_advance(advance as i16) };
         if let Some(device) = variable.as_ref().and_then(|(v, resolved)| v.device(resolved.get(i)?)) {
-            record = record.with_x_advance_device(device);
+            record = if vertical { record.with_y_advance_device(device) } else { record.with_x_advance_device(device) };
         }
         out.push(KernPair { side1, side2, value: record });
     }

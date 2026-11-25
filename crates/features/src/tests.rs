@@ -34,7 +34,8 @@ fn group(f: &mut Font, glyph: &str, side: GroupSide, name: &str) {
     match side {
         GroupSide::Left => g.kern_groups.left = Some(name.to_string()),
         GroupSide::Right => g.kern_groups.right = Some(name.to_string()),
-        _ => panic!("a horizontal side"),
+        GroupSide::Top => g.kern_groups.top = Some(name.to_string()),
+        GroupSide::Bottom => g.kern_groups.bottom = Some(name.to_string()),
     }
 }
 
@@ -283,7 +284,7 @@ fn the_feature_writer_setting_decides_which_kern_features_are_written() {
     assert_eq!(tags(Some("({class = MarkFeatureWriter;})")), (KernTags::NONE, 0));
     assert_eq!(tags(Some("({class = KernFeatureWriter;})")), (KernTags::ALL, 0));
     let only_dist = "({class = KernFeatureWriter; module = ufo2ft.featureWriters.kernFeatureWriter; options = {features = (dist); mode = append;};})";
-    assert_eq!(tags(Some(only_dist)), (KernTags { kern: false, dist: true }, 0));
+    assert_eq!(tags(Some(only_dist)), (KernTags { kern: false, dist: true, vkrn: false }, 0));
     assert_eq!(tags(Some("({class = KernFeatureWriter; options = {other = 1;};})")), (KernTags::NONE, 0), "an unknown option drops the entry");
     assert_eq!(tags(Some("({class = KernFeatureWriter; options = {ignoreMarks = 0;};})")), (KernTags::ALL, 1), "written, with a warning");
     assert_eq!(tags(Some("{class = KernFeatureWriter;}")), (KernTags::NONE, 1), "not a list");
@@ -304,7 +305,7 @@ fn the_feature_writer_setting_decides_which_kern_features_are_written() {
         variable: None,
     };
     assert!(kern_feature(&request(KernTags::NONE)).unwrap().gpos.is_none());
-    assert!(kern_feature(&request(KernTags { kern: false, dist: true })).unwrap().gpos.is_none(), "Latin kerning goes to kern only");
+    assert!(kern_feature(&request(KernTags { kern: false, dist: true, vkrn: false })).unwrap().gpos.is_none(), "Latin kerning goes to kern only");
     assert!(kern_feature(&request(KernTags::ALL)).unwrap().gpos.is_some());
 }
 
@@ -440,4 +441,76 @@ fn the_default_caps_bound_the_builder_memory() {
     let cell = std::mem::size_of::<write_fonts::tables::gpos::Class2Record>();
     let bytes = crate::MAX_GLYPH_PAIRS.saturating_mul(400).saturating_add(crate::MAX_TOTAL_CLASS_CELLS.saturating_mul(cell));
     assert!(bytes <= 512 << 20, "{bytes} bytes");
+}
+
+/// Vertical pairs become one `vkrn` lookup of y advances, glyph pairs and groups of bottom and top sides, in the default
+/// script and the scripts with kerning; a font with vertical pairs alone has `vkrn` alone, and the setting turns it off.
+#[test]
+fn vertical_kerning_is_a_vkrn_lookup_of_y_advances() {
+    use read_fonts::tables::gpos::{PairPos, PositionSubtables};
+    use read_fonts::{FontRef, TableProvider};
+    let mut f = latin();
+    group(&mut f, "A", GroupSide::Bottom, "flat");
+    group(&mut f, "Aacute", GroupSide::Bottom, "flat");
+    group(&mut f, "T", GroupSide::Top, "bar");
+    set(&mut f, Direction::Vertical, "@MMK_T_flat", "@MMK_B_bar", -30.0);
+    set(&mut f, Direction::Vertical, "T", "A", 12.0);
+    let (bytes, names, warnings) = build(&f, &[]);
+    assert!(warnings.is_empty(), "{warnings:?}");
+    // Horizontal kerning reads nothing of it.
+    assert_all_pairs(&f, &bytes, &names, Tag::new(b"latn"), Direction::Ltr, &["A", "Aacute", "T"]);
+    let gpos = FontRef::new(&bytes).unwrap().gpos().unwrap();
+    let records = gpos.feature_list().unwrap();
+    let vkrn: Vec<_> = records.feature_records().iter().filter(|r| r.feature_tag() == Tag::new(b"vkrn")).collect();
+    assert_eq!(vkrn.len(), 1);
+    let feature = vkrn[0].feature(records.offset_data()).unwrap();
+    let lookups: Vec<u16> = feature.lookup_list_indices().iter().map(|i| i.get()).collect();
+    assert_eq!(lookups.len(), 1);
+    let scripts = gpos.script_list().unwrap();
+    for script in scripts.script_records() {
+        let default = script.script(scripts.offset_data()).unwrap().default_lang_sys().unwrap().unwrap();
+        let tags: Vec<Tag> =
+            default.feature_indices().iter().filter_map(|i| records.feature_records().get(usize::from(i.get()))).map(|r| r.feature_tag()).collect();
+        assert!(tags.contains(&Tag::new(b"vkrn")), "{}: {tags:?}", script.script_tag());
+    }
+    let list = gpos.lookup_list().unwrap();
+    let PositionSubtables::Pair(subtables) = list.lookups().get(usize::from(lookups[0])).unwrap().subtables().unwrap() else {
+        panic!("pair positioning");
+    };
+    let (mut glyph_pair, mut class_pair) = (None, None);
+    for subtable in subtables.iter() {
+        match subtable.unwrap() {
+            PairPos::Format1(t) => {
+                let record = t.pair_sets().get(0).unwrap().pair_value_records().get(0).unwrap();
+                glyph_pair = record.value_record1().y_advance();
+                assert_eq!(record.value_record1().x_advance(), None);
+            }
+            PairPos::Format2(t) => {
+                let values =
+                    t.class1_records().iter().filter_map(Result::ok).flat_map(|c| {
+                        c.class2_records().iter().filter_map(Result::ok).filter_map(|r| r.value_record1().y_advance()).collect::<Vec<_>>()
+                    });
+                class_pair = values.into_iter().find(|v| *v != 0);
+            }
+        }
+    }
+    assert_eq!((glyph_pair, class_pair), (Some(12), Some(-30)));
+
+    let mut alone = font(&[("A", Some(0x41)), ("T", Some(0x54))]);
+    set(&mut alone, Direction::Vertical, "A", "T", 40.0);
+    assert_eq!(build_with(&alone, &[], KernLimits::default()).unwrap().lookups, 1);
+    let index = KernIndex::new(&alone);
+    let glyphs: Vec<KernGlyph> = alone.glyphs.iter().map(|g| KernGlyph { name: &g.name, codepoints: &g.unicodes, mark: None }).collect();
+    let off = KernRequest {
+        font: &alone,
+        index: &index,
+        master: "m01",
+        glyphs: &glyphs,
+        tags: KernTags { vkrn: false, ..KernTags::ALL },
+        limits: KernLimits::default(),
+        language_systems: &[],
+        gsub: None,
+        variable: None,
+    };
+    assert!(kern_feature(&off).unwrap().gpos.is_none());
 }

@@ -240,6 +240,9 @@ impl Job<'_> {
         if !self.gpos {
             c.gpos = None;
         }
+        if let Some(gpos) = c.gpos.as_mut() {
+            crate::provider::drop_claim(gpos);
+        }
         let lookup_debug = if self.debug_lookups { Some(crate::debug::build(tree, &c, &self.files, positions).map_err(|d| vec![d])?) } else { None };
         if let (Some(generated), Some(gsub)) = (self.generated.filter(|g| !g.feature_variations.is_empty()), c.gsub.as_mut()) {
             crate::provider::order_feature_variations(gsub, generated);
