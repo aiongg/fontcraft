@@ -3,7 +3,7 @@
 //!
 //! A stem ending is a straight segment between two corners that point out of the filled area,
 //! with straight, parallel segments on either side, no wider across those sides than the stem
-//! (plus [`STEM_TOLERANCE`]). Each ending becomes a half circle as wide as the stem. The half
+//! nearest its width (plus [`STEM_TOLERANCE`]). Each ending becomes a half circle as wide as the stem. The half
 //! circle covers the same area as the square end it replaces: its centre sits `r·π/4` inside the
 //! old end, so its tip overshoots the old end by `r·(1 − π/4)`, about a tenth of the stem width.
 //! The sides get shorter by the same `r·π/4`.
@@ -38,10 +38,10 @@ const PARAMS: &[Param] = &[Param {
     default: Value::Number(0.0),
     required: false,
     slot: Slot::Position(0),
-    doc: "the widest stem whose endings are rounded, in units; 0 or left out: the master's widest vertical stem",
+    doc: "the widest stem whose endings are rounded, in units; 0 or left out: for each ending, the master's vertical stem nearest its width",
 }];
 
-const DOC: &str = "{glyph: name | glyphs: [names], layer?: id | layers?: [ids] (default: the first master's layer), stem?: units (0 to 1000000; 0 or left out: the master's widest vertical stem)} turns stem endings into half circles with an overshoot. A stem ending is a straight segment between two outward corners whose neighbouring segments are straight and parallel, at most the stem width (plus a tenth) across. The half circle covers the area of the square end it replaces, so its tip reaches about a tenth of the stem width past the old end. Endings are taken in path order; one whose sides are too short for it stays. Without `stem` the master needs a vertical stem. Components and locked paths are not changed; new points are rounded to the grid. Export string: RoundedFont; stem (stem optional) → {glyphs: [names], skipped: [{glyph, layer?, reason}]}";
+const DOC: &str = "{glyph: name | glyphs: [names], layer?: id | layers?: [ids] (default: the first master's layer), stem?: units (0 to 1000000; 0 or left out: the master's vertical stems)} turns stem endings into half circles with an overshoot. A stem ending is a straight segment between two outward corners whose neighbouring segments are straight and parallel, at most the stem width (plus a tenth) across; without `stem`, the vertical stem nearest the ending's width counts. The half circle covers the area of the square end it replaces, so its tip reaches about a tenth of the stem width past the old end. Endings are taken in path order; one whose sides are too short for it stays. Without `stem` the master needs a vertical stem. Components and locked paths are not changed; new points are rounded to the grid. Export string: RoundedFont; stem (stem optional) → {glyphs: [names], skipped: [{glyph, layer?, reason}]}";
 
 impl Filter for RoundedFont {
     fn id(&self) -> &'static str {
@@ -66,8 +66,7 @@ impl Filter for RoundedFont {
 
     fn apply(&self, contours: &[Contour], args: &Args, cx: &Context) -> Result<Vec<Contour>, PathOpError> {
         let stem = args.number("stem");
-        let stem = if stem > 0.0 { stem } else { master_stem(cx)? };
-        rounded_font(contours, stem, cx.grid)
+        if stem > 0.0 { rounded_font(contours, stem, cx.grid) } else { rounded_font_stems(contours, &master_stems(cx)?, cx.grid) }
     }
 
     /// The stem is written only when one is given: `RoundedFont;` runs on the master's stems.
@@ -76,23 +75,39 @@ impl Filter for RoundedFont {
     }
 }
 
-/// The master's widest vertical stem.
-fn master_stem(cx: &Context) -> Result<f64, PathOpError> {
-    cx.vertical_stems.iter().copied().filter(|v| v.is_finite() && *v > 0.0).reduce(f64::max).map(|v| v.min(MAX_COORDINATE)).ok_or_else(|| {
-        PathOpError::Invalid(
+/// The master's vertical stems.
+fn master_stems(cx: &Context) -> Result<Vec<f64>, PathOpError> {
+    let stems: Vec<f64> = cx.vertical_stems.iter().copied().filter(|v| v.is_finite() && *v > 0.0).map(|v| v.min(MAX_COORDINATE)).collect();
+    if stems.is_empty() {
+        return Err(PathOpError::Invalid(
             "Rounded Font needs a vertical stem: give `stem`, or add a vertical stem to the master (Font Info › Masters › Stems)".into(),
-        )
-    })
+        ));
+    }
+    Ok(stems)
+}
+
+/// The widest ending that counts as the end of the stem nearest `width` (the wider of two equally
+/// near), of `stems`; 0 without stems.
+fn widest_at(stems: &[f64], width: f64) -> f64 {
+    let nearest = stems.iter().copied().min_by(|a, b| (a - width).abs().total_cmp(&(b - width).abs()).then(b.total_cmp(a)));
+    nearest.map_or(0.0, |s| s * (1.0 + STEM_TOLERANCE))
 }
 
 /// Rounded Font on one layer's contours with endings up to `stem` units wide. See the module
 /// docs for the geometry. Open contours and contours without area stay as they are.
 pub fn rounded_font(contours: &[Contour], stem: f64, grid: f64) -> Result<Vec<Contour>, PathOpError> {
-    if !stem.is_finite() {
-        return Err(PathOpError::NotFinite);
-    }
-    if stem <= 0.0 || stem > MAX_COORDINATE {
-        return Err(PathOpError::Invalid(format!("the stem ({stem}) must be more than 0 and at most {MAX_COORDINATE} units")));
+    rounded_font_stems(contours, &[stem], grid)
+}
+
+/// [`rounded_font`] with several stems: an ending is measured against the stem nearest its width.
+pub fn rounded_font_stems(contours: &[Contour], stems: &[f64], grid: f64) -> Result<Vec<Contour>, PathOpError> {
+    for stem in stems {
+        if !stem.is_finite() {
+            return Err(PathOpError::NotFinite);
+        }
+        if *stem <= 0.0 || *stem > MAX_COORDINATE {
+            return Err(PathOpError::Invalid(format!("the stem ({stem}) must be more than 0 and at most {MAX_COORDINATE} units")));
+        }
     }
     let total: usize = contours.iter().map(|c| c.nodes.len()).sum();
     if total > MAX_NODES {
@@ -100,12 +115,11 @@ pub fn rounded_font(contours: &[Contour], stem: f64, grid: f64) -> Result<Vec<Co
     }
     let rings = contours.iter().map(Ring::from_contour).collect::<Result<Vec<_>, _>>()?;
     let sides = fill_sides(contours, &rings)?;
-    let widest = stem * (1.0 + STEM_TOLERANCE);
     let mut out = Vec::with_capacity(rings.len());
     let mut count = 0usize;
     for (i, (ring, original)) in rings.iter().zip(contours).enumerate() {
         let side = sides.get(i).copied().unwrap_or(0.0);
-        let contour = match round_endings(ring, side, widest, grid) {
+        let contour = match round_endings(ring, side, stems, grid) {
             Some(r) => r.to_contour(),
             None => original.clone(),
         };
@@ -143,7 +157,7 @@ struct Ending {
 
 /// The ring with its stem endings rounded, or `None` when it has none. `side`: as in
 /// [`fill_sides`].
-fn round_endings(ring: &Ring, side: f64, widest: f64, grid: f64) -> Option<Ring> {
+fn round_endings(ring: &Ring, side: f64, stems: &[f64], grid: f64) -> Option<Ring> {
     let m = ring.len();
     if !ring.closed || side == 0.0 || m < 4 {
         return None;
@@ -159,7 +173,7 @@ fn round_endings(ring: &Ring, side: f64, widest: f64, grid: f64) -> Option<Ring>
         if used.get(a).copied().unwrap_or(true) || used.get(b).copied().unwrap_or(true) {
             continue;
         }
-        let Some(e) = ending(ring, a, b, side, widest) else { continue };
+        let Some(e) = ending(ring, a, b, side, stems) else { continue };
         let (Some(&ta), Some(&tb)) = (taken.get(a), taken.get(next)) else { continue };
         if ta + e.take_a > e.room_a - MIN_SIDE || tb + e.take_b > e.room_b - MIN_SIDE {
             continue;
@@ -208,7 +222,7 @@ fn round_endings(ring: &Ring, side: f64, widest: f64, grid: f64) -> Option<Ring>
 }
 
 /// The rounding of the segment from node `a` to node `b` if it is a stem ending, else `None`.
-fn ending(ring: &Ring, a: usize, b: usize, side: f64, widest: f64) -> Option<Ending> {
+fn ending(ring: &Ring, a: usize, b: usize, side: f64, stems: &[f64]) -> Option<Ending> {
     if ring.nodes.get(a)?.node.smooth || ring.nodes.get(b)?.node.smooth {
         return None;
     }
@@ -234,7 +248,7 @@ fn ending(ring: &Ring, a: usize, b: usize, side: f64, widest: f64) -> Option<End
     // The stem's direction, pointing out through the ending.
     let d = (t1 - t2).normalize();
     let width = across.cross(d).abs();
-    if !(MIN_WIDTH..=widest).contains(&width) {
+    if !(MIN_WIDTH..=widest_at(stems, width)).contains(&width) {
         return None;
     }
     let (sa, sb) = (pa.to_vec2().dot(d), pb.to_vec2().dot(d));
@@ -322,6 +336,18 @@ mod tests {
         let out = rounded_font(&[rect(0.0, 0.0, 70.0, 200.0), counter.clone(), open.clone()], 50.0, 0.0).unwrap();
         assert_eq!(out[1], counter);
         assert_eq!(out[2], open);
+    }
+
+    #[test]
+    fn an_ending_is_measured_against_the_stem_nearest_its_width() {
+        let stems = [60.0, 100.0];
+        // 64 is the end of a 60 stem (up to 66) and 98 of a 100 stem; 72 is too wide for the stem
+        // nearest it.
+        for (width, rounded) in [(50.0, true), (64.0, true), (72.0, false), (98.0, true), (109.0, true), (111.0, false)] {
+            let bar = rect(0.0, 0.0, width, 700.0);
+            let out = rounded_font_stems(std::slice::from_ref(&bar), &stems, 0.0).unwrap();
+            assert_eq!(out[0] != bar, rounded, "{width}");
+        }
     }
 
     #[test]
