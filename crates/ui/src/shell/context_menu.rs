@@ -175,6 +175,7 @@ pub(crate) fn glyph_action(menu: &glyph_menu::GlyphMenu, pick: Pick) -> Option<G
         Pick::MoreTags => Some(GlyphAction::MoreTags),
         Pick::CopyNames(format) => Some(GlyphAction::CopyNames(format)),
         Pick::Status(code) => Some(GlyphAction::Status(code)),
+        Pick::Hinting(id) => Some(GlyphAction::Hinting(id)),
         Pick::Item(_) | Pick::Choice(..) => None,
     }
 }

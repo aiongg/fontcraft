@@ -378,7 +378,7 @@ pub fn row_dialog(name: &str, scope: Scope) -> Option<RowDialog> {
         ("fsType" | "codePageRanges" | "unicodeRanges", _) => RowDialog::Os2Bits,
         ("panose", _) => RowDialog::Panose,
         ("TTFStems", Scope::Master) => RowDialog::TtfStems,
-        ("TTFZones", Scope::Master) => RowDialog::TtfZones,
+        ("TTFZones", Scope::Master | Scope::Font) => RowDialog::TtfZones,
         ("Axis Location", Scope::Master | Scope::Instance) => RowDialog::AxisLocation,
         ("Virtual Master", Scope::Font) => RowDialog::VirtualMaster,
         ("Axis Mappings", Scope::Font | Scope::Instance) => RowDialog::AxisMappings,

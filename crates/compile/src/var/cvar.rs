@@ -80,9 +80,9 @@ fn master_values(source: &Font, master: &str, options: &Options, win_metrics: (f
                 }
             }
         }
-        let family = family_tt_zones(source).map_err(|e| e.to_string())?;
+        let family = measured.family_zones(family_tt_zones(source).map_err(|e| e.to_string())?, &settings);
         let (layout, mut values) = control_values(&settings, &family).map_err(|e| e.to_string())?;
-        let (extra, _) = autohint_prep(&auto.options, &settings, &layout, measured.x_height).map_err(|e| e.to_string())?;
+        let (extra, _) = autohint_prep(&auto.options, &settings, &layout, &measured).map_err(|e| e.to_string())?;
         values.extend(extra);
         let mut layout = names(&settings, &family);
         layout.insert(0, "autohinter".into());

@@ -15,7 +15,8 @@ once. At 9 to 30 PPM, in FreeType's default and monochrome modes, the script rep
 and in total:
 
   * zone extremes: on-curve nodes of flat extremes inside an alignment zone that lie on a whole
-    pixel row, the row most extremes of that zone are on;
+    pixel row, the row most extremes of that zone are on in their script's glyphs, or half a pixel
+    out (an overshoot from half a pixel up); also per script;
   * x-height and cap-height rows: the height most extremes of that zone have, equal to
     ttfautohint's at the same size;
   * stem widths: the heights of horizontal bars of A to Z, a to z and 0 to 9, equal to
@@ -40,6 +41,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import freetype
+from fontTools import unicodedata
 from fontTools.ttLib import TTFont
 
 PPEMS = range(9, 31)
@@ -58,6 +60,8 @@ RUNS = {
     "strong": "--stem-width-mode=sss",
     "range": "--hinting-range-min=20 --hinting-range-max=25",
     "composites": "--composites",
+    "fallback": "--fallback-script=latn",
+    "scaling": "--fallback-scaling",
 }
 LETTERS = [chr(c) for c in range(ord("A"), ord("Z") + 1)] + [chr(c) for c in range(ord("a"), ord("z") + 1)]
 BAR_CHARS = LETTERS + list("0123456789")
@@ -234,8 +238,11 @@ def describe(path: str, zone_list: list[tuple[float, float, bool]]) -> dict:
     glyf, cmap = font["glyf"], font.getBestCmap() or {}
     upem = font["head"].unitsPerEm
     simple = {n: glyf[n] for n in font.getGlyphOrder() if glyf[n].numberOfContours > 0}
-    if not any(cmap.get(ord(c)) in simple for c in LETTERS):
-        return {"skip": "no outline for a letter A to Z or a to z"}
+    script_of = {n: unicodedata.script(chr(cp)) for cp, n in sorted(cmap.items(), reverse=True) if n in simple}
+    letters = Counter(script_of[n] for cp, n in cmap.items() if n in simple and unicodedata.category(chr(cp))[0] == "L")
+    if not letters:
+        return {"skip": "no outline for a letter"}
+    main = "Latn" if "Latn" in letters else letters.most_common(1)[0][0]
     if not font["post"].formatType == 2.0:
         return {"skip": "no glyph names"}
     os2 = font["OS/2"]
@@ -253,12 +260,13 @@ def describe(path: str, zone_list: list[tuple[float, float, bool]]) -> dict:
         k: next((z for z, (lo, hi, top) in enumerate(zone_list) if top and v and lo <= v <= hi), None) for k, v in named.items()
     }
     bar_list = {}
-    for c in BAR_CHARS:
+    for c in BAR_CHARS + [chr(cp) for cp, n in sorted(cmap.items()) if script_of.get(n) in ("Cyrl", "Grek")]:
         name = cmap.get(ord(c))
         if name in simple and (found_bars := bars(simple[name], upem)):
             bar_list[name] = found_bars
     data = font.reader["glyf"] + str(upem).encode()
-    return {"extremes": found, "rows": row_zone, "bars": bar_list, "hash": hashlib.sha256(data).hexdigest()}
+    hashed = hashlib.sha256(data).hexdigest()
+    return {"extremes": found, "rows": row_zone, "bars": bar_list, "hash": hashed, "scripts": script_of, "main": main}
 
 
 def measure(what: dict, path: str, mode: str) -> dict:
@@ -266,30 +274,35 @@ def measure(what: dict, path: str, mode: str) -> dict:
     font = Hinted(path)
     on_row = total = 0
     rows: dict[str, float] = {}
+    by_script: dict[str, list[int]] = {}
     widths: dict[tuple[str, int, int], float] = {}
     for ppem in PPEMS:
-        per_zone: dict[int, list[float]] = {}
+        per_zone: dict[tuple[int, str], list[float]] = {}
         for name in sorted(set(what["extremes"]) | set(what["bars"])):
             y = font.heights(name, ppem, mode)
             for point, zone in what["extremes"].get(name, []):
-                per_zone.setdefault(zone, []).append(round(y[point], 2))
+                per_zone.setdefault((zone, what["scripts"].get(name, "Zyyy")), []).append(round(y[point], 2))
             for i, (lo, hi) in enumerate(what["bars"].get(name, [])):
                 widths[(name, i, ppem)] = y[hi] - y[lo]
-        for zone, ys in per_zone.items():
+        for (_, script), ys in per_zone.items():
             row = Counter(round(v) for v in ys).most_common(1)[0][0]
-            on_row += sum(abs(v - row) <= ON_ROW for v in ys)
+            on = sum(min(abs(v - row), abs(abs(v - row) - 0.5)) <= ON_ROW for v in ys)
+            on_row += on
             total += len(ys)
+            pair = by_script.setdefault(script, [0, 0])
+            pair[0] += on
+            pair[1] += len(ys)
         for key, zone in what["rows"].items():
-            if zone in per_zone:
-                rows[f"{key}{ppem}"] = Counter(per_zone[zone]).most_common(1)[0][0]
-    return {"on": on_row, "of": total, "rows": rows, "widths": widths}
+            if (zone, what["main"]) in per_zone:
+                rows[f"{key}{ppem}"] = Counter(per_zone[zone, what["main"]]).most_common(1)[0][0]
+    return {"on": on_row, "of": total, "rows": rows, "widths": widths, "scripts": by_script}
 
 
 def compare(what: dict, ours: str, theirs: str) -> dict:
     out = {"size": Path(ours).stat().st_size, "ref_size": Path(theirs).stat().st_size}
     for mode in MODES:
         a, b = measure(what, ours, mode), measure(what, theirs, mode)
-        r = {"on": a["on"], "of": a["of"], "ref_on": b["on"]}
+        r = {"on": a["on"], "of": a["of"], "ref_on": b["on"], "scripts": a["scripts"], "ref_scripts": b["scripts"]}
         for key in ("x", "cap"):
             mine = {k: v for k, v in a["rows"].items() if k.startswith(key)}
             r[f"{key}_rows"] = [sum(abs(v - b["rows"][k]) <= ON_ROW for k, v in mine.items()), len(mine)]
@@ -356,6 +369,16 @@ def run(args, name: str, options: str, corpus: Path, files: list[Path]) -> None:
     for mode in MODES:
         report[f"total {mode}"] = total(results, mode)
     (out / "report.json").write_text(json.dumps(report, indent=1))
+    for mode in MODES:
+        by_script: dict[str, list[int]] = {}
+        for r in results:
+            for script, (on, of) in r[mode]["scripts"].items():
+                pair = by_script.setdefault(script, [0, 0, 0])
+                pair[0] += on
+                pair[1] += of
+                pair[2] += r[mode]["ref_scripts"].get(script, [0, 0])[0]
+        report[f"total {mode}"] |= {f"zones {s}": f"{percent([on, of])}, ttfautohint {percent([ref, of])}" for s, (on, of, ref) in sorted(by_script.items())}
+    (out / "report.json").write_text(json.dumps(report, indent=1))
     print(f"== {name} ({options or 'no options'}): {len(results)} fonts of {len(files)} sources")
     for reason, n in Counter(why.split(":")[0] if not why.startswith("same") else "same outlines" for _, why in skipped).most_common():
         print(f"   skipped {n}: {reason}")
@@ -382,6 +405,7 @@ def reference(args, fonts: list[Path]) -> None:
                 continue
             for mode in MODES:
                 m = measure(what, str(out), mode)
+                print("   by script:", {s: percent(v) for s, v in m["scripts"].items()})
                 x = [m["rows"].get(f"x{p}") for p in (9, 12, 15, 20, 30)]
                 w = [v for (g, i, p), v in sorted(m["widths"].items()) if p == 20][:6]
                 print(f"{path.name} {name} {mode}: zones {percent([m['on'], m['of']])}, x rows at 9 12 15 20 30: {x}, bars at 20: {w}, {out.stat().st_size} bytes")

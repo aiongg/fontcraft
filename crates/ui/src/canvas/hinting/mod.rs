@@ -25,7 +25,9 @@ use std::collections::BTreeSet;
 use craft::ui::contract::Tracked;
 use egui::Pos2;
 use fontcraft_engine::Session;
+use fontcraft_engine::hinting::settings::main_master;
 use fontcraft_engine::hinting::{Direction, MAX_INSTRUCTOR_PPM, MIN_INSTRUCTOR_PPM, tt_instructions};
+use fontcraft_engine::model::Font;
 use fontcraft_render::hinted::Intent;
 use fontcraft_tools::hint_drag::{self, HintLayout, HintMark, HintMarks};
 use fontcraft_tools::tt_instructor::{self, TtDirection};
@@ -259,8 +261,20 @@ pub fn targets(scene: &Scene, selection: &Selection, view: &HintingView, id: &st
             }
             Some(Value::Object(m))
         }
+        "hint.tt.autohintGlyph" => Some(json!({"glyphs": [scene.glyph], "layer": scene.layer.master})),
+        "hint.tt.removeHints" => Some(json!({"glyphs": [scene.glyph], "layer": scene.layer_id})),
         _ => None,
     }
+}
+
+/// The hint commands that act on whole glyphs: from Font View's selection or the text selection they take the glyphs
+/// and [`glyphs_layer`], from the canvas the edited glyph's layer.
+pub const GLYPH_COMMANDS: [&str; 4] = ["hint.ps.autohintGlyph", "hint.ps.clearGlyphHints", "hint.tt.autohintGlyph", "hint.tt.removeHints"];
+
+/// The `layer` one of [`GLYPH_COMMANDS`] gets with several glyphs: the main master, whose hints an export reads. None
+/// for the command that takes `layers`, which then removes the hints of every layer.
+pub fn glyphs_layer(font: &Font, id: &str) -> Option<String> {
+    (id != "hint.ps.clearGlyphHints").then(|| main_master(font))
 }
 
 #[cfg(test)]

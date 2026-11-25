@@ -64,6 +64,13 @@ pub const FUNCTION_COUNT: u16 = 10;
 /// The stem function the autohinter adds after them ([`crate::tt_auto::autohint_fpgm`]): origin,
 /// target, stem width entry (−1: none).
 pub const FN_AUTO_STEM: u8 = 10;
+/// The overshoot function the autohinter adds after it: a zone's overshoot at this size, unrounded
+/// and signed, replaced by the one that shows.
+pub const FN_AUTO_OVERSHOOT: u8 = 11;
+/// [`FN_AUTO_STEM`] for a glyph of another zone group than the first: origin, target, stem width
+/// entry (−1: none), the group's scaled x-height and its fitted one. The caller reads both from
+/// storage, where their numbers are constants the analysis of a program can follow.
+pub const FN_AUTO_STEM_GROUP: u8 = 12;
 
 /// Storage set by `prep`: 1 when overshoots show at this size.
 pub const S_SHOW_OVERSHOOTS: u8 = 0;
@@ -163,6 +170,14 @@ impl CvtLayout {
 
     pub fn stem(&self, index: usize) -> Option<(u16, u16)> {
         self.stems.get(index).copied()
+    }
+
+    /// The entry an autohinted build adds after the layout's own for the overshoot edge of zone
+    /// `index` ([`crate::autohint_prep`]), one per zone; `None` when `cvt ` has no room for them.
+    pub fn overshoot(&self, index: usize) -> Option<u16> {
+        let room = usize::from(self.len).saturating_add(self.zones.len()) <= MAX_CVT_ENTRIES;
+        let at = usize::from(self.len).saturating_add(index);
+        u16::try_from(at).ok().filter(|_| room && index < self.zones.len())
     }
 
     /// The first zone whose span holds `y` (font units).

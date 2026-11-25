@@ -297,7 +297,8 @@ impl FontCraftApp {
     }
 
     /// `command` fired from a menu or a key with its targets filled from the Font View selection: the selected
-    /// glyphs, and the layer of Font View's master when the command takes `layer`. A command given parameters, one
+    /// glyphs, and the layer of Font View's master when the command takes `layer` (the hint commands on glyphs: the main
+    /// master, [`crate::canvas::hinting::glyphs_layer`]). A command given parameters, one
     /// that takes no glyphs, and every command while Font View is hidden or has no selection stay as they are. The
     /// [`PER_GLYPH`] commands become one `command.batch` with a step per glyph.
     pub fn with_font_view_targets(&self, command: CommandRef) -> CommandRef {
@@ -312,7 +313,13 @@ impl FontCraftApp {
         }
         let Some(spec) = fontcraft_engine::find_command(&command.id) else { return command };
         let takes_layer = spec.params.split('→').next().is_some_and(|p| p.contains("layer?"));
-        let layer = if takes_layer && !given.contains_key("layer") { self.font_view_master() } else { None };
+        let layer = if crate::canvas::hinting::GLYPH_COMMANDS.contains(&command.id.as_str()) {
+            self.hint_glyphs_layer(&command.id)
+        } else if takes_layer && !given.contains_key("layer") {
+            self.font_view_master().map(|id| json!(id))
+        } else {
+            None
+        };
         let glyphs: Vec<&String> = selected.iter().take(MAX_BATCH_GLYPHS).collect();
         if PER_GLYPH.contains(&command.id.as_str()) && !given.contains_key("glyph") {
             let steps: Vec<Value> = glyphs
@@ -321,7 +328,7 @@ impl FontCraftApp {
                     let mut m = given.clone();
                     m.insert("glyph".into(), json!(glyph));
                     if let Some(layer) = &layer {
-                        m.insert("layer".into(), json!(layer));
+                        m.insert("layer".into(), layer.clone());
                     }
                     json!({"command": command.id, "params": m})
                 })
@@ -334,7 +341,7 @@ impl FontCraftApp {
         let mut m = Map::new();
         m.insert("glyphs".into(), json!(glyphs));
         if let Some(layer) = layer {
-            m.insert("layer".into(), json!(layer));
+            m.insert("layer".into(), layer);
         }
         CommandRef::with_params(command.id, Value::Object(m))
     }

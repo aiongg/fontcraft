@@ -1,5 +1,5 @@
-//! The TTFZones and TTFStems editors: a master's TT zones (or TT stems) as rows, each control running one of the TT
-//! definition commands (`hint.tt.*`, `fontcraft_engine::cmd::hint_tt_defs`).
+//! The TTFZones and TTFStems editors: a master's TT zones (or TT stems), or the font's family TT zones, as rows, each
+//! control running one of the TT definition commands (`hint.tt.*`, `fontcraft_engine::cmd::hint_tt_defs`).
 //!
 //! | Control | Command |
 //! |---|---|
@@ -18,6 +18,10 @@
 //! master, captioned with its key so its cells can be cleared. The Delta table and the filter sheet show in the
 //! editor in place of the rows while they are open.
 //!
+//! The family zones (the font's TTFZones) have no deltas and no filters, and their commands get `family: true` in place
+//! of the master. Under the title the editor says whether they match the main master's zones in number, without which
+//! an export leaves them out.
+//!
 //! The filter sheet edits the stored glyph predicate as text; an empty text clears the filter.
 //!
 //! Rows: `dialog.ttfZones`, `dialog.ttfStems` (M10.28).
@@ -31,11 +35,11 @@ use craft::ui::dialog::{Dialog, DialogId, DialogResult, DialogStack, StackDialog
 use craft::ui::display::{Shade, Text};
 use craft::ui::layout_components::{Row, Stack};
 use craft::ui::pickers::Select;
-use craft::ui::runtime::env::{Env, Label};
+use craft::ui::runtime::env::{Env, Label, WordSet as _};
 use craft::ui::sections::{DialogRole, FooterButton};
 use craft::ui::text::{NumberField, TextField};
 use egui::Ui;
-use fontcraft_engine::hinting::settings::{TTF_STEMS, TTF_ZONES, main_master};
+use fontcraft_engine::hinting::settings::{TTF_STEMS, TTF_ZONES, family_tt_zones, main_master};
 use fontcraft_engine::hinting::{DeltaDir, Deltas, HintSettings, TtStem, TtZone};
 use fontcraft_engine::model::Font;
 use serde_json::{Map, Value, json};
@@ -53,6 +57,15 @@ craft::ui::words! {
     pub struct ZonesWords {
         /// Shown under the title off the main master.
         main_only: "fontcraftTtfZones.mainOnly" = "Deltas and filters are set on the main master.";
+        /// Shown under the family zones' title while TTFFamilyZonesThreshold is set and the counts match.
+        family: "fontcraftTtfZones.family" = "Family zones: every master uses them up to TTFFamilyZonesThreshold.";
+        /// Shown under the family zones' title when the counts differ.
+        family_count: template "fontcraftTtfZones.familyCount" =
+            "Not applied: {family} family zones, {master} zones in the main master. The numbers must be the same.";
+        /// Shown under the family zones' title when the counts match and the threshold is missing.
+        family_threshold: "fontcraftTtfZones.familyThreshold" = "Not applied: the font has no TTFFamilyZonesThreshold parameter.";
+        /// The family zones' title.
+        family_title: "fontcraftTtfZones.familyTitle" = "Font";
         /// The Name caption and field.
         name: "fontcraftTtfZones.name" = "Name";
         /// The Position caption and field.
@@ -235,13 +248,33 @@ pub enum Control {
     Filter(usize, Option<String>),
 }
 
-/// The list an editor shows: one master's TT zones or TT stems.
+/// What an editor edits.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Place {
+    /// A master's list, by the master's id.
+    Master(String),
+    /// The font's TTFZones, the family zones.
+    Family,
+}
+
+/// The family zones beside the main master's.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct FamilyCheck {
+    /// The main master's zones.
+    pub master_zones: usize,
+    /// The main master has a TTFFamilyZonesThreshold.
+    pub threshold: bool,
+}
+
+/// The list an editor shows: one master's TT zones or TT stems, or the family TT zones.
 #[derive(Clone, Debug, PartialEq)]
 pub struct List {
     pub kind: Kind,
-    /// The master's id.
+    /// The master's id; empty for the family zones.
     pub master: String,
     pub master_name: String,
+    /// Set when these are the family zones.
+    pub family: Option<FamilyCheck>,
     /// The master is the main master, the only one with deltas and filters.
     pub main: bool,
     pub entries: Vec<Entry>,
@@ -252,6 +285,30 @@ pub struct List {
 }
 
 impl List {
+    /// The list at `place`.
+    pub fn at(font: &Font, kind: Kind, place: &Place) -> Result<List, String> {
+        match place {
+            Place::Master(master) => List::read(font, kind, master),
+            Place::Family => List::read_family(font),
+        }
+    }
+
+    /// The family zones.
+    pub fn read_family(font: &Font) -> Result<List, String> {
+        let main = HintSettings::for_master(font, &main_master(font)).map_err(|e| e.to_string())?;
+        let zones = family_tt_zones(font).map_err(|e| e.to_string())?;
+        Ok(List {
+            kind: Kind::Zones,
+            master: String::new(),
+            master_name: ZonesWords::english().family_title.as_str().to_string(),
+            family: Some(FamilyCheck { master_zones: main.tt_zones.len(), threshold: main.tt_family_zones_threshold.is_some() }),
+            main: false,
+            entries: zones.iter().map(Entry::zone).collect(),
+            masters: Vec::new(),
+            scale: f64::from(font.units_per_em) / 1000.0,
+        })
+    }
+
     /// The list of `master` (an id or a name).
     pub fn read(font: &Font, kind: Kind, master: &str) -> Result<List, String> {
         let m = font.master(master).map_err(|e| e.to_string())?;
@@ -265,6 +322,7 @@ impl List {
             kind,
             master: m.id.clone(),
             master_name: m.name.clone(),
+            family: None,
             main: main_master(font) == m.id,
             entries,
             masters,
@@ -300,7 +358,8 @@ impl List {
     pub fn command(&self, control: &Control) -> Option<(&'static str, Value)> {
         let kind = self.kind;
         let mut p = Map::new();
-        p.insert("master".into(), json!(self.master));
+        let (key, place) = if self.family.is_some() { ("family", json!(true)) } else { ("master", json!(self.master)) };
+        p.insert(key.into(), place);
         let entry = |at: &usize| self.entries.get(*at);
         let mut set = |at: &usize, key: &str, value: Value| -> Option<&'static str> {
             p.insert(kind.entry_key().into(), json!(entry(at)?.name));
@@ -440,7 +499,9 @@ pub fn view(ui: &mut Ui, list: &List, editor: &mut Editor, controls: &mut Vec<Co
 fn rows(ui: &mut Ui, words: &ZonesWords, list: &List, editor: &mut Editor, controls: &mut Vec<Control>) {
     let kind = list.kind;
     Stack::new().show(ui, |ui, _| {
-        if !list.main {
+        if let Some(check) = &list.family {
+            Text::new(family_note(words, check, list.entries.len())).shade(Shade::Muted).show(ui);
+        } else if !list.main {
             Text::new(words.main_only.clone()).shade(Shade::Muted).show(ui);
         }
         Row::new().show(ui, |ui, _| {
@@ -478,6 +539,15 @@ fn rows(ui: &mut Ui, words: &ZonesWords, list: &List, editor: &mut Editor, contr
             }
         });
     });
+}
+
+/// What the editor says under the family zones' title, for `count` of them.
+pub fn family_note(words: &ZonesWords, check: &FamilyCheck, count: usize) -> Label {
+    if count != check.master_zones {
+        let (family, master) = (count.to_string(), check.master_zones.to_string());
+        return Label::from(words.family_count.fill(&[("family", &family), ("master", &master)]));
+    }
+    if check.threshold { words.family.clone() } else { words.family_threshold.clone() }
 }
 
 /// One entry's controls.
@@ -556,8 +626,7 @@ fn filter_sheet(ui: &mut Ui, words: &ZonesWords, kind: Kind, text: &mut String) 
 /// The open editor on the window's dialog host.
 pub struct DefinitionsDialog {
     pub kind: Kind,
-    /// The master's id.
-    pub master: String,
+    pub place: Place,
     /// What the editor shows, refreshed by the dialog module each pass; `None` once the master is gone.
     pub list: Option<List>,
     pub editor: Editor,
@@ -567,8 +636,8 @@ pub struct DefinitionsDialog {
 }
 
 impl DefinitionsDialog {
-    pub fn new(kind: Kind, master: String) -> Self {
-        DefinitionsDialog { kind, master, list: None, editor: Editor::default(), outbox: Vec::new(), open: true }
+    pub fn new(kind: Kind, place: Place) -> Self {
+        DefinitionsDialog { kind, place, list: None, editor: Editor::default(), outbox: Vec::new(), open: true }
     }
 }
 
@@ -616,6 +685,7 @@ mod tests {
             kind: Kind::Zones,
             master: "m01".into(),
             master_name: "Regular".into(),
+            family: None,
             main,
             entries: vec![zone("baseline", 0.0, -16.0), zone("xHeight", 500.0, 16.0)],
             masters: vec![Column { key: "m01".into(), label: "Regular".into() }, Column { key: "m02".into(), label: "Bold".into() }],
@@ -679,6 +749,25 @@ mod tests {
         other.settle();
         assert!(other.node_of(row_id(Kind::Zones, 0, "deltas")).is_none());
         assert!(other.node_of(row_id(Kind::Zones, 0, "filter")).is_none());
+    }
+
+    /// The family zones' controls give `family` in place of the master, without deltas and filters, and the editor says
+    /// when the numbers of zones differ.
+    #[test]
+    fn family_zones_name_no_master() {
+        let mut list = zones(false);
+        list.master = String::new();
+        list.family = Some(FamilyCheck { master_zones: 3, threshold: true });
+        let words = ZonesWords::english();
+        assert!(family_note(&words, &list.family.unwrap(), 2).as_str().contains('3'));
+        assert_eq!(family_note(&words, &list.family.unwrap(), 3).as_str(), words.family.as_str());
+        assert_eq!(list.command(&Control::Filter(0, Some("x".into()))), None);
+        let (mut f, posted) = fixture(list);
+        f.settle();
+        assert!(f.node_of(row_id(Kind::Zones, 0, "deltas")).is_none());
+        let plus = f.node_of(button_id(Kind::Zones, "plus")).expect("plus");
+        f.click(&plus).settle();
+        assert_eq!(*posted.borrow(), vec![("hint.tt.addZone", json!({"family": true, "position": 0.0, "size": 16.0}))]);
     }
 
     #[test]

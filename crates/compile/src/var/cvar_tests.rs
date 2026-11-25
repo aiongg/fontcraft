@@ -222,6 +222,49 @@ fn a_variable_font_varies_its_zones_with_cvar() {
     assert!(font.table_data(skrifa::Tag::new(b"cvar")).is_none(), "identical control values write no cvar");
 }
 
+/// Cyrillic letters 4 units above the xHeight zone get zones of their own in every master, whatever
+/// its TTFBlueFuzz, and the family zones keep applying beside them.
+#[test]
+fn an_autohinted_font_with_script_zones_keeps_cvar_and_its_family_zones() {
+    use fontcraft_hinting::settings::{TTF_BLUE_FUZZ, TTF_FAMILY_ZONES_THRESHOLD, TTF_ZONES};
+    use fontcraft_model::plist::{Number, Value, openstep};
+    use fontcraft_model::{Glyph, Layer};
+    let mut f = two_masters(720.0);
+    for (cp, top) in [(u32::from('x'), 500.0), (0x43F, 520.0), (0x43D, 520.0)] {
+        let name = match f.glyphs.iter().find(|g| g.unicodes.contains(&cp)) {
+            Some(g) => g.name.clone(),
+            None => {
+                let mut g = Glyph::new(format!("uni{cp:04X}"));
+                g.unicodes.push(cp);
+                g.layers = vec![Layer::new("m01", 600.0), Layer::new("m02", 600.0)];
+                let name = g.name.clone();
+                f.glyphs.push(g);
+                name
+            }
+        };
+        let mut g = f.glyph_mut(&name).unwrap();
+        for layer in g.layers.iter_mut() {
+            layer.shapes = vec![Shape::Path(Path::rect(50.0, 0.0, 450.0, top))];
+        }
+    }
+    let masters = std::sync::Arc::make_mut(&mut f.masters);
+    masters[1].params.set(TTF_BLUE_FUZZ, Value::Number(Number::int(10)));
+    let zones = "({name = ascender; position = 777; size = 16;}, {name = capHeight; position = 701; size = 16;}, {name = xHeight; position = 501; size = 16;}, {name = baseline; position = 0; size = -16;}, {name = descender; position = -200; size = -16;})";
+    let params = &mut std::sync::Arc::make_mut(&mut f.info).params;
+    params.set(TTF_ZONES, openstep::parse_value(zones).unwrap());
+    params.set(TTF_FAMILY_ZONES_THRESHOLD, Value::Number(Number::int(20)));
+
+    let autohint = Options { hinting: crate::HintingOptions { autohint: true, ..Default::default() }, ..Options::default() };
+    let out = compile_variable(&f, None, &autohint, &VariableOptions::default()).unwrap().compiled;
+    assert!(!out.warnings.iter().any(|w| ["cvar", "family TT zones", "cannot follow"].iter().any(|t| w.contains(t))), "{:?}", out.warnings);
+    let font = FontRef::new(&out.bytes).unwrap();
+    let cvt: Vec<i16> = font.cvt().unwrap().iter().map(|v| v.get()).collect();
+    assert!(cvt.contains(&777) && cvt.contains(&520), "a family zone and a Cyrillic one: {cvt:?}");
+    let maxp = font.maxp().unwrap();
+    assert!(maxp.max_stack_elements().is_some_and(|n| n < 1_024) && maxp.max_storage().is_some_and(|n| n >= 21), "the analysis follows the programs");
+    assert!(font.table_data(skrifa::Tag::new(b"cvar")).is_some());
+}
+
 /// The glyph program of `name` in `out`.
 fn program(out: &crate::Compiled, name: &str) -> Vec<u8> {
     use skrifa::raw::tables::glyf::Glyph as RawGlyph;

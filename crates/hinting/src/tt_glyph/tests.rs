@@ -80,6 +80,7 @@ fn compile(s: &HintSettings, points: &[(i16, i16)], list: &[TtInstruction]) -> (
         stems: None,
         delta_column: Some(COLUMN),
         auto_stems: false,
+        auto_group: 0,
     };
     let g = glyph_program(&cx);
     (programs, g)
@@ -362,6 +363,7 @@ fn a_program_past_the_glyf_limit_or_a_mismatched_outline_is_refused() {
         stems: None,
         delta_column: Some(COLUMN),
         auto_stems: false,
+        auto_group: 0,
     };
     assert!(matches!(glyph_program(&cx), Err(HintingError::Glyph { .. })));
 }

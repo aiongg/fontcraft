@@ -20,6 +20,7 @@
 //! | [`tt_font`] | M10.17 | [`CvtLayout`], [`FontPrograms`], [`font_programs`] |
 //! | [`tt_glyph`] | M10.18 | [`glyph_program`]: instructions plus point map to bytecode, with its `maxp` needs |
 //! | [`tt_auto`] | M10.21 | [`autohint_tt`] and the TTFAutohint options |
+//! | [`tt_styles`] | M10.52 | [`Styles`]: the scripts of an autohinted build, their zones and x-heights |
 //! | [`control`] | M10.21 | [`control::parse`]: TTFAutohint control instructions |
 //! | [`imported`] | M10.22 | glyph programs of an opened font, kept while the outline is unchanged |
 //!
@@ -50,6 +51,7 @@ pub mod tt;
 pub mod tt_auto;
 pub mod tt_font;
 pub mod tt_glyph;
+pub mod tt_styles;
 #[cfg(test)]
 mod tt_testfont;
 pub mod validate;
@@ -72,6 +74,7 @@ pub use tt_auto::{
 };
 pub use tt_font::{CvtLayout, FontPrograms, control_values, font_programs};
 pub use tt_glyph::{GlyphContext, GlyphOutline, GlyphProgram, OutlinePoint, glyph_program};
+pub use tt_styles::{GlyphStyle, Styles};
 pub use validate::{HintFinding, Severity, validate_font_hints};
 
 #[cfg(test)]

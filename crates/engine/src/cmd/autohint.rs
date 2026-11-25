@@ -34,7 +34,7 @@ use fontcraft_model::{Font, Layer, Shape};
 use serde_json::{Value, json};
 
 use super::*;
-use crate::params::Params;
+use crate::params::{Params, TargetKind};
 
 /// Most glyph layers one run hints (glyphs times masters). The autohinter bounds the work per
 /// glyph by its own limits (`fontcraft_autohint::MAX_ELEMENTS`, `MAX_SEGMENTS`).
@@ -57,12 +57,13 @@ pub fn specs() -> Vec<CommandSpec> {
         cmd!(
             "hint.ps.autohintGlyph",
             "Autohint",
-            [],
+            ["Glyph", "PostScript Hinting"],
             None,
             "{glyphs: [names], layer?: master id (default: the first master)} run the PostScript autohinter on each glyph's layer of that master and store its stems as the layer's PostScript hints, replacing those it has; the glyph then counts as manually hinted; one undo step → {hinted: [{glyph, master, horizontal, vertical}], skipped: [{glyph, master, reason}], warnings}",
             has_doc,
             autohint_glyph
-        ),
+        )
+        .targets(&[TargetKind::Glyphs]),
     ]
 }
 

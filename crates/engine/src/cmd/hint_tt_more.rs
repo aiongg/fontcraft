@@ -109,7 +109,7 @@ pub fn specs() -> Vec<CommandSpec> {
         cmd!(
             "hint.tt.removeHints",
             "Remove Hints",
-            [],
+            ["Glyph", "TrueType Hinting"],
             None,
             "{glyphs: [name] (or glyph: name), layer?: id (default: the main master's layer)} delete every TrueType instruction of that layer of each glyph, in both directions; PostScript hints stay → {glyphs: [name], removed: count}; `glyphs` lists the glyphs that had instructions",
             has_doc,

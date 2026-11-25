@@ -156,6 +156,7 @@ pub fn dialog_message(target: &Target, row: &RowModel, dialog: RowDialog) -> Opt
         }
         RowDialog::Panose => shell("font.info.openDialog", open_params(&InfoDialog::Panose { target: target.clone(), index: row.occurrence })),
         RowDialog::TtfStems => shell("window.ttfStems", json!({"master": target.first()})),
+        RowDialog::TtfZones if target.scope == Scope::Font => shell("window.ttfZones", json!({"family": true})),
         RowDialog::TtfZones => shell("window.ttfZones", json!({"master": target.first()})),
         RowDialog::AxisLocation => open("dialog.axisLocation", json!({"scope": target.scope.name(), "targets": target.first()})),
         RowDialog::VirtualMaster => open("dialog.virtualMaster", json!({"index": row.occurrence})),

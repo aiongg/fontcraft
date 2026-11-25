@@ -38,7 +38,8 @@
 //! switches the glyph programs off above the hinting limit. At export the `xHeight` and
 //! `capHeight` zones apply only when the font draws a letter ttfautohint measures its zones on
 //! and the zone holds that letter's top, or is named after the letter's own height
-//! ([`drop_unmeasured_zones`]); the x-height scaling needs a lower-case one.
+//! ([`drop_unmeasured_zones`]); the x-height scaling needs a lower-case one. Other scripts than
+//! Latin share those zones or get their own ([`crate::tt_styles`]).
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
@@ -48,7 +49,8 @@ use fontcraft_model::{Font, Layer, Shape};
 
 use crate::control::{ControlInstructions, ControlKind};
 use crate::tt::delta_column_key;
-use crate::{DeltaDir, Direction, HintSettings, HintingError, NodeRef, PointMap, Rounding, StemRef, TtInstruction, TtKind, TtPoint, ZoneRef};
+use crate::tt_styles::{Styles, ZoneGroup, measure_scripts};
+use crate::{DeltaDir, Direction, HintSettings, HintingError, NodeRef, PointMap, Rounding, StemRef, TtInstruction, TtKind, TtPoint, TtZone, ZoneRef};
 
 /// Most nodes of one layer the autohinter looks at (the TrueType point limit).
 pub const MAX_AUTOHINT_NODES: usize = 65_535;
@@ -137,18 +139,7 @@ impl Default for TtAutohintOptions {
 }
 
 /// The options our autohinter has no use for: accepted, checked and reported as ignored.
-const IGNORED_OPTIONS: [&str; 10] = [
-    "adjust-subglyphs",
-    "default-script",
-    "fallback-script",
-    "fallback-scaling",
-    "reference",
-    "reference-index",
-    "family-suffix",
-    "control-file",
-    "epoch",
-    "verbose",
-];
+const IGNORED_OPTIONS: [&str; 7] = ["adjust-subglyphs", "reference", "reference-index", "family-suffix", "control-file", "epoch", "verbose"];
 /// Longest option text read, and longest single value.
 const MAX_OPTIONS_TEXT: usize = 4_096;
 const MAX_OPTION_VALUE: usize = 256;
@@ -316,11 +307,17 @@ impl TtAutohintOptions {
     /// commands store.
     pub fn export_only(&self) -> Vec<String> {
         let d = Self::default();
-        [(self.stem_width_mode != d.stem_width_mode, "stem-width-mode"), (self.hint_composites, "composites")]
-            .into_iter()
-            .filter(|(on, _)| *on)
-            .map(|(_, name)| name.to_string())
-            .collect()
+        [
+            (self.stem_width_mode != d.stem_width_mode, "stem-width-mode"),
+            (self.hint_composites, "composites"),
+            (self.default_script != d.default_script, "default-script"),
+            (self.fallback_script != d.fallback_script, "fallback-script"),
+            (self.fallback_scaling, "fallback-scaling"),
+        ]
+        .into_iter()
+        .filter(|(on, _)| *on)
+        .map(|(_, name)| name.to_string())
+        .collect()
     }
 
     /// The options that differ from the defaults, as long options, which
@@ -416,31 +413,48 @@ pub fn snapping_exceptions(text: &str) -> Result<Vec<(u16, u16)>, String> {
 /// preference for rounding up (up from 3/8 of a pixel above a row; from 3/16 at 6 PPM up to the
 /// x-height increase limit), and every zone is then placed at its position scaled by the same
 /// factor, rounded to the nearest row. Horizontal stems scale by that factor too. At the sizes of
-/// the x-height snapping exceptions, and at every size without an `xHeight` zone or with
-/// `scale_x_height` off ([`MeasuredZones::x_height`]), the factor is 1, so the zones are only
-/// rounded. Zone and stem
+/// the x-height snapping exceptions, and at every size without an `xHeight` zone or an x-height
+/// letter ([`MeasuredZones::x_height`]), the factor is 1, so the zones are only rounded. Zones of a
+/// script's own ([`Styles`]) scale by that script's x-height zone instead. Zone and stem
 /// deltas of our own `prep` are kept: each fitted entry moves by the difference between the
 /// scaled row and the row our program gave it. Zones aligned to another zone keep their rounded
 /// distance to it; zones in an alignment cycle, and those aligned to one, stay as our program
 /// placed them.
 ///
-/// Returns the `cvt ` entries to append after `layout`'s (the top of the `xHeight` zone, so the
-/// rasterizer scales it as it scales the zones) and the program to append to `prep`. Storage:
-/// [`S_X_SCALED`] and [`S_X_FITTED`], after the font programs' own.
+/// Overshoots: a round extreme past half of a zone's size ([`crate::glyph_program`]) lies beyond
+/// the zone's row by the zone's whole size at this size, scaled by the x-height factor and
+/// replaced ([`autohint_fpgm`]): nothing under half a pixel, half a pixel up to three quarters,
+/// from there whole pixels. `prep` leaves that row in the zone's overshoot entry.
+///
+/// Returns the `cvt ` entries to append after `layout`'s (each zone's overshoot edge, its position
+/// plus its size, so the rasterizer scales it as it scales the zones; none when `cvt ` has no
+/// room, which leaves out the x-height scaling and the overshoots) and the program to append to
+/// `prep`. Storage: [`S_X_SCALED`] and [`S_X_FITTED`], after the font programs' own, and that pair
+/// of each zone group ([`group_storage`]).
 pub fn autohint_prep(
     options: &TtAutohintOptions,
     settings: &HintSettings,
     layout: &crate::CvtLayout,
-    scale_x_height: bool,
+    measured: &MeasuredZones,
 ) -> Result<(Vec<i16>, Vec<u8>), HintingError> {
     use std::fmt::Write;
     let mut t = stem_mode_program(options);
-    let mut cvt = Vec::new();
+    let cvt = match layout.overshoot(0) {
+        Some(_) => settings.tt_zones.iter().map(|z| (z.position + z.size).round().clamp(f64::from(i16::MIN), f64::from(i16::MAX)) as i16).collect(),
+        None => Vec::new(),
+    };
     let exceptions = snapping_exceptions(&options.x_height_snapping_exceptions)
         .map_err(|message| HintingError::BadParameter { name: "TTFAutohint options".into(), message })?;
-    let (top, scaling) = x_height_scaling(options, settings, layout, &exceptions, scale_x_height);
-    cvt.extend(top);
-    t.push_str(&scaling);
+    let align = Alignment::of(&settings.tt_zones);
+    // Group 0 comes last: its scaling is what the stem function finds in storage.
+    t.push_str(&no_zones_group());
+    for (number, group) in measured.styles.own_groups().take_while(|(n, _)| group_storage(*n).is_some()) {
+        t.push_str(&group_rows(options, settings, layout, &exceptions, &align, &NumberedGroup { number, group: group.clone() }));
+    }
+    let zones: Vec<usize> = (0..settings.tt_zones.len()).filter(|k| measured.styles.zone_group(*k) == 0).collect();
+    let named_x = zones.iter().copied().find(|k| settings.tt_zones.get(*k).is_some_and(|z| z.name == "xHeight"));
+    let group = ZoneGroup { zones, x_height: named_x.filter(|_| measured.x_height) };
+    t.push_str(&group_rows(options, settings, layout, &exceptions, &align, &NumberedGroup { number: 0, group }));
     if options.hinting_limit > 0 {
         let _ = writeln!(t, "MPPEM[ ]\nPUSH {}\nGT[ ]\nIF[ ]\nPUSH 1 1\nINSTCTRL[ ]\nEIF[ ]", options.hinting_limit.min(MAX_OPTION_PPM));
     }
@@ -458,8 +472,10 @@ fn stem_mode_program(options: &TtAutohintOptions) -> String {
 }
 
 /// What an autohinted build adds to `fpgm` after our own functions: [`FN_AUTO_STEM`], which puts a
-/// stem's target at its distance from the origin by the stem width mode. The distance and the
-/// standard width (the TT stem the instruction uses) are first scaled by the x-height factor.
+/// stem's target at its distance from the origin by the stem width mode, and
+/// [`FN_AUTO_OVERSHOOT`]. The distance and the standard width (the TT stem the instruction uses)
+/// and the overshoot are first scaled by the x-height factor; [`FN_AUTO_STEM_GROUP`] runs the stem
+/// function with another zone group's factor.
 ///
 /// The rules are fitted to the bar heights ttfautohint 1.8.4 gives synthetic fonts of one standard
 /// width, at 9 to 100 PPM and widths of 0.1 to 15 pixels; its manual describes the modes only in
@@ -470,8 +486,13 @@ fn stem_mode_program(options: &TtAutohintOptions) -> String {
 ///   5/8 of it; else, under 3 pixels, the whole part of `d` plus 5/32 (a fraction from 5/32 to
 ///   1/2) or 27/32 (from 1/2 to 27/32), other fractions kept; from 3 pixels up `d` rounded.
 /// * strong: the rounded `s` when `d` lies within 3/4 of it, else `d` rounded; at least 1.
+///
+/// The overshoots follow the rows ttfautohint gives synthetic fonts with overshoots of 0.5% to 3%
+/// of the em at 8 to 200 PPM: an overshoot under 1/2 pixel does not show, one under 3/4 shows as
+/// 1/2, and one from 3/4 up as the nearest whole number of pixels.
 pub fn autohint_fpgm() -> Result<Vec<u8>, HintingError> {
-    use crate::tt_font::{FN_AUTO_STEM, S_NEGATIVE};
+    use crate::tt_font::{FN_AUTO_OVERSHOOT, FN_AUTO_STEM, FN_AUTO_STEM_GROUP, S_NEGATIVE};
+    let first_fitted = S_GROUPS.saturating_add(1);
     let scale = format!(
         "PUSH {S_X_FITTED}\nRS[ ]\nPUSH {S_X_SCALED}\nRS[ ]\nNEQ[ ]\nIF[ ]\nPUSH {S_X_FITTED}\nRS[ ]\nMUL[ ]\nPUSH {S_X_SCALED}\nRS[ ]\nDIV[ ]\nEIF[ ]"
     );
@@ -619,6 +640,62 @@ ROLL[ ]
 SRP0[ ]
 MSIRP[0]
 ENDF[ ]
+
+; {FN_AUTO_OVERSHOOT}: overshoot -> overshoot shown
+PUSH {FN_AUTO_OVERSHOOT}
+FDEF[ ]
+DUP[ ]
+PUSH 0
+LT[ ]
+PUSH {S_NEGATIVE}
+SWAP[ ]
+WS[ ]
+ABS[ ]
+{scale}
+DUP[ ]
+PUSH 32
+LT[ ]
+IF[ ]
+POP[ ]
+PUSH 0
+ELSE[ ]
+DUP[ ]
+PUSH 48
+LT[ ]
+IF[ ]
+POP[ ]
+PUSH 32
+ELSE[ ]
+PUSH 32
+ADD[ ]
+FLOOR[ ]
+EIF[ ]
+EIF[ ]
+PUSH {S_NEGATIVE}
+RS[ ]
+IF[ ]
+NEG[ ]
+EIF[ ]
+ENDF[ ]
+
+; {FN_AUTO_STEM_GROUP}: origin target width scaled fitted
+PUSH {FN_AUTO_STEM_GROUP}
+FDEF[ ]
+PUSH {S_X_FITTED}
+SWAP[ ]
+WS[ ]
+PUSH {S_X_SCALED}
+SWAP[ ]
+WS[ ]
+PUSH {FN_AUTO_STEM}
+CALL[ ]
+PUSH {S_X_SCALED} {S_GROUPS}
+RS[ ]
+WS[ ]
+PUSH {S_X_FITTED} {first_fitted}
+RS[ ]
+WS[ ]
+ENDF[ ]
 "
     ))?)
 }
@@ -637,29 +714,132 @@ const S_STEM_STANDARD: u8 = 14;
 const X_HEIGHT_ROUND_UP: i32 = 40;
 const X_HEIGHT_INCREASE_ROUND_UP: i32 = 52;
 
-/// The `cvt ` entry and the `prep` text of the x-height scaling ([`autohint_prep`]). With
-/// `scale_x_height` off, and without a usable `xHeight` zone or room in `cvt ` for the entry, the
-/// factor is 1: the zones are only rounded to the nearest row.
+/// Storage written by [`autohint_prep`]: [`S_X_SCALED`] and [`S_X_FITTED`] of each zone group.
+const S_GROUPS: u8 = 15;
+/// Most zone groups of a font, the first and the one without zones included.
+const MAX_ZONE_GROUPS: usize = 64;
+
+/// The storage of the scaled x-height of zone group `group`; its fitted one is the next. `None`
+/// past [`MAX_ZONE_GROUPS`].
+pub(crate) fn group_storage(group: usize) -> Option<u8> {
+    let at = group.checked_mul(2).filter(|_| group < MAX_ZONE_GROUPS)?;
+    u8::try_from(at.checked_add(usize::from(S_GROUPS))?).ok()
+}
+
+/// The `prep` text of the group without zones, whose factor is 1.
+fn no_zones_group() -> String {
+    group_storage(crate::tt_styles::NO_ZONES).map_or(String::new(), |s| format!("PUSH {s} 64\nWS[ ]\nPUSH {} 64\nWS[ ]\n", s.saturating_add(1)))
+}
+
+/// A zone group and its number.
+struct NumberedGroup {
+    number: usize,
+    group: ZoneGroup,
+}
+
+/// Which zone each zone is aligned to.
+struct Alignment {
+    target: Vec<Option<usize>>,
+    /// 0 for a zone rounded on its own, `None` in or below a cycle.
+    depth: Vec<Option<usize>>,
+}
+
+impl Alignment {
+    fn of(zones: &[TtZone]) -> Self {
+        let target: Vec<Option<usize>> = zones
+            .iter()
+            .enumerate()
+            .map(|(k, z)| {
+                let name = z.align.as_deref()?;
+                zones.iter().position(|z| z.name == name).filter(|&j| j != k)
+            })
+            .collect();
+        let depth = (0..zones.len())
+            .map(|start| {
+                let mut k = start;
+                for d in 0..=zones.len() {
+                    match target.get(k).copied().flatten() {
+                        Some(j) => k = j,
+                        None => return Some(d),
+                    }
+                }
+                None
+            })
+            .collect();
+        Self { target, depth }
+    }
+
+    fn target(&self, k: usize) -> Option<usize> {
+        self.target.get(k).copied().flatten()
+    }
+
+    fn depth(&self, k: usize) -> Option<usize> {
+        self.depth.get(k).copied().flatten()
+    }
+}
+
+/// The `prep` text of one zone group: its scaling, kept in its storage, its zones' rows and their
+/// overshoots.
+fn group_rows(
+    options: &TtAutohintOptions,
+    settings: &HintSettings,
+    layout: &crate::CvtLayout,
+    exceptions: &[(u16, u16)],
+    align: &Alignment,
+    at: &NumberedGroup,
+) -> String {
+    let mut t = x_height_scaling(options, settings, layout, exceptions, align, at);
+    if let Some(s) = group_storage(at.number) {
+        for (to, from) in [(s, S_X_SCALED), (s.saturating_add(1), S_X_FITTED)] {
+            t.push_str(&format!("PUSH {to} {from}\nRS[ ]\nWS[ ]\n"));
+        }
+    }
+    t.push_str(&overshoot_rows(settings, layout, &at.group.zones));
+    t
+}
+
+/// The `prep` text that turns the overshoot entries of `zones` into the rows of their round
+/// extremes ([`autohint_prep`]).
+fn overshoot_rows(settings: &HintSettings, layout: &crate::CvtLayout, zones: &[usize]) -> String {
+    use crate::tt_font::FN_AUTO_OVERSHOOT;
+    use std::fmt::Write;
+    let mut t = String::new();
+    if settings.tt_overshoot_suppression_below_ppm.is_some() {
+        return t;
+    }
+    for &k in zones {
+        let Some(z) = settings.tt_zones.get(k).filter(|z| z.size != 0.0) else { continue };
+        let (Some((pos, fit)), Some(end)) = (layout.zones.get(k).copied(), layout.overshoot(k)) else { continue };
+        let _ = writeln!(
+            t,
+            "; overshoot of zone {}\nPUSH {end} {fit}\nRCVT[ ]\nPUSH {end}\nRCVT[ ]\nPUSH {pos}\nRCVT[ ]\nSUB[ ]\nPUSH {FN_AUTO_OVERSHOOT}\nCALL[ ]\nADD[ ]\nWCVTP[ ]",
+            z.name.chars().filter(char::is_ascii_alphanumeric).collect::<String>()
+        );
+    }
+    t
+}
+
+/// The `prep` text of a group's x-height scaling ([`autohint_prep`]). Without a usable x-height
+/// zone or room in `cvt ` for its overshoot entry, the factor is 1: the zones are only rounded to
+/// the nearest row. Group 0 also scales the stems.
 fn x_height_scaling(
     options: &TtAutohintOptions,
     settings: &HintSettings,
     layout: &crate::CvtLayout,
     exceptions: &[(u16, u16)],
-    scale_x_height: bool,
-) -> (Option<i16>, String) {
+    align: &Alignment,
+    at: &NumberedGroup,
+) -> String {
     use crate::tt_font::{FN_ROUND, MAX_ZONE_THRESHOLD_PX};
     use std::fmt::Write;
     let zones = &settings.tt_zones;
     let word = |v: f64| -> Option<i32> { (v.is_finite() && (1.0..=32_767.0).contains(&v.round())).then(|| v.round() as i32) };
-    let entry = layout.len;
-    // A zone at or below the baseline cannot scale the others.
-    let top = zones
-        .iter()
-        .find(|z| scale_x_height && z.name == "xHeight" && z.align.is_none() && z.size >= 0.0)
-        .filter(|x| word(x.position).is_some())
-        .and_then(|x| word(x.position + x.size))
-        .and_then(|v| i16::try_from(v).ok())
-        .filter(|_| usize::from(entry) < crate::MAX_CVT_ENTRIES);
+    // The overshoot entry of the x-height zone. A zone at or below the baseline cannot scale the
+    // others.
+    let top = at.group.x_height.and_then(|k| {
+        let x = zones.get(k).filter(|z| z.align.is_none() && z.size >= 0.0)?;
+        (word(x.position).is_some() && word(x.position + x.size).is_some()).then(|| layout.overshoot(k)).flatten()
+    });
     let in_range = |lo: u16, hi: u16| format!("MPPEM[ ]\nPUSH {lo}\nGTEQ[ ]\nMPPEM[ ]\nPUSH {hi}\nLTEQ[ ]\nAND[ ]\nIF[ ]");
     // The cvt entry our program rounded zone `k` from: the family zone up to the family
     // threshold, else the zone's own position.
@@ -677,7 +857,7 @@ fn x_height_scaling(
     );
 
     let mut t = String::new();
-    if top.is_some() {
+    if let Some(entry) = top {
         let _ = writeln!(t, "; x-height scaling\nPUSH {S_X_SCALED} {entry}\nRCVT[ ]\nWS[ ]");
         let _ = writeln!(t, "PUSH {S_X_FITTED} {S_X_SCALED}\nRS[ ]\nPUSH {X_HEIGHT_ROUND_UP}\nADD[ ]");
     } else {
@@ -699,25 +879,8 @@ fn x_height_scaling(
     }
     let _ = writeln!(t, "WS[ ]\nPUSH {S_X_SCALED}\nRS[ ]\nPUSH 0\nGT[ ]\nPUSH {S_X_FITTED}\nRS[ ]\nPUSH 0\nGT[ ]\nAND[ ]\nIF[ ]");
 
-    // Alignment depth of each zone: 0 for a zone rounded on its own, `None` in or below a cycle.
-    let target = |k: usize| -> Option<usize> {
-        let name = zones.get(k)?.align.as_deref()?;
-        zones.iter().position(|z| z.name == name).filter(|&j| j != k)
-    };
-    let depth: Vec<Option<usize>> = (0..zones.len())
-        .map(|start| {
-            let mut k = start;
-            for d in 0..=zones.len() {
-                match target(k) {
-                    Some(j) => k = j,
-                    None => return Some(d),
-                }
-            }
-            None
-        })
-        .collect();
     let mut aligned: Vec<(usize, usize, usize)> =
-        (0..zones.len()).filter_map(|k| Some((depth.get(k).copied().flatten().filter(|d| *d > 0)?, k, target(k)?))).collect();
+        at.group.zones.iter().copied().filter_map(|k| Some((align.depth(k).filter(|d| *d > 0)?, k, align.target(k)?))).collect();
     aligned.sort();
     // FN_ZONE_ALIGN's placement of zone `k` on zone `j`: the target's row plus the rounded distance.
     let placement = |k: usize, j: usize| -> Option<String> {
@@ -735,8 +898,9 @@ fn x_height_scaling(
     } else {
         0.0
     };
-    for (k, z) in zones.iter().enumerate() {
-        if depth.get(k).copied().flatten() != Some(0) {
+    for &k in &at.group.zones {
+        let Some(z) = zones.get(k) else { continue };
+        if align.depth(k) != Some(0) {
             continue;
         }
         let (Some((_, fit)), Some(src)) = (layout.zones.get(k).copied(), source(k)) else { continue };
@@ -754,7 +918,7 @@ fn x_height_scaling(
         let _ = writeln!(t, "PUSH {fit} {fit}\nRCVT[ ]\n{p}\nADD[ ]\nWCVTP[ ]");
     }
     for (k, (s, &(width, fit))) in settings.tt_stems.iter().zip(&layout.stems).enumerate() {
-        if s.horizontal {
+        if s.horizontal && at.number == 0 {
             let _ = writeln!(
                 t,
                 "; stem {k}\nPUSH {fit} {fit}\nRCVT[ ]\nPUSH {width}\nRCVT[ ]\n{scaled}\nPUSH {width}\nRCVT[ ]\nPUSH 32\nADD[ ]\nFLOOR[ ]\nSUB[ ]\nADD[ ]\nWCVTP[ ]"
@@ -762,7 +926,7 @@ fn x_height_scaling(
         }
     }
     t.push_str("EIF[ ]\n");
-    (top, t)
+    t
 }
 
 /// The letters the ttfautohint manual lists for its Latin x-height zone and cap-height zone.
@@ -777,6 +941,23 @@ pub struct MeasuredZones {
     /// The font draws a letter of the x-height zone, so its zones scale with the x-height
     /// ([`autohint_prep`]).
     pub x_height: bool,
+    /// The zones of each script ([`prepare_settings`]).
+    pub styles: Styles,
+    /// The master's own zones at the start of the settings' list; [`prepare_settings`] appends the
+    /// scripts' after them.
+    pub own_zones: usize,
+}
+
+impl MeasuredZones {
+    /// The family zones of an autohinted build: `family` with the zones appended to `settings`
+    /// after the master's own, which are their own family zones, when there is one family zone for
+    /// each of the master's. Else `family`, which then does not apply ([`crate::CvtLayout`]).
+    pub fn family_zones(&self, mut family: Vec<TtZone>, settings: &HintSettings) -> Vec<TtZone> {
+        if !family.is_empty() && family.len() == self.own_zones {
+            family.extend(settings.tt_zones.iter().skip(self.own_zones).cloned());
+        }
+        family
+    }
 }
 
 /// Leaves out of `settings` the zones the autohinter has no letters for, as ttfautohint, which
@@ -785,6 +966,13 @@ pub struct MeasuredZones {
 /// C, Q or S has. A zone that holds the top of a letter of the other list stays, since ttfautohint
 /// measures a zone at that height (a font whose capitals are as tall as its x-height).
 pub fn drop_unmeasured_zones(font: &Font, settings: &mut HintSettings) -> MeasuredZones {
+    let fuzz = settings.tt_blue_fuzz;
+    drop_zones(font, settings, [false, false], fuzz)
+}
+
+/// [`drop_unmeasured_zones`], with the `xHeight` and `capHeight` zones that hold a height of
+/// another script's letters (`holds`) kept; `fuzz` widens the zones.
+fn drop_zones(font: &Font, settings: &mut HintSettings, holds: [bool; 2], fuzz: f64) -> MeasuredZones {
     let tops = |letters: &[char]| -> Vec<f64> {
         font.glyphs
             .iter()
@@ -794,24 +982,38 @@ pub fn drop_unmeasured_zones(font: &Font, settings: &mut HintSettings) -> Measur
             .collect()
     };
     let (lower, upper) = (tops(&X_HEIGHT_LETTERS), tops(&CAP_HEIGHT_LETTERS));
-    let fuzz = if settings.tt_blue_fuzz.is_finite() { settings.tt_blue_fuzz.max(0.0) } else { 0.0 };
+    let fuzz = if fuzz.is_finite() { fuzz.max(0.0) } else { 0.0 };
     let mut gone = Vec::new();
-    for (name, own, other) in [("xHeight", &lower, &upper), ("capHeight", &upper, &lower)] {
+    let lists = [("xHeight", &lower, &upper), ("capHeight", &upper, &lower)];
+    for ((name, own, other), held) in lists.into_iter().zip(holds) {
         let Some(z) = settings.tt_zones.iter().find(|z| z.name == name) else { continue };
         let (lo, hi) = (z.position.min(z.position + z.size) - fuzz, z.position.max(z.position + z.size) + fuzz);
-        if own.is_empty() && !other.iter().any(|y| *y >= lo && *y <= hi) {
+        if own.is_empty() && !held && !other.iter().any(|y| *y >= lo && *y <= hi) {
             gone.push(name.to_string());
         }
     }
     settings.tt_zones.retain(|z| !gone.contains(&z.name));
-    MeasuredZones { left_out: gone, x_height: !lower.is_empty() }
+    MeasuredZones { left_out: gone, x_height: !lower.is_empty(), styles: Styles::default(), own_zones: settings.tt_zones.len() }
 }
 
 /// Prepares `settings` for an autohinted build: leaves out the zones without letters
-/// ([`drop_unmeasured_zones`]) and, when the master has no horizontal TT stem, adds one of the
-/// standard width ([`standard_stem`]). Every master of a variable font gets the same entries.
+/// ([`drop_unmeasured_zones`]; a letter of a script that shares the zone counts too), appends the
+/// zones measured on the letters of the other scripts ([`crate::tt_styles`]) and, when the master has
+/// no horizontal TT stem, adds one of the standard width ([`standard_stem`]). Which letters a zone
+/// holds is decided with the main master's TTFBlueFuzz, so every master of a variable font gets the
+/// same entries.
 pub fn prepare_settings(font: &Font, settings: &mut HintSettings, options: &TtAutohintOptions) -> MeasuredZones {
-    let measured = drop_unmeasured_zones(font, settings);
+    let main = match settings.main_master == settings.master {
+        true => None,
+        false => HintSettings::for_master(font, &settings.main_master).ok(),
+    };
+    let (zones, fuzz) = main.as_ref().map_or((&settings.tt_zones, settings.tt_blue_fuzz), |m| (&m.tt_zones, m.tt_blue_fuzz));
+    let scripts = measure_scripts(font, settings, zones, fuzz);
+    let mut measured = drop_zones(font, settings, scripts.holds, fuzz);
+    measured.x_height |= scripts.x_height;
+    measured.styles = scripts.styles;
+    measured.styles.shift(settings.tt_zones.len());
+    settings.tt_zones.extend(scripts.zones);
     if !settings.tt_stems.iter().any(|s| s.horizontal && s.size.is_finite() && s.size > 0.0) {
         let size = standard_stem(font, settings, options);
         settings.tt_stems.push(crate::TtStem { name: "autohint standard".into(), horizontal: true, size, ..Default::default() });
@@ -819,9 +1021,13 @@ pub fn prepare_settings(font: &Font, settings: &mut HintSettings, options: &TtAu
     measured
 }
 
+/// The letters the standard stem width is measured on: the round small letters of Latin, Cyrillic
+/// and Greek.
+const STANDARD_LETTERS: [char; 3] = ['o', '\u{43e}', '\u{3bf}'];
+
 /// The standard horizontal stem width of a master without one, as the ttfautohint manual derives
-/// it: the width of the thinnest horizontal stem of `o`; without a drawn `o`, and for a symbol
-/// font, the fallback stem width (by default 50 units at 2048 units per em).
+/// it: the width of the thinnest horizontal stem of `o`, else of the Cyrillic or Greek letter of
+/// its shape; without one drawn, and for a symbol font, the fallback stem width (by default 50 units at 2048 units per em).
 fn standard_stem(font: &Font, settings: &HintSettings, options: &TtAutohintOptions) -> f64 {
     let fallback = options.fallback_stem_width.map_or((f64::from(font.units_per_em) * 50.0 / 2048.0).round(), f64::from);
     let fallback = if fallback.is_finite() && fallback >= 1.0 { fallback } else { 1.0 };
@@ -829,8 +1035,11 @@ fn standard_stem(font: &Font, settings: &HintSettings, options: &TtAutohintOptio
         return fallback;
     }
     let measured = || -> Option<f64> {
-        let g = font.glyphs.iter().find(|g| g.unicodes.contains(&u32::from('o')))?;
-        let layer = g.layer(&settings.master)?;
+        let drawn = |c: &char| {
+            let g = font.glyphs.iter().find(|g| g.unicodes.contains(&u32::from(*c)))?;
+            g.layer(&settings.master).filter(|l| !l.shapes.is_empty()).map(|l| (g, l))
+        };
+        let (g, layer) = STANDARD_LETTERS.iter().find_map(drawn)?;
         let control = ControlInstructions::default();
         let input = AutoGlyph {
             glyph: &g.name,
@@ -1509,7 +1718,7 @@ mod tests {
         assert!(o.windows_compatibility && o.ttfa_table && o.hint_composites);
         assert!(ignored.is_empty(), "{ignored:?}");
         assert_eq!(o.export_only(), ["stem-width-mode", "composites"]);
-        assert_eq!(TtAutohintOptions::parse("-p -i -l 10 -r 20 -D grek").unwrap().1, ["adjust-subglyphs", "default-script"]);
+        assert_eq!(TtAutohintOptions::parse("-p -i -l 10 -r 20 -D grek").unwrap().1, ["adjust-subglyphs"]);
         assert_eq!(TtAutohintOptions::parse(&o.to_text()).unwrap().0, o, "{}", o.to_text());
         assert_eq!(TtAutohintOptions::default().to_text(), "");
         assert_eq!(snapping_exceptions("-").unwrap(), [(1, MAX_OPTION_PPM)]);
@@ -1637,15 +1846,19 @@ mod tests {
     #[test]
     fn x_height_scaling_needs_an_x_height_zone_and_a_cvt_entry_for_its_top() {
         let (font, settings) = slab_and_wedge();
+        let scaled = |x_height| MeasuredZones { x_height, ..MeasuredZones::default() };
         let layout = crate::CvtLayout::new(&settings, &[]).unwrap();
-        let (cvt, prep) = autohint_prep(&TtAutohintOptions::default(), &settings, &layout, true).unwrap();
-        assert_eq!(cvt, [516], "the new font's x-height 500 with its overshoot of 16");
-        assert!(!prep.is_empty());
+        let (cvt, prep) = autohint_prep(&TtAutohintOptions::default(), &settings, &layout, &scaled(true)).unwrap();
+        assert_eq!(cvt.len(), settings.tt_zones.len());
+        let x = settings.tt_zones.iter().position(|z| z.name == "xHeight").unwrap();
+        assert_eq!(cvt[x], 516, "the new font's x-height 500 with its overshoot of 16");
+        let (_, unscaled) = autohint_prep(&TtAutohintOptions::default(), &settings, &layout, &scaled(false)).unwrap();
+        assert!(unscaled.len() < prep.len());
         let mut flat = settings.clone();
         flat.tt_zones.retain(|z| z.name != "xHeight");
         let layout = crate::CvtLayout::new(&flat, &[]).unwrap();
-        let (cvt, _) = autohint_prep(&TtAutohintOptions::default(), &flat, &layout, true).unwrap();
-        assert!(cvt.is_empty());
+        let [with, without] = [true, false].map(|on| autohint_prep(&TtAutohintOptions::default(), &flat, &layout, &scaled(on)).unwrap().1);
+        assert_eq!(with, without, "no x-height zone, no scaling");
         let _ = font;
     }
 
@@ -1692,6 +1905,41 @@ mod tests {
         }
         assert_eq!(top("C", 520.0, 12), 6.0);
         assert_eq!(top("x", 520.0, 12), 7.0);
+    }
+
+    /// A closed contour of quadratic curves through the four extremes of a box.
+    fn ring(x0: f64, y0: f64, x1: f64, y1: f64) -> fontcraft_model::Path {
+        use fontcraft_model::{Node, NodeKind, Path};
+        let (cx, cy) = ((x0 + x1) / 2.0, (y0 + y1) / 2.0);
+        let corners = [(x1, y0), (x1, y1), (x0, y1), (x0, y0)];
+        let extremes = [(x1, cy), (cx, y1), (x0, cy), (cx, y0)];
+        let nodes =
+            corners.iter().zip(extremes).flat_map(|(&(a, b), (x, y))| [Node::new(a, b, NodeKind::OffCurve), Node::new(x, y, NodeKind::QCurve)]);
+        Path::new(true, nodes.collect())
+    }
+
+    #[test]
+    fn overshoots_show_from_half_a_pixel_on_round_extremes() {
+        // ttfautohint 1.8.4's rows for an x-height of 500 and an o from -16 to 516.
+        let mut font = one_letter("x", 500.0);
+        font.glyph_mut("o").unwrap().layer_mut("m01").unwrap().shapes.push(Shape::Path(ring(50.0, -16.0, 550.0, 516.0)));
+        let options = TtAutohintOptions::default();
+        let (round, flat) = (tt::autohinted(&font, "o", &options), tt::autohinted(&font, "x", &options));
+        let ends = |f: &[u8], ppem| {
+            let y = tt::hinted_y(f, ppem, tt::grayscale());
+            (y.iter().copied().fold(f32::MAX, f32::min), y.iter().copied().fold(f32::MIN, f32::max))
+        };
+        for (ppem, bottom, top, x) in [
+            (12, 0.0, 7.0, 7.0),
+            (28, 0.0, 15.0, 15.0),
+            (32, -0.5, 16.5, 16.0),
+            (40, -0.5, 20.5, 20.0),
+            (60, -1.0, 31.0, 30.0),
+            (100, -2.0, 52.0, 50.0),
+        ] {
+            assert_eq!(ends(&round, ppem), (bottom, top), "o at {ppem} PPM");
+            assert_eq!(ends(&flat, ppem), (0.0, x), "x at {ppem} PPM");
+        }
     }
 
     /// The height in pixels of an E's bar on the baseline, `width` units thick, with a standard

@@ -207,6 +207,24 @@ fn the_glyph_menu_status_items_equal_set_status() {
     assert!(glyph_menu::open(&glyphs_app(), &names, [0.0, 0.0]).statuses.is_empty(), "no definitions, no submenu");
 }
 
+/// The Hinting submenu runs the hint commands on every glyph of the menu, on the main master's layers.
+#[test]
+fn the_glyph_menu_hints_its_glyphs() {
+    let mut app = glyphs_app();
+    let names: Vec<String> = ["A", "B"].iter().map(|s| s.to_string()).collect();
+    let menu = glyph_menu::open(&app, &names, [0.0, 0.0]);
+    let main = fontcraft_engine::hinting::settings::main_master(&font(&app));
+    for id in glyph_menu::HINTING {
+        let steps = glyph_menu::steps(&menu, &GlyphAction::Hinting(id));
+        let [Msg::Run(command)] = steps.as_slice() else { panic!("{steps:?}") };
+        assert_eq!(command.id, id);
+        assert_eq!(command.params["glyphs"], json!(["A", "B"]));
+        let layer = command.params.get("layer").cloned();
+        assert_eq!(layer, (id != "hint.ps.clearGlyphHints").then(|| json!(main)), "{id}");
+        app.run_now(steps[0].clone(), false).unwrap();
+    }
+}
+
 /// A glyph menu opened with Alt held colours the layer each glyph shows in the current master; without Alt the glyph.
 #[test]
 fn the_glyph_menu_opened_with_alt_colours_the_layer() {

@@ -262,11 +262,13 @@ pub fn text_mode(view: &ViewState) -> bool {
     view.tool == TEXT_TOOL
 }
 
-/// The glyphs a filter fired in text mode acts on: those the text selection shows (`filter.target.editViewTextSelection`).
-/// `None` outside text mode, without a selection, for a command that is no filter or one given parameters.
-pub fn filter_glyphs(view: &ViewState, command: &CommandRef) -> Option<Vec<String>> {
+/// The glyphs a filter or a hint command on glyphs fired in text mode acts on: those the text selection shows
+/// (`filter.target.editViewTextSelection`). `None` outside text mode, without a selection, for any other command and
+/// one given parameters.
+pub fn selection_glyphs(view: &ViewState, command: &CommandRef) -> Option<Vec<String>> {
     let empty = command.params.is_null() || command.params.as_object().is_some_and(Map::is_empty);
-    if !text_mode(view) || !empty || !command.id.starts_with("filter.") {
+    let takes = command.id.starts_with("filter.") || crate::canvas::hinting::GLYPH_COMMANDS.contains(&command.id.as_str());
+    if !text_mode(view) || !empty || !takes {
         return None;
     }
     let spec = fontcraft_engine::find_command(&command.id)?;
