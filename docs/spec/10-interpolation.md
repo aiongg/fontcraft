@@ -398,8 +398,12 @@ upper layer (1).
   weighted by the sum of the span's two layer weights; `s` is the upper layer's part of that sum.
   Outside its span a curve adds nothing, and the other axes stay linear (guesses).
 - Static instances, the preview, `interpolation.interpolateGlyph` and re-interpolated layers
-  follow the curves; the interpolated layer keeps none. Variable fonts do not carry them yet
-  (M9.33).
+  follow the curves; the interpolated layer keeps none.
+- A variable font follows them in straight lines between added sources: along each curved span
+  the fewest of 32 equal steps that keep every curved node within 0.5 unit, and beside it, at the
+  glyph's sources on the other axes, where the result would differ from the instance there. The
+  added sources move only the outline; advances keep the glyph's own sources
+  (`hoi.appliesToAllExports`, guess).
 - The timing graph's function is the fraction of the curve's length travelled at `s` (guess).
 
 ### 9.2 Commands

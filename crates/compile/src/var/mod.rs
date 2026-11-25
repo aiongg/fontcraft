@@ -9,6 +9,7 @@
 //! | Glyph order | the static order plus the alternate-layer glyphs ([`featvar::with_bracket_glyphs`]) | M9.5, M9.8 |
 //! | Decomposition | [`decompose`]: inconsistent component transforms, the decomposition parameters | M9.5 |
 //! | Outlines | [`glyf`]: cubic to quadratic across sources, `glyf` from the origin; [`gvar`] with phantom points, IUP and shared tuples | M9.5 |
+//! | Interpolation curves | [`hoi`]: sources along the spans of glyphs whose nodes keep curves | M9.33 |
 //! | Axes and names | [`fvar`], [`avar`], [`names`] | M9.6 |
 //! | Metrics variations | [`hvar`] (`HVAR`, `VVAR`), [`mvar`] | M9.6, M9.38 |
 //! | Style attributes | [`stat`] | M9.7 |
@@ -33,6 +34,7 @@ pub mod featvar;
 pub mod fvar;
 pub mod glyf;
 pub mod gvar;
+pub mod hoi;
 pub mod hvar;
 pub mod mvar;
 pub mod names;
@@ -308,9 +310,7 @@ fn font_at(font: &Font, designspace: &fontcraft_interp::Designspace, location: &
         ..Default::default()
     });
     let index = probe.instances.len() - 1;
-    // Variable fonts do not carry higher-order interpolation curves yet, so the probes stay
-    // linear like the rest of the variable font.
-    let options = fontcraft_interp::InterpOptions { hoi: false, ..fontcraft_interp::instance::options_for(&probe, index)? };
+    let options = fontcraft_interp::instance::options_for(&probe, index)?;
     Ok(fontcraft_interp::instance::instance_font(&probe, index, &options)?)
 }
 
@@ -437,6 +437,7 @@ pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, 
     for m in designspace.masters().iter().filter(|m| m.id != origin.id) {
         add(Some(m.id.clone()), m.location.clone(), source_glyphs(font, prepared, &Target::Master(m.id.clone()), flavour, &options)?)?;
     }
+    let samples = hoi::Samples::plan(prepared, &designspace, &glyph_sources, &mut notes)?;
     let mut intermediate: Vec<fontcraft_interp::Location> = Vec::new();
     for s in glyph_sources.values().flat_map(|g| g.main.iter()).filter(|s| !s.is_master) {
         if !intermediate.contains(&s.location) {
@@ -449,6 +450,7 @@ pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, 
         }
     }
     intermediate.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+    let mut drawn: Vec<fontcraft_interp::Location> = Vec::with_capacity(intermediate.len());
     for location in intermediate {
         // An intermediate layer beyond the axes of this font (a setting that disables masters
         // can narrow them) is no source of it.
@@ -456,9 +458,22 @@ pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, 
             notes.push(format!("intermediate layers at {:?} lie outside the axes of this variable font and were left out", location.0));
             continue;
         }
-        let at = font_at(prepared, &designspace, &location)?;
+        let mut at = font_at(prepared, &designspace, &location)?;
+        samples.place(&mut at, &location);
         let target = at.default_target()?;
+        drawn.push(location.clone());
         add(None, location, source_glyphs(&at, &at, &target, flavour, &options)?)?;
+    }
+    // Where only curves need a source, only the glyphs they reach are drawn.
+    let curved: Vec<fontcraft_interp::Location> = samples.locations.iter().filter(|l| !drawn.contains(*l)).cloned().collect();
+    if !curved.is_empty() {
+        let reduced = samples.reduced(prepared);
+        for location in curved {
+            let mut at = font_at(&reduced, &designspace, &location)?;
+            samples.place(&mut at, &location);
+            let target = at.default_target()?;
+            add(None, location, source_glyphs(&at, &at, &target, flavour, &options)?)?;
+        }
     }
 
     // The masters the generated kerning and mark positions vary with: the origin, then each
@@ -494,7 +509,15 @@ pub fn compile_variable(font: &Font, setting: Option<usize>, options: &Options, 
     };
     // The masters `cvar` varies with: each master source and its normalized location.
     let cvar_masters: Vec<(String, Vec<f64>)> = sources.iter().filter_map(|s| Some((s.master.clone()?, s.normalized.clone()))).collect();
-    let ctx = Outlines { designspace: &designspace, prepared, origin: &origin.id, sources: &sources, glyph_sources: &glyph_sources, flavour };
+    let ctx = Outlines {
+        designspace: &designspace,
+        prepared,
+        origin: &origin.id,
+        sources: &sources,
+        glyph_sources: &glyph_sources,
+        samples: &samples,
+        flavour,
+    };
     let mut stage = |origin_resolved: &fontcraft_model::Resolved,
                      glyphs: &[ResolvedGlyph],
                      settings: &crate::outline::Settings,
@@ -585,6 +608,7 @@ struct Outlines<'a> {
     origin: &'a str,
     sources: &'a [Source],
     glyph_sources: &'a HashMap<String, fontcraft_interp::GlyphSources>,
+    samples: &'a hoi::Samples,
     /// `Cff` for a CFF2 font: every composite decomposed, cubic outlines kept.
     flavour: Flavour,
 }
@@ -704,6 +728,38 @@ impl Outlines<'_> {
         out
     }
 
+    /// The sources (indices into `sources`) that sample the interpolation curves `g` is drawn
+    /// with: its own, and those of the glyphs its outline holds as contours. `decomposed`: its
+    /// components are written as contours; a component that is not has its own sources.
+    fn sample_sources(&self, g: &ResolvedGlyph, decomposed: bool) -> Vec<usize> {
+        let mut out: Vec<usize> = Vec::new();
+        if self.samples.is_empty() {
+            return out;
+        }
+        let referenced = |name: &str| !decomposed && g.components.iter().any(|c| c.base == name);
+        // Each name enters `todo` once, so the walk is linear in the components it reads.
+        let mut seen: HashSet<&str> = HashSet::from([g.name.as_str()]);
+        let mut todo: Vec<&str> = vec![g.name.as_str()];
+        while let Some(name) = todo.pop() {
+            for location in self.samples.of(name) {
+                if let Some(k) = self.sources.iter().position(|o| o.master.is_none() && o.location == *location)
+                    && !out.contains(&k)
+                {
+                    out.push(k);
+                }
+            }
+            let Some(layer) = self.prepared.glyph(name).and_then(|p| p.layer(self.origin)) else { continue };
+            for shape in &layer.shapes {
+                let fontcraft_model::Shape::Component(c) = shape else { continue };
+                if !referenced(&c.glyph) && seen.len() < MAX_COMPONENT_CLOSURE && seen.insert(c.glyph.as_str()) {
+                    todo.push(c.glyph.as_str());
+                }
+            }
+        }
+        out.sort_unstable();
+        out
+    }
+
     /// The outline of each glyph of `glyphs` (the origin's final order) and its points at each of
     /// its sources; for CFF2 the points are the advances' phantoms only and the cubic outlines of
     /// each source come third. `programs`: glyph programs are compiled for the font. `vertical`:
@@ -774,10 +830,21 @@ impl Outlines<'_> {
         let mut per_glyph = Vec::with_capacity(glyphs.len());
         let mut cubic = Vec::new();
         for (i, g) in glyphs.iter().enumerate() {
-            let ks: &[usize] = own.get(i).map_or(&[], Vec::as_slice);
+            let decomposed = decompose.get(i).copied().unwrap_or(false);
+            let mut ks: Vec<usize> = own.get(i).cloned().unwrap_or_default();
+            ks.retain(|&k| self.sources.get(k).is_some_and(|s| s.index.contains_key(&g.name)));
+            let own_count = ks.len();
+            if own_count > 0 {
+                for k in self.sample_sources(g, decomposed) {
+                    if !ks.contains(&k) && self.sources.get(k).is_some_and(|s| s.index.contains_key(&g.name)) {
+                        ks.push(k);
+                    }
+                }
+            }
+            let samples = ks.len().saturating_sub(own_count);
             let mut locations = vec![origin_location.clone()];
             let mut drawn: Vec<(usize, &ResolvedGlyph)> = vec![(i, g)];
-            for &k in ks {
+            for &k in &ks {
                 let Some(s) = self.sources.get(k) else { continue };
                 if let Some(found) = s.glyph(&g.name) {
                     locations.push(s.normalized.clone());
@@ -785,12 +852,9 @@ impl Outlines<'_> {
                 }
             }
             // Per entry of `drawn`, which source it is: 0 the origin, k + 1 source k.
-            let slots: Vec<usize> = std::iter::once(0)
-                .chain(ks.iter().filter(|&&k| self.sources.get(k).is_some_and(|s| s.index.contains_key(&g.name))).map(|k| k + 1))
-                .collect();
+            let slots: Vec<usize> = std::iter::once(0).chain(ks.iter().map(|k| k + 1)).collect();
             let ends: Vec<[(f64, f64); gvar::PHANTOM_POINTS]> =
                 slots.iter().zip(&drawn).map(|(&slot, (_, r))| phantoms(r.width, self.vertical(r, slot, vertical))).collect();
-            let decomposed = decompose.get(i).copied().unwrap_or(false);
             if !decomposed && !g.components.is_empty() {
                 outlines.push(crate::outline::composite(g)?);
                 let points = drawn
@@ -809,7 +873,7 @@ impl Outlines<'_> {
                         ps
                     })
                     .collect();
-                per_glyph.push(gvar::SourceOutlines { glyph: g.name.clone(), locations, points, contour_ends: Vec::new() });
+                per_glyph.push(gvar::SourceOutlines { glyph: g.name.clone(), locations, points, contour_ends: Vec::new(), samples });
                 continue;
             }
             let mut contours: Vec<Vec<BezPath>> = Vec::with_capacity(drawn.len());
@@ -844,15 +908,21 @@ impl Outlines<'_> {
                     Some(p) if !p.elements().is_empty() => Prepared::Simple(p),
                     _ => Prepared::Empty,
                 });
-                per_glyph.push(gvar::SourceOutlines { glyph: g.name.clone(), locations: locations.clone(), points, contour_ends: Vec::new() });
+                per_glyph.push(gvar::SourceOutlines {
+                    glyph: g.name.clone(),
+                    locations: locations.clone(),
+                    points,
+                    contour_ends: Vec::new(),
+                    samples,
+                });
                 let layers = slots.iter().map(|&slot| self.source_layer(&g.name, slot)).collect();
-                cubic.push(cff2::CubicSources { glyph: g.name.clone(), locations, paths: contours, layers });
+                cubic.push(cff2::CubicSources { glyph: g.name.clone(), locations, paths: contours, layers, samples });
                 continue;
             }
             if contours.iter().all(|c| c.iter().all(|p| p.elements().is_empty())) {
                 outlines.push(Prepared::Empty);
                 let points = ends.iter().map(|end| end.to_vec()).collect();
-                per_glyph.push(gvar::SourceOutlines { glyph: g.name.clone(), locations, points, contour_ends: Vec::new() });
+                per_glyph.push(gvar::SourceOutlines { glyph: g.name.clone(), locations, points, contour_ends: Vec::new(), samples });
                 continue;
             }
             let far = |p: &fontcraft_geom::Point| !(p.x.abs() <= crate::MAX_TT_COORDINATE && p.y.abs() <= crate::MAX_TT_COORDINATE);
@@ -915,26 +985,29 @@ impl Outlines<'_> {
             origin.overlaps = true;
             origin.recompute_bounding_box();
             outlines.push(Prepared::Points(origin));
-            per_glyph.push(gvar::SourceOutlines { glyph: g.name.clone(), locations, points, contour_ends });
+            per_glyph.push(gvar::SourceOutlines { glyph: g.name.clone(), locations, points, contour_ends, samples });
         }
         Ok((outlines, per_glyph, cubic))
     }
 }
 
-/// Each glyph's value `get` reads from the phantom points of its sources, with its deltas.
+/// Each glyph's value `get` reads from the phantom points of its sources, with its deltas. The
+/// sources that only sample the outline take no part.
 fn metric_values(glyphs: &[gvar::SourceOutlines], table: &'static str, get: fn(&[(f64, f64)]) -> f64) -> Result<Vec<VarValue>, CompileError> {
     let mut models = gvar::Models::default();
     glyphs
         .iter()
         .map(|g| {
-            let values: Vec<Vec<f64>> = g.points.iter().map(|ps| vec![get(ps)]).collect();
+            let own = g.locations.len().saturating_sub(g.samples);
+            let locations = g.locations.get(..own).unwrap_or(&g.locations);
+            let values: Vec<Vec<f64>> = g.points.iter().take(own).map(|ps| vec![get(ps)]).collect();
             let default = values.first().and_then(|v| v.first()).copied().unwrap_or(0.0);
             let default = i32::try_from(default as i64).unwrap_or(0);
-            if g.locations.len() < 2 {
+            if locations.len() < 2 {
                 return Ok(VarValue { default, deltas: Vec::new() });
             }
             let bad = |e: String| CompileError::Table { table, message: format!("glyph `{}`: {e}", g.glyph) };
-            let model = models.get(&g.locations).map_err(bad)?;
+            let model = models.get(locations).map_err(bad)?;
             let mut deltas = Vec::new();
             for (region, d) in gvar::region_deltas(model, &values).map_err(bad)? {
                 let d = d.first().copied().unwrap_or(0.0);

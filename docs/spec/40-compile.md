@@ -230,6 +230,9 @@ Only when at least one axis has a range (`compile.variableOnlyTables`).
   origin takes its master's typographic ascender and descender, an intermediate layer those of
   the master it belongs to. CFF2 has VORG at the origin and the origin map in VVAR, always with
   index maps.
+- Higher-order interpolation curves: added sources for the glyphs whose nodes keep them
+  (`hoi.appliesToAllExports`, § 9.1 of 10-interpolation.md). Their IUP tolerance is 0, as the
+  regions lie close together and errors add up.
 - MVAR for tagged global metrics.
 - Variable kerning and mark positions in GPOS, their deltas in the GDEF variation store
   (`compile.instanceLayoutInterpolation`). Kerning: the rules of every master; a master's value

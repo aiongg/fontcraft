@@ -5,7 +5,7 @@
 //! axis tag, in the node of the lower layer of the span along that axis. Versions 2 and 3 have no
 //! equivalent. A UFO keeps it in the node's glyphsLib lib key with the node's other attribute
 //! keys. The model reads, keeps and writes it; `fontcraft_interp::hoi` evaluates it for static
-//! instances (`hoi.defaultLinear`, `hoi.curveTypes`). Variable fonts do not carry it yet.
+//! instances (`hoi.defaultLinear`, `hoi.curveTypes`). Variable fonts sample it into sources.
 //!
 //! | Curve | `.glyphs` version 4 |
 //! |---|---|

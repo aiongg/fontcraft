@@ -3,7 +3,10 @@
 
 use std::sync::Arc;
 
-use fontcraft_model::{Axis, Component, Font, Glyph, GlyphTable, Instance, Layer, Master, Node, NodeKind, Param, Path, Shape, Transform};
+use fontcraft_model::{
+    Axis, Component, Font, Glyph, GlyphTable, Hoi, HoiAxis, HoiCenter, HoiCurve, HoiDirection, HoiTiming, Instance, Layer, Master, Node, NodeKind,
+    Param, Path, Rare, Shape, Transform,
+};
 use skrifa::instance::Size;
 use skrifa::outline::{DrawSettings, OutlinePen};
 use skrifa::raw::TableProvider;
@@ -617,6 +620,7 @@ fn cff2_sources_without_an_outline_each_are_refused() {
         locations: vec![vec![0.0], vec![1.0]],
         paths: vec![vec![fontcraft_geom::BezPath::new()]],
         layers: Vec::new(),
+        samples: 0,
     };
     let err = cff2::cff2_font(1, &[glyph], &[master(0.0), master(1.0)], 1000, None, &mut Vec::new()).unwrap_err();
     assert!(matches!(&err, CompileError::Glyph { glyph, .. } if glyph == "a"), "{err}");
@@ -967,4 +971,119 @@ fn vertical_metrics_vary_through_vvar_and_the_phantom_points() {
     let (glyf, loca) = (font.glyf().unwrap(), font.loca(None).unwrap());
     let phantoms = font.gvar().unwrap().phantom_point_deltas(&glyf, &loca, &coords[1], gid(&plain, "a")).unwrap();
     assert_eq!((phantoms[2].y.to_f64(), phantoms[3].y.to_f64()), (0.0, 0.0));
+}
+
+/// A 700-high rectangle `right` wide whose bottom right node keeps `curve` on the weight axis.
+fn curved(right: f64, curve: Option<HoiCurve>) -> Shape {
+    let mut nodes: Vec<Node> =
+        [(0.0, 0.0), (right, 0.0), (right, 700.0), (0.0, 700.0)].into_iter().map(|(x, y)| Node::new(x, y, NodeKind::Line)).collect();
+    if let Some(curve) = curve {
+        let mut info = (*nodes[1].info).clone();
+        info.hoi = Hoi(vec![HoiAxis { axis: "wght".into(), curve }]);
+        nodes[1].info = Rare::new(info);
+    }
+    Shape::Path(Path::new(true, nodes))
+}
+
+/// [`two_masters`] with `a` bent by `curve` (so its composites `c`, decomposed, and `d` are too).
+fn with_curve(curve: Option<HoiCurve>) -> Font {
+    let mut f = two_masters();
+    f.glyph_mut("a").unwrap().layers[0].shapes = vec![curved(100.0, curve)];
+    f.glyph_mut("a").unwrap().layers[1].shapes = vec![curved(300.0, None)];
+    f
+}
+
+type Box4 = (f64, f64, f64, f64);
+
+/// The bounds of the nodes of `a` in a static instance at `wght`.
+fn instance_bounds(f: &Font, wght: f64) -> Box4 {
+    let designspace = fontcraft_interp::Designspace::new(f).unwrap();
+    let sources = fontcraft_interp::GlyphSources::of(f, &designspace, "a").unwrap();
+    let options = fontcraft_interp::InterpOptions::default();
+    let layer = fontcraft_interp::instance::interpolate_layer(f, &sources, &fontcraft_interp::Location(vec![wght]), &options).unwrap();
+    let Some(Shape::Path(p)) = layer.shapes.first() else { panic!("no path") };
+    p.nodes.iter().fold((f64::MAX, f64::MAX, f64::MIN, f64::MIN), |b, n| (b.0.min(n.x), b.1.min(n.y), b.2.max(n.x), b.3.max(n.y)))
+}
+
+/// The widest difference between drawn bounds and expected ones.
+fn off(drawn: (f32, f32, f32, f32), expected: Box4) -> f64 {
+    let pairs = [(drawn.0, expected.0), (drawn.1, expected.1), (drawn.2, expected.2), (drawn.3, expected.3)];
+    pairs.into_iter().map(|(a, b)| (f64::from(a) - b).abs()).fold(0.0, f64::max)
+}
+
+#[test]
+fn interpolation_curves_are_followed_along_their_span() {
+    let amplitudes = HoiTiming { lower_time: Some(0.6), upper_time: Some(0.2), lower_amplitude: Some(-40.0), upper_amplitude: Some(-70.0) };
+    let curves = [
+        HoiCurve::Point { x: 450.0, y: -120.0 },
+        HoiCurve::Timing(amplitudes),
+        HoiCurve::Rotation { center: Some(HoiCenter::At { x: 200.0, y: 0.0 }), direction: Some(HoiDirection::CounterClockwise) },
+    ];
+    for curve in curves {
+        let f = with_curve(Some(curve.clone()));
+        let (tt, cff2) = (build(&f, None), build_cff2(&f, None));
+        assert!(instance_bounds(&f, 500.0).1 < -40.0, "{curve:?} bends the outline");
+        for k in 0..=32u8 {
+            let wght = 100.0 + 25.0 * f32::from(k);
+            let expected = instance_bounds(&f, f64::from(wght));
+            for (what, v) in [("TrueType", &tt), ("CFF2", &cff2)] {
+                let drawn = drawn_at(v, "a", wght).0;
+                assert!(off(drawn, expected) <= 1.05, "{what} {curve:?} at {wght}: {drawn:?} against {expected:?}");
+                // `d` moves `a` by up to 50; `c` scales it by up to a half.
+                let s = f64::from(k) / 32.0;
+                let moved = (expected.0 + 50.0 * s, expected.1, expected.2 + 50.0 * s, expected.3);
+                assert!(off(drawn_at(v, "d", wght).0, moved) <= 1.55, "{what} {curve:?}: the composite at {wght}");
+                let m = 1.0 + 0.5 * s;
+                let scaled = (expected.0 * m, expected.1 * m, expected.2 * m, expected.3 * m);
+                assert!(off(drawn_at(v, "c", wght).0, scaled) <= 2.5, "{what} {curve:?}: the decomposed composite at {wght}");
+            }
+        }
+    }
+}
+
+#[test]
+fn curves_that_bend_nothing_add_nothing_and_advances_keep_their_own_regions() {
+    let table = |v: &VariableFont, tag: &[u8; 4]| {
+        let font = FontRef::new(&v.compiled.bytes).unwrap();
+        font.table_data(skrifa::raw::types::Tag::new(tag)).unwrap().as_bytes().to_vec()
+    };
+    let plain = build(&with_curve(None), None);
+    let straight = build(&with_curve(Some(HoiCurve::Timing(HoiTiming::default()))), None);
+    let bent = build(&with_curve(Some(HoiCurve::Point { x: 200.0, y: -120.0 })), None);
+    for tag in [b"gvar", b"HVAR", b"glyf"] {
+        assert_eq!(table(&plain, tag), table(&straight, tag), "{}", String::from_utf8_lossy(tag));
+    }
+    assert_ne!(table(&plain, b"gvar"), table(&bent, b"gvar"));
+    assert_eq!(table(&plain, b"HVAR"), table(&bent, b"HVAR"), "advances vary with the glyph's own layers");
+}
+
+#[test]
+fn a_curve_fades_along_the_other_axes_as_in_instances() {
+    let mut f = two_masters();
+    let axis = |name: &str, tag: &str| Axis { name: name.into(), tag: tag.into(), ..Axis::default() };
+    f.axes = Arc::new(vec![axis("Weight", "wght"), axis("Width", "wdth")]);
+    let master = |id: &str, location: [f64; 2]| Master { id: id.into(), name: id.into(), location: location.to_vec(), ..Master::default() };
+    f.masters = Arc::new(vec![
+        master("thin", [100.0, 0.0]),
+        master("black", [900.0, 0.0]),
+        master("wide", [100.0, 100.0]),
+        master("wideblack", [900.0, 100.0]),
+    ]);
+    let curve = HoiCurve::Point { x: 200.0, y: -120.0 };
+    let a = glyph(
+        "a",
+        0x61,
+        vec![
+            layer("thin", 300.0, vec![curved(100.0, Some(curve))]),
+            layer("black", 500.0, vec![curved(300.0, None)]),
+            layer("wide", 400.0, vec![curved(200.0, None)]),
+            layer("wideblack", 700.0, vec![curved(500.0, None)]),
+        ],
+    );
+    f.glyphs = GlyphTable::from_glyphs(vec![Arc::new(a)]);
+    let v = build(&f, None);
+    for (wdth, bottom) in [(0.0, -120.0), (25.0, -90.0), (50.0, -60.0), (100.0, 0.0)] {
+        let (drawn, _) = at(&v, "a", &[("wght", 500.0), ("wdth", wdth)]);
+        assert!((drawn.1 - bottom).abs() <= 1.05, "at width {wdth}: {drawn:?}");
+    }
 }

@@ -52,6 +52,9 @@ pub struct SourceOutlines {
     pub points: Vec<Vec<(f64, f64)>>,
     /// Index of the last point of each contour (for IUP); empty for composites and empty glyphs.
     pub contour_ends: Vec<usize>,
+    /// How many of the sources, the last ones, only sample the outline between the others
+    /// ([`super::hoi`]): metrics do not vary with them.
+    pub samples: usize,
 }
 
 /// How `gvar` is written.
@@ -249,6 +252,8 @@ fn glyph_variations(glyph: &SourceOutlines, axis_count: u16, options: &GvarOptio
     }
     let origin: Vec<Point> = glyph.points.first().map(|ps| ps.iter().map(|&(x, y)| Point::new(x, y)).collect()).unwrap_or_default();
     let simple = !glyph.contour_ends.is_empty();
+    // The sources that follow a curve lie close together, and the errors of their regions add up.
+    let tolerance = if glyph.samples > 0 { 0.0 } else { IUP_TOLERANCE };
     let mut out = Vec::new();
     for (region, flat) in regions {
         if flat.iter().all(|d| *d == 0.0) {
@@ -262,7 +267,7 @@ fn glyph_variations(glyph: &SourceOutlines, axis_count: u16, options: &GvarOptio
         let pairs: Vec<(f64, f64)> = flat.as_chunks::<2>().0.iter().map(|&[x, y]| (x, y)).collect();
         let deltas: Vec<GlyphDelta> = if simple && options.optimize {
             let vecs: Vec<Vec2> = pairs.iter().map(|&(x, y)| Vec2::new(x, y)).collect();
-            iup_delta_optimize(vecs, origin.clone(), IUP_TOLERANCE, &glyph.contour_ends).map_err(|e| gvar_error(name, format!("{e:?}")))?
+            iup_delta_optimize(vecs, origin.clone(), tolerance, &glyph.contour_ends).map_err(|e| gvar_error(name, format!("{e:?}")))?
         } else {
             pairs.iter().map(|&(x, y)| Ok(GlyphDelta::required(delta_i16(name, x)?, delta_i16(name, y)?))).collect::<Result<_, CompileError>>()?
         };
@@ -308,8 +313,10 @@ mod tests {
             locations: vec![vec![0.0], vec![1.0]],
             points: vec![square(0.0, 200.0), square(50.0, 260.0)],
             contour_ends: vec![3],
+            samples: 0,
         };
-        let still = SourceOutlines { glyph: "b".into(), locations: vec![vec![0.0]], points: vec![square(0.0, 200.0)], contour_ends: vec![3] };
+        let still =
+            SourceOutlines { glyph: "b".into(), locations: vec![vec![0.0]], points: vec![square(0.0, 200.0)], contour_ends: vec![3], samples: 0 };
         let gvar = build_gvar(1, &[still, moving], &GvarOptions::default()).unwrap();
         let bytes = write_fonts::dump_table(&gvar).unwrap();
         let read = skrifa::raw::tables::gvar::Gvar::read(FontData::new(&bytes)).unwrap();
@@ -328,7 +335,13 @@ mod tests {
     fn many_points(count: usize, delta: impl Fn(usize) -> f64) -> SourceOutlines {
         let origin: Vec<(f64, f64)> = (0..count).map(|i| ((i % 1000) as f64, (i / 1000) as f64)).collect();
         let moved = origin.iter().enumerate().map(|(i, &(x, y))| (x + delta(i), y + delta(i))).collect();
-        SourceOutlines { glyph: "big".into(), locations: vec![vec![0.0], vec![1.0]], points: vec![origin, moved], contour_ends: vec![count - 5] }
+        SourceOutlines {
+            glyph: "big".into(),
+            locations: vec![vec![0.0], vec![1.0]],
+            points: vec![origin, moved],
+            contour_ends: vec![count - 5],
+            samples: 0,
+        }
     }
 
     #[test]
@@ -353,6 +366,7 @@ mod tests {
                 locations: vec![vec![0.0], vec![1.0]],
                 points: vec![square(0.0, 500.0), square(0.0, 50_000.0)],
                 contour_ends: vec![3],
+                samples: 0,
             };
             let err = build_gvar(1, &[wide], &GvarOptions { optimize }).unwrap_err().to_string();
             assert!(err.contains("`wide`") && err.contains("49500"), "{err}");
@@ -366,6 +380,7 @@ mod tests {
             locations: vec![vec![0.0], vec![1.0]],
             points: vec![square(0.0, 200.0), square(0.0, 200.0)[..6].to_vec()],
             contour_ends: vec![3],
+            samples: 0,
         };
         assert!(build_gvar(1, &[bad], &GvarOptions::default()).is_err());
     }
