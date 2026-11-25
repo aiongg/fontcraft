@@ -18,6 +18,7 @@
 //! | `tableViewer.openFont`, `tableViewer.compareWithFile` | a compiled font for the Table Viewer ([`COMPILED_EXTENSIONS`]) |
 //! | `plugin.installFromFile` | a `.wasm` module or `.fcmacro` macro, unless `dataBase64` or `name` names the file |
 //! | `view.filterByEncodingFile` | an encoding file, unless `name` names a built-in encoding |
+//! | `kerning.loadPairList` | a list file for the Pairs & Phrases panel, unless `text` or `reset` names the list |
 //! | `macroPanel.open`, `macroPanel.save` | a `.fcmacro` file to read into the Macro Panel's editor, or to write it to |
 //!
 //! Engine and shell commands alike: a shell command of the table asks before it runs, as an engine command does.
@@ -47,6 +48,7 @@ pub const PICKED: &[(&str, &str)] = &[
     ("view.filterByEncodingFile", "path"),
     ("macroPanel.open", "path"),
     ("macroPanel.save", "path"),
+    ("kerning.loadPairList", "path"),
 ];
 
 /// Most files one picker answer opens; the rest are left alone.
@@ -168,6 +170,12 @@ fn request(session: &Session, command: &CommandRef) -> Option<(PickRequest, &'st
                 return None;
             }
             (PickRequest::open("encoding").title("Filter by Encoding File"), Fill::One)
+        }
+        "kerning.loadPairList" => {
+            if ["text", "reset"].iter().any(|k| command.params.get(*k).is_some_and(|v| !v.is_null())) {
+                return None;
+            }
+            (PickRequest::open("pairList").title("Load Pair List"), Fill::One)
         }
         "macroPanel.open" => {
             let filter = [crate::shell::macro_editor::EXTENSION];

@@ -13,6 +13,7 @@
 //! | `dialog.renameKerningGroup {side, from, to?, pair, master?, direction?}` | asks whether a group rename covers the font or the pair |
 //! | `dialog.pasteKerningConflict {text? \| pairs?, master?, direction?}` | pastes (neither: the clipboard's text); when a pasted pair clashes with a stored one, asks what to do |
 //! | `dialog.auditKerningExceptions {threshold?, masters?, direction?, fix?}` | runs `kerning.auditExceptions` and shows what it found |
+//! | `dialog.autoKern`, `dialog.kernToDistance`, `dialog.removeKerningPairs`, `dialog.verticalKerning` | open `dialogs::kerning_batch` |
 //! | `dialog.matchKerning {run?, mainMaster?, masters?}` | asks for the main master, then runs `kerning.matchAcrossMasters` and shows a summary |
 //!
 //! The list itself is the projection's (`app::models::kerning_window`): the stored pairs of the current master,
@@ -130,6 +131,34 @@ const COMMANDS: &[UiCommand] = &[
         menu: &["Font", "Kerning"],
         shortcut: None,
         params: "{run?: bool (default false), mainMaster?: id, masters?: [ids]} without run, ask for the main master; with run, run kerning.matchAcrossMasters and show how many pairs each master had before and after",
+    },
+    UiCommand {
+        id: "dialog.autoKern",
+        label: "Auto Kern…",
+        menu: &["Font", "Kerning"],
+        shortcut: None,
+        params: "{} ask where the pairs come from (the Kerning window's selected rows, the Font View selection with itself or a typed list, the Pairs & Phrases list, every stored pair) and the options of kerning.autoKern; Preview lists what it would store, Apply stores the ticked rows in one undo step",
+    },
+    UiCommand {
+        id: "dialog.kernToDistance",
+        label: "Kern to Distance…",
+        menu: &["Font", "Kerning"],
+        shortcut: None,
+        params: "{} ask for the pairs, as dialog.autoKern does, and the distance; Preview lists what kerning.kernToDistance would store, Apply stores the ticked rows in one undo step",
+    },
+    UiCommand {
+        id: "dialog.removeKerningPairs",
+        label: "Remove Pairs…",
+        menu: &["Font", "Kerning"],
+        shortcut: None,
+        params: "{} ask for the rules of kerning.removePairsByRule; Preview lists and counts the pairs, Apply deletes them",
+    },
+    UiCommand {
+        id: "dialog.verticalKerning",
+        label: "Vertical Kerning from Horizontal…",
+        menu: &["Font", "Kerning"],
+        shortcut: None,
+        params: "{} ask for the masters and say how many vertical pairs kerning.verticalFromHorizontal deletes before it runs",
     },
 ];
 
@@ -318,6 +347,23 @@ pub struct KerningView {
     pub audit: Option<Audit>,
     /// The Match Kerning dialog's state while it is asked for or open.
     pub matching: Option<Matching>,
+    /// The batch dialog asked for and not yet opened.
+    pub batch: Option<Batch>,
+}
+
+/// A kerning dialog over many pairs (`dialogs::kerning_batch`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Batch {
+    AutoKern,
+    Distance,
+    Remove,
+    Vertical,
+}
+
+fn batch(app: &mut FontCraftApp, kind: Batch) -> Result<(), String> {
+    app.session.font().map_err(|e| e.to_string())?;
+    app.view.kerning.batch = Some(kind);
+    Ok(())
 }
 
 /// Whether the Kerning window shows.
@@ -359,6 +405,10 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
         "dialog.pasteKerningConflict" => paste(app, p),
         "dialog.auditKerningExceptions" => audit(app, p),
         "dialog.matchKerning" => matching(app, p),
+        "dialog.autoKern" => batch(app, Batch::AutoKern),
+        "dialog.kernToDistance" => batch(app, Batch::Distance),
+        "dialog.removeKerningPairs" => batch(app, Batch::Remove),
+        "dialog.verticalKerning" => batch(app, Batch::Vertical),
         other => Err(format!("no Kerning window command `{other}`")),
     }
 }

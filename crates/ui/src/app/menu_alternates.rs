@@ -32,6 +32,10 @@ pub const ALTERNATES: &[(&str, &str)] = &[
 pub const DIALOG_ROWS: &[(&str, &str)] = &[
     ("kerning.auditExceptions", "dialog.auditKerningExceptions"),
     ("kerning.matchAcrossMasters", "dialog.matchKerning"),
+    ("kerning.autoKern", "dialog.autoKern"),
+    ("kerning.kernToDistance", "dialog.kernToDistance"),
+    ("kerning.removePairsByRule", "dialog.removeKerningPairs"),
+    ("kerning.verticalFromHorizontal", "dialog.verticalKerning"),
     ("font.overlayFonts", "dialog.overlayFonts"),
 ];
 

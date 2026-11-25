@@ -37,6 +37,7 @@ mod host;
 pub mod import;
 pub mod interp;
 pub mod kerning_audit;
+pub mod kerning_batch;
 pub mod kerning_questions;
 pub mod master_color;
 pub mod os2_bits;
@@ -83,6 +84,7 @@ pub const MODULES: &[Module] = &[
     host::run,
     kerning_questions::run,
     kerning_audit::run,
+    kerning_batch::run,
     overlay_fonts::run,
     start_window::run,
     settings::run,
