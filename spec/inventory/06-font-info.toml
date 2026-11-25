@@ -3319,9 +3319,9 @@ milestone = "M7"
 summary = "The note field highlights Markdown as plain text styling: italic with single asterisks or underscores, bold with double ones, inline links and angle-bracket autolinks, and headings of level one to six marked with number signs. The text is stored unrendered."
 ref = "Font Info › Notes"
 status = "handbook"
-notes = "Documented, not yet observed. The Notes tab is a plain text field; M7.35 builds the highlighting."
+notes = "Documented, not yet observed. Built in M7.35 (`notes_tab::highlight`)."
 guesses = [
-  "Headings of every level take the section heading size and the strong text colour, bold takes the strong text colour, italic slants, links take the accent colour, and the Markdown syntax itself is dimmed; the reference app's Notes tab settles the styles.",
+  "Headings of every level and bold take the accent colour, italic is underlined, links take the accent colour and an underline, and the Markdown syntax itself is dimmed, all in the field's own font and size; the reference app's Notes tab settles the styles.",
   "Underscore emphasis needs a word boundary on both sides and asterisk emphasis does not, emphasis and links stay within one line, and an autolink needs an http, https or mailto address; typing the edge cases in the reference app settles them.",
   "A note longer than 256 KiB is shown without highlighting so typing stays fast; a long note in the reference app settles whether it stops highlighting.",
 ]
@@ -3336,9 +3336,9 @@ milestone = "M7"
 summary = "The Exports tab shows a short preview of the selected instance drawn in its own outlines: the glyphs of Aang126 by default, or the glyphs an Instance Preview parameter lists."
 ref = "Appendix › Custom Parameters (Instance Preview)"
 status = "handbook"
-notes = "Documented in the description of the Instance Preview parameter, which calls the tab Instances; not yet observed. M7 plan § 4: M7.18. The Exports tab draws no preview; M7.35 builds it."
+notes = "Documented in the description of the Instance Preview parameter, which calls the tab Instances; not yet observed. M7 plan § 4: M7.18. Built in M7.35 (`panels/font_info/instance_preview.rs`, `app/models/instance_preview.rs`): the outlines of the engine's kept instance view, side by side without kerning."
 guesses = [
-  "The preview sits above the instance's fields, one line high, and draws the first selected instance; an instance between masters is drawn interpolated, and a variable font setting shows none; the Exports tab of the reference app settles placement.",
+  "The preview sits above the instance's fields, one line high, and draws the first selected instance; an instance between masters is drawn interpolated, without kerning, and a variable font setting shows none; the Exports tab of the reference app settles placement.",
   "The default `Aang126` is read as characters and drawn with the glyphs mapped to them, skipping characters the font lacks; the reference app settles whether it names glyphs instead.",
 ]
 observe = [

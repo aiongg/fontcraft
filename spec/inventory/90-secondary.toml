@@ -3166,7 +3166,7 @@ summary = "Builds a new font between, or beyond, two compatible single-master fo
 ref = "FontForge Element menu › Interpolate Fonts"
 status = "docs"
 origin = "fontforge"
-notes = "Documented in the secondary reference's manual, not yet observed. Built (M13.48): a fontRef is an open document's title or path, anything else is read as a font file. The new font opens as an untitled document: a copy of the first font with each glyph's master layer (width, nodes, component placement, smart values, anchors), the master's metrics, stems and zones, and the kerning interpolated as a·(1 − t) + b·t. Fonts with another number of masters, other units per em, another glyph set, or a glyph whose shapes or anchors do not correspond are refused with the first difference, and nothing opens. The menu item has no dialog yet: from the menu it reports the missing parameters."
+notes = "Documented in the secondary reference's manual, not yet observed. Built (M13.48): a fontRef is an open document's title or path, anything else is read as a font file. The new font opens as an untitled document: a copy of the first font with each glyph's master layer (width, nodes, component placement, smart values, anchors), the master's metrics, stems and zones, and the kerning interpolated as a·(1 − t) + b·t. Fonts with another number of masters, other units per em, another glyph set, or a glyph whose shapes or anchors do not correspond are refused with the first difference, and nothing opens. The menu item opens dialog.interpolateFonts (M7.35)."
 guesses = [
   "Fonts that differ anywhere are refused with the first difference, rather than leaving out the glyphs that do not match; the secondary reference's handling of a partly compatible pair would settle it.",
   "The new font keeps only the master layer of each glyph, and its family name, Font Info, features and other data are the first font's; the secondary reference's result on two fonts with different names and extra layers would settle it.",
@@ -4155,7 +4155,7 @@ summary = "Turns an ordinary font into a CID-keyed one with a single sub-font, a
 ref = "FontForge CID menu › Convert to CID, Convert By CMap"
 status = "docs"
 origin = "fontforge"
-notes = "Documented, not yet observed. The CID-keyed state is kept in the lib keys and FDArraySelect groups AFDKO uses for CID-keyed UFOs (com.adobe.type.ROS, .CIDFontName, .postscriptCIDMap, .postscriptFDArray), read with tx 4.0 from a font built by mergefonts; crates/model/src/cid.rs describes the layout. A CMap file follows the CMap resource format (CIDSystemInfo, CMapName, cidrange and cidchar blocks); usecmap is reported, not followed."
+notes = "Documented, not yet observed. The CID-keyed state is kept in the lib keys and FDArraySelect groups AFDKO uses for CID-keyed UFOs (com.adobe.type.ROS, .CIDFontName, .postscriptCIDMap, .postscriptFDArray), read with tx 4.0 from a font built by mergefonts; crates/model/src/cid.rs describes the layout. A CMap file follows the CMap resource format (CIDSystemInfo, CMapName, cidrange and cidchar blocks); usecmap is reported, not followed. The menu item opens dialog.convertToCid (M7.35)."
 guesses = [
   "Without a CMap file only the Identity ordering is accepted, with .notdef at CID 0 and the other exporting glyphs from 1 in glyph order; bundled data for the public collections (M7's ROS row) would allow the others.",
   "Glyphs the CMap does not reach, and a second glyph on a CID already taken, get CIDs after the highest mapped one in glyph order, as the reference's export appends glyphs its ROS does not cover; converting such a font in the reference would settle the order.",
@@ -4177,7 +4177,7 @@ summary = "Merges all sub-fonts of a CID-keyed font into one ordinary font in CI
 ref = "FontForge CID menu › Flatten, Flatten By CMap"
 status = "docs"
 origin = "fontforge"
-notes = "Documented, not yet observed. Removes the CID keys and the FDArraySelect groups; the sub-fonts' own hinting values are dropped. A glyphOrder parameter, when present, is rewritten to the new order."
+notes = "Documented, not yet observed. Removes the CID keys and the FDArraySelect groups; the sub-fonts' own hinting values are dropped. A glyphOrder parameter, when present, is rewritten to the new order. The menu item opens dialog.flattenCid (M7.35)."
 guesses = [
   "Glyphs without a CID follow the glyphs in CID order, in their old order.",
   "With a CMap, a glyph whose CID it reaches gets exactly the code points the CMap maps to that CID, replacing its own, and other glyphs lose those code points; the documentation does not say whether existing code points stay.",
@@ -4196,7 +4196,7 @@ summary = "Manages the sub-fonts (font dictionaries) of a CID-keyed font: adds a
 ref = "FontForge CID menu › Insert Font, Insert Blank, Remove Font, Change Supplement, sub font list"
 status = "docs"
 origin = "fontforge"
-notes = "Documented, not yet observed. One action per call. show returns the sub-font's glyphs in CID order and changes nothing; narrowing Font View to them is the shell's part and not built yet. private sets a sub-font's hinting values in its PrivateDict under the UFO font-info names tx writes there (postscriptBlueValues, postscriptBlueScale, postscriptBlueShift, postscriptBlueFuzz, ExpansionFactor seen in tx 4.0 output)."
+notes = "Documented, not yet observed. One action per call. show returns the sub-font's glyphs in CID order and changes nothing; narrowing Font View to them is the shell's part and not built yet. private sets a sub-font's hinting values in its PrivateDict under the UFO font-info names tx writes there (postscriptBlueValues, postscriptBlueScale, postscriptBlueShift, postscriptBlueFuzz, ExpansionFactor seen in tx 4.0 output). The menu item opens dialog.editCidSubfonts (M7.35), which adds, removes and sets the supplement; show and private have no field in it."
 guesses = [
   "An inserted font's glyphs whose names the font already has get .001, .002… (references inside the inserted font follow), code points the font already uses are dropped, and exporting glyphs take CIDs after the highest; the documentation does not say how name and code point clashes are resolved.",
   "An inserted font needs as many masters as the font, matched in order.",
@@ -4977,4 +4977,68 @@ guesses = [
 ]
 observe = [
   "In the reference app, open Font › Status definitions, add a status, and note its starting code, name and colour.",
+]
+
+[[panel]]
+id = "dialog.convertToCid"
+label = "Convert to CID-Keyed"
+location = "dialog"
+controls = ["Registry", "Ordering", "Supplement", "CMap File with the file chooser", "Convert, Cancel"]
+area = "font-info"
+milestone = "M13"
+summary = "The dialog of Font › CID › Convert to CID-Keyed…: names the character collection and an optional CMap file, and runs cid.convertToCid once."
+ref = "FontForge CID menu › Convert to CID, Convert By CMap"
+status = "docs"
+origin = "fontforge"
+notes = "Built for M7.35 (crates/ui/src/dialogs/cid.rs). Run on OK; a collection or file the command refuses keeps the dialog open with the message."
+guesses = [
+  "The dialog opens on Adobe-Identity-0 and offers the CMap file beside the collection; the reference asks for the collection and for a CMap in two commands.",
+]
+
+[[panel]]
+id = "dialog.flattenCid"
+label = "Flatten CID Font"
+location = "dialog"
+controls = ["CMap File with the file chooser", "Flatten, Cancel"]
+area = "font-info"
+milestone = "M13"
+summary = "The dialog of Font › CID › Flatten CID Font: an optional CMap file that gives the glyphs their code points, and runs cid.flatten once."
+ref = "FontForge CID menu › Flatten, Flatten By CMap"
+status = "docs"
+origin = "fontforge"
+notes = "Built for M7.35 (crates/ui/src/dialogs/cid.rs)."
+guesses = [
+  "One dialog covers flattening with and without a CMap file; the reference has a command for each.",
+]
+
+[[panel]]
+id = "dialog.editCidSubfonts"
+label = "Edit CID Sub-fonts"
+location = "dialog"
+controls = ["Action pop-up: Add Sub-font, Remove Sub-font, Set Supplement", "Add pop-up: Blank and the other open fonts", "Name", "Remove pop-up", "Supplement", "OK, Cancel"]
+area = "font-info"
+milestone = "M13"
+summary = "The dialog of Font › CID › Edit CID Sub-fonts: one of adding a blank sub-font or an open font, removing a sub-font, and setting the supplement, run once as cid.editSubfonts."
+ref = "FontForge CID menu › Insert Font, Insert Blank, Remove Font, Change Supplement"
+status = "docs"
+origin = "fontforge"
+notes = "Built for M7.35 (crates/ui/src/dialogs/cid.rs). Which sub-font shows and the hinting values of one stay with the command."
+guesses = [
+  "One dialog holds the actions with every field shown; the reference has a command for each.",
+]
+
+[[panel]]
+id = "dialog.interpolateFonts"
+label = "Interpolate Fonts"
+location = "dialog"
+controls = ["From and To pop-ups of the open fonts with one master", "Percentage", "Interpolate, Cancel"]
+area = "interpolation"
+milestone = "M13"
+summary = "The dialog of Font › Interpolate Fonts…: two open fonts with one master and the percentage between them; runs font.interpolateFonts once, which opens the new font."
+ref = "FontForge Element menu › Interpolate Fonts"
+status = "docs"
+origin = "fontforge"
+notes = "Built for M7.35 (crates/ui/src/dialogs/interp/fonts.rs). It draws no preview."
+guesses = [
+  "The dialog opens at 50 percent with the first two open fonts of one master; the reference asks for the second font as a file.",
 ]

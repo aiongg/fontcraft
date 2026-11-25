@@ -1158,3 +1158,39 @@ fn the_exports_tab_shows_the_exported_names_and_marks_the_entries_that_share_one
     let (fixture, _) = panel(shown);
     assert!(fixture.texts().iter().any(|t| t.text.contains("As Exported")), "the section shows");
 }
+
+/// The Exports tab draws the selected instance in its own outlines: those of the engine's instance view, side by side,
+/// with the glyphs of Instance Preview.
+#[test]
+fn the_instance_preview_is_drawn_in_the_instances_own_outlines() {
+    use fontcraft_engine::interp_cache::SessionInterpExt as _;
+    let mut s = Session::with_document();
+    let mut run = |id: &str, p: Value| s.execute(id, &p).unwrap_or_else(|e| panic!("{id}: {e}"));
+    let ids: Vec<String> = {
+        run("font.axes.add", json!({"name": "Weight", "tag": "wght"}));
+        run("font.master.add", json!({}));
+        run("font.master.setAxisLocation", json!({"masters": [0], "location": [100]}));
+        run("font.master.setAxisLocation", json!({"masters": [1], "location": [300]}));
+        run("font.instance.add", json!({"styleName": "Mid", "axes": {"wght": 200}}));
+        s.font().expect("a font").masters.iter().map(|m| m.id.clone()).collect()
+    };
+    for (id, width) in ids.iter().zip([100, 300]) {
+        let p = json!({"glyph": "A", "layer": id, "x": 0, "y": 0, "width": width, "height": 500});
+        s.execute("path.addRectangle", &p).expect("a rectangle");
+    }
+    let mid = s.font().expect("a font").instances.iter().position(|i| i.name == "Mid").expect("the instance");
+    let p = json!({"scope": "instance", "targets": [mid], "name": "Instance Preview", "value": ["A", "nowhere"]});
+    s.execute("font.customParameters.add", &p).expect("the parameter");
+    let view = s.instance_view(mid, &["A".to_string()]).expect("the instance's view");
+    let master = view.masters.first().expect("its master").id.clone();
+    let drawn = view.outline("A", &master).expect("its outline");
+
+    let mut app = FontCraftApp::with_edit_tab(s, Arc::new(Host::builder(APP).build()));
+    app.sent.push(shell("font.info", json!({ "tab": "exports" })));
+    app.sent.push(shell("font.info.exports.select", json!({ "instances": [mid] })));
+    app.drain();
+    let preview = app.models.font_info.exports.preview.clone().expect("the preview");
+    assert_eq!(preview.outline.elements(), drawn.elements());
+    let (fixture, _) = panel((*app.models.font_info).clone());
+    assert!(fixture.by_label("Instance Preview").is_some(), "it draws");
+}

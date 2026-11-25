@@ -184,7 +184,7 @@ milestone = "M9"
 summary = "Interpolates the instances of the current document, turns each into a master and creates new source documents from them, so each instance can be edited as ordinary outlines. The chapter says a file per instance in one sentence and a new file holding those masters in the next; which it is must be observed."
 ref = "Interpolation › Working with Multiple Fonts › Glyphs Files, Masters, & Instances"
 status = "handbook"
-notes = "Documented, not yet observed. Every instance is interpolated before any document opens or any file is written."
+notes = "Documented, not yet observed. Every instance is interpolated before any document opens or any file is written. The menu item opens dialog.generateInstances (M7.35)."
 guesses = [
   "Without a list, every active static instance is generated; settle with an inactive instance in F1 in the reference app.",
   "The new document keeps the instance as its only export, without the parameters only interpolation reads, and saved files are named Family-Style; settle by running the command in the reference app.",
@@ -1972,4 +1972,19 @@ ref = "Interpolation › Variable Font Options › Axis Mappings"
 status = "inferred"
 guesses = [
   "OK keeps all edits made while the dialog was open as one undo step and Cancel restores the font as it was; one undo step is our choice, and undoing after OK in the reference app would settle it.",
+]
+
+[[panel]]
+id = "dialog.generateInstances"
+label = "Generate Instances"
+location = "dialog"
+controls = ["Instances check boxes", "Open the Documents check box", "Save In folder with the folder chooser", "Generate, Cancel"]
+area = "interpolation"
+milestone = "M9"
+summary = "The dialog of File › Generate Instances: which static instances, whether their documents open, and a folder to save them in; runs file.generateInstances once."
+ref = "Interpolation › Working with Multiple Fonts › Glyphs Files, Masters, & Instances"
+status = "inferred"
+notes = "Not documented: built for M7.35 (crates/ui/src/dialogs/interp/fonts.rs) because the command has choices a menu item alone cannot make."
+guesses = [
+  "The menu item opens a dialog with the active static instances ticked and the documents opened; running it in the reference app settles whether it asks anything.",
 ]

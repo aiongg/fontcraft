@@ -7,7 +7,8 @@
 //! | [`param_value`] | the value editor of each row |
 //! | [`font_tab`] | General (Family Name, Units per Em, Version, Creation Date, added fields), Axes, Custom Parameters |
 //! | [`other_tab`] | Other Settings |
-//! | [`notes_tab`] | the font note |
+//! | [`notes_tab`] | the font note, its Markdown coloured |
+//! | [`instance_preview`] | the Exports tab's preview of the selected instance |
 //! | [`exports_tab`] | Exports: the export list and the selected entries' fields and parameters |
 //! | [`exported_names`] | the Exports tab's As Exported section |
 //! | [`features_tab`] | Features: the sidebar of prefixes, classes and features, and the shown entry |
@@ -27,6 +28,7 @@ pub mod exported_names;
 pub mod exports_tab;
 pub mod features_tab;
 pub mod font_tab;
+pub mod instance_preview;
 pub mod masters_tab;
 pub mod notes_tab;
 pub mod other_tab;

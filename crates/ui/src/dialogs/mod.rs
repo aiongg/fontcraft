@@ -14,6 +14,7 @@ pub mod after;
 pub mod audit_profile;
 pub mod axis_mappings;
 pub mod changed_on_disk;
+pub mod cid;
 pub mod color_palettes;
 mod component_name;
 pub mod cross_axis;
@@ -120,6 +121,7 @@ pub const SPECS: &[&[DialogSpec]] = &[
     sidebar_filters::SPECS,
     component_name::SPECS,
     interp::SPECS,
+    cid::SPECS,
     primitive_measurements::SPECS,
     add_pixel_glyph::SPECS,
     rename_by_namelist::SPECS,

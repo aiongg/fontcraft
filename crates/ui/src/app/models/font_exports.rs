@@ -12,6 +12,7 @@ use serde_json::{Value, json};
 use super::ProjectCx;
 use super::exported_names::{self, ExportedModel};
 use super::font_info::{Editor, FieldWarning, MAX_SHOWN, MAX_WARNINGS, RowModel, field_warnings, rows};
+use super::instance_preview::InstancePreview;
 use crate::shell::font_info::Target;
 use crate::shell::font_info_tabs::ParamProblem;
 
@@ -79,6 +80,8 @@ pub struct ExportsModel {
     pub exported: Option<ExportedModel>,
     /// The entries that take a file name, PostScript name or style-linked slot another entry takes.
     pub conflicts: Vec<usize>,
+    /// The first selected static instance in its own outlines.
+    pub preview: Option<InstancePreview>,
 }
 
 /// One entry of the list.
@@ -150,6 +153,8 @@ pub fn project(cx: &mut ProjectCx<'_>) -> ExportsModel {
     };
     let mut model = ExportsModel { entries, selected, plus, fields, rows: rows_, params, ..ExportsModel::default() };
     exported_names::place(&mut model, cx);
+    let shown = model.fields.as_ref().and_then(|f| f.statics.first().copied());
+    model.preview = shown.and_then(|at| super::instance_preview::project(cx, at));
     model
 }
 

@@ -15,6 +15,8 @@
 //! | General plus, Custom Parameters plus | `font.info.openDialog` with the field or parameter picker |
 //! | added fields and parameters | the shared rows ([`super::rows`]) |
 //!
+//! A preview of the first selected static instance ([`super::instance_preview`]) stands above its fields.
+//!
 //! The list takes Copy and Paste for the selected rows ([`rows::list_edits`]).
 //!
 //! The list and the fields scroll apart, so the list stays while the fields move. The reply of a run that adds or moves
@@ -50,6 +52,7 @@ use fontcraft_engine::fontinfo::Scope;
 use serde_json::{Value, json};
 
 use super::exported_names::{self, ExportedWords};
+use super::instance_preview;
 use super::param_value::number_json;
 use super::rows;
 use crate::app::Msg;
@@ -71,6 +74,7 @@ craft::ui::words! {
         not_yet: "fontcraftExports.notYet" = "Not available yet";
         remove: "fontcraftExports.remove" = "Remove the selected exports";
         no_exports: "fontcraftExports.noExports" = "This font has no exports. Add one with the plus button below the list.";
+        preview: "fontcraftExports.preview" = "Instance Preview";
         general: "fontcraftExports.general" = "General";
         add_field: "fontcraftExports.addField" = "Add a field";
         active: "fontcraftExports.active" = "Active";
@@ -167,6 +171,9 @@ pub fn view(ui: &mut Ui, model: &ExportsModel, masters: &[(String, String)], sen
             let target = Target { scope: Scope::Instance, indices: model.selected.clone() };
             let open = |dialog: InfoDialog| Msg::Shell(CommandRef::with_params("font.info.openDialog", open_params(&dialog)));
             let mut posted = Vec::new();
+            if let Some(preview) = &model.preview {
+                instance_preview::view(ui, &words.preview, preview);
+            }
             let plus = rows::section(ui, "exportsGeneral", words.general.clone(), words.add_field.clone(), |ui| {
                 general(ui, fields, &model.selected, &words, &mut posted);
                 rows::rows(ui, &model.rows, &target, masters, &mut posted);

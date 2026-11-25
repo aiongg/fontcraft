@@ -29,6 +29,7 @@ pub mod hinting;
 pub mod hoi;
 pub mod image_box;
 pub mod info_box_kerning;
+pub mod instance_preview;
 pub mod kerning_review;
 pub mod kerning_tools;
 pub mod kerning_window;
