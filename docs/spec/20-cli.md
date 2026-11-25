@@ -2851,6 +2851,13 @@ differences that do not matter. The comparison methods are described after the t
 | `tables show` | none | Tests on fonts built in code: every field of the tables we model appears with its name and value |
 | `sources diff`, `sources merge` | none | Round trip: merging every change of A → B gives a document equal to B; a source compared with itself gives no change |
 
+The measures of `dump --normalize`, `outlines to-quadratic`, `outlines componentize`, `outlines decompose`,
+`metrics --statistics`, `glyphs reorder`, `diff`, `collection` and `dehint` run from
+`crates/tables/crosscheck/python_tools.py` (M12.71); those of `tables extract`, `delete`, `add` and `checksum`, the
+`spot` listings, `diff --detail offset`, `metrics`, `metrics --format afm`, `glyphs rename` and `dehint` against AFDKO's
+C tools from `crates/tables/crosscheck/afdko_c_tools.py` (M12.72). A difference a measure finds is fixed, or listed
+here with its reason and in the script's `EXPECTED`.
+
 ### Method: compiler normalisation (fontc's `ttx_diff`)
 
 `ttx_diff` exists to compare what two compilers make of the same source. Its method, as read from its

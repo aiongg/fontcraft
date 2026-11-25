@@ -32,10 +32,13 @@ scope = "source"
 fixable = true
 area = "qa"
 milestone = "M3"
-summary = "After components are decomposed, the glyph's contours cross each other or themselves, or a contour lies inside another contour that runs the same way. Curves are flattened into 24 line pieces each and only proper crossings count; the contours of one component are not compared with each other. Message codes: `crossing` and `nested-same-direction`. The fix replaces the paths involved with their union (Remove Overlap); open paths and components stay."
+summary = "After components are decomposed, the glyph's contours cross each other or themselves, or a contour lies inside another contour that runs the same way. Curves are flattened into 24 line pieces each and only proper crossings count; the contours of one component are not compared with each other. A decoded variable TrueType font is skipped, since it keeps its overlaps. Message codes: `crossing` and `nested-same-direction`. The fix replaces the paths involved with their union (Remove Overlap); open paths and components stay."
 ref = "checkoutlinesufo overlap removal (do_overlap_removal); fontTools ttLib.removeOverlaps"
 status = "docs"
 notes = "Restoring the earlier contour order and start points after the union (audit.outlineFixKeepsContourOrder) is not built yet."
+guesses = [
+  "A decoded variable TrueType font is not checked for overlaps, whether or not its glyphs carry the overlap flag; a reference checker that reads variable fonts would settle it.",
+]
 
 [[check]]
 id = "check.outlines.coincidentPoints"
@@ -100,9 +103,12 @@ scope = "source"
 fixable = true
 area = "qa"
 milestone = "M3"
-summary = "A contour winds the wrong way for its nesting depth: outer contours run counter-clockwise (the PostScript convention of sources), counters clockwise, and so on alternately. Outlines decoded from a compiled `glyf` table follow the TrueType convention instead, outer contours clockwise; the codes keep their names. A contour encloses another when the inner contour's bounding box lies inside the outer one's (and is not equal to it) and every sampled on-curve point of the inner contour (up to 16) is inside the outer contour. Message codes: `outer-clockwise`, `counter-same-direction`, `nested-clockwise`. The fix runs Correct Path Direction on the layer: directions from nesting, each closed path starting at its lowest, then leftmost, node, and the paths sorted."
+summary = "A contour winds the wrong way for its nesting depth: outer contours run counter-clockwise (the PostScript convention of sources), counters clockwise, and so on alternately. Outlines decoded from a compiled `glyf` table follow the TrueType convention instead, outer contours clockwise; the codes keep their names. A contour encloses another when the inner contour's bounding box lies inside the outer one's (and is not equal to it) and the ends and middles of the inner contour's segments (up to 16 segments, implied on-curve points included) are all inside the outer contour. An enclosed contour that crosses another contour is part of an overlapping shape and is not judged. Message codes: `outer-clockwise`, `counter-same-direction`, `nested-clockwise`. The fix runs Correct Path Direction on the layer: directions from nesting, each closed path starting at its lowest, then leftmost, node, and the paths sorted."
 ref = "fontbakery outline_direction"
 status = "docs"
+guesses = [
+  "A contour inside another one that also crosses a contour is never a counter; a glyph whose real counter crosses another path, checked in the reference app, would show whether it expects a direction there.",
+]
 
 [[check]]
 id = "check.outlines.alignmentMiss"
@@ -145,7 +151,7 @@ scope = "source"
 fixable = false
 area = "qa"
 milestone = "M3"
-summary = "A segment is shorter than 3 units or shorter than 0.6% of its contour's length; a short line that follows another line is not counted. The report is dropped above 100 hits and is not produced for sources with more than one master."
+summary = "A segment is shorter than 3 units or shorter than 0.6% of its contour's length; a short line counts only when it follows another line. The report is dropped above 100 hits and is not produced for sources with more than one master."
 ref = "fontbakery outline_short_segments"
 status = "docs"
 
@@ -411,7 +417,7 @@ scope = "source"
 fixable = true
 area = "qa"
 milestone = "M3"
-summary = "A node flagged as corner has exactly collinear handles; it probably should be smooth. The fix sets the smooth flag."
+summary = "A node flagged as corner has exactly collinear handles; it probably should be smooth. Sources only: a compiled font stores no smooth flags. The fix sets the smooth flag."
 ref = "Editor audit convention (node type clean-up)"
 status = "inferred"
 notes = "audit.fix sets the reported nodes smooth with path.toggleNodeType (to: smooth, keepOutline: true)."
@@ -2474,10 +2480,13 @@ scope = "binary"
 fixable = false
 area = "qa"
 milestone = "M12"
-summary = "The STAT table is missing or cannot describe every named instance: an instance uses an axis value that no STAT axis value covers, or its name record is missing."
+summary = "The STAT table is missing or cannot describe every named instance: an instance uses an axis value that no STAT axis value covers or (warning) that more than one format 1 or 3 value names, or its name record is missing."
 ref = "fontbakery inconsistencies_between_fvar_STAT; fontbakery microsoft/fvar_STAT_axis_ranges"
 status = "docs"
 notes = "A format 4 axis value whose coordinates equal an instance's covers that whole instance; FontBakery's check ignores format 4 values."
+guesses = [
+  "Two format 1 or 3 values for one instance value are a warning, since applications take one of them; FontBakery fails them. A system that shows a wrong style name because of it would settle the severity.",
+]
 
 [[check]]
 id = "check.variations.statValueQuality"
@@ -3971,7 +3980,7 @@ milestone = "M12"
 summary = "Shortcut for the classic outline check: runs overlap, coincident points, flat curves, collinear lines, tiny contours and empty glyphs, and repairs them when `fix` is set. Defaults: minArea 25, tolerance 0, integer rounding, both check families on, fixed outlines written with the original kept in a backup layer."
 ref = "AFDKO checkoutlinesufo (all options)"
 status = "docs"
-notes = "Built in M12.44 as one audit.run of overlap, coincidentPoints, flatCurve, collinearLines, tinyContour and noContours with the reference defaults (minArea 25, tolerance 0); `fix` then runs audit.fix on the open document with every repair, not only the safe ones, as the reference's error correction mode does. Repair order read from AFDKO 5.0.1's checkoutlinesufo (Apache-2.0): coincident points, flat curves, collinear lines, overlap removal repeated until the rounded point list stops changing, tiny contours, collinear lines again; coordinates rounded (three decimals with decimal), points closer than one unit merged, then the original contour order restored for contours that did not change. `all` (X.audit3) passes to audit.run, which otherwise reuses the layer-check results of glyphs unchanged since the kept run (audit.glyphHashCache). `quiet` (X.audit3) leaves the `results` list out of the reply and keeps the summary and the per-check counts, as the reference prints no line per glyph in quiet mode. After audit.fix, each layer it changed is cleaned up as the reference cleans up each glyph it changed (X.audit4, ported from AFDKO 5.0.1's checkoutlinesufo and ufotools): every point rounded half to even, to integers or to three decimals with `decimal`; each segment whose end lies less than one unit from the point before it dropped, as fontPens' threshold pen does; then, unless keepContourOrder is false, the reference's contour matching: contours sorted by their top point and node count, each matched to the first original contour with as many nodes, else to the first original contour with an on-curve node on its top point (taking that contour's start point), the rest last. The reference's quirks are kept so the order matches its output: the node-count match ignores coordinates, and the top point compares x with y on a tie. The reply lists the cleaned layers under `cleanup` with the number of points merged. On an outline of four rectangles (two overlapping) the order and rounding equal AFDKO 5.0.1's `checkoutlinesufo -e -w` with and without `-d`."
+notes = "Built in M12.44 as one audit.run of overlap, coincidentPoints, flatCurve, collinearLines, tinyContour and noContours with the reference defaults (minArea 25, tolerance 0; collinearLines without its nearly-collinear variant) and no result cap; `fix` then runs audit.fix on the open document with every repair, not only the safe ones, as the reference's error correction mode does. Repair order read from AFDKO 5.0.1's checkoutlinesufo (Apache-2.0): coincident points, flat curves, collinear lines, overlap removal repeated until the rounded point list stops changing, tiny contours, collinear lines again; coordinates rounded (three decimals with decimal), points closer than one unit merged, then the original contour order restored for contours that did not change. `all` (X.audit3) passes to audit.run, which otherwise reuses the layer-check results of glyphs unchanged since the kept run (audit.glyphHashCache). `quiet` (X.audit3) leaves the `results` list out of the reply and keeps the summary and the per-check counts, as the reference prints no line per glyph in quiet mode. After audit.fix, each layer it changed is cleaned up as the reference cleans up each glyph it changed (X.audit4, ported from AFDKO 5.0.1's checkoutlinesufo and ufotools): every point rounded half to even, to integers or to three decimals with `decimal`; each segment whose end lies less than one unit from the point before it dropped, as fontPens' threshold pen does; then, unless keepContourOrder is false, the reference's contour matching: contours sorted by their top point and node count, each matched to the first original contour with as many nodes, else to the first original contour with an on-curve node on its top point (taking that contour's start point), the rest last. The reference's quirks are kept so the order matches its output: the node-count match ignores coordinates, and the top point compares x with y on a tie. The reply lists the cleaned layers under `cleanup` with the number of points merged. On an outline of four rectangles (two overlapping) the order and rounding equal AFDKO 5.0.1's `checkoutlinesufo -e -w` with and without `-d`."
 guesses = ["A fix of a file given by path is refused; the command line opens the source, fixes it and saves it, so the engine command only fixes the open document.", "The clean-up keeps node types, smooth flags and node names; the reference redraws the glyph through a segment pen, which loses smooth flags and point names. Running it on a UFO with smooth points would show whether that matters to users.", "Only paths are cleaned up and reordered; components keep their places in the shape list and their offsets, fractional ones included. The reference decomposes components before testing, so a fixed glyph never has any.", "`quiet` drops the results list and keeps the counts; the reference's quiet mode still prints how many glyphs it skipped, which the summary covers."]
 
 [[command]]
@@ -4002,7 +4011,7 @@ summary = "Shortcut for the family comparison: groups the given fonts into style
 ref = "AFDKO comparefamily (-d, -st, -ft, -tolerance, -nohints, -rm, -rn, -rp, -rf)"
 status = "docs"
 guesses = ["The label is Check Family and the results go to the Font Audit panel, never to the Compare Family window, so the two features with similar names stay apart; the id stays for the command line (21-qa.md question 13).", "`reports` only adds the tables; the reference's -rm also turns on its menu-name checks, which run here whenever their test numbers are selected. Running the reference with and without -rm on our fonts would settle whether the checks should follow the option."]
-notes = "Test numbers checked against AFDKO 5.0.1, run locally: comparefamily has single-face tests 1 to 34 and family tests 1 to 21, as 21-qa.md § 6 maps them; single-face test 29 is empty. Built in M12.44 as one audit.run of the mapped checks on the fonts and folder given; a number whose checks are not built yet is named in `warnings`, and a selection with no built check at all is refused. `tolerance` sets the `tolerance` threshold of each selected check that has one. `reports` (X.audit3) adds, under `reports`, the tables of audit.report.menuNames, .metrics, .panose and .featureLanguages for the same fonts: the reference's -rm, -rn (its code prints the menu-name table for -rn; see audit.report.menuNames), -rp and -rf. The reference's -l (a log file) is the command line's `check family -l`, which writes what it would print to the file instead of standard output."
+notes = "Test numbers checked against AFDKO 5.0.1, run locally: comparefamily has single-face tests 1 to 34 and family tests 1 to 21, as 21-qa.md § 6 maps them; single-face test 29 is empty. Built in M12.44 as one audit.run of the mapped checks on the fonts and folder given; a number whose checks are not built yet is named in `warnings`, and a selection with no built check at all is refused; the results are not capped. `tolerance` sets the `tolerance` threshold of each selected check that has one. `reports` (X.audit3) adds, under `reports`, the tables of audit.report.menuNames, .metrics, .panose and .featureLanguages for the same fonts: the reference's -rm, -rn (its code prints the menu-name table for -rn; see audit.report.menuNames), -rp and -rf. The reference's -l (a log file) is the command line's `check family -l`, which writes what it would print to the file instead of standard output."
 
 [[command]]
 id = "audit.report.menuNames"

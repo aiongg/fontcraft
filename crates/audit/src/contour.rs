@@ -1,7 +1,7 @@
 //! Paths read as segments with node addresses, tolerant of malformed node lists, and the
 //! geometry the checks share.
 
-use fontcraft_geom::{BezPath, Point, Rect, Shape as _, Vec2};
+use fontcraft_geom::{BezPath, ParamCurve as _, Point, Rect, Shape as _, Vec2};
 use fontcraft_model::{Layer, MAX_COORDINATE, NodeKind, Path, Shape};
 
 /// Pieces a curve is cut into where a check needs points along it (length, deviation,
@@ -9,8 +9,9 @@ use fontcraft_model::{Layer, MAX_COORDINATE, NodeKind, Path, Shape};
 pub(crate) const CURVE_STEPS: usize = 24;
 /// A closed contour whose area is below this many square units encloses nothing.
 pub(crate) const ZERO_AREA_TOLERANCE: f64 = 0.01;
-/// Most on-curve points of a contour tested for lying inside another contour.
-const NESTING_SAMPLES: usize = 16;
+/// Most segments of a contour tested for lying inside another contour, each at its end and its
+/// middle.
+const NESTING_SEGMENTS: usize = 16;
 /// Most closed contours whose nesting is worked out (pairs grow with the square).
 pub(crate) const MAX_NESTING_CONTOURS: usize = 1_000;
 
@@ -426,21 +427,33 @@ pub(crate) fn regions(contours: &[Contour<'_>]) -> Vec<Region> {
         if !area.is_finite() || area.abs() < ZERO_AREA_TOLERANCE {
             continue;
         }
-        let on: Vec<Point> = c.path.nodes.iter().filter(|n| n.on_curve()).map(|n| n.point()).collect();
-        let step = (on.len() / NESTING_SAMPLES).max(1);
-        let samples = on.into_iter().step_by(step).take(NESTING_SAMPLES).collect();
+        // The Bézier path also has the on-curve points a quadratic contour implies, so a contour
+        // of off-curve nodes only is sampled too.
+        let count = bez.segments().count();
+        let step = count.div_ceil(NESTING_SEGMENTS).max(1);
+        let samples = bez.segments().step_by(step).flat_map(|s| [s.eval(0.5), s.eval(1.0)]).collect();
         out.push(Region { shape: c.shape, bbox: bez.bounding_box(), bez, area, samples });
     }
     out
 }
 
-/// Does `outer` enclose `inner`: `inner`'s box lies within `outer`'s, and every sampled
-/// on-curve point of `inner` is inside `outer`?
+/// Does `outer` enclose `inner`: `inner`'s box lies within `outer`'s, and every sampled point
+/// of `inner` is inside `outer`?
 pub(crate) fn encloses(outer: &Region, inner: &Region) -> bool {
     if outer.shape == inner.shape || outer.bbox == inner.bbox || !outer.bbox.contains_rect(inner.bbox) {
         return false;
     }
     !inner.samples.is_empty() && inner.samples.iter().all(|p| outer.bez.winding(*p) != 0)
+}
+
+/// Do the outlines of the two regions cross, as overlapping shapes do: is one of them sampled
+/// both inside and outside the other?
+pub(crate) fn cross(a: &Region, b: &Region) -> bool {
+    let partly = |outer: &Region, inner: &Region| {
+        let inside = inner.samples.iter().filter(|p| outer.bez.winding(**p) != 0).count();
+        inside > 0 && inside < inner.samples.len()
+    };
+    a.shape != b.shape && overlaps(a.bbox, b.bbox) && (partly(a, b) || partly(b, a))
 }
 
 /// For every region: how many regions enclose it, and the smallest of them.

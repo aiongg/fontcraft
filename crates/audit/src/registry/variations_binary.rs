@@ -234,9 +234,10 @@ pub(super) const CHECKS: &[CheckSpec] = &[
     CheckSpec {
         id: "check.variations.statCoversInstances",
         label: "STAT covers the instances",
-        description: "The variable font has no STAT table, or STAT cannot name every instance: an instance uses an axis value no STAT axis value names, or its name record is missing.",
+        description: "The variable font has no STAT table, or STAT cannot name every instance: an instance uses an axis value that no STAT axis value names or (warning) that more than one names, or its name record is missing.",
         profile: Universal,
-        codes: &["missing-STAT-table", "missing-name-id", "missing-fvar-instance-axis-value"],
+        codes: &["missing-STAT-table", "missing-name-id", "missing-fvar-instance-axis-value", "ambiguous-axis-value"],
+        code_severities: &[("ambiguous-axis-value", Warn)],
         run: Runner::Binary(vb::stat_covers_instances),
         ..BASE
     },

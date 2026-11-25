@@ -549,6 +549,7 @@ fn each_variation_check_reports_its_fault() {
         }),
         case("statItalicNaming", "bad-italic", |s| s.set_name(257, "Thin Italic")),
         case("statCoversInstances", "missing-STAT-table", |s| s.stat = None),
+        case("statCoversInstances", "ambiguous-axis-value", |s| s.stat().values.push(Val::One { axis: 0, flags: 0, name: 259, value: 700.0 })),
         case("statCoversInstances", "missing-fvar-instance-axis-value", |s| s.instance(259).coords[0] = 650.0),
         case("statValueQuality", "duplicate-axis-value", |s| s.stat().values.push(Val::One { axis: 0, flags: 0, name: 259, value: 700.0 })),
         case("statValueQuality", "regular-not-elidable", |s| {

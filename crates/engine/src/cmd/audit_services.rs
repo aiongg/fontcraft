@@ -324,6 +324,8 @@ fn registered<'a>(ids: impl IntoIterator<Item = &'a str>) -> Vec<&'a str> {
 const BASIC_CHECKS: [&str; 3] = ["check.outlines.coincidentPoints", "check.outlines.flatCurve", "check.outlines.collinearLines"];
 const OVERLAP_CHECKS: [&str; 2] = ["check.outlines.overlap", "check.outlines.tinyContour"];
 const EMPTY_GLYPHS: &str = "check.outlines.noContours";
+/// `maxResults` of the shortcut commands: the reference checkers list every finding.
+const ALL_FINDINGS: i64 = 1_000_000;
 
 fn check_outlines(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("audit.checkOutlines", v)?;
@@ -355,7 +357,7 @@ fn check_outlines(s: &mut Session, v: &Value) -> Result<Value> {
     checks.push(EMPTY_GLYPHS);
     let config = json!({
         "check.outlines.flatCurve": {"tolerance": tolerance},
-        "check.outlines.collinearLines": {"tolerance": tolerance},
+        "check.outlines.collinearLines": {"tolerance": tolerance, "maxAngle": 0.0},
         "check.outlines.tinyContour": {"minArea": min_area},
     });
     let mut q = Map::new();
@@ -363,6 +365,7 @@ fn check_outlines(s: &mut Session, v: &Value) -> Result<Value> {
     q.insert("profile".into(), json!("strict"));
     q.insert("checks".into(), json!(checks));
     q.insert("config".into(), config.clone());
+    q.insert("maxResults".into(), json!(ALL_FINDINGS));
     if all {
         q.insert("all".into(), json!(true));
     }
@@ -694,7 +697,7 @@ fn compare_family(s: &mut Session, v: &Value) -> Result<Value> {
             list
         }
     };
-    let q = json!({"target": target, "profile": "strict", "checks": wanted, "config": config});
+    let q = json!({"target": target, "profile": "strict", "checks": wanted, "config": config, "maxResults": ALL_FINDINGS});
     let mut report = s.execute("audit.run", &q)?;
     // The reference's -rm, -rn, -rp and -rf print their tables beside the test results.
     let mut tables = Map::new();

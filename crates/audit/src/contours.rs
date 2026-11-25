@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, HashMap};
 use fontcraft_geom::{BezPath, PathEl, Point, Rect, Shape as _};
 use fontcraft_model::{NodeKind, Shape};
 
-use crate::contour::{Bez, MAX_NESTING_CONTOURS, ZERO_AREA_TOLERANCE, nesting, overlaps, polylines_cross, proper_cross, regions};
+use crate::contour::{Bez, MAX_NESTING_CONTOURS, ZERO_AREA_TOLERANCE, cross, nesting, overlaps, polylines_cross, proper_cross, regions};
 use crate::{CurveType, Hit, LayerInput, MAX_LAYER_NODES, Nth, Params, Severity, Sink, Threshold, num};
 
 /// Most pairs of line pieces the overlap test compares on one layer.
@@ -47,8 +47,13 @@ fn edge(shape: usize, contour: usize, component: bool, a: Point, b: Point) -> Ed
 
 /// Contours that cross each other or themselves, and contours inside another one that runs the
 /// same way. Components take part as their outlines; their own contours are not compared with
-/// each other.
+/// each other. A decoded variable TrueType font is skipped: it keeps its overlaps on purpose, as
+/// merged contours would not interpolate.
 pub(crate) fn overlap(input: &LayerInput<'_>, _: &Params<'_>, sink: &mut Sink) {
+    if input.ctx.glyf_outlines && input.ctx.variable {
+        sink.skip("a variable TrueType font keeps its overlaps");
+        return;
+    }
     let mut edges: Vec<Edge> = Vec::new();
     let mut contour_id = 0usize;
     for c in input.finite().filter(|c| c.closed()) {
@@ -229,6 +234,8 @@ pub(crate) fn no_contours(input: &LayerInput<'_>, _: &Params<'_>, sink: &mut Sin
 }
 
 /// Outer contours that run clockwise, and contours that run the same way as the one around them.
+/// A contour inside another one that also crosses a contour is part of an overlapping shape (a
+/// crossbar drawn over a bowl and its counter), not a counter; the overlap check reports it.
 pub(crate) fn path_direction(input: &LayerInput<'_>, _: &Params<'_>, sink: &mut Sink) {
     let regions = regions(&input.contours);
     if regions.len() > MAX_NESTING_CONTOURS {
@@ -239,7 +246,7 @@ pub(crate) fn path_direction(input: &LayerInput<'_>, _: &Params<'_>, sink: &mut 
         let counter_clockwise = r.area > 0.0;
         // Sources wind outer contours counter-clockwise; a compiled glyf table winds them clockwise.
         let expected = (depth % 2 == 0) != input.ctx.glyf_outlines;
-        if counter_clockwise == expected {
+        if counter_clockwise == expected || (depth > 0 && regions.iter().any(|other| cross(r, other))) {
             continue;
         }
         // The codes name the source convention; on glyf outlines both directions are reversed.

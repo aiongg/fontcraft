@@ -890,6 +890,16 @@ fn points_outside_the_stored_box_are_reported() {
     assert_eq!((f.code, f.location.glyph.as_str(), f.location.point), ("points-out-of-bounds", "A", Some([300.0, 750.0])));
     assert_eq!(f.location.bounds, Some([0.0, 0.0, 600.0, 700.0]));
     assert_eq!(f.fix.map(|x| x.id), Some("patchTable"));
+
+    // A composite is read at its stored coordinates, whatever its side bearing says (hmtx has 0
+    // here, the glyph starts at 20), and whether the metrics are its own or its component's.
+    let a = simple_glyph([20, 0, 600, 700], &[(20, 0, true), (300, 700, true), (600, 0, true)]);
+    for use_my_metrics in [0u16, 0x0200] {
+        let mut w = W::default();
+        w.i16(-1).i16(20).i16(0).i16(600).i16(700).u16(0x0003 | use_my_metrics).u16(1).i16(0).i16(0);
+        let bytes = build(&Tt { glyphs: vec![notdef(), a.clone(), w.0], ..clean() });
+        assert!(run(&bytes, "check.outlines.pointsOutsideBBox").findings.is_empty(), "{use_my_metrics}");
+    }
 }
 
 #[test]

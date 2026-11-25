@@ -1072,6 +1072,14 @@ pub(crate) fn stat_covers_instances(ctx: &BinaryCtx<'_>, _: &Params<'_>, sink: &
                 .values
                 .iter()
                 .any(|v| v.axis.and_then(|a| stat.axis_tag(a)) == Some(axis.tag.as_str()) && (v.value == Some(*value) || v.linked == Some(*value)));
+            let named = stat
+                .values
+                .iter()
+                .filter(|v| matches!(v.format, 1 | 3) && v.axis.and_then(|a| stat.axis_tag(a)) == Some(axis.tag.as_str()) && v.value == Some(*value));
+            if named.count() > 1 {
+                let message = format!("Instance {name} has {} {}, which more than one STAT axis value names.", axis.tag, num(*value));
+                sink.push(Hit::new("ambiguous-axis-value", message).data("value", *value).place(at_instance_axis(name, &axis.tag)));
+            }
             if !covered {
                 let message = format!("Instance {name} has {} {}, which no STAT axis value names.", axis.tag, num(*value));
                 sink.push(Hit::new("missing-fvar-instance-axis-value", message).data("value", *value).place(at_instance_axis(name, &axis.tag)));
