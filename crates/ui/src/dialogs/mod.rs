@@ -14,6 +14,7 @@ pub mod after;
 pub mod audit_profile;
 pub mod axis_mappings;
 pub mod changed_on_disk;
+pub mod collection_members;
 pub mod color_palettes;
 mod component_name;
 pub mod cross_axis;
@@ -38,7 +39,9 @@ pub mod import;
 pub mod interp;
 pub mod kerning_audit;
 pub mod kerning_questions;
+pub mod loss_question;
 pub mod master_color;
+pub mod open_report;
 pub mod os2_bits;
 pub mod overlay_fonts;
 pub mod panose;
@@ -87,6 +90,9 @@ pub const MODULES: &[Module] = &[
     start_window::run,
     settings::run,
     changed_on_disk::run,
+    loss_question::run,
+    collection_members::run,
+    open_report::run,
     review_hints::run,
     actions::run_dialog,
     audit_profile::run,

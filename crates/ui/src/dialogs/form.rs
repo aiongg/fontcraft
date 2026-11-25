@@ -565,6 +565,17 @@ fn run_on_ok(app: &mut FontCraftApp, person: bool) -> Result<Value, String> {
     }
     let (title, command, params) = (d.title.clone(), d.command.clone(), d.params());
     let kept = d.remember.then(|| (d.id.clone(), d.values.clone()));
+    // An export that leaves data out asks first, and its answer runs it.
+    if person
+        && let Some(asked) =
+            crate::app::file_questions::ask(app, &craft::ui::runtime::commands::CommandRef::with_params(command.clone(), params.clone()))
+    {
+        if let Some((id, values)) = kept {
+            app.dialogs.remember(id, values);
+        }
+        app.dialogs.open = None;
+        return Ok(asked);
+    }
     match app.session.execute(&command, &params) {
         Ok(result) => {
             if let Some((id, values)) = kept {
@@ -626,9 +637,7 @@ pub fn poll_chooser(app: &mut FontCraftApp) {
     }
     let result = match answer {
         Picked::Paths(paths) => match paths.first() {
-            Some(path) => {
-                set(app, &key, &json!(path.to_string_lossy())).and_then(|_| if then_ok { confirm_by(app, false).map(drop) } else { Ok(()) })
-            }
+            Some(path) => set(app, &key, &json!(path.to_string_lossy())).and_then(|_| if then_ok { confirm_by(app, true).map(drop) } else { Ok(()) }),
             None => Ok(()),
         },
         Picked::Cancelled => Ok(()),

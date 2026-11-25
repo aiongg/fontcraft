@@ -334,12 +334,20 @@ pub(crate) fn source_feature_dir(_path: &std::path::Path) -> Option<std::path::P
 /// The position of the open document that was opened from (or saved to) `path`, comparing the
 /// paths as the file system resolves them.
 pub(crate) fn find_open(s: &Session, path: &std::path::Path) -> Option<usize> {
+    find_open_face(s, path, None)
+}
+
+/// The open document that was opened from `path`: from its collection member `face`, when one is
+/// named and the document is one of a collection's.
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+pub(crate) fn find_open_face(s: &Session, path: &std::path::Path, face: Option<u32>) -> Option<usize> {
     let want = std::fs::canonicalize(path).ok();
     s.documents().iter().position(|d| {
-        d.path.as_deref().is_some_and(|p| match (&want, std::fs::canonicalize(p).ok()) {
+        let same_path = d.path.as_deref().is_some_and(|p| match (&want, std::fs::canonicalize(p).ok()) {
             (Some(a), Some(b)) => *a == b,
             _ => p == path,
-        })
+        });
+        same_path && (face.is_none() || d.collection_face().is_none() || d.collection_face() == face)
     })
 }
 

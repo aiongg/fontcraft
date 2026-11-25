@@ -36,7 +36,7 @@ pub const COMMANDS: &[UiCommand] = &[
         label: "Unsaved Changes",
         menu: &[],
         shortcut: None,
-        params: "{answer?: \"save\" | \"dontSave\" | \"cancel\"} the question asked before unsaved work is closed (the window's close box, Quit, File › Close on a modified document). With answer, answers it as its buttons do: save writes the document asked about (the question's own Save button opens the save picker for one without a file; a save answer from anywhere else is refused for it: give it a file with file.saveAs or project.save and a path, then answer again), dontSave leaves its changes unsaved, and both move to the next document with unsaved changes; once none is left the window closes (File › Close: the document closes). cancel stops closing. A failed save also stops closing. ui.inspect reports the question as closePrompt: {open, purpose: \"close\" | \"quit\" | null, document, kind: \"font\" | \"project\" | null, remaining: [titles]}",
+        params: "{answer?: \"save\" | \"dontSave\" | \"cancel\", strict?: bool} the question asked before unsaved work is closed (the window's close box, Quit, File › Close on a modified document). With answer, answers it as its buttons do: save writes the document asked about (the question's own Save button opens the save picker for one without a file; a save answer from anywhere else is refused for it: give it a file with file.saveAs or project.save and a path, then answer again; the question's own Save asks again when the format leaves data out (window.fileQuestion), while a save answer from anywhere else saves without asking, or with strict: true fails instead of leaving data out), dontSave leaves its changes unsaved, and both move to the next document with unsaved changes; once none is left the window closes (File › Close: the document closes). cancel stops closing. A failed save also stops closing. ui.inspect reports the question as closePrompt: {open, purpose: \"close\" | \"quit\" | null, document, kind: \"font\" | \"project\" | null, remaining: [titles]}",
     },
 ];
 
@@ -87,7 +87,7 @@ pub struct ClosePrompt {
     pub from_window: bool,
     /// "Apply to All" was ticked: the same answer goes to each document left.
     pub apply_all: Option<Answer>,
-    /// The document whose save waits for the save picker.
+    /// The document whose save waits for the save picker, or for the answer about the data its format leaves out.
     saving: Option<Item>,
     /// Ask the window to close in the next `logic`.
     close_window: bool,
@@ -99,7 +99,7 @@ impl ClosePrompt {
         self.asking.is_some()
     }
 
-    /// Whether the question waits for the save picker; the dialog stays hidden meanwhile.
+    /// Whether the question waits for the save picker or the save's own question; the dialog stays hidden meanwhile.
     pub fn saving(&self) -> bool {
         self.saving.is_some()
     }
@@ -151,9 +151,12 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
         }
         "window.closePrompt" => match params::string(p, "answer")? {
             None => Ok(()),
-            Some("save") => answer(app, Answer::Save),
-            Some("dontSave") => answer(app, Answer::DontSave),
-            Some("cancel") => answer(app, Answer::Cancel),
+            Some("save") => {
+                let strict = params::flag(p, "strict")?.unwrap_or(false);
+                answer(app, Answer::Save, strict)
+            }
+            Some("dontSave") => answer(app, Answer::DontSave, false),
+            Some("cancel") => answer(app, Answer::Cancel, false),
             Some(other) => Err(format!("`answer` is save, dontSave or cancel, not `{other}`")),
         },
         other => Err(format!("unknown command `{other}`")),
@@ -208,15 +211,17 @@ pub fn close_requested(app: &mut FontCraftApp) -> CloseDecision {
     CloseDecision::Hold
 }
 
-/// After every `drain`: a save the question started through the save picker either wrote the document, and the
-/// question moves on, or did not (cancelled picker, failed save), and closing stops.
+/// After every `drain`: a save the question started through the save picker, or that asked about data the format
+/// leaves out, either wrote the document, and the
+/// question moves on, or did not (cancelled picker or question, failed save), and closing stops.
 pub fn after_drain(app: &mut FontCraftApp) {
     let Some(item) = app.closing.saving else {
         prune(app);
         return;
     };
     if is_unsaved(&app.session, item) {
-        if app.picks.waiting() {
+        let asking = matches!(item, Item::Font(id) if app.view.file_questions.saving(id));
+        if app.picks.waiting() || asking {
             return;
         }
         let name = title(&app.session, item).unwrap_or_default();
@@ -296,7 +301,8 @@ fn show_first(app: &mut FontCraftApp) {
     }
 }
 
-fn activate(app: &mut FontCraftApp, id: u64) -> Result<(), String> {
+/// Makes the document `id` the active one.
+pub(super) fn activate(app: &mut FontCraftApp, id: u64) -> Result<(), String> {
     if app.session.active().is_some_and(|d| d.id == id) {
         return Ok(());
     }
@@ -344,11 +350,11 @@ fn cancel(app: &mut FontCraftApp) {
     app.closing.keep_window();
 }
 
-fn answer(app: &mut FontCraftApp, answer: Answer) -> Result<(), String> {
+fn answer(app: &mut FontCraftApp, answer: Answer, strict: bool) -> Result<(), String> {
     let from_window = std::mem::take(&mut app.closing.from_window);
     let was_open = app.closing.is_open();
     if app.closing.saving.is_some() {
-        return Err("window.closePrompt: a save is waiting for its file: answer the save picker first".into());
+        return Err("window.closePrompt: a save is waiting for its file or its question: answer the save picker or window.fileQuestion first".into());
     }
     prune(app);
     let Some((item, name, _)) = app.closing.current(&app.session) else {
@@ -371,9 +377,17 @@ fn answer(app: &mut FontCraftApp, answer: Answer) -> Result<(), String> {
                 }
                 return save_with_picker(app, item);
             }
-            if let Err(e) = save(app, item) {
-                cancel(app);
-                return Err(format!("`{name}` was not saved, so nothing was closed: {e}"));
+            match save(app, item, if from_window { None } else { Some(strict) }) {
+                Ok(true) => {}
+                // It asked what to do about the data the format leaves out: `after_drain` goes on.
+                Ok(false) => {
+                    app.closing.saving = Some(item);
+                    return Ok(());
+                }
+                Err(e) => {
+                    cancel(app);
+                    return Err(format!("`{name}` was not saved, so nothing was closed: {e}"));
+                }
             }
         }
         Answer::DontSave => {}
@@ -421,19 +435,23 @@ fn needs_file(session: &Session, item: Item) -> Option<&'static str> {
     }
 }
 
-/// Saves `item`, which has a file, as File › Save does.
-fn save(app: &mut FontCraftApp, item: Item) -> Result<(), String> {
+/// Saves `item`, which has a file, as File › Save does; with `strict` given, as a command that gives it does. False:
+/// the save asks a question first (`app/file_questions.rs`).
+fn save(app: &mut FontCraftApp, item: Item, strict: Option<bool>) -> Result<bool, String> {
     match item {
         Item::Font(id) => {
             activate(app, id)?;
-            app.apply_msg(Msg::run("file.save", json!({})))?;
+            app.apply_msg(Msg::run("file.save", strict.map_or_else(|| json!({}), |strict| json!({ "strict": strict }))))?;
+            if app.view.file_questions.saving(id) {
+                return Ok(false);
+            }
         }
         Item::Project(id) => app.apply_msg(Msg::run("project.save", json!({ "project": id })))?,
     }
     if is_unsaved(&app.session, item) {
         return Err("it still has unsaved changes".into());
     }
-    Ok(())
+    Ok(true)
 }
 
 /// Asks the save picker for `item`'s file; the question waits for its answer ([`after_drain`]).

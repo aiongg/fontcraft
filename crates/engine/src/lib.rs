@@ -253,7 +253,44 @@ impl DocState {
     pub fn modified(&self) -> bool {
         !Arc::ptr_eq(&self.font, &self.saved)
     }
+
+    /// The format of the document's file, which Save writes: the one it was last saved in, else a
+    /// native file's own, else the one it was read from. A native file can hold a font read from
+    /// another format (`font.source`), which decides other things (the metrics' defaults, what a
+    /// UFO's components mean) and stays.
+    pub fn file_format(&self) -> fontcraft_model::SourceFormat {
+        if let Some(SavedAs(format)) = self.ext::<SavedAs>() {
+            return *format;
+        }
+        let native = self.path.as_deref().is_some_and(is_native_path);
+        if native { fontcraft_model::SourceFormat::Native } else { self.font.source.format }
+    }
+
+    /// Whether Save has no format to write the document back in, so it is view-only until Save As
+    /// gives it a source file (`open.compiledIsViewOnly`): a compiled font, or a source of a
+    /// format that is only read.
+    pub fn view_only(&self) -> bool {
+        self.file_format() == fontcraft_model::SourceFormat::Binary
+    }
+
+    /// The member of a font collection the document was opened from.
+    pub fn collection_face(&self) -> Option<u32> {
+        self.ext::<CollectionFace>().map(|f| f.0)
+    }
 }
+
+/// Whether a file is named as a native one (`.fontcraft`, in any case).
+pub(crate) fn is_native_path(path: &std::path::Path) -> bool {
+    path.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("fontcraft"))
+}
+
+/// The format a document was last saved in ([`DocState::file_format`]).
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+pub(crate) struct SavedAs(pub fontcraft_model::SourceFormat);
+
+/// The collection member a document was opened from ([`DocState::collection_face`]).
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+pub(crate) struct CollectionFace(pub u32);
 
 /// The open documents and everything commands act on.
 #[derive(Default)]

@@ -81,7 +81,13 @@ fn save_extension(source: SourceFormat) -> Option<&'static str> {
 
 /// Whether saving `doc` needs a file chosen first: it was never saved, or Save cannot write its format back.
 pub fn needs_save_path(doc: &DocState) -> bool {
-    doc.path.is_none() || save_extension(doc.font.source.format).is_none()
+    doc.path.is_none() || save_extension(doc.file_format()).is_none()
+}
+
+/// The save commands' name of the format `path`'s extension names; `None` for any other extension.
+pub fn format_of(path: &str) -> Option<&'static str> {
+    let extension = std::path::Path::new(path).extension()?.to_str()?.to_ascii_lowercase();
+    SAVE_EXTENSIONS.into_iter().find(|e| *e == extension)
 }
 
 /// How a picker's answer fills the command.
@@ -100,7 +106,7 @@ fn request(session: &Session, command: &CommandRef) -> Option<(PickRequest, &'st
     let &(_, param) = PICKED.iter().find(|(id, param)| *id == command.id && command.params.get(*param).is_none_or(Value::is_null))?;
     let save_as = |session: &Session, title: &str| {
         let doc = session.active()?;
-        let extension = save_extension(doc.font.source.format).unwrap_or(NATIVE_EXTENSION);
+        let extension = save_extension(doc.file_format()).unwrap_or(NATIVE_EXTENSION);
         let request = PickRequest::save("document")
             .title(title)
             .filter("Font source", &SAVE_EXTENSIONS)

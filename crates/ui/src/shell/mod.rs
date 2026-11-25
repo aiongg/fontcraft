@@ -60,7 +60,7 @@ pub mod window;
 
 use craft::menu::MenuBarUi;
 use craft::ui::contract::BodyCx;
-use craft::ui::runtime::env::WindowKey;
+use craft::ui::runtime::env::{Env, WindowKey};
 use craft::ui::shell::{AppShell, ShellDialogsCx as _, Slot, SlotSize, Title, TitleBar};
 use egui::Ui;
 
@@ -75,6 +75,10 @@ craft::ui::words! {
         options: "fontcraftShell.options" = "Options";
         /// The status bar's name.
         status: "fontcraftShell.status" = "Status";
+        /// After the title of a document that Save cannot write back.
+        view_only: "fontcraftShell.viewOnly" = "View Only";
+        /// The notice bar's name.
+        notice: "fontcraftShell.notice" = "Document notice";
         /// The status line with nothing to report.
         ready: "fontcraftShell.ready" = "Ready";
         /// The document area's name.
@@ -88,11 +92,17 @@ craft::ui::words! {
 
 /// Shows the window for one frame.
 pub fn show(app: &mut FontCraftApp, ui: &mut Ui) {
+    let notice = crate::app::open_report::notice(app);
     AppShell::new(WindowKey::main())
         .title_bar(title_bar)
         .options_bar(true, |ui, _, app: &mut FontCraftApp| {
             let palette = window::palette_shows(app);
             bars::options(ui, bars::OptionsProps { tool: app.view.tool, palette, sent: &mut app.sent })
+        })
+        .top(Slot::new("fontcraft.notice").visible(notice.is_some()), move |ui, _, app: &mut FontCraftApp| {
+            if let Some(notice) = &notice {
+                bars::notice(ui, notice, &mut app.sent);
+            }
         })
         .status(true, |ui, _, app: &mut FontCraftApp| {
             let edit = bars::edit_state(app);
@@ -108,10 +118,18 @@ pub fn show(app: &mut FontCraftApp, ui: &mut Ui) {
         .show(ui, app);
 }
 
+/// The document's title, with the view-only mark after it while Save has no format to write it back in
+/// (`open.compiledIsViewOnly`).
+fn document_title(doc: &fontcraft_engine::DocState, words: &ChromeWords) -> String {
+    if doc.view_only() { format!("{} ({})", doc.title, words.view_only.as_str()) } else { doc.title.clone() }
+}
+
 fn title_bar(ui: &mut Ui, _: &mut BodyCx<'_>, app: &mut FontCraftApp) {
     let title = match app.session.active() {
-        Some(doc) if doc.modified() => Title::unsaved(doc.title.clone()),
-        Some(doc) => Title::new(doc.title.clone()),
+        Some(doc) => {
+            let text = document_title(doc, &Env::of(ui).words::<ChromeWords>());
+            if doc.modified() { Title::unsaved(text) } else { Title::new(text) }
+        }
         None => Title::new("FontCraft"),
     };
     let menu = craft_ext::menu::held_alternate_labels(ui, &app.catalog.menu, |command| {
