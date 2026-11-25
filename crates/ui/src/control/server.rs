@@ -57,7 +57,7 @@ const ELEMENTS_TIMEOUT: Duration = Duration::from_secs(10);
 /// The input cancelled error, for replies whose input the window host withdrew.
 const INPUT_CANCELLED: &str = "input cancelled: the window dropped the queued input";
 
-/// What cancels the requests of the connections, by `cancelKey`: at most one for each connection.
+/// What cancels the requests that run or wait, by `cancelKey`.
 type Running = Arc<Mutex<HashMap<String, Arc<Token>>>>;
 
 /// A request on its way to the UI thread.
@@ -65,6 +65,9 @@ struct Incoming {
     request: ControlRequest,
     token: Arc<Token>,
     progress: bool,
+    /// The connection may give the request up while it runs; its key stands until both are through with it. Dropped
+    /// before the reply goes out, so the client can use the key again.
+    registered: Option<Arc<Registered>>,
 }
 
 impl Incoming {
@@ -112,6 +115,7 @@ pub struct Server {
 struct Waiting {
     reply: Sender<Value>,
     token: Arc<Token>,
+    registered: Option<Arc<Registered>>,
     wait: Wait,
     since: Instant,
     frames: u64,
@@ -221,10 +225,10 @@ fn serve(stream: TcpStream, to_ui: &Sender<Incoming>, ctx: &egui::Context, runni
             continue;
         }
         let token = Token::new();
-        let _registered = match request.get("cancelKey") {
+        let registered = match request.get("cancelKey") {
             None | Some(Value::Null) => None,
             Some(key) => match Registered::new(running, key, &token) {
-                Ok(registered) => Some(registered),
+                Ok(registered) => Some(Arc::new(registered)),
                 Err(e) => {
                     writeln!(writer, "{}", super::with_id(reply(Err(e)), &id))?;
                     continue;
@@ -235,7 +239,7 @@ fn serve(stream: TcpStream, to_ui: &Sender<Incoming>, ctx: &egui::Context, runni
         let (request, replies) = ControlRequest::new(method, params);
         let request = request.with_deadline();
         let dispatch = request.dispatch.clone();
-        if to_ui.send(Incoming { request, token, progress }).is_err() {
+        if to_ui.send(Incoming { request, token, progress, registered: registered.clone() }).is_err() {
             return refuse(writer, "the app is shutting down; closing the connection");
         }
         ctx.request_repaint();
@@ -246,6 +250,7 @@ fn serve(stream: TcpStream, to_ui: &Sender<Incoming>, ctx: &egui::Context, runni
                 Err(_) => break json!({"ok": false, "error": dispatch.give_up()}),
             }
         };
+        drop(registered);
         writeln!(writer, "{}", super::with_id(answer, &id))?;
     }
 }
@@ -286,7 +291,9 @@ fn next_request(server: &Server) -> Option<Incoming> {
     while let Ok(incoming) = server.requests.try_recv() {
         let request = &incoming.request;
         if request.deadline.is_some_and(|deadline| motion::now() >= deadline) || !request.dispatch.start() {
-            let _ = request.reply.send(json!({"ok": false, "error": expired_error()}));
+            let reply = request.reply.clone();
+            drop(incoming);
+            let _ = reply.send(json!({"ok": false, "error": expired_error()}));
             continue;
         }
         return Some(incoming);
@@ -309,6 +316,7 @@ pub fn logic(app: &mut FontCraftApp, ctx: &egui::Context) {
         answered += 1;
         let request = &incoming.request;
         if incoming.token.is_cancelled() {
+            drop(incoming.registered);
             settle(&mut server, incoming.request, Err("cancelled".into()), 0);
             continue;
         }
@@ -317,6 +325,7 @@ pub fn logic(app: &mut FontCraftApp, ctx: &egui::Context) {
         app.control.work = None;
         match answered_now {
             Answer::Reply(result) => {
+                drop(incoming.registered);
                 settle(&mut server, incoming.request, result, app.control.queued);
             }
             Answer::Elements => server.elements.push((incoming, motion::now(), 0)),
@@ -327,7 +336,8 @@ pub fn logic(app: &mut FontCraftApp, ctx: &egui::Context) {
             }
             Answer::Wait(wait) => {
                 let token = Arc::clone(&incoming.token);
-                server.waits.push(Waiting { reply: request.reply.clone(), token, wait, since: motion::now(), frames: 0 });
+                let (reply, registered) = (request.reply.clone(), incoming.registered);
+                server.waits.push(Waiting { reply, token, registered, wait, since: motion::now(), frames: 0 });
             }
         }
     }
@@ -379,6 +389,7 @@ fn answer_elements(app: &mut FontCraftApp, server: &mut Server) {
             server.elements.insert(0, (incoming, motion::now(), 0));
             return;
         }
+        drop(incoming.registered);
         settle(server, incoming.request, result, app.control.queued);
     }
 }
@@ -411,12 +422,14 @@ pub fn after_ui(app: &mut FontCraftApp, ctx: &egui::Context) {
         server.waits.retain_mut(|waiting| {
             waiting.frames = waiting.frames.saturating_add(1);
             if waiting.token.is_cancelled() {
+                waiting.registered = None;
                 let _ = waiting.reply.send(reply(Err("cancelled".into())));
                 return false;
             }
             let elapsed = now.saturating_duration_since(waiting.since);
             let settled = waiting.wait.settled(waiting.frames, idle);
             if settled || elapsed >= waiting.wait.timeout {
+                waiting.registered = None;
                 let _ = waiting.reply.send(reply(Ok(wait::result(waiting.frames, idle, !settled, elapsed))));
                 return false;
             }

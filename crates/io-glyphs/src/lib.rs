@@ -77,7 +77,9 @@ pub fn read_reporting(text: &str) -> Result<(Font, Vec<String>)> {
 
 /// The document a root dictionary holds, in whichever format version it states.
 fn read_root(root: Dict) -> Result<Font> {
-    read_font(root)
+    let mut font = read_font(root)?;
+    lenient::keep_metric_ids(&mut font);
+    Ok(font)
 }
 
 /// Writes a document as a single `.glyphs` file in the format version it was read in (version 3
@@ -943,18 +945,16 @@ pub(crate) fn push_master_info(e: &mut Vec<(Str, Value)>, m: &Master, version: u
 }
 
 fn plain_metric_values(v: &Value) -> Option<Vec<MetricValue>> {
-    v.as_array()?
-        .items
-        .iter()
-        .map(|m| {
-            let d = m.as_dict()?;
-            if d.entries.iter().any(|(k, _)| !matches!(k.as_str(), "pos" | "over")) {
-                return None;
-            }
-            let get = |k: &str| d.get(k).map_or(Some(0.0), |v| if lenient::is_unset(v) { Some(0.0) } else { v.as_num().map(Num::as_f64) });
-            Some(MetricValue { pos: get("pos")?, over: get("over")? })
-        })
-        .collect()
+    v.as_array()?.items.iter().map(plain_metric_value).collect()
+}
+
+fn plain_metric_value(v: &Value) -> Option<MetricValue> {
+    let d = v.as_dict()?;
+    if d.entries.iter().any(|(k, _)| !matches!(k.as_str(), "pos" | "over")) {
+        return None;
+    }
+    let get = |k: &str| d.get(k).map_or(Some(0.0), |v| if lenient::is_unset(v) { Some(0.0) } else { v.as_num().map(Num::as_f64) });
+    Some(MetricValue { pos: get("pos")?, over: get("over")? })
 }
 
 fn read_glyph(v: Value, at: &str, version: i64) -> Result<Glyph> {
@@ -1197,7 +1197,8 @@ fn write_font(font: &Font, version: u32) -> Result<Dict> {
     if !font.instances.is_empty() {
         e.push(("instances".into(), list(font.instances.iter().map(write_instance).collect::<Result<_>>()?)));
     }
-    e.push(("fontMaster".into(), list(font.masters.iter().map(|m| write_master(m, version)).collect::<Result<_>>()?)));
+    let metrics = lenient::metric_ids(&font.metrics);
+    e.push(("fontMaster".into(), list(font.masters.iter().map(|m| write_master(m, &metrics, version)).collect::<Result<_>>()?)));
     e.push(("glyphs".into(), list(font.glyphs.iter().map(|g| write_glyph(g, version).map(Value::Dict)).collect::<Result<_>>()?)));
     let tables = [(ltr_key, &font.kerning.ltr), (Some("kerningRTL"), &font.kerning.rtl), (Some("kerningVertical"), &font.kerning.vertical)];
     for (key, table) in tables {
@@ -1227,7 +1228,7 @@ fn write_metric(m: &MetricDef) -> Value {
     Value::Dict(finish(e, &m.extra))
 }
 
-fn write_master(m: &Master, version: u32) -> Result<Value> {
+fn write_master(m: &Master, metrics: &[String], version: u32) -> Result<Value> {
     let mut e = vec![("id".into(), string(&m.id))];
     if !m.name.is_empty() {
         e.push(("name".into(), string(&m.name)));
@@ -1237,18 +1238,16 @@ fn write_master(m: &Master, version: u32) -> Result<Value> {
     }
     if !m.metric_values.is_empty() {
         // Values the file has none for are written as it has them while nothing set them.
-        let kept = m.extra.get(Family::Native, lenient::METRIC_VALUES);
-        let kept_items = kept.and_then(Value::as_array).map_or(&[][..], |a| a.items.as_slice());
-        let kept_values = kept.and_then(plain_metric_values).filter(|v| v.len() == m.metric_values.len()).unwrap_or_default();
+        let unset = lenient::unset_values(m, metrics);
         let values = m
             .metric_values
             .iter()
             .enumerate()
             .map(|(i, v)| {
-                if kept_values.get(i) == Some(v)
-                    && let Some(item) = kept_items.get(i).filter(|item| lenient::has_unset(item))
+                if let Some(item) = metrics.get(i).and_then(|id| unset.get(id.as_str()))
+                    && plain_metric_value(item).as_ref() == Some(v)
                 {
-                    return Ok(item.clone());
+                    return Ok((*item).clone());
                 }
                 let mut d = Vec::new();
                 if v.over != 0.0 {

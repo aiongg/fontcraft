@@ -1,7 +1,9 @@
 //! File › Print… (`file.print`): the active font's proof pages, sent to a printer or saved as a PDF file.
 //!
-//! The pages are `font.proof` with `document`, made in memory as a PDF; the dialog shows them one at a time
-//! (`fontcraft_io_pdf::render_pdf_page`) and prints the very bytes it shows. The printer, the copies, two-sided and
+//! The pages are `font.proof` with `document`, made in memory as a PDF by a job of the host, off the window's thread
+//! (`fontcraft_engine::cmd::proof::document_proof`). One job runs at a time; what changes meanwhile is made when it
+//! lands. The dialog shows the pages one at a time (`fontcraft_io_pdf::render_pdf_page`) and prints the very bytes it
+//! shows. The printer, the copies, two-sided and
 //! grayscale printing are the suite's print panel (`craft::print::ui`, decision 0008), and the job goes through the
 //! app's [`PrintHost`](crate::app::print_host::PrintHost). The browser build has no printers and saves PDF only.
 //!
@@ -16,7 +18,7 @@
 //!
 //! Print sends the job and keeps the dialog open for the spooler's answer.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use base64::Engine as _;
 use craft::ui::buttons::Button;
@@ -32,6 +34,7 @@ use craft::ui::runtime::env::{Env, Label};
 use craft::ui::sections::{DialogRole, FooterButton};
 use craft::ui::text::{NumberField, TextField};
 use egui::{Color32, ColorImage, Pos2, Rect, Sense, TextureOptions, Ui, Vec2};
+use fontcraft_engine::cmd::proof::{self, KeptBuild};
 use fontcraft_model::Font;
 use serde_json::{Map, Value, json};
 
@@ -60,6 +63,7 @@ craft::ui::words! {
         point_size: "fontcraftPrint.pointSize" = "Point Size";
         preview: "fontcraftPrint.preview" = "Page preview";
         preview_note: "fontcraftPrint.previewNote" = "The preview leaves out the labels set in the printer's own font.";
+        making: "fontcraftPrint.making" = "Making the pages…";
         previous: "fontcraftPrint.previous" = "Previous Page";
         next: "fontcraftPrint.next" = "Next Page";
         page: template "fontcraftPrint.page" = "Page {page} of {pages}";
@@ -102,7 +106,7 @@ const COMMANDS: &[UiCommand] = &[UiCommand {
     label: "Print…",
     menu: &["File"],
     shortcut: None,
-    params: "{layout?: \"fontChart\"|\"glyphPerPage\"|\"glyphWaterfall\"|\"sampleText\" (default fontChart), glyphs?: [name]|\"selected\"|\"all\" (the Font View selection or every glyph; default every glyph for the chart and the sample text, else the selection), text?: string (the waterfall's and the sample's text; without it the glyphs' characters, else the proof's own sample), pointSize?: number (4 to 720, the sample text's size, default 24), master?: id|name, instance?: name (default the default master), paper?: \"letter\"|\"a4\"|\"a3\", landscape?: bool, header?: bool (a title on each page, default true), output?: path, saveAs?: bool, close?: bool} opens the Print dialog on the active font's proof pages (font.proof with document), or changes the open dialog; what is left out stays as it was. output writes the pages as a PDF file instead; saveAs asks for that file in the window; close closes the dialog. ui.inspect reports the dialog under `print`: {open, layout, glyphs, pages, font, error}",
+    params: "{layout?: \"fontChart\"|\"glyphPerPage\"|\"glyphWaterfall\"|\"sampleText\" (default fontChart), glyphs?: [name]|\"selected\"|\"all\" (the Font View selection or every glyph; default every glyph for the chart and the sample text, else the selection), text?: string (the waterfall's and the sample's text; without it the glyphs' characters, else the proof's own sample), pointSize?: number (4 to 720, the sample text's size, default 24), master?: id|name, instance?: name (default the default master), paper?: \"letter\"|\"a4\"|\"a3\", landscape?: bool, header?: bool (a title on each page, default true), output?: path, saveAs?: bool, close?: bool} opens the Print dialog on the active font's proof pages (font.proof with document), or changes the open dialog; what is left out stays as it was. output writes the pages as a PDF file instead; saveAs asks for that file in the window; close closes the dialog. The pages are made in the background: ui.inspect reports the dialog under `print`: {open, layout, glyphs, making (true until the pages are the ones asked for), pages, font, error}",
 }];
 
 /// What the pages show.
@@ -377,12 +381,98 @@ pub struct PrintState {
     pub error: Option<String>,
     /// Moves whenever the pages are made again.
     generation: u64,
+    /// The job that makes the pages.
+    making: Option<Landing>,
+    /// What the job makes is no longer what the dialog asks for.
+    again: bool,
 }
 
-/// Makes the pages of `setup`.
-fn make_pages(app: &mut FontCraftApp, setup: &Setup) -> Result<Pages, String> {
-    let params = setup.proof_params(app.session.font().map_err(|e| e.to_string())?);
-    let r = app.run_command("font.proof", Value::Object(params))?;
+/// Where a job leaves the pages and the compiled font they show.
+type Landing = Arc<Mutex<Option<(Result<Pages, String>, KeptBuild)>>>;
+
+/// How often a frame looks for finished pages.
+const POLL: std::time::Duration = std::time::Duration::from_millis(30);
+
+/// Makes the pages of the dialog's setup in the background, now or when those under way have landed. What they cannot
+/// be made of is an error now.
+fn make_pages(app: &mut FontCraftApp) -> Result<(), String> {
+    if app.printing.making.is_some() {
+        app.printing.again = true;
+        return Ok(());
+    }
+    let params = app.printing.setup.proof_params(app.session.font().map_err(|e| e.to_string())?);
+    let job = proof::document_proof(&mut app.session, Value::Object(params)).map_err(|e| e.to_string())?;
+    let landing: Landing = Arc::default();
+    let out = Arc::clone(&landing);
+    let wake = app.window.clone();
+    app.printing.making = Some(landing);
+    let make = move || {
+        let (made, build) = job.run();
+        let pages = made.map_err(|e| e.to_string()).and_then(|r| pages_of(&r));
+        if let Ok(mut slot) = out.lock() {
+            *slot = Some((pages, build));
+        }
+        if let Some(ctx) = wake {
+            ctx.request_repaint();
+        }
+    };
+    app.host.jobs().spawn("print pages", Box::new(make));
+    land(app);
+    Ok(())
+}
+
+/// Takes the pages that are made, and starts on newer ones when the dialog asks for other pages now.
+fn land(app: &mut FontCraftApp) {
+    let Some(landing) = app.printing.making.clone() else { return };
+    // This copy and the state's; the job that has gone without an answer holds none.
+    let gone = Arc::strong_count(&landing) <= 2;
+    let landed = landing.lock().ok().and_then(|mut l| l.take());
+    let made = match landed {
+        Some((made, build)) => {
+            proof::keep_build(&mut app.session, build);
+            made
+        }
+        None if gone => Err("the pages could not be made".to_string()),
+        None => return,
+    };
+    app.printing.making = None;
+    if !app.printing.open {
+        app.printing.again = false;
+        return;
+    }
+    let made = if std::mem::take(&mut app.printing.again) {
+        match make_pages(app) {
+            Ok(()) => return,
+            Err(e) => Err(e),
+        }
+    } else {
+        made
+    };
+    show(app, made);
+}
+
+fn show(app: &mut FontCraftApp, made: Result<Pages, String>) {
+    let st = &mut app.printing;
+    st.generation = st.generation.wrapping_add(1);
+    (st.pages, st.error) = match made {
+        Ok(pages) => (Some(pages), None),
+        Err(e) => (None, Some(e)),
+    };
+}
+
+/// One frame's look at the pages under way.
+pub fn logic(app: &mut FontCraftApp, ctx: &egui::Context) {
+    if app.printing.making.is_none() {
+        return;
+    }
+    land(app);
+    if app.printing.making.is_some() {
+        ctx.request_repaint_after(POLL);
+    }
+}
+
+/// The pages in an answer of `font.proof`.
+fn pages_of(r: &Value) -> Result<Pages, String> {
     let proof = r.pointer("/proofs/0").ok_or("the proof made no pages")?;
     let data = proof.get("dataBase64").and_then(Value::as_str).ok_or("the proof kept no pages")?;
     let pdf = base64::engine::general_purpose::STANDARD.decode(data).map_err(|e| format!("the pages cannot be read: {e}"))?;
@@ -400,6 +490,7 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
         app.printing.open = false;
         app.printing.pages = None;
         app.printing.error = None;
+        app.printing.again = false;
         return Ok(());
     }
     let selected: Vec<String> = app.view.font_view.selected.iter().take(MAX_GLYPHS).cloned().collect();
@@ -420,18 +511,18 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
     if flag(params, "saveAs")? == Some(true) {
         return Err("`saveAs` asks for a file in the window: give `output`".into());
     }
-    let made = make_pages(app, &setup);
+    let before = app.printing.clone();
+    app.printing.setup = setup;
     if !app.printing.open {
-        app.printing = PrintState { open: true, setup, generation: app.printing.generation.wrapping_add(1), pages: Some(made?), error: None };
-        return Ok(());
+        app.printing.open = true;
+        app.printing.pages = None;
+        app.printing.error = None;
+        // No dialog opens on pages that cannot be made.
+        return make_pages(app).inspect_err(|_| app.printing = before);
     }
-    let st = &mut app.printing;
-    st.setup = setup;
-    st.generation = st.generation.wrapping_add(1);
-    (st.pages, st.error) = match made {
-        Ok(pages) => (Some(pages), None),
-        Err(e) => (None, Some(e)),
-    };
+    if let Err(e) = make_pages(app) {
+        show(app, Err(e));
+    }
     Ok(())
 }
 
@@ -443,6 +534,7 @@ pub fn inspect(app: &FontCraftApp, state: &mut Map<String, Value>) {
         "open": st.open,
         "layout": st.setup.layout.name(),
         "glyphs": st.setup.glyphs.len(),
+        "making": st.making.is_some(),
         "pages": pages.map_or(0, |p| p.count),
         "font": pages.map(|p| p.font.as_str()),
         "error": st.error.as_deref(),
@@ -462,6 +554,8 @@ pub struct PrintModel {
     pub selected: usize,
     pub pages: Option<Pages>,
     pub error: Option<String>,
+    /// Pages are made that are not shown yet.
+    pub making: bool,
     generation: u64,
 }
 
@@ -481,6 +575,7 @@ impl PrintModel {
             selected: app.view.font_view.selected.len(),
             pages: st.pages.clone(),
             error: st.error.clone(),
+            making: st.making.is_some(),
             generation: st.generation,
         })
     }
@@ -544,7 +639,8 @@ fn post(params: Value) -> Msg {
 pub fn preview_view(ui: &mut Ui, m: &PrintModel, preview: &mut Preview) {
     let words = Env::of(ui).words::<PrintWords>();
     let Some(pages) = &m.pages else {
-        Text::new(m.error.clone().unwrap_or_default()).show(ui);
+        let waiting = if m.making { words.making.clone() } else { Label::from(String::new()) };
+        Text::new(m.error.clone().map_or(waiting, Label::from)).show(ui);
         return;
     };
     match preview.picture(pages, m.generation) {
@@ -564,6 +660,9 @@ pub fn preview_view(ui: &mut Ui, m: &PrintModel, preview: &mut Preview) {
             }
         }
         Err(why) => _ = Text::new(why).show(ui),
+    }
+    if m.making {
+        Text::new(words.making.clone()).shade(Shade::Muted).show(ui);
     }
     let last = pages.count.saturating_sub(1);
     let _ = Row::new().show(ui, |ui, _| {
@@ -743,7 +842,7 @@ pub fn view(ui: &mut Ui, m: &PrintModel, preview: &mut Preview, printer: &mut Pr
         let _ = Stack::new().show(ui, |ui, _| {
             let ready = printer.show(ui);
             let _ = Row::new().show(ui, |ui, _| {
-                let can_print = ready && m.pages.is_some();
+                let can_print = ready && m.pages.is_some() && !m.making;
                 if Button::new(words.print.clone()).enabled(can_print).show(ui).clicked()
                     && can_print
                     && let Some(pages) = &m.pages
@@ -859,7 +958,8 @@ mod tests {
         let mut session = Session::with_document();
         let rect = json!([{"x": 60.0, "y": 0.0}, {"x": 540.0, "y": 0.0}, {"x": 540.0, "y": 700.0}, {"x": 60.0, "y": 700.0}]);
         session.execute("path.addPath", &json!({"glyph": "A", "nodes": rect})).unwrap();
-        FontCraftApp::with_edit_tab(session, Arc::new(Host::builder(APP).build()))
+        // Inline jobs: the pages are there when the command returns.
+        FontCraftApp::with_edit_tab(session, Arc::new(Host::builder(APP).jobs(Arc::new(craft::host::InlineJobs)).build()))
     }
 
     fn execute(app: &mut FontCraftApp, params: Value) -> Result<Value, String> {
@@ -900,6 +1000,34 @@ mod tests {
         assert!(!app.printing.open && app.printing.pages.is_none());
         assert!(execute(&mut app, json!({"instance": "Nope"})).is_err(), "no dialog opens on pages that cannot be made");
         assert!(!app.printing.open);
+    }
+
+    /// The pages are made off the window's thread; what changes while they are made is made after them, once.
+    #[test]
+    fn pages_are_made_in_the_background_and_the_last_ones_asked_for_are_shown() {
+        let jobs = Arc::new(craft::host::ManualJobs::default());
+        let host = Host::builder(APP).jobs(jobs.clone()).build();
+        let mut app = FontCraftApp::with_edit_tab(app().session, Arc::new(host));
+        execute(&mut app, json!({})).unwrap();
+        let making = |app: &mut FontCraftApp| control::dispatch(app, "ui.inspect", &json!({})).unwrap()["print"]["making"] == true;
+        assert!(app.printing.pages.is_none() && making(&mut app));
+        execute(&mut app, json!({"layout": "glyphPerPage", "glyphs": ["A"]})).unwrap();
+        execute(&mut app, json!({"glyphs": ["A", "B"]})).unwrap();
+        assert_eq!(jobs.waiting(), 1, "one job at a time");
+        jobs.run_next();
+        land(&mut app);
+        assert!(app.printing.pages.is_none() && making(&mut app), "the first pages are not the ones asked for");
+        jobs.run_next();
+        land(&mut app);
+        assert_eq!(app.printing.pages.as_ref().unwrap().count, 2);
+        assert!(!making(&mut app) && jobs.waiting() == 0);
+
+        // Closed while the pages are made: they are dropped.
+        execute(&mut app, json!({"paper": "a4"})).unwrap();
+        execute(&mut app, json!({"close": true})).unwrap();
+        jobs.run_next();
+        land(&mut app);
+        assert!(!app.printing.open && app.printing.pages.is_none() && app.printing.making.is_none());
     }
 
     /// Print hands the shown pages and the panel's settings to the print service, and its receipt is shown.

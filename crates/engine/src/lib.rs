@@ -725,7 +725,7 @@ impl Session {
         let _modules = extensions::ModuleScope::enter(&self.extensions);
         self.depth = 1;
         self.renumbered = fontcraft_hinting::Renumbered::default();
-        let outcome = guard::catch_panic(|| (spec.run)(self, params));
+        let (outcome, written) = fontcraft_format::written::collect(|| guard::catch_panic(|| (spec.run)(self, params)));
         self.depth = 0;
         let result = match outcome {
             Ok(r) => r
@@ -739,9 +739,9 @@ impl Session {
             (r, _) => r,
         };
         // A cancel the command did not stop at undoes it here; from here on it is too late. Files already written
-        // stand, so a command that writes some is kept.
+        // stand, so a command that wrote some is kept.
         let result = result.and_then(|v| {
-            if spec.files.iter().any(|f| f.access == cmd::FileAccess::Write) {
+            if written.count > 0 {
                 work::keep();
             } else if spec.journal {
                 work::seal()?;

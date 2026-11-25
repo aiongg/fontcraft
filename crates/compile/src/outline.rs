@@ -127,17 +127,20 @@ pub enum Prepared {
 
 /// Erases the invisible open corners ([`fontcraft_pathops::erase_invisible_corners`]) of the
 /// contours of the glyphs `erased` names.
-pub(crate) fn erase_open_corners(glyphs: &mut [ResolvedGlyph], erased: impl Fn(&str) -> bool) {
+pub(crate) fn erase_open_corners(glyphs: &mut [ResolvedGlyph], erased: impl Fn(&str) -> bool) -> Result<(), crate::CompileError> {
     for g in glyphs {
         if g.contours.is_empty() || !erased(&g.name) {
             continue;
         }
+        crate::check_stop()?;
+        let mut work = fontcraft_pathops::MAX_CORNER_WORK;
         for contour in &mut g.contours {
-            if let Some(closed) = fontcraft_pathops::erase_invisible_corners(contour) {
+            if let Some(closed) = fontcraft_pathops::erase_invisible_corners_within(contour, &mut work) {
                 *contour = closed;
             }
         }
     }
+    Ok(())
 }
 
 /// Does a component's 2×2 transform hold a value that `glyf` cannot store?

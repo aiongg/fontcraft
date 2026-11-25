@@ -718,6 +718,7 @@ pub fn save(font: &Font, path: &Path, format: SaveFormat) -> Result<Saved> {
             for rel in on_disk.keys().filter(|r| r.starts_with("glyphs/") && r.ends_with(".glyph") && !files.contains_key(*r)) {
                 let target = safe_join(path, rel)?;
                 std::fs::remove_file(&target).map_err(|e| io_err("remove", &target, e))?;
+                fontcraft_format::written::record(path);
                 removed += 1;
             }
             Ok(Saved { bytes: files.values().map(Vec::len).sum(), files_written: written, files_removed: removed, losses })
@@ -841,6 +842,7 @@ fn write_ufo(path: &Path, files: &BTreeMap<String, Vec<u8>>) -> Result<(usize, u
     for rel in on_disk.keys().filter(|r| stale(r) && !files.contains_key(*r)) {
         let target = safe_join(path, rel)?;
         std::fs::remove_file(&target).map_err(|e| io_err("remove", &target, e))?;
+        fontcraft_format::written::record(path);
         removed += 1;
         // A layer folder left empty goes too.
         if let Some(parent) = target.parent()

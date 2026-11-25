@@ -69,7 +69,9 @@ pub use graph::Rewired;
 pub use inflections::{MIN_INFLECTION_DISTANCE, add_inflections};
 pub use limit::{TIME_LIMIT, Unfinished, catch_panic, run_with_time_limit};
 pub use mask::{LayerShape, MAX_MASKS, MaskMode, composite};
-pub use open_corners::{OpenCorner, erase_invisible_corners, erase_invisible_corners_in, find_open_corners};
+pub use open_corners::{
+    MAX_CORNER_WORK, OpenCorner, erase_invisible_corners, erase_invisible_corners_in, erase_invisible_corners_within, find_open_corners,
+};
 pub use stroke::{
     Cap, CapAxis, Join, MAX_PEN_RATIO, MAX_STROKE_SEGMENTS, MAX_STROKE_WIDTH, MITER_LIMIT, STROKE_TOLERANCE, StrokeStyle, position_from_stored,
     position_to_stored, stroke_outline,

@@ -13,13 +13,13 @@ use std::sync::Arc;
 use serde_json::{Map, Value, json};
 
 use super::*;
-use crate::EngineError;
 use crate::extensions::{LoadedMacro, MacroRun};
 use crate::macros::{
     self, BUILT_IN_ARGS, MACRO_EXTENSION, MAX_MACRO_NESTING, MAX_MACRO_RUN_BYTES, MAX_MACRO_RUN_STEPS, MAX_MACRO_TEXT, Macro, MacroError, Recording,
     Step,
 };
 use crate::params::Params;
+use crate::{EngineError, work};
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
@@ -267,7 +267,7 @@ fn run_loaded(s: &mut Session, loaded: Loaded, args: Value, dry_run: bool) -> Re
     }
     s.extensions_mut().running_macros.push(key.unwrap_or_default());
     // A panic is caught inside the step, so the batch it started ends with it.
-    let ran = s.one_step(&label, |s| {
+    let ran = super::session::one_step_naming_files(s, &label, "script.run", |s| {
         crate::guard::catch_panic(|| run_steps(s, &steps))
             .map_err(|panic| EngineError::Internal(format!("the macro `{label}` failed unexpectedly: {panic}")))
             .and_then(|r| r)
@@ -279,6 +279,7 @@ fn run_loaded(s: &mut Session, loaded: Loaded, args: Value, dry_run: bool) -> Re
     }
     let results = ran?;
     if outermost {
+        work::seal()?;
         s.extensions_mut().last_macro = Some((path, Arc::unwrap_or_clone(m), args));
     }
     Ok(json!({ "title": label, "steps": steps.len(), "results": results }))
@@ -348,6 +349,7 @@ fn save_in_folder(s: &mut Session, p: &Params, name: &str, m: &Macro, replace: b
     check_name(p, name)?;
     let file = format!("{name}.{MACRO_EXTENSION}");
     let target = macros_dir(s, p)?.join(&file);
+    work::seal()?;
     write_macro(p, &target, m, replace)?;
     s.extensions_mut().put_macro(file, m.clone());
     Ok(target)
@@ -388,14 +390,17 @@ fn record_macro(s: &mut Session, value: &Value) -> Result<Value> {
             if s.extensions().recording.is_some() {
                 return Err(p.bad("a macro is already being recorded: stop or cancel it first"));
             }
+            work::seal()?;
             s.extensions_mut().recording = Some(Recording::new());
             Ok(json!({ "recording": true }))
         }
         "cancel" => {
-            let Some(dropped) = s.extensions_mut().recording.take() else {
+            let Some(dropped) = s.extensions().recording.as_ref().map(|r| r.steps.len()) else {
                 return Err(p.bad("no macro is being recorded"));
             };
-            Ok(json!({ "recording": false, "steps": dropped.steps.len() }))
+            work::seal()?;
+            s.extensions_mut().recording = None;
+            Ok(json!({ "recording": false, "steps": dropped }))
         }
         "stop" => {
             let Some(recording) = s.extensions().recording.clone() else {
@@ -407,6 +412,8 @@ fn record_macro(s: &mut Session, value: &Value) -> Result<Value> {
             if let Some(description) = p.opt_str("description")? {
                 m.description = description.to_string();
             }
+            // The recording is not put back when a command is undone.
+            work::seal()?;
             let path = match name {
                 Some(name) => Some(save_in_folder(s, &p, name, &m, p.bool_or("replace", false)?)?.display().to_string()),
                 None => None,

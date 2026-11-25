@@ -28,7 +28,7 @@ pub const MAX_ENTRIES: usize = 1024;
 pub const MAX_ID_BYTES: usize = 128;
 /// Largest value, as compact JSON.
 pub const MAX_VALUE_BYTES: usize = 1 << 20;
-/// Largest settings file.
+/// Largest settings file, and the most all values take as compact JSON.
 pub const MAX_FILE_BYTES: usize = 8 << 20;
 /// Deepest nesting of arrays and objects in one value.
 pub const MAX_DEPTH: usize = 64;
@@ -274,12 +274,17 @@ fn depth_ok(v: &Value, limit: usize) -> bool {
     }
 }
 
+/// How many bytes a value takes as compact JSON.
+fn json_size(v: &Value) -> usize {
+    serde_json::to_vec(v).map_or(usize::MAX, |b| b.len())
+}
+
 /// Checks a value against the size and depth limits.
 fn check_size(id: &str, v: &Value) -> Result<(), SettingsError> {
     if !depth_ok(v, MAX_DEPTH) {
         return Err(SettingsError::TooLarge { what: format!("setting `{id}`'s nesting"), size: MAX_DEPTH + 1, limit: MAX_DEPTH });
     }
-    let size = serde_json::to_vec(v).map(|b| b.len()).unwrap_or(usize::MAX);
+    let size = json_size(v);
     if size > MAX_VALUE_BYTES {
         return Err(SettingsError::TooLarge { what: format!("setting `{id}`"), size, limit: MAX_VALUE_BYTES });
     }
@@ -425,6 +430,15 @@ impl UserSettings {
         }
         if !self.values.contains_key(id) && self.values.len() >= MAX_ENTRIES {
             return Err(SettingsError::TooLarge { what: "the number of settings".into(), size: self.values.len() + 1, limit: MAX_ENTRIES });
+        }
+        // A value that gets smaller is taken whatever the others take.
+        let (old, new) = (self.values.get(id).map_or(0, json_size), json_size(&value));
+        if new > old {
+            let others = self.values.iter().filter(|(k, _)| *k != id).map(|(k, v)| k.len().saturating_add(json_size(v)));
+            let size = others.fold(id.len().saturating_add(new), usize::saturating_add);
+            if size > MAX_FILE_BYTES {
+                return Err(SettingsError::TooLarge { what: "all settings together".into(), size, limit: MAX_FILE_BYTES });
+            }
         }
         Arc::make_mut(&mut self.values).insert(id.to_string(), value);
         self.revision += 1;
@@ -583,6 +597,16 @@ mod tests {
         assert!(matches!(s.reserved::<Vec<String>>(Reserved::Filters), Ok(None)));
         s.set_reserved(Reserved::Filters, &json!({"not": "a list"})).unwrap();
         assert!(matches!(s.reserved::<Vec<String>>(Reserved::Filters), Err(SettingsError::Unreadable { .. })));
+    }
+
+    #[test]
+    fn all_settings_together_are_limited() {
+        let mut s = UserSettings::new();
+        let big = |bytes: usize| Value::String("a".repeat(bytes));
+        let taken = (0..16).take_while(|i| s.put(&format!("big.{i}"), big(MAX_VALUE_BYTES - 2)).is_ok()).count();
+        assert_eq!(taken, MAX_FILE_BYTES / MAX_VALUE_BYTES - 1);
+        assert!(matches!(s.put("big.more", big(MAX_VALUE_BYTES - 2)), Err(SettingsError::TooLarge { .. })));
+        assert!(s.put("big.0", big(10)).is_ok() && s.put("big.more", big(10)).is_ok());
     }
 
     #[test]

@@ -44,7 +44,7 @@ impl Settings for Config {
     const SCHEMA_VERSION: u32 = 1;
 }
 
-/// The file system, with a limit on what is read.
+/// The file system, with a limit on what is read, and so on what is written.
 struct CappedFiles;
 
 impl SettingsFiles for CappedFiles {
@@ -61,6 +61,9 @@ impl SettingsFiles for CappedFiles {
     }
 
     fn write(&self, path: &Path, text: &str) -> io::Result<()> {
+        if text.len() as u64 > MAX_CONFIG_BYTES {
+            return Err(io::Error::other(format!("the settings take {} bytes, over the limit of {MAX_CONFIG_BYTES}", text.len())));
+        }
         DiskFiles.write(path, text)
     }
 
@@ -353,6 +356,17 @@ mod tests {
         assert!(problems.iter().any(|p| p.contains("not imported")), "{problems:?}");
         assert_eq!(settings, UserSettings::new());
         assert!(dir.join(LEGACY_FILE).exists());
+    }
+
+    #[test]
+    fn a_config_too_large_to_read_back_is_not_written() {
+        let dir = std::env::temp_dir().join(format!("fontcraft-settings-large-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(CONFIG_FILE);
+        CappedFiles.write(&path, "kept = 1\n").unwrap();
+        assert!(CappedFiles.write(&path, &"#".repeat(MAX_CONFIG_BYTES as usize + 1)).is_err());
+        assert_eq!(CappedFiles.read(&path).unwrap().as_deref(), Some("kept = 1\n"));
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

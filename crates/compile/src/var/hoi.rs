@@ -45,6 +45,10 @@ pub const MAX_CURVED_NODES: usize = 4096;
 pub const MAX_CHECKS: usize = 1024;
 /// Most times the sources of one glyph are refined.
 pub const MAX_ROUNDS: usize = 8;
+/// Most planning done for the glyphs of one font, in [`WORK_UNIT`]s; the curves of the rest are drawn straight.
+pub const MAX_PLAN_WORK: usize = 1_000_000_000;
+/// Coordinates added up that count as one unit of planning.
+const WORK_UNIT: usize = 16;
 /// The shortest step, in normalized coordinates: sources stay apart once written in 14 fractional
 /// bits. A span of less than two steps is drawn straight.
 const SHORTEST_STEP: f64 = 1.0 / 1024.0;
@@ -68,14 +72,33 @@ impl Samples {
         sources: &HashMap<String, GlyphSources>,
         notes: &mut Vec<String>,
     ) -> Result<Samples, CompileError> {
+        Samples::plan_within(font, designspace, sources, notes, MAX_PLAN_WORK)
+    }
+
+    /// [`Samples::plan`] with the most planning to do.
+    pub(crate) fn plan_within(
+        font: &Font,
+        designspace: &Designspace,
+        sources: &HashMap<String, GlyphSources>,
+        notes: &mut Vec<String>,
+        mut work: usize,
+    ) -> Result<Samples, CompileError> {
         let mut out = Samples::default();
         for g in font.glyphs.iter() {
+            crate::check_stop()?;
             if !g.layers.iter().any(fontcraft_interp::hoi::has_curves) {
                 continue;
             }
             let Some(gs) = sources.get(&g.name) else { continue };
-            let added = match plan_glyph(font, designspace, g, gs) {
+            let added = match plan_glyph(font, designspace, g, gs, &mut work) {
                 Ok(added) => added,
+                Err(Refused::Work) => {
+                    notes.push(format!(
+                        "glyph `{}`: the interpolation curves of the font take too much planning, so its nodes move in straight lines",
+                        g.name
+                    ));
+                    continue;
+                }
                 Err(Refused::Limit(what, limit)) => {
                     notes.push(format!(
                         "glyph `{}`: its interpolation curves need more than {limit} {what}, so its nodes move in straight lines",
@@ -189,6 +212,8 @@ fn bases(g: &Glyph) -> Vec<String> {
 enum Refused {
     /// More than so many of something.
     Limit(&'static str, usize),
+    /// The planning of the font is used up ([`MAX_PLAN_WORK`]).
+    Work,
     Error(CompileError),
 }
 
@@ -223,7 +248,13 @@ struct CurvedSpan<'a> {
     upper: &'a Location,
 }
 
-fn plan_glyph(font: &Font, designspace: &Designspace, glyph: &Glyph, sources: &GlyphSources) -> Result<Vec<Sample>, Refused> {
+/// Takes adding up `values` coordinates of each of `layers` off `work`.
+fn spend(work: &mut usize, layers: usize, values: usize) -> Result<(), Refused> {
+    *work = work.checked_sub(layers.saturating_mul(values) / WORK_UNIT + 1).ok_or(Refused::Work)?;
+    Ok(())
+}
+
+fn plan_glyph(font: &Font, designspace: &Designspace, glyph: &Glyph, sources: &GlyphSources, work: &mut usize) -> Result<Vec<Sample>, Refused> {
     // The sources the variable font has: those within its axes.
     let mut gs = GlyphSources { glyph: sources.glyph.clone(), ..GlyphSources::default() };
     let mut own: Vec<Vec<f64>> = Vec::new();
@@ -252,7 +283,10 @@ fn plan_glyph(font: &Font, designspace: &Designspace, glyph: &Glyph, sources: &G
     }
     let own_values: Vec<Vec<f64>> = gs.main.iter().map(|s| layer_of(&s.layer_id).map(|l| coordinates(l, &nodes)).unwrap_or_default()).collect();
     let options = InterpOptions::default();
-    let draw = |location: Location, span: Option<usize>| -> Result<Sample, CompileError> {
+    let size = gs.main.iter().filter_map(|s| layer_of(&s.layer_id)).map(layer_size).max().unwrap_or(0);
+    let draw = |location: Location, span: Option<usize>, work: &mut usize| -> Result<Sample, Refused> {
+        crate::check_stop()?;
+        spend(work, gs.main.len(), size)?;
         let normalized = designspace.to_normalized(&location)?.0;
         let layer = fontcraft_interp::instance::interpolate_layer_in(font, designspace, &gs, &location, &options)?;
         Ok(Sample { values: coordinates(&layer, &nodes), location, normalized, layer, span })
@@ -274,7 +308,7 @@ fn plan_glyph(font: &Font, designspace: &Designspace, glyph: &Glyph, sources: &G
         // Twice as many positions, so a step's middle is measured too.
         let mut along = Vec::with_capacity(2 * steps + 1);
         for i in 0..=2 * steps {
-            along.push(draw(between(span, i as f64 / (2 * steps) as f64), Some(k))?);
+            along.push(draw(between(span, i as f64 / (2 * steps) as f64), Some(k), work)?);
         }
         let parameters: Vec<f64> = along.iter().map(|s| s.normalized.get(span.axis).copied().unwrap_or(0.0)).collect();
         let values: Vec<&[f64]> = along.iter().map(|s| s.values.as_slice()).collect();
@@ -309,7 +343,7 @@ fn plan_glyph(font: &Font, designspace: &Designspace, glyph: &Glyph, sources: &G
             if checks.len().saturating_add(beside.len()) >= MAX_CHECKS {
                 return Err(Refused::Limit("locations to check in one glyph", MAX_CHECKS));
             }
-            beside.push(draw(location, None)?);
+            beside.push(draw(location, None, work)?);
         }
     }
     checks.append(&mut beside);
@@ -325,6 +359,8 @@ fn plan_glyph(font: &Font, designspace: &Designspace, glyph: &Glyph, sources: &G
         let mut wanted: BTreeSet<usize> = BTreeSet::new();
         let mut worst: HashMap<usize, (f64, usize)> = HashMap::new();
         for (i, check) in checks.iter().enumerate() {
+            crate::check_stop()?;
+            spend(work, masters.len(), check.values.len())?;
             let drawn = model.interpolate(&check.normalized, &masters).map_err(|e| model_error(glyph, &e))?;
             let off = drawn.iter().zip(&check.values).map(|(a, b)| (a - b).abs()).fold(0.0, f64::max);
             if off <= TOLERANCE {
@@ -355,6 +391,11 @@ fn plan_glyph(font: &Font, designspace: &Designspace, glyph: &Glyph, sources: &G
         return Err(Refused::Limit("added sources in one glyph", MAX_GLYPH_SAMPLES));
     }
     Ok(added)
+}
+
+/// How many coordinates of nodes a layer has.
+fn layer_size(layer: &Layer) -> usize {
+    layer.shapes.iter().map(|s| if let Shape::Path(p) = s { p.nodes.len().saturating_mul(2) } else { 1 }).sum()
 }
 
 fn model_error(glyph: &Glyph, e: &fontcraft_geom::variation::VariationError) -> CompileError {

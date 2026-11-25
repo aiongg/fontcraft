@@ -6,8 +6,9 @@
 //!
 //! A cancelled command fails with [`EngineError::Cancelled`], and a command that fails changes nothing. A command
 //! that ran to its end [`seal`]s the token before its change is kept, so a cancel either undoes the command whole or
-//! comes too late. Work inside other work (a step of a batch, a filter of an export) can be cancelled too, but only
-//! the outermost command reports progress and seals ([`enter`]).
+//! comes too late; one that wrote files is kept even then ([`keep`]), as the files stand. Work inside other work (a
+//! step of a batch, a filter of an export) can be cancelled too, but only the outermost command reports progress and
+//! seals ([`enter`]).
 //!
 //! The compiler, below this crate, asks through [`fontcraft_compile::stop`] whether the work was cancelled.
 

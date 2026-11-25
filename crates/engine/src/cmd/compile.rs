@@ -384,18 +384,27 @@ impl Request {
 const UNNAMED_GLYPHS_FAMILY: &str = "Unnamed font";
 
 /// The name of the UFO a master of a designspace is read from, without its extension: what fontmake names the
-/// master's font by. `None` for a layer of another master's UFO, and in any other source.
+/// master's font by. `None` for a layer of another master's UFO, where UFOs in several folders share the name, and in
+/// any other source.
 fn master_ufo_stem(font: &Font, target: &Target, format: SourceFormat) -> Option<String> {
-    use fontcraft_model::Family;
     let Target::Master(id) = target else { return None };
     let master = font.masters.iter().find(|m| m.id == *id).filter(|_| format == SourceFormat::Designspace)?;
+    let stem = ufo_stem(master)?;
+    // File systems that ignore case hold one file of the two names.
+    let shared = font.masters.iter().filter(|m| m.id != *id).filter_map(ufo_stem).any(|other| other.to_lowercase() == stem.to_lowercase());
+    (!shared).then(|| stem.to_string())
+}
+
+/// The name of the UFO `master` is the main source of, without its folder and extension.
+fn ufo_stem(master: &fontcraft_model::Master) -> Option<&str> {
+    use fontcraft_model::Family;
     if master.extra.get(Family::Designspace, "layer").is_some() {
         return None;
     }
     let path = master.extra.get(Family::Designspace, "filename")?.as_str()?;
     let name = path.trim_end_matches(['/', '\\']).rsplit(['/', '\\']).next()?;
     let stem = name.rsplit_once('.').map_or(name, |(stem, _)| stem);
-    (!stem.trim().is_empty()).then(|| stem.to_string())
+    (!stem.trim().is_empty()).then_some(stem)
 }
 
 /// The file name stem of a font: its `fileName` parameter as written (unless `postscript_names`),
@@ -1116,6 +1125,29 @@ impl Drop for Stage {
         for d in self.made.iter().rev() {
             let _ = std::fs::remove_dir(d);
         }
+    }
+}
+
+#[cfg(test)]
+mod ufo_name_tests {
+    use super::*;
+    use fontcraft_model::{Family, plist::Value as Plist};
+
+    #[test]
+    fn masters_whose_ufos_share_a_name_are_not_named_by_it() {
+        let mut font = Font::new("Stems");
+        let masters = Arc::make_mut(&mut font.masters);
+        let master = masters.first().cloned().unwrap_or_default();
+        *masters = ["a/Regular.ufo", "b/regular.ufo", "b/Bold.ufo"]
+            .into_iter()
+            .map(|file| {
+                let mut m = fontcraft_model::Master { id: file.into(), ..master.clone() };
+                m.extra.push(Family::Designspace, "filename", Plist::String(file.into()));
+                m
+            })
+            .collect();
+        let name = |file: &str| master_ufo_stem(&font, &Target::Master(file.into()), SourceFormat::Designspace);
+        assert_eq!((name("a/Regular.ufo"), name("b/regular.ufo"), name("b/Bold.ufo").as_deref()), (None, None, Some("Bold")));
     }
 }
 

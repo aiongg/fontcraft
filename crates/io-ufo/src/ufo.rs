@@ -312,6 +312,8 @@ pub(crate) struct ReadUfo {
 /// The master extra key of the glyphs whose files were skipped: UFO layer directory → glyph name →
 /// file name. Their `contents.plist` entries are written back.
 const SKIPPED: &str = "skippedGlifs";
+/// Most glyph files of one UFO that may be missing or empty: as many as a font has glyphs.
+const MAX_SKIPPED: usize = 65_535;
 /// Most names a warning lists.
 const MAX_LISTED: usize = 10;
 /// Most warnings about layers one UFO gives.
@@ -503,6 +505,7 @@ pub(crate) fn read_master(files: &Files, master_id: &str) -> Result<ReadUfo> {
     let mut layerinfo = Dict::new();
     let mut contents_kept = Dict::new();
     let mut skipped_glifs = Dict::new();
+    let mut skipped_left = MAX_SKIPPED;
     let mut missing_dirs: Vec<Value> = Vec::new();
     let mut glyphs: Vec<Glyph> = Vec::new();
     let mut index: HashMap<String, usize> = HashMap::new();
@@ -553,7 +556,11 @@ pub(crate) fn read_master(files: &Files, master_id: &str) -> Result<ReadUfo> {
                 found => {
                     let list = if found.is_some() { &mut empty } else { &mut absent };
                     list.push(format!("{name} ({file})"));
-                    skipped.insert(name, str_value(file));
+                    skipped_left = skipped_left
+                        .checked_sub(1)
+                        .ok_or_else(|| bad(&contents_path, format!("more than {MAX_SKIPPED} glyph files are missing or empty")))?;
+                    // The name is new here; looking for it would make reading quadratic.
+                    skipped.entries.push((name.into(), str_value(file)));
                     continue;
                 }
             };
@@ -1612,13 +1619,18 @@ pub(crate) fn write_master(font: &Font, target: &Target<'_>) -> Result<Files> {
                 files_taken.insert(file.to_lowercase());
             }
         }
-        for (name, file) in skipped.into_iter().flat_map(|s| &s.entries) {
-            if let Some(file) = file.as_str()
-                && !entries.iter().any(|(n, _, _, _, _)| n == name.as_str())
-            {
-                files_taken.insert(file.to_lowercase());
+        if let Some(skipped) = skipped {
+            let names: HashSet<&str> = entries.iter().map(|(n, _, _, _, _)| n.as_str()).collect();
+            for (name, file) in &skipped.entries {
+                if let Some(file) = file.as_str()
+                    && !names.contains(name.as_str())
+                {
+                    files_taken.insert(file.to_lowercase());
+                }
             }
         }
+        let kept_contents = kept_contents.and_then(|c| c.get(dir)).and_then(Value::as_dict);
+        let kept_names: HashSet<&str> = kept_contents.into_iter().flat_map(|d| &d.entries).map(|(n, _)| n.as_str()).collect();
         for (name, file, g, layer, is_background) in &mut entries {
             if file.is_empty() {
                 *file = glyph_file_name(name, &files_taken).ok_or_else(|| bad(name, "no free file name for the glyph"))?;
@@ -1682,8 +1694,7 @@ pub(crate) fn write_master(font: &Font, target: &Target<'_>) -> Result<Files> {
                 (origin, height)
             };
             // glyphsLib's lib keys, and the outline as they want it.
-            let new_file =
-                !from_ufo || kept_contents.and_then(|c| c.get(dir)).and_then(Value::as_dict).is_none_or(|d| d.get(name.as_str()).is_none());
+            let new_file = !from_ufo || !kept_names.contains(name.as_str());
             let primary = is_default && doc_default && !*is_background;
             let keys = glyphkeys::entries(&glyphkeys::Glif { font, glyph: g, layer, background: *is_background, primary, new: new_file, format });
             let shaped: Cow<'_, Layer> = if keys.paths_first || keys.zero_width || !keys.anchor_ids.is_empty() {
@@ -1711,15 +1722,29 @@ pub(crate) fn write_master(font: &Font, target: &Target<'_>) -> Result<Files> {
             out.insert(format!("{dir}/{file}"), text.into_bytes());
         }
         // The kept contents, for its order and spellings; then the model's glyphs.
-        if let Some(kept) = kept_contents.and_then(|c| c.get(dir)).and_then(Value::as_dict) {
+        if let Some(kept) = kept_contents {
             contents = kept.clone();
             let files: HashSet<&str> = entries.iter().map(|(_, f, _, _, _)| f.as_str()).collect();
+            let names: HashSet<&str> = entries.iter().map(|(n, _, _, _, _)| n.as_str()).collect();
+            let skipped: HashSet<&str> = skipped.into_iter().flat_map(|s| &s.entries).map(|(n, _)| n.as_str()).collect();
             contents.entries.retain(|(k, v)| {
-                let still_skipped = skipped.is_some_and(|s| s.get(k.as_str()).is_some()) && v.as_str().is_some_and(|f| !files.contains(f));
-                entries.iter().any(|(n, _, _, _, _)| n == k.as_str()) || still_skipped
+                let still_skipped = skipped.contains(k.as_str()) && v.as_str().is_some_and(|f| !files.contains(f));
+                names.contains(k.as_str()) || still_skipped
             });
         }
-        for (name, file, _, _, _) in &entries {
+        let mut listed: HashMap<String, usize> = HashMap::with_capacity(contents.entries.len());
+        for (i, (k, _)) in contents.entries.iter().enumerate() {
+            listed.entry(k.as_str().to_string()).or_insert(i);
+        }
+        let (known, new): (Vec<_>, Vec<_>) = entries.iter().partition(|(name, ..)| listed.contains_key(name));
+        for (name, file, _, _, _) in known {
+            if let Some((_, old)) = listed.get(name).and_then(|&i| contents.entries.get_mut(i))
+                && old.as_str() != Some(file.as_str())
+            {
+                *old = str_value(file);
+            }
+        }
+        for (name, file, _, _, _) in new {
             patch(&mut contents, name, Some(str_value(file)));
         }
         if entries.is_empty() && missing.contains(&dir.as_str()) {
@@ -2573,6 +2598,23 @@ mod tests {
         assert!(s(&out["glyphs/B_eta.glif"]).contains("321"));
         let (font, warnings) = read_reporting(&out).unwrap();
         assert!(warnings.is_empty() && font.glyph("Beta").is_some(), "{warnings:?}");
+    }
+
+    #[test]
+    fn many_missing_glifs_are_read_and_written_back_up_to_a_limit() {
+        let path = format!("{DEFAULT_DIR}/{CONTENTS}");
+        let with = |missing: usize| {
+            let mut files = lenient_ufo();
+            let listed = s(&files[&path]).to_string();
+            let entries: String = (0..missing).map(|i| format!("    <key>z{i:06}</key>\n    <string>z{i:06}.glif</string>\n")).collect();
+            files.insert(path.clone(), listed.replacen("  </dict>", &format!("{entries}  </dict>"), 1).into_bytes());
+            files
+        };
+        let (font, warnings) = unchanged(&with(30_000));
+        one(&warnings, "and 29990 more");
+        assert_eq!(font.glyphs.len(), 3);
+        let refused = read_reporting(&with(MAX_SKIPPED + 1)).unwrap_err().to_string();
+        assert!(refused.contains("missing or empty"), "{refused}");
     }
 
     #[test]

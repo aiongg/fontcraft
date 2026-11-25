@@ -35,6 +35,7 @@ mod background_layers;
 mod bitmap_edit;
 mod bitmap_open;
 mod bitmap_strikes;
+mod cancelled_commands;
 mod cid;
 mod clipboard;
 mod clipboard_pdf;

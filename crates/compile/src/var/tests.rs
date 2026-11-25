@@ -1103,6 +1103,28 @@ fn interpolation_curves_are_followed_along_their_span() {
 }
 
 #[test]
+fn planning_curves_stops_when_cancelled_and_has_one_limit_for_the_font() {
+    let f = with_curve(Some(HoiCurve::Point { x: 450.0, y: -120.0 }));
+    let designspace = fontcraft_interp::Designspace::new(&f).unwrap();
+    let sources = fontcraft_interp::GlyphSources::of(&f, &designspace, "a").unwrap();
+    let sources = std::collections::HashMap::from([("a".to_string(), sources)]);
+    let mut notes = Vec::new();
+    let planned = hoi::Samples::plan(&f, &designspace, &sources, &mut notes).unwrap();
+    assert!(!planned.is_empty() && notes.is_empty(), "{notes:?}");
+    let short = hoi::Samples::plan_within(&f, &designspace, &sources, &mut notes, 20).unwrap();
+    assert!(short.is_empty() && notes.len() == 1 && notes[0].contains("straight lines"), "{notes:?}");
+    // Cancelled once it has begun on the glyph.
+    let asked = std::rc::Rc::new(std::cell::Cell::new(0));
+    let count = std::rc::Rc::clone(&asked);
+    let ask: crate::stop::Ask = std::rc::Rc::new(move || {
+        count.set(count.get() + 1);
+        count.get() > 5
+    });
+    let stopped = crate::stop::with(Some(ask), || hoi::Samples::plan(&f, &designspace, &sources, &mut Vec::new()));
+    assert!(matches!(stopped, Err(CompileError::Cancelled)));
+}
+
+#[test]
 fn curves_that_bend_nothing_add_nothing_and_advances_keep_their_own_regions() {
     let table = |v: &VariableFont, tag: &[u8; 4]| {
         let font = FontRef::new(&v.compiled.bytes).unwrap();

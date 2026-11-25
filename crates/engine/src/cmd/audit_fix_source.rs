@@ -35,7 +35,9 @@ pub(super) fn fix_source(s: &mut Session, p: &Params, target: &str) -> Result<Va
     let dry = p.bool_or("dryRun", false)?;
     let req = OutputRequest::from_params(p)?;
     let input = Path::new(target);
-    let (font, mut problems) = crate::io::open(input, None)?;
+    // Taken before the files are read, so a change made while they are read counts as one made after.
+    let mut read = crate::io::stamp(input);
+    let (mut font, mut problems) = crate::io::open(input, None)?;
     if font.source.format == fontcraft_model::SourceFormat::Binary {
         return Err(EngineError::Unsupported("fixing this kind of compiled font; open it and save it as a source first".into()));
     }
@@ -52,7 +54,11 @@ pub(super) fn fix_source(s: &mut Session, p: &Params, target: &str) -> Result<Va
     if format == SaveFormat::Designspace && !req.in_place {
         return Err(p.bad("a designspace names its UFOs, so a copy of it would write over them: give `inPlace`, or an `output` in another format"));
     }
-    let read = crate::io::document_stamp(input, &font);
+    // Only the document says which UFOs it names, so what is fixed is a second reading, made after their stamp.
+    if format == SaveFormat::Designspace {
+        read = crate::io::document_stamp(input, &font);
+        (font, problems) = crate::io::open(input, None)?;
+    }
 
     let mut own = s.without_documents();
     own.push_document(font, Some(input.to_path_buf()));
