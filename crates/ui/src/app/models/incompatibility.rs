@@ -10,10 +10,12 @@
 //! in. Nothing is drawn while Enforce Compatibility Check is present and off.
 
 use std::collections::HashSet;
+use std::sync::Arc;
 
 use craft::behavior::dock::PanelState;
 use craft::ui::contract::{PlainData, Tracked};
 use fontcraft_engine::Session;
+use fontcraft_engine::interp_cache::KnownCompat;
 use fontcraft_engine::prelude::*;
 
 use super::ProjectCx;
@@ -27,8 +29,6 @@ use crate::shell::dock::PanelId;
 pub const WORK_PER_PASS: usize = 20_000;
 /// Most cells in view one pass asks for.
 pub const MAX_CELLS: usize = 4_096;
-/// Most pairs of layers a reason names.
-const MAX_REASONS: usize = 4;
 
 /// What a Font View cell shows of its glyph's compatibility.
 #[derive(PlainData, Clone, Debug, Default, PartialEq, Eq)]
@@ -39,7 +39,7 @@ pub enum CellCompat {
     /// Not checked yet.
     Unchecked,
     /// The layers cannot interpolate, and why.
-    Differs(String),
+    Differs(Arc<str>),
 }
 
 /// The bar over one glyph of the text, in the edited glyph's font units.
@@ -96,29 +96,17 @@ pub fn scan(app: &mut FontCraftApp) {
     }
 }
 
-/// Why `glyph` cannot interpolate, on one line.
-fn reason(session: &mut Session, glyph: &str) -> String {
-    let reasons = session.compat_reasons(glyph);
-    let more = reasons.len().saturating_sub(MAX_REASONS);
-    let mut text = reasons.into_iter().take(MAX_REASONS).collect::<Vec<_>>().join("; ");
-    if more > 0 {
-        text.push_str(&format!("; and {more} more"));
-    }
-    text
-}
-
 fn states(session: &mut Session, rows: &[GlyphRow]) -> Vec<CellCompat> {
     if !session.compat_indicators() {
         return vec![CellCompat::Fine; rows.len()];
     }
     let names: Vec<&str> = rows.iter().map(|r| r.name.as_str()).collect();
-    let known = session.known_compat_states(&names);
-    let state = |(row, known): (&GlyphRow, Option<bool>)| match known {
-        Some(true) => CellCompat::Fine,
-        None => CellCompat::Unchecked,
-        Some(false) => CellCompat::Differs(reason(session, &row.name)),
+    let state = |known: KnownCompat| match known {
+        KnownCompat::Compatible => CellCompat::Fine,
+        KnownCompat::Unchecked => CellCompat::Unchecked,
+        KnownCompat::Differs(reason) => CellCompat::Differs(reason),
     };
-    rows.iter().zip(known).map(state).collect()
+    session.known_compat_states(&names).into_iter().map(state).collect()
 }
 
 /// Sets the rows' states from the answers there are.
@@ -197,8 +185,9 @@ fn text_bars(text: &TextModel, cx: &mut ProjectCx<'_>) -> Option<(Vec<Bar>, bool
     let waiting = cx.session.check_some_compat(&names, false, WORK_PER_PASS);
     let mut reasons = std::collections::HashMap::new();
     for name in names {
-        if cx.session.known_compat(&name).is_some_and(|c| !c.ok) {
-            let reason = reason(cx.session, &name);
+        if cx.session.known_compat(&name).is_some()
+            && let Some(reason) = cx.session.compat_reason(&name)
+        {
             reasons.insert(name, reason);
         }
     }
@@ -211,7 +200,7 @@ fn text_bars(text: &TextModel, cx: &mut ProjectCx<'_>) -> Option<(Vec<Bar>, bool
     let mut push = |name: &str, item: Option<usize>, at: [f64; 2], width: f64, ascender: f64| {
         let Some(reason) = reasons.get(name) else { return };
         let width = if width.is_finite() { width.max(0.0) } else { 0.0 };
-        let bar = Bar { glyph: name.to_string(), item, x0: at[0], x1: at[0] + width, y: at[1] + ascender, reason: reason.clone() };
+        let bar = Bar { glyph: name.to_string(), item, x0: at[0], x1: at[0] + width, y: at[1] + ascender, reason: reason.to_string() };
         if [bar.x0, bar.x1, bar.y].iter().all(|v| v.is_finite()) {
             out.push(bar);
         }

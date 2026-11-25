@@ -107,7 +107,7 @@ pub fn show(ui: &mut Ui, model: &FontViewModel, images: &CellImages, sent: &mut 
                     false
                 }
                 CellCompat::Differs(reason) => {
-                    tile = tile.tooltip(reason.clone()).accessible_name(format!("{}, {}", glyph.name, words.incompatible.as_str()));
+                    tile = tile.tooltip(reason.to_string()).accessible_name(format!("{}, {}", glyph.name, words.incompatible.as_str()));
                     true
                 }
             };
