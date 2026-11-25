@@ -51,7 +51,8 @@ pub fn click(app: &mut FontCraftApp, params: &Value) -> Result<Value, String> {
 pub fn key(app: &mut FontCraftApp, params: &Value) -> Result<Value, String> {
     let name = params.get("key").and_then(Value::as_str).ok_or("`key` is required")?;
     let shift = params.get("shift").and_then(Value::as_bool).unwrap_or(false);
-    let Some(key) = DialogKey::parse(name) else { return Ok(json!({"handled": false, "open": app.dialogs.open.is_some()})) };
+    let key = DialogKey::parse(name).filter(|_| !app.closing.is_open());
+    let Some(key) = key else { return Ok(json!({"handled": false, "open": app.dialogs.open.is_some()})) };
     let Some(result) = form::key(app, key, shift) else { return Ok(json!({"handled": false, "open": false})) };
     let open = app.dialogs.open.is_some();
     Ok(match result {
@@ -64,5 +65,5 @@ pub fn key(app: &mut FontCraftApp, params: &Value) -> Result<Value, String> {
 /// comes here first.
 pub fn text(app: &mut FontCraftApp, params: &Value) -> Result<Value, String> {
     let text = params.get("text").and_then(Value::as_str).ok_or("`text` is required")?;
-    Ok(json!({"field": form::type_text(app, text)}))
+    Ok(json!({"field": !app.closing.is_open() && form::type_text(app, text)}))
 }

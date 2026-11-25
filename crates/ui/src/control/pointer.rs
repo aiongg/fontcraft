@@ -130,12 +130,6 @@ fn key(app: &mut FontCraftApp, params: &Value) -> Result<Value, String> {
     const M: &str = "ui.key";
     let name =
         params.get("key").and_then(Value::as_str).ok_or_else(|| format!("{M}: `key` (a key name such as `v`, `ArrowLeft`, `Escape`) is required"))?;
-    if app.dialogs.open.is_some() {
-        let reply = super::dialogs::key(app, params).map_err(|e| format!("{M}: {e}"))?;
-        if reply.get("handled").and_then(Value::as_bool) == Some(true) {
-            return Ok(reply);
-        }
-    }
     let mut mods = modifiers(M, params.get("mods"))?;
     for (flag, slot) in [("shift", &mut mods.shift), ("alt", &mut mods.alt), ("cmd", &mut mods.cmd), ("ctrl", &mut mods.ctrl)] {
         match params.get(flag) {
@@ -150,6 +144,17 @@ fn key(app: &mut FontCraftApp, params: &Value) -> Result<Value, String> {
         Some("release") => (false, true),
         Some(_) => return Err(format!("{M}: `action` must be tap, press or release")),
     };
+    // The question about unsaved changes is a modal over everything, the open dialog included: the window's keys are its.
+    if app.closing.is_open() {
+        let steps = to_window(app, name, mods, press, release);
+        return Ok(json!({"queued": steps.unwrap_or(0), "handled": steps.is_some(), "closePrompt": true}));
+    }
+    if app.dialogs.open.is_some() {
+        let reply = super::dialogs::key(app, params).map_err(|e| format!("{M}: {e}"))?;
+        if reply.get("handled").and_then(Value::as_bool) == Some(true) {
+            return Ok(reply);
+        }
+    }
     // An open context menu takes the window's keys before anything under it, so the key goes to the window as the
     // keyboard sends it.
     let menu_open = app.context_menus.canvas.is_some() || app.context_menus.glyph.is_some();

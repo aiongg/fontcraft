@@ -113,7 +113,7 @@ is checked for.
 | `ui.resize` | `{width, height}` | the window's inner size in points, width 640 to 16,384 and height 400 to 16,384, at the next frame. A size larger than the monitor, or than the graphics device can draw (8,192 points at most), is clamped; `{width, height, clamped}` has the size asked of the window |
 | `ui.focus` | | brings the window to the front with the keyboard, at the next frame; `{focus: true}` |
 | `ui.contextMenu.list` | `{x?, y?, space?}` | the open canvas context menu: `{open, glyph, screen, at, hit, sections: [{context, items: [{command, label, enabled, disabled_reason?, checked?, alternate?, choices?: [{value, label, checked}]}]}]}`; `{open: false}` when none is. With `x` and `y` it first opens the menu there, as a right-click does (`space` as in `ui.pointer`, default `font`); that is refused while a tool is dragging or a dialog is open |
-| `ui.contextMenu.invoke` | `{command, value?}` | runs an item of the open canvas context menu as a click on it does, and closes the menu; the item's result. A submenu item (one `ui.contextMenu.list` shows with `choices`) needs `value`, one of its choices' values; a plain item takes none. The item is checked as the menu would show it now: a disabled or missing item is refused and the menu stays open; a menu whose tab or glyph changed, or that a dialog covers, closes and the request is refused. Refused while the question about unsaved changes is open |
+| `ui.contextMenu.invoke` | `{command, value?}` | runs an item of the open canvas context menu as a click on it does, and closes the menu; the item's result. A submenu item (one `ui.contextMenu.list` shows with `choices`) needs `value`, one of its choices' values; a plain item takes none. The item is checked as the menu would show it now: a disabled or missing item is refused and the menu stays open; a menu whose tab, glyph, layer or side changed, or that a dialog covers, closes and the request is refused. Refused while the question about unsaved changes is open |
 | `ui.wait` | `{frames?, idle?, timeoutMs?}` | the reply waits until `frames` frames (at most 3,600) have been drawn, or until the window is idle, or both: `{frames, idle, timedOut, elapsedMs}`. Without `frames` it waits for idle; with `frames` alone only for the frames. Idle means no window input queued or running, no screenshot or input reply waiting, and at least two frames drawn since the request, so what the request before it fired has been applied and drawn. `timeoutMs` (default 5,000, at most 30,000) ends the wait with `timedOut: true`. Headless hosts answer with an error |
 | `control.cancel` | `{key}` | cancels the request with that `cancelKey`: `{cancelled}`; see the top of this page. Headless hosts answer with an error |
 | `events.list` | `{since?}` | what happened, oldest first: `{events: [{seq, kind, …}], last, dropped}`; see [Events](#events) |
@@ -337,6 +337,12 @@ in `ui.dialog.inspect` is what OK runs: the same command with those parameters g
 font. While a dialog is open, `ui.key` goes to it (`Return`, `Escape`, `Tab`, `ArrowUp`,
 `ArrowDown`, the rules of `dialog.fieldKeys`), `ui.text` types into its focused field, and
 editing commands fail with "an interaction is running".
+
+While the question about unsaved changes is open (`closePrompt` of `ui.inspect`), it has the keyboard:
+`ui.key` goes to the window as the keyboard sends it, so Tab moves among its buttons, Return and
+Escape answer it and no tool letter or shortcut runs (`{queued, handled, closePrompt: true}`);
+`ui.text` types nothing (`{typed: false, closePrompt: true}`), and `ui.dialog.key` and
+`ui.dialog.text` do not reach a dialog behind it. `window.closePrompt` answers it by command.
 
 A dialog in `runOnOk` mode (the tabs of `dialog.export`, opened by `file.export`) previews
 nothing, because its command writes files: `ui.dialog.confirm` runs the command once, and a
