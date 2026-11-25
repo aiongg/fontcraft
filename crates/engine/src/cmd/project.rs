@@ -8,6 +8,8 @@
 //! `project.startsFromFontInstances`, `project.linkedFontNeedNotBeOpen`,
 //! `project.exportPreconditions`, `project.instanceExportFolder`.
 //!
+//! A project's variable font settings are entries of its list like the static instances; `project.export` builds both.
+//!
 //! Instance edits run the export entry commands (`font.instance.*`, `font.customParameters.*`) on
 //! a private session holding a copy of the linked font with the project's instances in place of
 //! its own, so a project instance is checked and changed exactly as an export of the font is.
@@ -56,7 +58,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Add Instance",
             [],
             None,
-            "{project?: id|path|title, kind?: \"instance\"|\"variableFontSetting\", at?: index, styleName?: string, axes?: {tag: number}, weightClass?: 1–1000, widthClass?: 1–9} add a static instance with the defaults of font.instance.add (Regular, at the linked font's first master, classes 400 and 5) at position at (default: the end). Variable font settings are not supported yet → {project, index}",
+            "{project?: id|path|title, kind?: \"instance\"|\"variableFontSetting\", at?: index, styleName?: string, axes?: {tag: number}, weightClass?: 1–1000, widthClass?: 1–9} add a static instance with the defaults of font.instance.add (Regular, at the linked font's first master, classes 400 and 5), or a variable font setting as font.instance.addVariableFontSetting adds one (called styleName, Regular unless given; the other properties do not apply), at position at (default: the end) → {project, index, warnings}",
             has_project,
             add_instance
         ),
@@ -101,7 +103,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Edit Instance",
             [],
             None,
-            "{project?: id|path|title, instance: id|name|index, changes: {active?, styleName?, weightClass?, widthClass?, axes?, isBold?, isItalic?, linkStyle?, customParameters?: [{action: \"add\"|\"set\"|\"remove\", name: string, index?: integer, value?: any, enabled?: bool}]}} change one project instance as Font Info › Exports changes an export: the property keys are those of font.instance.set, and each custom parameter edit is font.customParameters.add, set or remove on this instance, in order. All of it is checked before anything changes → {project, changed: [keys], warnings}",
+            "{project?: id|path|title, instance: id|name|index, changes: {active?, styleName?, weightClass?, widthClass?, axes?, isBold?, isItalic?, linkStyle?, fields?: [{action: \"set\"|\"remove\"|\"setLanguage\"|\"removeLanguage\", key: string, value?: any, language?: string}], customParameters?: [{action: \"add\"|\"set\"|\"remove\", name: string, index?: integer, value?: any, enabled?: bool}]}} change one project instance as Font Info › Exports changes an export: the property keys are those of font.instance.set, each General field edit is font.info.set, removeField, setLocalizedValue or removeLocalizedValue and each custom parameter edit is font.customParameters.add, set or remove on this instance, in order. All of it is checked before anything changes → {project, changed: [keys], warnings}",
             has_project,
             edit_instance
         ),
@@ -119,7 +121,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Export",
             [],
             None,
-            "{project?: id|path|title, outlines?: [\"truetype\"|\"cff\"], containers?: [\"plain\"|\"woff\"|\"woff2\"], removeOverlap?: bool, timestamp?: number|\"now\", versionStamp?: bool} build every active static instance of the project from the linked font file, read from disk (it need not be open), into the export destination, through the same build as File › Export; an instance's Export Folder parameter puts its files in that sub-folder. Needs a saved project without unsaved changes, a font link that resolves and a destination. Default outlines truetype, container plain; with both outline formats the files go into ttf and otf subfolders. Instances between masters are skipped and listed. A failing export writes nothing → {destination, written, fonts: [{instance, source, format, outlines, glyphs, warnings, files}], skipped: [{instance, source, reason}], warnings}",
+            "{project?: id|path|title, outlines?: [\"truetype\"|\"cff\"], containers?: [\"plain\"|\"woff\"|\"woff2\"], removeOverlap?: bool, timestamp?: number|\"now\", versionStamp?: bool} build every active static instance and every active variable font setting of the project from the linked font file, read from disk (it need not be open), into the export destination, through the same builds as File › Export; a variable font has glyf and gvar for truetype and CFF2 for cff; an instance's Export Folder parameter puts its files in that sub-folder. Needs a saved project without unsaved changes, a font link that resolves and a destination. Default outlines truetype, container plain; with both outline formats the files go into ttf and otf subfolders. Instances between masters are skipped and listed. A failing export writes nothing → {destination, written, fonts: [{instance, source (instance or variable), format, outlines, fileName? (variable fonts), glyphs, warnings, files}], skipped: [{instance, source, reason}], warnings}",
             has_project,
             export
         ).writes_files(),
@@ -246,10 +248,11 @@ fn with_project(s: &Session, i: usize, mut result: Map<String, Value>) -> Result
 /// Links `data` to the font at `path`: reads it and, when the project has no instances, takes
 /// the font's. Returns the font read, how many instances were copied, and the reader's warnings.
 fn link(p: &Params, data: &mut ProjectData, path: PathBuf) -> Result<(Arc<Font>, usize, Vec<String>)> {
-    let (font, warnings) = read_font(&path)?;
+    let (font, mut warnings) = read_font(&path)?;
     if font.instances.len() > MAX_PROJECT_INSTANCES {
         return Err(p.bad(format!("the font has {} instances; a project holds at most {MAX_PROJECT_INSTANCES}", font.instances.len())));
     }
+    warnings.extend(axis_warning(&font, &data.instances));
     data.font = Some(path);
     let copied = if data.instances.is_empty() {
         data.instances = font.instances.clone();
@@ -306,21 +309,35 @@ fn link_font(s: &mut Session, v: &Value) -> Result<Value> {
 fn add_instance(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("project.addInstance", v)?;
     let i = project_index(s, &p)?;
-    match p.opt_str("kind")? {
-        None | Some("instance") => {}
-        Some("variableFontSetting") => return Err(EngineError::Unsupported("variable font settings in a project (ROADMAP.md, M9)".into())),
+    let variable = match p.opt_str("kind")? {
+        None | Some("instance") => false,
+        Some("variableFontSetting") => true,
         Some(other) => return Err(p.bad(format!("`kind` is \"instance\" or \"variableFontSetting\", not `{other}`"))),
-    }
+    };
     let doc = s.project_at(i)?;
     let count = doc.data.instances.len();
+    if count >= MAX_PROJECT_INSTANCES {
+        return Err(p.bad(format!("a project holds at most {MAX_PROJECT_INSTANCES} instances")));
+    }
     let at = position(&p, "at", count)?.unwrap_or(count);
     let mut forward = Map::new();
-    for key in ADD_KEYS {
-        if let Some(value) = p.get(key) {
-            forward.insert(key.into(), value.clone());
+    let command = if variable {
+        if let Some(key) = ADD_KEYS.iter().find(|key| **key != "styleName" && p.get(key).is_some()) {
+            return Err(p.bad(format!("a variable font setting has no `{key}`")));
         }
-    }
-    let (instances, _) = on_carrier("project.addInstance", doc, |t| t.execute("font.instance.add", &Value::Object(forward)))?;
+        if let Some(name) = p.get("styleName") {
+            forward.insert("name".into(), name.clone());
+        }
+        "font.instance.addVariableFontSetting"
+    } else {
+        for key in ADD_KEYS {
+            if let Some(value) = p.get(key) {
+                forward.insert(key.into(), value.clone());
+            }
+        }
+        "font.instance.add"
+    };
+    let (instances, added) = on_carrier("project.addInstance", doc, |t| t.execute(command, &Value::Object(forward)))?;
     let last = instances.len().checked_sub(1).ok_or_else(|| EngineError::Internal("the new instance is missing".into()))?;
     let list = moved_to(&instances, &[last], at).ok_or_else(|| p.bad("`at` is out of range"))?;
     let mut data = ProjectData::clone(&doc.data);
@@ -328,6 +345,7 @@ fn add_instance(s: &mut Session, v: &Value) -> Result<Value> {
     s.update_project(i, data, None)?;
     let mut out = Map::new();
     out.insert("index".into(), json!(at));
+    out.insert("warnings".into(), added.get("warnings").cloned().unwrap_or_else(|| json!([])));
     with_project(s, i, out)
 }
 
@@ -431,6 +449,7 @@ fn edit_instance(s: &mut Session, v: &Value) -> Result<Value> {
     }
     let mut set = Map::new();
     let mut edits: &[Value] = &[];
+    let mut field_edits: &[Value] = &[];
     for (key, value) in changes {
         if INSTANCE_KEYS.contains(&key.as_str()) {
             set.insert(key.clone(), value.clone());
@@ -439,14 +458,22 @@ fn edit_instance(s: &mut Session, v: &Value) -> Result<Value> {
             if edits.len() > MAX_PARAMS_PER_SCOPE {
                 return Err(p.bad(format!("`changes.customParameters` holds more than {MAX_PARAMS_PER_SCOPE} edits")));
             }
+        } else if key == "fields" {
+            field_edits = value.as_array().ok_or_else(|| p.bad("`changes.fields` is a list of edits"))?;
+            if field_edits.len() > MAX_PARAMS_PER_SCOPE {
+                return Err(p.bad(format!("`changes.fields` holds more than {MAX_PARAMS_PER_SCOPE} edits")));
+            }
         } else {
-            return Err(p.bad(format!("`changes` has no key `{key}`: it takes {} and customParameters", INSTANCE_KEYS.join(", "))));
+            return Err(p.bad(format!("`changes` has no key `{key}`: it takes {}, fields and customParameters", INSTANCE_KEYS.join(", "))));
         }
     }
     let mut steps: Vec<(&'static str, Value)> = Vec::with_capacity(edits.len() + 1);
     if !set.is_empty() {
         set.insert("instances".into(), json!([k]));
         steps.push(("font.instance.set", Value::Object(set)));
+    }
+    for (n, edit) in field_edits.iter().enumerate() {
+        steps.push(field_step(&p, n, edit, k)?);
     }
     for (n, edit) in edits.iter().enumerate() {
         let Value::Object(edit) = edit else { return Err(p.bad(format!("custom parameter edit #{n} is not an object"))) };
@@ -468,7 +495,10 @@ fn edit_instance(s: &mut Session, v: &Value) -> Result<Value> {
         }
         Ok(Value::Array(outputs))
     })?;
-    let mut changed: Vec<String> = changes.keys().filter(|key| *key != "customParameters").cloned().collect();
+    let mut changed: Vec<String> = changes.keys().filter(|key| !matches!(key.as_str(), "customParameters" | "fields")).cloned().collect();
+    if !field_edits.is_empty() {
+        changed.push("fields".into());
+    }
     if !edits.is_empty() {
         changed.push("customParameters".into());
     }
@@ -481,6 +511,36 @@ fn edit_instance(s: &mut Session, v: &Value) -> Result<Value> {
     out.insert("changed".into(), json!(changed));
     out.insert("warnings".into(), json!(warnings));
     with_project(s, i, out)
+}
+
+/// The command and parameters of General field edit `n` on instance `k`.
+fn field_step(p: &Params, n: usize, edit: &Value, k: usize) -> Result<(&'static str, Value)> {
+    let Value::Object(edit) = edit else { return Err(p.bad(format!("field edit #{n} is not an object"))) };
+    let key = edit.get("key").and_then(Value::as_str).ok_or_else(|| p.bad(format!("field edit #{n}: `key` names the field")))?;
+    let value = || edit.get("value").cloned().unwrap_or(Value::Null);
+    let language = || edit.get("language").cloned().unwrap_or(Value::Null);
+    Ok(match edit.get("action").and_then(Value::as_str) {
+        Some("set") => {
+            let mut values = Map::new();
+            values.insert(key.into(), value());
+            ("font.info.set", json!({"scope": "instance", "targets": [k], "values": values}))
+        }
+        Some("remove") => ("font.info.removeField", json!({"scope": "instance", "targets": [k], "keys": [key]})),
+        Some("setLanguage") => {
+            ("font.info.setLocalizedValue", json!({"scope": "instance", "target": k, "key": key, "language": language(), "value": value()}))
+        }
+        Some("removeLanguage") => ("font.info.removeLocalizedValue", json!({"scope": "instance", "target": k, "key": key, "language": language()})),
+        _ => return Err(p.bad(format!("field edit #{n}: `action` is \"set\", \"remove\", \"setLanguage\" or \"removeLanguage\""))),
+    })
+}
+
+/// A warning when instances have coordinates on more axes than `font` has: they are kept, and those past the font's
+/// axes are not used.
+fn axis_warning(font: &Font, instances: &[Instance]) -> Option<String> {
+    let longer: Vec<&str> = instances.iter().filter(|i| i.location.len() > font.axes.len()).map(target::instance_name).collect();
+    let (first, more) = (longer.first()?, longer.len().saturating_sub(1));
+    let who = if more == 0 { format!("the instance {first} has") } else { format!("the instance {first} and {more} more have") };
+    Some(format!("{who} coordinates on more axes than the linked font ({}); check the Axes Coordinates", font.axes.len()))
 }
 
 fn set_destination(s: &mut Session, v: &Value) -> Result<Value> {
@@ -496,7 +556,9 @@ fn set_destination(s: &mut Session, v: &Value) -> Result<Value> {
 #[cfg(not(target_arch = "wasm32"))]
 fn export(s: &mut Session, v: &Value) -> Result<Value> {
     use super::compile::{self, Dest, Pick, Report, Request, Sink};
-    use fontcraft_compile::{Flavour, Options};
+    use super::compile_select::{self, VariablePick};
+    use fontcraft_compile::var::{VarFlavour, names::variable_names};
+    use fontcraft_compile::{AssetsRef, DataRef, Flavour, Options};
 
     let p = Params::new("project.export", v)?;
     let i = project_index(s, &p)?;
@@ -532,7 +594,7 @@ fn export(s: &mut Session, v: &Value) -> Result<Value> {
         version_stamp: p.bool_or("versionStamp", true)?,
         ..Options::default()
     };
-    let req = Request {
+    let mut req = Request {
         flavours,
         containers,
         options,
@@ -543,38 +605,75 @@ fn export(s: &mut Session, v: &Value) -> Result<Value> {
     };
 
     let (mut font, mut warnings) = crate::project::read_font(&font_path)?;
+    warnings.extend(axis_warning(&font, &instances));
     font.instances = instances;
     compile::check_glyph_names(&font)?;
     // Only the project's own instances: a project without one exports nothing, not a master.
     let jobs: Vec<compile::Job> = compile::jobs(&font, &Pick::Exportable, false, &p)?.into_iter().filter(|j| j.source == "instance").collect();
-    if jobs.is_empty() {
-        return Err(p.bad("the project has no active static instance to export"));
+    let mut settings: Vec<VariablePick> = Vec::new();
+    for k in fontcraft_interp::designspace::variable_settings(&font) {
+        let Some(setting) = font.instances.get(k).filter(|setting| setting.exports) else { continue };
+        let stem = variable_names(&font, Some(k))?.file_stem;
+        settings.push(VariablePick { setting: Some(k), label: setting.name.clone(), stem });
     }
-    compile::check_size(&req, jobs.len())?;
+    if jobs.is_empty() && settings.is_empty() {
+        return Err(p.bad("the project has no active instance or variable font setting to export"));
+    }
+    compile::check_size(&req, jobs.len().saturating_add(settings.len()))?;
+    req.naming.split_outlines = req.flavours.len() > 1;
     let data = s.glyph_data_beside(&font, &font_path, &mut warnings)?;
     let title = font_path.file_stem().map(|t| t.to_string_lossy().into_owned()).unwrap_or_default();
     let mut report = Report { warnings, ..Report::default() };
     let mut sink = Sink::new(&req.dest, false, s.export_outside())?;
-    compile::build(&font, &title, Some(&font_path), data, &jobs, &req, &mut sink, &mut report)?;
-    if report.fonts.is_empty() {
+    if !jobs.is_empty() {
+        compile::build(&font, &title, Some(&font_path), data.clone(), &jobs, &req, &mut sink, &mut report)?;
+    }
+    let mut variable = Vec::new();
+    if !settings.is_empty() {
+        req.options.glyph_data = DataRef(Some(data));
+        req.options.assets = AssetsRef(Some(s.assets()));
+        compile::source_includes(&mut req.options, Some(&font_path));
+        let flavours: Vec<VarFlavour> =
+            req.flavours.iter().map(|f| if *f == Flavour::Cff { VarFlavour::Cff2 } else { VarFlavour::TrueType }).collect();
+        let linked = crate::export_steps::linked(&font, Some(&font_path), &mut report.warnings)?;
+        compile_select::build_variable(&linked, &settings, &flavours, &req, None, &mut sink, &mut report, &mut variable)?;
+    }
+    if report.fonts.is_empty() && variable.is_empty() {
         return Err(compile::nothing_built(&report));
     }
     // A compiled font in the destination may be the linked font itself; the staged files are
     // dropped unwritten.
-    if let Some(target) = report.fonts.iter().flat_map(|f| &f.files).filter_map(|f| f.path.as_deref()).find(|t| same_file(t, &font_path)) {
+    if let Some(target) = report
+        .fonts
+        .iter()
+        .flat_map(|f| &f.files)
+        .filter_map(|f| f.path.as_deref())
+        .chain(variable_paths(&variable))
+        .find(|t| same_file(t, &font_path))
+    {
         return Err(p.bad(format!(
             "the export would replace the linked font {}: choose another destination, or give the instance another file name",
             target.display()
         )));
     }
     sink.commit()?;
+    let written = report.file_count().saturating_add(variable_paths(&variable).count());
+    let mut fonts = report.fonts_json(false);
+    fonts.extend(variable);
     Ok(json!({
         "destination": destination.to_string_lossy(),
-        "written": report.file_count(),
-        "fonts": report.fonts_json(false),
+        "written": written,
+        "fonts": fonts,
         "skipped": report.skipped,
         "warnings": report.warnings,
     }))
+}
+
+/// The paths of the files of variable fonts, as `compile_select::build_variable` lists them.
+#[cfg(not(target_arch = "wasm32"))]
+fn variable_paths(fonts: &[Value]) -> impl Iterator<Item = &Path> {
+    let files = fonts.iter().filter_map(|f| f.get("files")).filter_map(Value::as_array).flatten();
+    files.filter_map(|f| f.get("path")).filter_map(Value::as_str).map(Path::new)
 }
 
 /// Whether `a` and `b` name the same existing file, through links and letter case on file
@@ -619,6 +718,7 @@ pub(super) fn open_project(s: &mut Session, v: &Value) -> Result<Value> {
         Some(font_path) => match crate::project::read_font(font_path) {
             Ok((font, mut w)) => {
                 warnings.append(&mut w);
+                warnings.extend(axis_warning(&font, &data.instances));
                 Some(Arc::new(font))
             }
             Err(e) => {

@@ -106,7 +106,7 @@ pub fn project(font: &Font, view: &MastersTabView, selected: &[usize], selected_
         points.push(MapPoint {
             selected: selected_instances.contains(&i),
             problem: placed().any(|p| p.instances.contains(&i)),
-            ..point(PointKind::Instance(i), &instance_name(inst), place(&inst.location))
+            ..point(PointKind::Instance(i), instance_name(inst), place(&inst.location))
         });
         if points.len() >= MAX_POINTS {
             break;
