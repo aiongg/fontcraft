@@ -80,6 +80,8 @@ pub struct Scene<'a> {
     /// The snapping suggestions that are on and what they read from the document, resolved by
     /// the caller.
     pub suggest: crate::suggestions::Suggest,
+    /// The interpolation paths the Higher-Order Interpolation tool edits, resolved by the caller while it is the tool.
+    pub hoi: Option<crate::hoi::HoiMarks>,
     components: Vec<ComponentGeom>,
     component_points: usize,
 }
@@ -169,6 +171,7 @@ impl<'a> Scene<'a> {
             ps_hints: crate::hint_drag::HintMarks::default(),
             attachments: Vec::new(),
             suggest: crate::suggestions::Suggest::default(),
+            hoi: None,
             component_points: 0,
         }
     }

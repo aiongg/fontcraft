@@ -354,7 +354,10 @@ Display:
   (`hoi.nodeMarkers`). The axis is chosen in a pop-up at the bottom right of the window
   (`hoi.selectAxis`).
 - Each linear path is a grey dotted line with a grey knob in the middle
-  (`hoi.knobOnDottedLine`).
+  (`hoi.knobOnDottedLine`). A curve is drawn with its knobs, and with lines to its handles or from
+  the rotation's centre (guess).
+- A click picks a knob, Shift+click adds one, a marquee picks several (guess). The right-click menu
+  of a knob offers Interpolation › Linear, Intermediate Point, Handles and Rotation.
 
 Types (`hoi.curveTypes`, `hoi.setInterpolationType`):
 

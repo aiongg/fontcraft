@@ -311,6 +311,11 @@ impl Toolbox {
         self.temporary.as_ref().is_some_and(|t| t.busy()) || self.held.as_ref().is_some_and(|t| t.busy()) || self.active.busy()
     }
 
+    /// The active tool's picked interpolation knobs.
+    pub fn hoi_picks(&self) -> &[crate::hoi::Knob] {
+        self.active.hoi_picks()
+    }
+
     /// What the canvas draws for the current tool.
     pub fn overlays(&self) -> Vec<Overlay> {
         match (&self.temporary, &self.held) {

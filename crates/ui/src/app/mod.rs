@@ -127,6 +127,8 @@ pub struct ViewState {
     pub text_preview: crate::shell::text_preview::TextPreviewState,
     /// Show Hints aside: the TrueType Instructor's state, the badge under a drag, the Review Hints dialog.
     pub hinting: crate::canvas::hinting::HintingView,
+    /// The Higher-Order Interpolation tool's axis.
+    pub hoi: crate::canvas::hoi::HoiView,
     /// The Actions window's state.
     pub actions: crate::dialogs::actions::ActionsState,
     pub font_audit: crate::shell::font_audit::FontAuditView,
@@ -195,6 +197,7 @@ impl Default for ViewState {
             preview: Default::default(),
             overlay_fonts: Default::default(),
             shape_order: Default::default(),
+            hoi: Default::default(),
             bitmap_editor: Default::default(),
             axis_mappings: Default::default(),
             cross_axis: Default::default(),

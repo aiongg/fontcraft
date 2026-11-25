@@ -24,6 +24,7 @@ pub fn for_tool(id: &str) -> &'static str {
         "rapid" => "spline",
         "spiro" => "pen_curvature",
         "trueTypeInstructor" => "pin",
+        "higherOrderInterpolation" => "route_curved",
         "annotationSelect" => "object_select",
         "annotationText" => "note",
         "annotationArrow" => "navigation",
