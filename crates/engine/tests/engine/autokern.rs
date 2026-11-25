@@ -85,7 +85,7 @@ fn kerning_kern_to_distance_gives_the_exact_gap() {
 
 #[test]
 fn kerning_auto_kern_targets_the_reference_gap_with_its_options() {
-    // x-height 500 with 16 units of overshoot; clipping depth 150. n has 60 units each side, so
+    // x-height 500 with 16 units of overshoot; clipping depth 100. n has 60 units each side, so
     // the reference gap of n n is 120.
     let mut s = Session::with_document();
     draw(&mut s, "n", &[rect(60.0, 0.0, 440.0, 500.0)], 500.0);
@@ -95,13 +95,13 @@ fn kerning_auto_kern_targets_the_reference_gap_with_its_options() {
     let out = undo_restores(&mut s, "kerning.autoKern", json!({"pairs": pairs}));
     assert_eq!(out["targets"]["m01"], json!({"lowercase": 120.0, "capitals": 120.0}), "without H, capitals take the lowercase target");
     // n i: 60 + 20 = 80 of white, so 40 looser. n v: the rows run from 90 units apart at the
-    // v's top corners to 240 where the clipping stops (a plain mean of 178); leaning toward the
-    // closest rows, the gap is 160, so 40 tighter.
+    // v's top corners to 190 where the clipping stops; leaning toward the closest rows, the gap is
+    // 152.6, so 32.6 tighter, rounded to 35.
     assert_eq!(kern(&s, "n", "i"), Some(40.0));
-    assert_eq!(kern(&s, "n", "v"), Some(-40.0), "{out}");
+    assert_eq!(kern(&s, "n", "v"), Some(-35.0), "{out}");
     assert_eq!(out["pairs"][0]["result"], "set");
     let gap = out["pairs"][1]["gap"].as_f64().unwrap();
-    assert!((gap - 160.08).abs() < 0.01, "{out}");
+    assert!((gap - 152.60).abs() < 0.01, "{out}");
 
     // Stored pairs are kept by default.
     let out = run(&mut s, "kerning.autoKern", json!({"pairs": [["n", "i"]], "separation": 100}));
@@ -113,20 +113,30 @@ fn kerning_auto_kern_targets_the_reference_gap_with_its_options() {
     // Only closer: the loosening pair is dropped, and its stored pair removed.
     let out = run(&mut s, "kerning.autoKern", json!({"pairs": pairs, "onlyCloser": true, "keepExisting": false}));
     assert_eq!((out["pairs"][0]["result"].as_str(), out["pairs"][1]["result"].as_str()), (Some("removed"), Some("set")));
-    assert_eq!((kern(&s, "n", "i"), kern(&s, "n", "v")), (None, Some(-40.0)));
+    assert_eq!((kern(&s, "n", "i"), kern(&s, "n", "v")), (None, Some(-35.0)));
     // Minimum value: against a separation of 100, n i's 20 is smaller in size than 35.
     run(&mut s, "kerning.autoKern", json!({"pairs": pairs, "separation": 100, "minKern": 35, "keepExisting": false}));
-    assert_eq!((kern(&s, "n", "i"), kern(&s, "n", "v")), (None, Some(-60.0)));
+    assert_eq!((kern(&s, "n", "i"), kern(&s, "n", "v")), (None, Some(-55.0)));
     // Touching measures the closest approach: n and v come within 60 + 30 = 90 at v's top
     // corner, against 120 for n n, so the pair loosens. Apply false stores nothing.
     let out = run(&mut s, "kerning.autoKern", json!({"pairs": [["n", "v"]], "touching": true, "apply": false}));
     assert_eq!(out["pairs"][0]["value"], json!(30.0), "{out}");
-    assert_eq!(kern(&s, "n", "v"), Some(-60.0), "the stored value stays");
+    assert_eq!(kern(&s, "n", "v"), Some(-55.0), "the stored value stays");
     // Glyph lists make every pair of the two.
     let out = run(&mut s, "kerning.autoKern", json!({"glyphsLeft": ["n"], "glyphsRight": ["i", "v"], "apply": false, "keepExisting": false}));
     let values: Vec<f64> = out["pairs"].as_array().unwrap().iter().map(|p| p["value"].as_f64().unwrap()).collect();
-    assert_eq!(values, [40.0, -40.0]);
+    assert_eq!(values, [40.0, -35.0]);
+    // The clipping depth in units, and as a share of the x-height: deeper white, a wider gap.
+    for depth in [json!({"depth": 150}), json!({"depthShare": 0.3})] {
+        let mut p = json!({"pairs": [["n", "v"]], "apply": false, "keepExisting": false});
+        p.as_object_mut().unwrap().extend(depth.as_object().unwrap().clone());
+        let out = run(&mut s, "kerning.autoKern", p);
+        let gap = out["pairs"][0]["gap"].as_f64().unwrap();
+        assert!((gap - 160.08).abs() < 0.01, "{depth}: {out}");
+    }
 
+    refused(&mut s, "kerning.autoKern", json!({"pairs": pairs, "depth": 100, "depthShare": 0.2}));
+    refused(&mut s, "kerning.autoKern", json!({"pairs": pairs, "depthShare": 1e9}));
     refused(&mut s, "kerning.autoKern", json!({}));
     refused(&mut s, "kerning.autoKern", json!({"glyphsLeft": ["n"]}));
     refused(&mut s, "kerning.autoKern", json!({"pairs": pairs, "direction": "vertical"}));
@@ -190,6 +200,7 @@ fn kerning_build_groups_finds_round_and_straight_sides() {
     assert_eq!(out["groups"], json!({"left": [], "right": []}));
 
     refused(&mut s, "kerning.buildGroups", json!({"glyphs": ["o"]}));
+    refused(&mut s, "kerning.buildGroups", json!({"glyphs": ["o"], "maxDifference": 10, "depthShare": -1}));
     refused(&mut s, "kerning.buildGroups", json!({"glyphs": ["o"], "maxDifference": 10, "side": "top"}));
     refused(&mut s, "kerning.buildGroups", json!({"glyphs": [], "maxDifference": 10}));
 }

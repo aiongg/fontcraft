@@ -10,7 +10,8 @@
 //! [`white_area`] is the area between a clipped profile and a sidebearing line; [`mean_white`]
 //! divides it by the inked height, which gives the mean width of white per row. [`mean_depth`]
 //! is the part of that mean that lies inside the profile, between the samples and the side's
-//! extreme; auto-spacing weighs it against the white outside the extreme. [`optical_gap`] is the
+//! extreme; the area model of auto-spacing weighs it against the white outside the extreme.
+//! [`zone_depths`] takes that mean in each third of the band. [`optical_gap`] is the
 //! distance between the right profile of one glyph and the left profile of the next, averaged
 //! over the rows so that the closest rows count most.
 //!
@@ -29,6 +30,7 @@
 //! white_area(profile: &SideProfile, x: f64) -> f64
 //! mean_white(profile: &SideProfile, x: f64) -> Option<f64>
 //! mean_depth(profile: &SideProfile) -> Option<f64>
+//! zone_depths(profile: &SideProfile) -> Option<[Option<f64>; 3]>
 //! optical_gap(right: &SideProfile, left: &SideProfile, offset: f64) -> Option<f64>
 //! SideProfile::extreme(&self) -> Option<f64>;  SideProfile::inked_rows(&self) -> usize
 //! SideProfile::height(&self, i: usize) -> f64;  SideProfile::mean_x(&self) -> Option<f64>
@@ -231,6 +233,21 @@ pub fn mean_depth(profile: &SideProfile) -> Option<f64> {
     (n > 0).then(|| sum / n as f64)
 }
 
+/// The mean depth of `profile` in the bottom, middle and top third of its rows: the mean over the
+/// third's rows with ink of each sample's distance inward from the side's extreme. A third without
+/// ink is `None`; so is the whole without ink anywhere.
+pub fn zone_depths(profile: &SideProfile) -> Option<[Option<f64>; 3]> {
+    let extreme = profile.extreme()?;
+    let count = profile.samples.len().max(1);
+    let mut sums = [(0.0, 0usize); 3];
+    for (i, x) in profile.samples.iter().enumerate() {
+        let (Some(x), Some(zone)) = (x, sums.get_mut(i * 3 / count)) else { continue };
+        zone.0 += (x - extreme).abs();
+        zone.1 += 1;
+    }
+    Some(sums.map(|(sum, n)| (n > 0).then(|| sum / n as f64)))
+}
+
 /// The optical distance between `right` (the right profile of the first glyph) and `left` (the
 /// left profile of the second glyph, shifted right by `offset`: the first glyph's advance plus
 /// any kerning), over the rows where both have ink: the power mean of order −[`GAP_POWER`] of
@@ -320,6 +337,11 @@ mod tests {
         // The mean depth is the white between the clipped samples and the extreme.
         assert!((mean_depth(&clipped).unwrap() - mean_white(&clipped, el).unwrap()).abs() < 1e-9);
         assert_eq!(mean_depth(&rect_left()), Some(0.0));
+        // Deep at the top and bottom, shallow in the middle; a third without ink has no mean.
+        let [bottom, middle, top] = zone_depths(&clipped).unwrap().map(Option::unwrap);
+        assert!(bottom > 5.0 * middle && (top - bottom).abs() < 1e-6, "{bottom} {middle} {top}");
+        let (half, _) = profiles(&rect(0.0, 0.0, 10.0, 300.0), Band { bottom: 0.0, top: 500.0 }, 5.0).unwrap();
+        assert_eq!(zone_depths(&half), Some([Some(0.0), Some(0.0), None]));
         let mean = mean_white(&clipped, 0.0).unwrap();
         assert!(mean > 50.0 && mean < 80.0, "{mean}");
         // The other side clips toward the right extreme.
