@@ -233,11 +233,11 @@ fn include_statements(text: &str) -> Vec<(&str, std::ops::Range<usize>)> {
     out
 }
 
-fn skip_comment(bytes: &[u8], i: usize) -> usize {
+pub(crate) fn skip_comment(bytes: &[u8], i: usize) -> usize {
     bytes.get(i..).and_then(|rest| rest.iter().position(|&c| c == b'\n' || c == b'\r')).map_or(bytes.len(), |n| i + n)
 }
 
-fn skip_string(bytes: &[u8], i: usize) -> usize {
+pub(crate) fn skip_string(bytes: &[u8], i: usize) -> usize {
     bytes.get(i + 1..).and_then(|rest| rest.iter().position(|&c| c == b'"')).map_or(bytes.len(), |n| i + n + 2)
 }
 

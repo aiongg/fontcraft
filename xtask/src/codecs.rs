@@ -19,7 +19,7 @@ use std::path::Path;
 use fontcraft_plist::openstep::{self, Dialect};
 use fontcraft_plist::{Num, Value};
 
-use crate::roundtrip::{Codec, Coded, Kind, Written, read_tree};
+use crate::roundtrip::{Codec, Coded, Failure, Kind, Written, read_tree};
 
 pub const MODES: [&str; 3] = ["plist", "model", "native"];
 
@@ -61,13 +61,13 @@ fn write_checked(doc: &openstep::Document, dialect: Dialect) -> Result<String, S
     Ok(out)
 }
 
-fn glyphs_file(path: &Path) -> Result<Coded, String> {
+fn glyphs_file(path: &Path) -> Result<Coded, Failure> {
     let doc = openstep::parse(&read_text(path)?).map_err(|e| e.to_string())?;
     let out = write_checked(&doc, dialect_of(&doc.root))?;
     Ok(Coded { written: Written::File(out.into_bytes()), spellings: doc.root.spelling_count() })
 }
 
-fn glyphs_package(path: &Path) -> Result<Coded, String> {
+fn glyphs_package(path: &Path) -> Result<Coded, Failure> {
     let info = openstep::parse(&read_text(&path.join("fontinfo.plist"))?).map_err(|e| format!("fontinfo.plist: {e}"))?;
     let dialect = dialect_of(&info.root);
     let mut tree = read_tree(path)?;
@@ -84,13 +84,13 @@ fn glyphs_package(path: &Path) -> Result<Coded, String> {
     Ok(Coded { written: Written::Tree(tree), spellings })
 }
 
-fn glyphs_file_model(path: &Path) -> Result<Coded, String> {
+fn glyphs_file_model(path: &Path) -> Result<Coded, Failure> {
     let font = fontcraft_io_glyphs::read(&read_text(path)?).map_err(|e| e.to_string())?;
     let out = fontcraft_io_glyphs::write(&font).map_err(|e| format!("writing: {e}"))?;
     Ok(Coded { written: Written::File(out.into_bytes()), spellings: 0 })
 }
 
-fn glyphs_package_model(path: &Path) -> Result<Coded, String> {
+fn glyphs_package_model(path: &Path) -> Result<Coded, Failure> {
     let files = read_tree(path)?;
     let font = fontcraft_io_glyphs::read_package(&files).map_err(|e| e.to_string())?;
     let out = fontcraft_io_glyphs::write_package(&font).map_err(|e| format!("writing: {e}"))?;
@@ -107,19 +107,19 @@ fn via_native(font: &fontcraft_engine::model::Font) -> Result<fontcraft_engine::
     Ok(back)
 }
 
-fn glyphs_file_native(path: &Path) -> Result<Coded, String> {
+fn glyphs_file_native(path: &Path) -> Result<Coded, Failure> {
     let font = fontcraft_io_glyphs::read(&read_text(path)?).map_err(|e| e.to_string())?;
     let out = fontcraft_io_glyphs::write(&via_native(&font)?).map_err(|e| format!("writing: {e}"))?;
     Ok(Coded { written: Written::File(out.into_bytes()), spellings: 0 })
 }
 
-fn glyphs_package_native(path: &Path) -> Result<Coded, String> {
+fn glyphs_package_native(path: &Path) -> Result<Coded, Failure> {
     let font = fontcraft_io_glyphs::read_package(&read_tree(path)?).map_err(|e| e.to_string())?;
     let out = fontcraft_io_glyphs::write_package(&via_native(&font)?).map_err(|e| format!("writing: {e}"))?;
     Ok(Coded { written: Written::Tree(out), spellings: 0 })
 }
 
-fn ufo_plist(path: &Path) -> Result<Coded, String> {
+fn ufo_plist(path: &Path) -> Result<Coded, Failure> {
     use fontcraft_plist::{xml, xmlplist};
     let mut tree = read_tree(path)?;
     let mut spellings = 0;
@@ -141,44 +141,44 @@ fn ufo_plist(path: &Path) -> Result<Coded, String> {
     Ok(Coded { written: Written::Tree(tree), spellings })
 }
 
-fn designspace_xml(path: &Path) -> Result<Coded, String> {
+fn designspace_xml(path: &Path) -> Result<Coded, Failure> {
     let doc = fontcraft_plist::xml::parse(&read_text(path)?).map_err(|e| e.to_string())?;
     Ok(Coded { written: Written::File(doc.write().into_bytes()), spellings: 0 })
 }
 
-fn ufo_model(path: &Path) -> Result<Coded, String> {
+fn ufo_model(path: &Path) -> Result<Coded, Failure> {
     let font = fontcraft_io_ufo::ufo::read(&read_tree(path)?).map_err(|e| e.to_string())?;
     let out = fontcraft_io_ufo::ufo::write(&font).map_err(|e| format!("writing: {e}"))?;
     Ok(Coded { written: Written::Tree(out), spellings: 0 })
 }
 
 /// A designspace read with the UFOs it names, relative to its folder.
-fn read_designspace(path: &Path) -> Result<fontcraft_engine::model::Font, String> {
+fn read_designspace(path: &Path) -> Result<fontcraft_engine::model::Font, Failure> {
     let text = read_text(path)?;
     let dir = path.parent().ok_or("a designspace without a folder")?;
     let mut ufos = std::collections::BTreeMap::new();
     for rel in fontcraft_io_ufo::designspace::ufo_paths(&text).map_err(|e| e.to_string())? {
         let ufo = dir.join(&rel);
         if !ufo.join("metainfo.plist").is_file() {
-            return Err(format!("the UFO `{rel}` is not in the corpus"));
+            return Err(Failure::NotApplicable(format!("the master `{rel}` is not a UFO in the corpus")));
         }
         ufos.insert(rel, read_tree(&ufo)?);
     }
-    fontcraft_io_ufo::designspace::read(&text, &ufos).map_err(|e| e.to_string())
+    fontcraft_io_ufo::designspace::read(&text, &ufos).map_err(|e| e.to_string().into())
 }
 
-fn designspace_model(path: &Path) -> Result<Coded, String> {
+fn designspace_model(path: &Path) -> Result<Coded, Failure> {
     let out = fontcraft_io_ufo::designspace::write(&read_designspace(path)?).map_err(|e| format!("writing: {e}"))?;
     Ok(Coded { written: Written::File(out.document.into_bytes()), spellings: 0 })
 }
 
-fn ufo_native(path: &Path) -> Result<Coded, String> {
+fn ufo_native(path: &Path) -> Result<Coded, Failure> {
     let font = fontcraft_io_ufo::ufo::read(&read_tree(path)?).map_err(|e| e.to_string())?;
     let out = fontcraft_io_ufo::ufo::write(&via_native(&font)?).map_err(|e| format!("writing: {e}"))?;
     Ok(Coded { written: Written::Tree(out), spellings: 0 })
 }
 
-fn designspace_native(path: &Path) -> Result<Coded, String> {
+fn designspace_native(path: &Path) -> Result<Coded, Failure> {
     let out = fontcraft_io_ufo::designspace::write(&via_native(&read_designspace(path)?)?).map_err(|e| format!("writing: {e}"))?;
     Ok(Coded { written: Written::File(out.document.into_bytes()), spellings: 0 })
 }

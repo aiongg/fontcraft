@@ -42,6 +42,9 @@
 //!   feature of each lookup, which [`LookupDebug::to_debg`] writes as fontTools feaLib's `Debg`
 //!   table (`debug.rs`).
 //!
+//! - Statements fea-rs does not read are taken out of the code before it runs and applied to what
+//!   it builds (`lift.rs`, `base.rs`).
+//!
 //! - A variable font: [`FeaVariations`] gives fea-rs the axes, masters and number values, and
 //!   resolves the code's variable values (`fontcraft_features::var_info`, M9.12);
 //!   [`GeneratedLookups::feature_variations`] holds the alternate layers' substitutions (M9.8)
@@ -49,12 +52,14 @@
 //!   code's and the generated deltas.
 #![forbid(unsafe_code)]
 
+mod base;
 mod check;
 mod debug;
 mod diagnostic;
 mod files;
 mod generated;
 mod glyphs;
+mod lift;
 mod limits;
 mod output;
 mod provider;
@@ -73,11 +78,12 @@ pub use generated::{
     LookupFlags, Metric, Region, RegionAxis, Value,
 };
 pub use glyphs::GlyphOrder;
+pub use lift::{AnonymousSpan, anonymous_block};
 pub use limits::{
     Limits, MAX_AXES, MAX_DELTAS, MAX_DIAGNOSTICS, MAX_FEATURE_VARIATIONS, MAX_GENERATED_LOOKUPS, MAX_GENERATED_RULES, MAX_GLYPHS, MAX_INCLUDE_DEPTH,
     MAX_INCLUDE_FILES, MAX_LOCATIONS, MAX_NESTING_DEPTH, MAX_PATH_BYTES, STACK_SIZE,
 };
-pub use output::{Compiled, FeatureSummary, FirstPass, HeadValues, LayoutTable, MetricsValues, Os2Values};
+pub use output::{AnonymousBlock, Compiled, FeatureSummary, FirstPass, HeadValues, LayoutTable, MetricsValues, Os2Values};
 pub use variations::{Axis, FeaVariations, Location};
 pub use write_fonts_052::types::{GlyphId16, Tag};
 

@@ -69,6 +69,11 @@ const ITALIC: usize = 5;
 /// The master keys that hold the positions of [`KINDS`] (the baseline has none).
 const KEYS: [Option<&str>; 6] = [Some("ascender"), Some("capHeight"), Some("xHeight"), None, Some("descender"), Some("italicAngle")];
 
+/// The master keys that hold metric positions.
+pub(crate) fn metric_keys() -> impl Iterator<Item = &'static str> {
+    KEYS.into_iter().flatten()
+}
+
 /// Glyph keys in the order format 2 writes them (from glyphsLib, see the module notes).
 const GLYPH_ORDER: &[&str] = &[
     "color",
@@ -423,10 +428,15 @@ fn read_master(v: Value, at: &str, axes: usize, stems: bool) -> Result<(Master, 
     let mut values: Vec<MetricValue> = Vec::with_capacity(KINDS.len());
     let mut present = [false; 6];
     for (key, slot) in KEYS.iter().zip(present.iter_mut()) {
-        let pos = match key.and_then(|k| take(&mut d, k)) {
-            Some(v) => {
+        let pos = match key.and_then(|k| Some((k, take(&mut d, k)?))) {
+            // No value: kept as written, so that saving gives it back.
+            Some((k, v)) if crate::lenient::is_unset(&v) => {
+                d.entries.push((k.into(), v));
+                0.0
+            }
+            Some((k, v)) => {
                 *slot = true;
-                as_f64(&v, &format!("{at}.{}", key.unwrap_or_default()))?
+                as_f64(&v, &format!("{at}.{k}"))?
             }
             None => 0.0,
         };
@@ -842,6 +852,10 @@ fn write_master(font: &Font, m: &Master) -> Result<Value> {
         // A metric the font has no definition of is no key (the format's default).
         let Some(key) = key.filter(|_| font.metric(m, kind).is_some()) else { continue };
         let pos = value(kind).pos;
+        // Stated as no value, which nothing has set since: the kept key is written.
+        if pos == 0.0 && m.extra.get(Family::Glyphs, key).is_some_and(crate::lenient::is_unset) {
+            continue;
+        }
         if *kind != metric::ITALIC_ANGLE || pos != 0.0 {
             e.push((key.into(), num(pos, &at)?));
         }

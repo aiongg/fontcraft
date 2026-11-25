@@ -301,3 +301,10 @@ fn many_standalone_lookups_in_a_long_named_feature_stop_at_the_size_cap() {
     let errors = lower(&code, false).unwrap_err();
     assert!(errors.iter().any(|e| e.message.contains("grows past")), "{errors:?}");
 }
+
+#[test]
+fn the_text_of_an_anonymous_block_is_not_read_as_code() {
+    let code = "anon sbit {\n delete { \"x #ifdef OTHER\n} sbit;\nfeature ccmp { delete a; } ccmp;";
+    let want = code.replace("delete a;", "sub a by NULL;");
+    assert_eq!(static_text(code), want);
+}

@@ -32,13 +32,14 @@ mod groups;
 mod info;
 mod kept;
 mod layer;
+mod lenient;
 mod package;
 mod palettes;
 mod shape;
 mod v2;
 
 pub use kept::without_stale_layouts;
-pub use package::{Files, glyph_file_stem, read_package, write_package};
+pub use package::{Files, glyph_file_stem, read_package, read_package_reporting, write_package};
 
 #[derive(Debug, thiserror::Error)]
 pub enum GlyphsError {
@@ -60,11 +61,18 @@ fn bad(at: &str, message: impl Into<String>) -> GlyphsError {
 
 /// Reads a single-file `.glyphs` document.
 pub fn read(text: &str) -> Result<Font> {
+    read_reporting(text).map(|(font, _)| font)
+}
+
+/// [`read`], with warnings about what breaks the format's rules and was read in a plainer form
+/// (the `lenient` module).
+pub fn read_reporting(text: &str) -> Result<(Font, Vec<String>)> {
     let doc = openstep::parse(text)?;
     let Value::Dict(root) = doc.root else { return Err(bad("the file", "the top level is not a dictionary")) };
-    let font = read_root(root)?;
+    let mut font = read_root(root)?;
+    let warnings = lenient::repair(&mut font);
     font.check()?;
-    Ok(font)
+    Ok((font, warnings))
 }
 
 /// The document a root dictionary holds, in whichever format version it states.
@@ -867,9 +875,14 @@ fn read_master(v: Value, at: &str) -> Result<Master> {
     // Metric values become fields only when every entry is a plain `{over, pos}`; anything else
     // stays as written.
     let mut metric_values = Vec::new();
+    let mut unset_values = None;
     if let Some(values) = take(&mut d, "metricValues") {
         match plain_metric_values(&values) {
-            Some(mv) => metric_values = mv,
+            Some(mv) => {
+                metric_values = mv;
+                let unset = values.as_array().is_some_and(|a| a.items.iter().any(lenient::has_unset));
+                unset_values = unset.then_some(values);
+            }
             None => d.entries.push(("metricValues".into(), values)),
         }
     }
@@ -880,6 +893,10 @@ fn read_master(v: Value, at: &str) -> Result<Master> {
     let properties = info::take_properties(&mut d);
     let params = info::take_params(&mut d);
     let user_data = info::take_user_data(&mut d);
+    let mut extra = into_extra(d);
+    if let Some(values) = unset_values {
+        extra.push(Family::Native, lenient::METRIC_VALUES, values);
+    }
     Ok(Master {
         id,
         name,
@@ -893,7 +910,7 @@ fn read_master(v: Value, at: &str) -> Result<Master> {
         properties,
         params,
         user_data,
-        extra: into_extra(d),
+        extra,
         ..Default::default()
     })
 }
@@ -934,7 +951,7 @@ fn plain_metric_values(v: &Value) -> Option<Vec<MetricValue>> {
             if d.entries.iter().any(|(k, _)| !matches!(k.as_str(), "pos" | "over")) {
                 return None;
             }
-            let get = |k: &str| d.get(k).map_or(Some(0.0), |v| v.as_num().map(Num::as_f64));
+            let get = |k: &str| d.get(k).map_or(Some(0.0), |v| if lenient::is_unset(v) { Some(0.0) } else { v.as_num().map(Num::as_f64) });
             Some(MetricValue { pos: get("pos")?, over: get("over")? })
         })
         .collect()
@@ -1219,10 +1236,20 @@ fn write_master(m: &Master, version: u32) -> Result<Value> {
         e.push(("axesValues".into(), write_numbers(&m.location, "axesValues")?));
     }
     if !m.metric_values.is_empty() {
+        // Values the file has none for are written as it has them while nothing set them.
+        let kept = m.extra.get(Family::Native, lenient::METRIC_VALUES);
+        let kept_items = kept.and_then(Value::as_array).map_or(&[][..], |a| a.items.as_slice());
+        let kept_values = kept.and_then(plain_metric_values).filter(|v| v.len() == m.metric_values.len()).unwrap_or_default();
         let values = m
             .metric_values
             .iter()
-            .map(|v| {
+            .enumerate()
+            .map(|(i, v)| {
+                if kept_values.get(i) == Some(v)
+                    && let Some(item) = kept_items.get(i).filter(|item| lenient::has_unset(item))
+                {
+                    return Ok(item.clone());
+                }
                 let mut d = Vec::new();
                 if v.over != 0.0 {
                     d.push(("over".into(), num(v.over, "metricValues")?));

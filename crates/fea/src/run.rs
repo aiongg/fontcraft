@@ -16,6 +16,7 @@ use write_fonts_052::tables::gdef::GlyphClassDef;
 use write_fonts_052::tables::layout::{ClassDef, FeatureList, ScriptList};
 
 use crate::debug::Positions;
+use crate::lift::Lifted;
 use crate::provider::{self, Provider};
 use crate::resolve::{self, Loaded, MapResolver};
 use crate::variations::Info;
@@ -27,7 +28,11 @@ use crate::{
 /// What fea-rs needs.
 struct Job<'a> {
     root: String,
+    /// The files without the statements [`crate::lift`] takes out, as fea-rs reads them.
     files: Loaded,
+    /// The files as written.
+    sources: Loaded,
+    lifted: Lifted,
     names: &'a [String],
     generated: Option<&'a GeneratedLookups>,
     variations: Option<&'a dyn FeaVariations>,
@@ -71,9 +76,12 @@ pub(crate) fn run(req: &CompileRequest, mode: Mode) -> Result<Output, Vec<Diagno
         provider::check(generated, req.glyph_order.len(), limits.rules, limits.ligature_components).map_err(|d| vec![d])?;
     }
     let (root, files) = resolve::load(req.files, &limits)?;
+    let lifted = crate::lift::lift(&files, &limits)?;
     let job = Job {
         root,
-        files,
+        files: lifted.files.clone(),
+        sources: files,
+        lifted,
         names: req.glyph_order.names(),
         generated: req.generated,
         variations: req.variations,
@@ -84,7 +92,31 @@ pub(crate) fn run(req: &CompileRequest, mode: Mode) -> Result<Output, Vec<Diagno
         limits,
         mode,
     };
-    on_big_stack(|| job.run())
+    let result = on_big_stack(|| job.run());
+    let Job { lifted, .. } = job;
+    let max = limits.diagnostics.max(1);
+    let placed = |found: Vec<Diagnostic>| -> Vec<Diagnostic> {
+        let mut found: Vec<Diagnostic> = found.into_iter().map(|d| lifted.place(d)).collect();
+        if mode != Mode::FirstPass {
+            found.extend(lifted.warnings.iter().cloned());
+        }
+        if build {
+            found.extend(lifted.anonymous_warnings.iter().cloned());
+        }
+        found.truncate(max);
+        found
+    };
+    match result {
+        Ok(Output::Compiled(mut compiled)) => {
+            compiled.warnings = placed(std::mem::take(&mut compiled.warnings));
+            Ok(Output::Compiled(compiled))
+        }
+        Ok(Output::FirstPass(mut first)) => {
+            first.warnings = placed(std::mem::take(&mut first.warnings));
+            Ok(Output::FirstPass(first))
+        }
+        Err(found) => Err(placed(found)),
+    }
 }
 
 /// Runs `work` on a thread with a [`STACK_SIZE`] stack and turns a panic into a diagnostic.
@@ -108,7 +140,7 @@ pub(crate) fn on_big_stack<T: Send>(work: impl FnOnce() -> Result<T, Vec<Diagnos
 }
 
 impl Job<'_> {
-    fn run(self) -> Result<Output, Vec<Diagnostic>> {
+    fn run(&self) -> Result<Output, Vec<Diagnostic>> {
         let max = self.limits.diagnostics.max(1);
         let glyph_map = GlyphMap::new(self.names.iter().map(String::as_str))
             .map_err(|e| vec![Diagnostic::request(Severity::Error, format!("the glyph order cannot be used: {e}"))])?;
@@ -127,6 +159,7 @@ impl Job<'_> {
         if validated.has_errors() {
             return Err(messages);
         }
+        let source = |file: &str, pos: usize| self.lifted.source(file, pos);
         // Checked and validated as written, so messages name the files; then compiled from one
         // file with the lookup breaks, its messages put back where they came from.
         if self.lookup_per_rule_type && self.mode != Mode::Validate {
@@ -135,7 +168,7 @@ impl Job<'_> {
                 Ok(Some(split)) => match self.reparse(&split.text, &glyph_map, info.as_ref(), max) {
                     Ok(rewritten) => {
                         let remap = Remap::new(&tree, &self.root, &self.files, split.inserts, self.limits.text_bytes);
-                        let positions = Positions { rewritten: Some(&split.text), locate: &|pos: usize| remap.place(pos) };
+                        let positions = Positions { rewritten: Some(&split.text), locate: &|pos: usize| remap.place(pos), source: &source };
                         let convert = |set: &DiagnosticSet| remap.convert(set, max);
                         return self.finish(&rewritten, &glyph_map, info.as_ref(), max, messages, &convert, &positions);
                     }
@@ -150,7 +183,7 @@ impl Job<'_> {
         }
         // Places in the files, for the lookup debug information only; worked out on first use.
         let remap = Remap::new(&tree, &self.root, &self.files, Vec::new(), self.limits.text_bytes);
-        let positions = Positions { rewritten: None, locate: &|pos: usize| remap.place(pos) };
+        let positions = Positions { rewritten: None, locate: &|pos: usize| remap.place(pos), source: &source };
         self.finish(&tree, &glyph_map, info.as_ref(), max, messages, &|set: &DiagnosticSet| convert(&tree, set, max), &positions)
     }
 
@@ -226,7 +259,7 @@ impl Job<'_> {
         &self,
         tree: &ParseTree,
         mut c: Compilation,
-        warnings: Vec<Diagnostic>,
+        mut warnings: Vec<Diagnostic>,
         positions: &Positions<'_>,
     ) -> Result<Compiled, Vec<Diagnostic>> {
         if c.name.is_some() {
@@ -240,9 +273,16 @@ impl Job<'_> {
         if !self.gpos {
             c.gpos = None;
         }
-        let lookup_debug = if self.debug_lookups { Some(crate::debug::build(tree, &c, &self.files, positions).map_err(|d| vec![d])?) } else { None };
+        let lookup_debug =
+            if self.debug_lookups { Some(crate::debug::build(tree, &c, &self.files, &self.sources, positions).map_err(|d| vec![d])?) } else { None };
         if let (Some(generated), Some(gsub)) = (self.generated.filter(|g| !g.feature_variations.is_empty()), c.gsub.as_mut()) {
             crate::provider::order_feature_variations(gsub, generated);
+        }
+        if let Some(gdef) = c.gdef.as_mut() {
+            self.lifted.apply_carets(gdef);
+        }
+        if let Some(base) = c.base.as_mut() {
+            warnings.extend(crate::base::min_max(tree.root(), base));
         }
         let mut errors = Vec::new();
         let mut dump = |name: &str, bytes: Option<Result<Vec<u8>, write_fonts_052::error::Error>>| match bytes {
@@ -275,12 +315,13 @@ impl Job<'_> {
             ascender: set.contains("Ascender").then_some(h.ascender.to_i16()),
             descender: set.contains("Descender").then_some(h.descender.to_i16()),
             line_gap: set.contains("LineGap").then_some(h.line_gap.to_i16()),
+            ..MetricsValues::default()
         });
         let vhea = c.vhea.as_ref().map_or_else(MetricsValues::default, |v| MetricsValues {
-            caret_offset: None,
             ascender: set.contains("VertTypoAscender").then_some(v.ascender.to_i16()),
             descender: set.contains("VertTypoDescender").then_some(v.descender.to_i16()),
             line_gap: set.contains("VertTypoLineGap").then_some(v.line_gap.to_i16()),
+            ..MetricsValues::default()
         });
         let os2 = c.os2_builder.as_ref().map_or_else(Os2Values::default, |o| Os2Values {
             weight_class: o.us_weight_class,
@@ -300,8 +341,9 @@ impl Job<'_> {
             typo_line_gap: o.s_typo_line_gap,
             lower_optical_point_size: o.us_lower_optical_point_size,
             upper_optical_point_size: o.us_upper_optical_point_size,
+            ..Os2Values::default()
         });
-        Ok(Compiled {
+        let mut compiled = Compiled {
             gsub,
             gpos,
             gdef,
@@ -315,8 +357,11 @@ impl Job<'_> {
             features,
             gdef_from_code,
             lookup_debug,
+            anonymous: Vec::new(),
             warnings,
-        })
+        };
+        self.lifted.finish(&mut compiled);
+        Ok(compiled)
     }
 }
 
