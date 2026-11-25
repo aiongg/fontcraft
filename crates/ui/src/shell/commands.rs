@@ -72,6 +72,7 @@ pub const MODULES: &[Module] = &[
     super::text_preview::MODULE,
     crate::canvas::hinting::commands::MODULE,
     crate::canvas::hoi::MODULE,
+    crate::canvas::anchor_editor::MODULE,
     crate::dialogs::actions::SHELL,
     crate::dialogs::color_palettes::MODULE,
     super::font_audit::MODULE,

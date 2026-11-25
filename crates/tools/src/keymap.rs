@@ -41,6 +41,7 @@ pub const KEYMAP: &[KeyBinding] = &[
         note: "the font's increments: plain, Shift, Cmd; Alt moves only the selected points, Ctrl+Alt nudges",
     },
     KeyBinding { keys: "Return", when: "editView", command: "path.toggleNodeType", note: "the selected on-curve nodes" },
+    KeyBinding { keys: "Return", when: "editView", command: "anchor.editName", note: "with one anchor selected alone" },
     KeyBinding { keys: "Alt+Return", when: "editView", command: "path.toggleNodeTypeKeepingOutline", note: "the selected on-curve nodes" },
     KeyBinding { keys: "Delete", when: "editView", command: "edit.delete", note: "the selection" },
     KeyBinding { keys: "Shift+Delete", when: "editView", command: "path.deleteAndBreak", note: "the selected points" },
@@ -155,7 +156,15 @@ pub fn edit_view_key(cx: &Context<'_>, ev: &KeyEvent) -> Option<Action> {
         Key::Return if !m.ctrl => {
             let points = sel.on_curve_points(scene);
             if points.is_empty() {
-                return None;
+                // One anchor selected alone is renamed.
+                return match sel.anchors.first() {
+                    Some(name) if sel.len() == 1 && !m.alt && !m.shift && !scene.locked => {
+                        let mut params = Map::new();
+                        params.insert("anchor".into(), json!(name));
+                        Some(run("anchor.editName", params))
+                    }
+                    _ => None,
+                };
             }
             let mut params = crate::Selection::new().targets(scene);
             params.insert("points".into(), json!(points.iter().map(|&(s, n)| [s, n]).collect::<Vec<_>>()));

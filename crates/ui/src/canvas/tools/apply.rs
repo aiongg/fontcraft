@@ -47,6 +47,7 @@ fn settings(session: &Session, font: &Font, app: &FontCraftApp) -> ToolSettings 
         snap_distance: f64::from(t.snap_distance),
         drag_threshold: f64::from(t.drag_threshold),
         bounding_box: app.view.display.bounding_box,
+        reference: app.view.palette.transform.point.filter(|p| p.iter().all(|v| v.is_finite())).map(|[x, y]| Point::new(x, y)),
         tunni_lines: app.overlays.switches.tunni_lines,
         curve_tension,
         tt_direction: app.view.hinting.instructor.direction,
@@ -61,9 +62,12 @@ fn with_tool<R>(app: &mut FontCraftApp, f: impl FnOnce(&mut Toolbox, &Context<'_
     sync(app);
     let view = tools_view(&camera(app));
     let marks = crate::canvas::hinting::ps_marks(&mut app.session, &app.view);
+    app.tools.smart.update(&app.session, &app.view, &app.tools.selection);
     let font = app.session.font().map_err(|e| e.to_string())?;
     let mut scene = scene(font, app.session.glyph_data().ok().as_deref(), &app.view, app.tools.focus.as_ref()).ok_or("no glyph is being edited")?;
     scene.ps_hints = marks;
+    scene.smart_handles.clone_from(&app.tools.smart.handles);
+    scene.smart_sizes.clone_from(&app.tools.smart.sizes);
     scene.hoi = crate::app::models::hoi::marks(font, &app.view);
     scene.suggest = crate::canvas::overlays::suggest::suggest(&app.session, font, &app.view, app.overlays.switches.suggest);
     let settings = settings(&app.session, font, app);

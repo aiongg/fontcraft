@@ -48,7 +48,7 @@ const COMMANDS: &[UiCommand] = &[
         label: "Set Transformation Origin",
         menu: &[],
         shortcut: None,
-        params: "{mode?: \"box\" | \"reference\" | \"metrics\" | \"layer\", boxPoint?: \"topLeft\" | \"top\" | \"topRight\" | \"left\" | \"center\" | \"right\" | \"bottomLeft\" | \"bottom\" | \"bottomRight\", metric?: \"baseline\" | \"halfXHeight\" | \"xHeight\" | \"halfCapHeight\" | \"capHeight\", point?: [x, y]} choose the fixed point of the Transformations section. `point` places the reference point (what a click with the Rotate or Scale tool does); without `mode` the mode stays. `boxPoint` and `metric` are kept for their modes",
+        params: "{mode?: \"box\" | \"reference\" | \"metrics\" | \"layer\", boxPoint?: \"topLeft\" | \"top\" | \"topRight\" | \"left\" | \"center\" | \"right\" | \"bottomLeft\" | \"bottom\" | \"bottomRight\", metric?: \"baseline\" | \"halfXHeight\" | \"xHeight\" | \"halfCapHeight\" | \"capHeight\", point?: [x, y] | null} choose the fixed point of the Transformations section. `point` places the reference point (what a click with the Rotate or Scale tool does), which those tools turn and scale about in every glyph; without `mode` the mode stays. `point: null` takes the reference point away: the tools turn about the centre of the selection's box again, and mode \"reference\" becomes \"box\". `boxPoint` and `metric` are kept for their modes",
     },
     UiCommand {
         id: "transform.setScaleLock",
@@ -247,6 +247,13 @@ pub fn set_origin(t: &TransformSettings, p: &Value) -> Result<TransformSettings,
     if let Some(placed) = placed {
         s.point = Some(placed);
     }
+    let cleared = p.get("point").is_some_and(Value::is_null);
+    if cleared {
+        s.point = None;
+        if s.mode == OriginMode::Reference {
+            s.mode = OriginMode::Box;
+        }
+    }
     let box_point = string(p, "boxPoint")?;
     if let Some(name) = box_point {
         BoxPoint::parse(name).ok_or_else(|| format!("`boxPoint` must be one of {}", BOX_POINTS.join(", ")))?;
@@ -258,7 +265,9 @@ pub fn set_origin(t: &TransformSettings, p: &Value) -> Result<TransformSettings,
         s.metric = name.into();
     }
     match string(p, "mode")? {
-        None if placed.is_none() && box_point.is_none() && metric.is_none() => return Err("give `mode`, `point`, `boxPoint` or `metric`".into()),
+        None if placed.is_none() && !cleared && box_point.is_none() && metric.is_none() => {
+            return Err("give `mode`, `point`, `boxPoint` or `metric`".into());
+        }
         None => {}
         Some("box") => s.mode = OriginMode::Box,
         Some("reference") => {
@@ -311,6 +320,9 @@ mod tests {
         let placed = set_origin(&t, &json!({"mode": "reference", "point": [10, 20]})).expect("placed");
         assert_eq!((placed.mode, placed.point), (OriginMode::Reference, Some([10.0, 20.0])));
         assert_eq!(placed.origin_param(), json!({"mode": "reference", "point": [10.0, 20.0]}));
+        let cleared = set_origin(&placed, &json!({"point": null})).expect("cleared");
+        assert_eq!((cleared.mode, cleared.point), (OriginMode::Box, None));
+        assert!(set_origin(&placed, &json!({"mode": "reference", "point": null})).is_err());
         assert!(set_origin(&t, &json!({"boxPoint": "middle"})).is_err());
         assert!(set_settings(&t, &json!({"scaleX": 0})).is_err());
         assert!(set_settings(&t, &json!({"slant": 90})).is_err());

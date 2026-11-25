@@ -53,6 +53,8 @@ pub struct ToolView {
     pub overlays: Vec<Overlay>,
     /// The edited glyph's placed images and the selected one (`canvas::images::refresh` keeps it).
     pub images: crate::canvas::images::ImagePaint,
+    /// The selection's box, the transformation origin and the smart handles (`canvas::bounding_box::refresh` keeps them).
+    pub marks: crate::canvas::bounding_box::Marks,
     /// The active tool is one under which Fill Preview fills the edited glyph: Text, Hand or Zoom.
     pub fills: bool,
 }
@@ -73,6 +75,10 @@ pub struct Tools {
     mods: Modifiers,
     /// The edited side's placed image is selected (`canvas::images`); it belongs to the same target as the selection.
     pub image: bool,
+    /// The selected smart components' handles and sizes.
+    pub smart: crate::canvas::smart::SmartCache,
+    /// What [`ToolView::marks`] was worked out from.
+    pub marks_key: Option<crate::canvas::bounding_box::MarksKey>,
     /// What the tool layers paint; [`Tools::refresh`] copies it from the state above.
     pub view: ToolView,
 }
@@ -90,6 +96,8 @@ impl Default for Tools {
             checked: None,
             mods: Modifiers::NONE,
             image: false,
+            smart: crate::canvas::smart::SmartCache::default(),
+            marks_key: None,
             view: ToolView::default(),
         }
     }
@@ -167,6 +175,7 @@ impl Tools {
             focus: self.focus.clone(),
             overlays: self.toolbox.overlays(),
             images: self.view.images.clone(),
+            marks: self.view.marks.clone(),
             fills: matches!(self.toolbox.active_id(), "text" | "hand" | "zoom"),
         };
         if view != self.view {

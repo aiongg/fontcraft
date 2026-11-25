@@ -46,6 +46,12 @@ craft::ui::words! {
         locked: "fontcraftOverlays.locked" = "Outline locked";
         /// The name of the field that edits a text note on the canvas.
         note: "fontcraftOverlays.note" = "Note";
+        /// The name of the field that names an anchor on the canvas.
+        anchor: "fontcraftOverlays.anchor" = "Anchor Name";
+        /// Under that field: no name was typed.
+        anchor_empty: "fontcraftOverlays.anchorEmpty" = "Type a name, or press Escape to keep the old one";
+        /// Under that field: the layer has an anchor of the typed name.
+        anchor_taken: "fontcraftOverlays.anchorTaken" = "Another anchor of this layer has this name";
     }
 }
 
@@ -195,6 +201,8 @@ pub struct Overlays {
     pub switches: Switches,
     /// The text note being typed on the canvas.
     pub note: Option<super::annotation_editor::NoteEdit>,
+    /// The anchor name being typed on the canvas.
+    pub anchor: Option<super::anchor_editor::AnchorEdit>,
     /// The pointer over the canvas in font units, and whether Shift was held.
     pub hover: Option<(Point, bool)>,
     pub data: OverlayData,

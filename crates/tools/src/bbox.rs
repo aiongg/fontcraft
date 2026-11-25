@@ -506,19 +506,17 @@ struct FreeDrag {
 #[derive(Clone, Debug)]
 pub struct Freehand {
     kind: FreeKind,
-    /// The point this tool last placed, used while the shell does not report one.
-    clicked: Option<Point>,
     drag: Option<FreeDrag>,
 }
 
 impl Freehand {
     pub fn new(kind: FreeKind) -> Self {
-        Self { kind, clicked: None, drag: None }
+        Self { kind, drag: None }
     }
 
     /// The point a drag would transform about now.
     pub fn origin(&self, cx: &Context<'_>) -> Option<Point> {
-        cx.settings.reference.or(self.clicked).or_else(|| selection_box(cx.scene, cx.selection).map(center))
+        cx.settings.reference.or_else(|| selection_box(cx.scene, cx.selection).map(center))
     }
 
     fn invocation(&self, cx: &Context<'_>, drag: &FreeDrag, origin: Point, pos: Point, mods: Modifiers) -> Invocation {
@@ -602,7 +600,6 @@ impl Freehand {
                     }
                     out.push(Action::Commit);
                 } else if usable(ev.pos) {
-                    self.clicked = Some(ev.pos);
                     out.push(Action::Run { invocation: Invocation::new("transform.setOrigin", json!({"point": [ev.pos.x, ev.pos.y]})) });
                 }
                 self.drag = None;

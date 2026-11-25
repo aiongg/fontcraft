@@ -77,7 +77,7 @@ pub mod zoom;
 pub use event::{Key, KeyEvent, Modifiers, PointerEvent, PointerKind};
 pub use hit::{Hit, HitResult, hit_test, hit_test_with_corners};
 pub use output::{Action, Invocation, Output, Overlay, OverlayKind, ViewChange};
-pub use scene::{Scene, SmartAxis, SmartHandle, SmartSize, side_view};
+pub use scene::{Scene, SmartAxis, SmartHandle, SmartSize, placeholder_box, side_view};
 pub use selection::{GuideRef, GuideScope, Item, SelectMode, Selection};
 pub use snap::{COMPONENT_MARKER_REACH, MAX_COMPONENT_MARKERS, Moving, Snap, SnapKind, component_markers, snap};
 pub use tool::{Context, TOOLS, Tool, ToolInfo, ToolSettings, make_tool};

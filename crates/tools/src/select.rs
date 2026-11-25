@@ -20,6 +20,7 @@
 //! | double-click a node | `path.toggleNodeType` (`Alt`: `path.toggleNodeTypeKeepingOutline`) |
 //! | double-click a segment | select its whole path |
 //! | double-click a component | `component.editBaseGlyph`: its base glyph joins the tab text, edited |
+//! | double-click an anchor | `anchor.editName`: its name is typed on the canvas |
 //! | drag a guide's knob, or the guide elsewhere; double-click it | see [`crate::guide_drag`] |
 //! | drag a smart handle of a selected smart component | `smartComponent.setValue` in one interaction |
 //! | click or drag a PostScript hint's badge or marker; `Tab`, `Delete` with hints selected | see [`crate::hint_drag`] |
@@ -538,6 +539,9 @@ impl SelectTool {
             Hit::Segment { shape, .. } => out.push(Action::Select { selection: path_points(cx.scene, shape) }),
             Hit::Component { shape } if !ev.mods.shift => {
                 out.push(Action::Run { invocation: Invocation::new("component.editBaseGlyph", json!({"component": shape})) });
+            }
+            Hit::Anchor { name } if !ev.mods.shift && !cx.scene.locked => {
+                out.push(Action::Run { invocation: Invocation::new("anchor.editName", json!({"anchor": name})) });
             }
             Hit::Guide { guide } => {
                 if let Some(invocation) = crate::guide_drag::double_click(cx, guide, ev.pos) {

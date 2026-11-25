@@ -59,7 +59,7 @@ fn painted(app: &FontCraftApp, layer: fn(&PaintCx<'_>) -> Vec<Shape>) -> Vec<Sha
         camera: Camera::new(view, top),
         model: &app.models.canvas,
         tokens: &app.models.canvas_tokens,
-        display: app.view.display,
+        display: super::text::display(&app.view),
         edit_background: app.view.edit_background,
         words: &words,
         tools: &app.tools.view,
@@ -132,6 +132,61 @@ fn components_and_anchors_draw_by_state() {
     let marks = &app.models.canvas.glyph.as_ref().unwrap().components;
     assert_eq!(marks.last().map(|m| m.state), Some(State::Placeholder(Placeholder::Empty)));
     assert_eq!(count(&painted(&app, paint::components::shapes), t.component_placeholder), 3, "box and cross");
+}
+
+/// The names of the labels among `shapes`.
+fn labels(shapes: &[Shape]) -> Vec<String> {
+    shapes.iter().filter_map(|s| if let Shape::Text(t) = s { Some(t.galley.text().to_string()) } else { None }).collect()
+}
+
+/// Selected components draw a wider outline in the selection colour, selected anchors a ring and their name; Escape, which
+/// enters text mode, draws none of it.
+#[test]
+fn the_selection_marks_components_and_anchors() {
+    let mut app = components_app();
+    run(&mut app, "glyph.addComponent", json!({"glyph": "A", "component": "base"}));
+    run(&mut app, "component.move", json!({"glyph": "A", "components": [3], "dx": 1000, "dy": 0}));
+    let t = app.models.canvas_tokens.clone();
+    let selection = super::tools::tokens::ToolTokens::standard().selection;
+    let wide = |app: &FontCraftApp| {
+        painted(app, paint::components::shapes)
+            .iter()
+            .filter(|s| matches!(s, Shape::Path(p) if p.stroke.color == ColorMode::Solid(selection) && p.stroke.width == t.component_selected_width))
+            .count()
+    };
+    let fills = |app: &FontCraftApp| painted(app, paint::components::shapes).iter().filter(|s| matches!(s, Shape::Mesh(_))).count();
+    assert_eq!((wide(&app), fills(&app)), (0, 3), "each component is filled lightly");
+    assert!(labels(&painted(&app, paint::anchors::shapes)).is_empty(), "an unselected anchor shows no name");
+
+    shell(&mut app, "selection.set", json!({"shapes": [1, 3], "anchors": ["top"]}));
+    assert_eq!(wide(&app), 2);
+    assert_eq!(count(&painted(&app, paint::components::shapes), t.component_manual), 1, "the third keeps its state's colour");
+    let anchors = painted(&app, paint::anchors::shapes);
+    assert_eq!(labels(&anchors), ["top"]);
+    assert_eq!(count(&anchors, selection), 1, "one ring");
+
+    crate::control::dispatch(&mut app, "ui.key", &json!({"key": "Escape"})).unwrap();
+    app.drain();
+    assert_eq!((wide(&app), fills(&app)), (0, 0), "text mode marks nothing");
+    assert!(labels(&painted(&app, paint::anchors::shapes)).is_empty());
+}
+
+/// A click inside a placeholder selects its component, so the Info box names the base glyph.
+#[test]
+fn a_click_on_a_placeholder_selects_its_component() {
+    let mut app = components_app();
+    run(&mut app, "glyph.addComponent", json!({"glyph": "A", "component": "empty"}));
+    run(&mut app, "component.move", json!({"glyph": "A", "components": [3], "dx": 0, "dy": -600}));
+    app.view.canvas = CanvasView::new(RECT, Point::new(400.0, 400.0), 1.0);
+    let box_corner = app.models.canvas.glyph.as_ref().unwrap().components.last().unwrap().placeholder.unwrap()[0];
+    let at = [box_corner[0] + 30.0, box_corner[1] + 200.0];
+    let events = json!([{"kind": "down", "x": at[0], "y": at[1]}, {"kind": "up", "x": at[0], "y": at[1]}]);
+    crate::control::dispatch(&mut app, "ui.pointer", &json!({ "events": events })).unwrap();
+    app.drain();
+    assert!(app.tools.selection.shapes.contains(&3), "{:?}", app.tools.selection);
+    assert_eq!(app.models.palette.info_box.component.as_ref().map(|c| c.base.as_str()), Some("empty"));
+    let selection = super::tools::tokens::ToolTokens::standard().selection;
+    assert_eq!(count(&painted(&app, paint::components::shapes), selection), 3, "its box and cross are in the selection colour");
 }
 
 #[test]
@@ -425,4 +480,118 @@ fn a_dragged_knob_bends_the_path_and_the_context_menu_sets_the_type() {
     app.sent.push(Msg::Shell(CommandRef::with_params("hoi.selectAxis", json!({"axis": "none"}))));
     app.drain();
     assert!(app.status.contains("no axis"), "{}", app.status);
+}
+
+/// Glyph `_part.bar` with a Width property from 200 to 600 and an anchor of that name at the bar's end; A holds a square
+/// (shape 0) and a component of it at Width 400 (shape 1). One point per unit on screen.
+fn smart_app() -> FontCraftApp {
+    let mut app = app();
+    run(&mut app, "glyph.newGlyph", json!({"name": "_part.bar"}));
+    let wide = app.session.execute("layers.addBackupLayer", &json!({"glyphs": ["_part.bar"], "name": "Wide"})).unwrap();
+    let wide = wide["layer"].as_str().unwrap().to_string();
+    let master = app.session.font().unwrap().masters[0].id.clone();
+    run(&mut app, "smartGlyph.addProperty", json!({"glyph": "_part.bar", "name": "Width", "min": 200, "max": 600}));
+    for (layer, width, pole) in [(&master, 200, "min"), (&wide, 600, "max")] {
+        run(&mut app, "path.addRectangle", json!({"glyph": "_part.bar", "layer": layer, "x": 0, "y": 0, "width": width, "height": 100}));
+        run(&mut app, "anchor.add", json!({"glyph": "_part.bar", "layer": layer, "name": "Width", "x": width, "y": 50}));
+        run(&mut app, "smartGlyph.setLayerPole", json!({"glyph": "_part.bar", "layer": layer, "property": "Width", "pole": pole}));
+    }
+    run(&mut app, "path.addRectangle", json!({"glyph": "A", "x": 100, "y": 600, "width": 50, "height": 50}));
+    run(&mut app, "glyph.addComponent", json!({"glyph": "A", "component": "_part.bar"}));
+    run(&mut app, "smartComponent.setValue", json!({"glyph": "A", "component": 1, "property": "Width", "value": 400}));
+    edit(&mut app, "A");
+    app.view.canvas = CanvasView::new(RECT, Point::new(400.0, 400.0), 1.0);
+    app
+}
+
+fn drag(app: &mut FontCraftApp, from: [f64; 2], to: [f64; 2]) {
+    let events = json!([
+        {"kind": "down", "x": from[0], "y": from[1]},
+        {"kind": "drag", "x": to[0], "y": to[1]},
+        {"kind": "up", "x": to[0], "y": to[1]},
+    ]);
+    crate::control::dispatch(app, "ui.pointer", &json!({ "events": events })).unwrap();
+    app.drain();
+    assert!(app.status.is_empty(), "{}", app.status);
+}
+
+fn layer_a(app: &FontCraftApp) -> fontcraft_engine::model::Layer {
+    app.session.font().unwrap().glyph("A").unwrap().layers[0].clone()
+}
+
+/// A selected smart component has a grey dot at its property's anchor; dragging it sets the value the command sets, in
+/// one undo step.
+#[test]
+fn a_smart_handle_drag_equals_the_command() {
+    let mut app = smart_app();
+    let grey = super::tools::tokens::ToolTokens::standard().smart_handle;
+    assert_eq!(count(&painted(&app, super::smart::shapes), grey), 0, "nothing is selected");
+    shell(&mut app, "selection.set", json!({"shapes": [1]}));
+    assert_eq!(count(&painted(&app, super::smart::shapes), grey), 1);
+    assert_eq!(app.tools.view.marks.handles, [fontcraft_geom::Point::new(400.0, 50.0)]);
+    let undo = |app: &FontCraftApp| app.session.inspect()["documents"][0]["undo"].as_array().map_or(0, Vec::len);
+    let steps = undo(&app);
+    drag(&mut app, [400.0, 50.0], [500.0, 50.0]);
+    let mut headless = smart_app();
+    run(&mut headless, "smartComponent.setValue", json!({"glyph": "A", "component": 1, "property": "Width", "value": 500}));
+    assert_eq!(layer_a(&app).shapes, layer_a(&headless).shapes);
+    assert_eq!(undo(&app), steps + 1);
+    assert_eq!(app.tools.view.marks.handles, [fontcraft_geom::Point::new(500.0, 50.0)], "the handle follows");
+}
+
+/// The box of a smart component: its right knob sets Width, and its top knob, without a Height property, does nothing.
+/// The box and its eight knobs show with Show Bounding Box and the Select tool only.
+#[test]
+fn box_knobs_set_the_size_properties() {
+    let mut app = smart_app();
+    let t = super::tools::tokens::ToolTokens::standard();
+    let drawn = |app: &FontCraftApp| count(&painted(app, super::bounding_box::shapes), t.bounding_box);
+    shell(&mut app, "selection.set", json!({"shapes": [1]}));
+    assert_eq!(drawn(&app), 0);
+    shell(&mut app, "view.showBoundingBox", json!({"on": true}));
+    assert_eq!(drawn(&app), 9, "the box and eight knobs");
+    let before = layer_a(&app);
+    drag(&mut app, [200.0, 106.0], [200.0, 206.0]);
+    assert_eq!(layer_a(&app).shapes, before.shapes, "no Height property: no resize");
+    drag(&mut app, [406.0, 50.0], [506.0, 50.0]);
+    let mut headless = smart_app();
+    run(&mut headless, "smartComponent.setValue", json!({"glyph": "A", "component": 1, "property": "Width", "value": 500}));
+    assert_eq!(layer_a(&app).shapes, layer_a(&headless).shapes);
+
+    app.sent.push(Msg::View(ViewMsg::SelectTool("rotate")));
+    app.drain();
+    let origin = painted(&app, super::bounding_box::shapes);
+    assert_eq!((count(&origin, t.bounding_box), count(&origin, t.transform_origin)), (0, 3), "the Rotate tool shows its fixed point");
+    let at = |app: &FontCraftApp| app.tools.view.marks.origin.map(|o| (o.at.x, o.at.y));
+    assert_eq!(at(&app), Some((250.0, 50.0)));
+    shell(&mut app, "transform.setOrigin", json!({"point": [10, 20]}));
+    assert_eq!(at(&app), Some((10.0, 20.0)), "the placed point");
+    shell(&mut app, "transform.setOrigin", json!({"mode": "box", "boxPoint": "left", "point": null}));
+    assert_eq!(at(&app), Some((250.0, 50.0)), "a box point puts it aside");
+}
+
+/// Info for Selection opens the settings of a selected smart component, the settings of a smart glyph with nothing
+/// selected, and the Selection Info panel otherwise.
+#[test]
+fn info_for_selection_opens_the_smart_settings() {
+    let mut app = smart_app();
+    let panel = |app: &FontCraftApp| {
+        app.view.workspace.layout.panel_state(&crate::shell::dock::PanelId::SelectionInfo) != craft::behavior::dock::PanelState::Hidden
+    };
+    shell(&mut app, "edit.infoForSelection", json!({"open": false}));
+    shell(&mut app, "selection.set", json!({"shapes": [1]}));
+    shell(&mut app, "edit.infoForSelection", json!({}));
+    let smart = app.view.components.smart_component.take().expect("the component's settings");
+    assert_eq!((smart.glyph.as_str(), smart.components.as_slice()), ("A", [1].as_slice()));
+    assert!(!panel(&app));
+
+    edit(&mut app, "_part.bar");
+    shell(&mut app, "edit.infoForSelection", json!({}));
+    assert_eq!(app.view.components.smart_glyph.take().map(|g| g.glyph).as_deref(), Some("_part.bar"));
+    assert!(!panel(&app));
+
+    edit(&mut app, "A");
+    shell(&mut app, "edit.infoForSelection", json!({}));
+    assert!(app.view.components.smart_component.is_none() && app.view.components.smart_glyph.is_none());
+    assert!(panel(&app));
 }

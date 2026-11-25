@@ -5,7 +5,7 @@ use std::borrow::Cow;
 use fontcraft_components::align::{AlignMode, component_alignment};
 use fontcraft_geom::{BezPath, CubicBez, ParamCurve, PathEl, Point, QuadBez};
 use fontcraft_model::glyphdata::GlyphData;
-use fontcraft_model::{Font, Guide, Layer, LayerSide, Node, Path, Shape, metric};
+use fontcraft_model::{Component, Font, Guide, Layer, LayerSide, Node, Path, Shape, metric};
 
 use crate::MAX_COMPONENT_POINTS;
 use crate::geometry::{bounds, usable, winding};
@@ -31,7 +31,7 @@ pub struct ComponentGeom {
 }
 
 impl ComponentGeom {
-    /// Whether `p` is inside the component's outline (nonzero rule).
+    /// Whether `p` is inside the component's outline (nonzero rule), or inside its placeholder's box.
     pub fn contains(&self, p: Point) -> bool {
         match self.bounds {
             Some((lo, hi)) if (lo.x..=hi.x).contains(&p.x) && (lo.y..=hi.y).contains(&p.y) => winding(p, &self.polygons) != 0,
@@ -211,13 +211,17 @@ impl<'a> Scene<'a> {
         let mut components = Vec::new();
         for (i, shape) in scene.layer.shapes.iter().enumerate() {
             let Shape::Component(c) = shape else { continue };
-            let Ok(outline) = font.component_outline(c, &layer.master) else { continue };
+            let outline = font.component_outline(c, &layer.master).ok().filter(|o| !o.elements().is_empty());
+            let drawn = outline.ok_or_else(|| placeholder_box(font, c, &layer.master));
             // Alignment reads the foreground layer; background components are not aligned.
             let aligned = side == LayerSide::Foreground && component_alignment(font, layer, i) == Some(AlignMode::Full);
-            components.push((i, outline, c.info.locked || aligned));
+            components.push((i, drawn, c.info.locked || aligned));
         }
-        for (i, outline, locked) in components {
-            scene.add_component(i, &outline, locked);
+        for (i, drawn, locked) in components {
+            match drawn {
+                Ok(outline) => scene.add_component(i, &outline, locked),
+                Err(corners) => scene.add_placeholder(i, corners, locked),
+            }
         }
         Some(scene)
     }
@@ -288,6 +292,17 @@ impl<'a> Scene<'a> {
         self.components.push(geom);
     }
 
+    /// Adds the component at shape index `shape` that has no outline to draw, as the box its placeholder shows: a
+    /// click inside it selects the component. It has no nodes to snap to. A box with unusable corners is left out.
+    pub fn add_placeholder(&mut self, shape: usize, corners: [Point; 4], locked: bool) {
+        if !corners.iter().all(|p| usable(*p)) {
+            return;
+        }
+        let bounds = bounds(corners);
+        self.components.retain(|c| c.shape != shape);
+        self.components.push(ComponentGeom { shape, locked, nodes: Vec::new(), handles: Vec::new(), polygons: vec![corners.to_vec()], bounds });
+    }
+
     /// The command target of the edited layer: `glyph`, `layer`, and `side` when it is the
     /// background. Commands add their own parameters to it.
     pub fn target(&self) -> serde_json::Map<String, serde_json::Value> {
@@ -352,6 +367,18 @@ impl<'a> Scene<'a> {
         let last = path.nodes.len().saturating_sub(1);
         !path.closed && path.nodes.get(node).is_some_and(Node::on_curve) && (node == 0 || node == last)
     }
+}
+
+/// The box that stands for `component` of a layer of `master` when its base glyph gives no outline (empty, missing or
+/// circular): as wide as the base glyph's advance (half an em without one) and half an em tall, placed by the
+/// component's transform. Bottom left, bottom right, top right, top left.
+pub fn placeholder_box(font: &Font, component: &Component, master: &str) -> [Point; 4] {
+    let em = f64::from(font.units_per_em);
+    let advance = font.glyph(&component.glyph).and_then(|g| g.layer(master)).map_or(0.0, |l| l.width);
+    let w = if advance.is_finite() && advance > 0.0 { advance } else { em / 2.0 };
+    let h = em / 2.0;
+    let affine = component.affine();
+    [Point::new(0.0, 0.0), Point::new(w, 0.0), Point::new(w, h), Point::new(0.0, h)].map(|p| affine * p)
 }
 
 /// `layer` as seen from `side`: the layer itself for the foreground; for the background, a copy

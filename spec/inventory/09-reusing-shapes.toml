@@ -521,7 +521,13 @@ milestone = "M6"
 summary = "Clicking a component with the Select tool selects it; one or more selected components bring up the component Info box next to the glyph Info box."
 ref = "Reusing Shapes › Components › Editing Components"
 status = "handbook"
-notes = "Documented, not yet observed. M6.10: a click inside a component's outline selects it (`fontcraft_tools::hit`) and a Shift-click toggles it; the component Info box is M6.11."
+notes = "Documented, not yet observed. M6.10: a click inside a component's outline selects it (`fontcraft_tools::hit`) and a Shift-click toggles it; the component Info box is M6.11. M6.30: a selected component's outline is wider and in the selection colour, in the background too while it is edited (`crates/ui/src/canvas/paint/components.rs`)."
+guesses = [
+  "A selected component is drawn with a wider outline in the selection colour, its fill unchanged; a selected component in the reference app settles the look.",
+]
+observe = [
+  "Select one of two overlapping components and note what marks it.",
+]
 
 [[behavior]]
 id = "components.rubberBandIgnoresComponents"
@@ -629,7 +635,7 @@ milestone = "M6"
 summary = "A component whose base glyph exists but has an empty layer is drawn as an empty-base placeholder. The remedies are to delete the component or to draw something on that layer."
 ref = "Reusing Shapes › Components › Component Placeholders"
 status = "handbook"
-notes = "Documented, not yet observed. M6.10: the three placeholders are drawn as a crossed box as wide as the base glyph's advance (half an em when it has none) and half an em tall, placed by the component's transform and labelled with the base glyph's name and the problem (`canvas/components.rs`)."
+notes = "Documented, not yet observed. M6.10: the three placeholders are drawn as a crossed box as wide as the base glyph's advance (half an em when it has none) and half an em tall, placed by the component's transform and labelled with the base glyph's name and the problem (`crates/ui/src/canvas/paint/components.rs`). M6.30: a click inside the box selects the component, so the Info box names its base glyph."
 guesses = [
   "A placeholder is a crossed box the width of the base glyph's advance and half an em tall, labelled with the problem; seeing the three placeholders in the reference app settles their look.",
 ]
@@ -644,7 +650,7 @@ milestone = "M6"
 summary = "A component that names a glyph absent from the font is drawn as a no-base-glyph placeholder. Clicking it still shows the referenced name in the Info box, and it resolves when the component is removed or a glyph of that name is added."
 ref = "Reusing Shapes › Components › Component Placeholders"
 status = "handbook"
-notes = "Documented, not yet observed. M6.10: drawn as the crossed box of `components.placeholderEmptyBase`, labelled `no such glyph`. It has no outline to click, so Tab and Select All select it until the Info box lands (M6.11)."
+notes = "Documented, not yet observed. M6.10: drawn as the crossed box of `components.placeholderEmptyBase`, labelled `no such glyph`. M6.30: a click inside the box selects the component (`fontcraft_tools::placeholder_box`), and the Info box names the missing glyph."
 observe = [
   "Add a component, delete its base glyph, and note the placeholder and whether a click selects it.",
 ]
@@ -671,9 +677,9 @@ milestone = "M6"
 summary = "While a node, anchor or other element is being dragged, the nodes inside components on the layer are revealed as snap targets, and the dragged element snaps to one when it comes close."
 ref = "Reusing Shapes › Components › Combining Paths and Components"
 status = "handbook"
-notes = "Documented, not yet observed. M6.10: while a pointer tool drags, Edit View draws the on-curve points of every component as small rings, and `fontcraft_tools::snap` snaps the dragged point to the nodes and handles of components."
+notes = "Documented, not yet observed. While a pointer tool drags, the on-curve points of components near the dragged point show as faint dots (`fontcraft_tools::snap::component_markers`), and `fontcraft_tools::snap` snaps the dragged point to the nodes and handles of components."
 guesses = [
-  "The nodes inside components show for as long as any drag of a pointer tool lasts, and not while the pointer only hovers; dragging a node next to a component in the reference app settles it.",
+  "The nodes inside components near the dragged point show for as long as any drag of a pointer tool lasts, and not while the pointer only hovers; dragging a node next to a component in the reference app settles it.",
 ]
 observe = [
   "Drag a node next to a component and note when the component's nodes appear and which of them the node snaps to.",
@@ -844,9 +850,9 @@ milestone = "M6"
 summary = "Component fill colour signals alignment state in Edit View: green for auto-aligned, gray for manually placed, blue for the vertically shiftable single-number case."
 ref = "Reusing Shapes › Components › Automatic Alignment"
 status = "handbook"
-notes = "Documented, not yet observed. M6.10: Edit View draws each component's outline over the glyph in green, grey or blue by `fontcraft_components::align::component_alignment` (`crates/ui/src/canvas/paint/components.rs`); a selected component is drawn in the selection colour."
+notes = "Documented, not yet observed. M6.10: Edit View draws each component's outline over the glyph in green, grey or blue by `fontcraft_components::align::component_alignment` (`crates/ui/src/canvas/paint/components.rs`). M6.30: each component also has a light fill in the same colour, left out in text mode and under Fill Preview's fill; a selected component keeps the fill and takes the selection colour for its outline."
 guesses = [
-  "Components are shown by their outline drawn in the state colour, not filled; a composite in the reference app's Edit View settles it.",
+  "Components are shown by their outline and a light fill, both in the state colour; a composite in the reference app's Edit View settles how strong the fill is and whether the outline is coloured.",
   "Every component aligned horizontally only is blue, the single Number component and a component set to horizontal alignment alike; a component set to horizontal alignment in the reference app settles it.",
 ]
 observe = [
@@ -1071,8 +1077,9 @@ milestone = "M6"
 summary = "Opens the Smart Glyph Settings (tabs Properties and Layers) for a smart glyph. Reached from the component context menu, or with Edit › Info for Selection (Cmd+Alt+I) while in the smart glyph."
 ref = "Reusing Shapes › Smart Components › Setting up Smart Glyphs"
 status = "handbook"
-notes = "Documented, not yet observed. A window that blocks nothing; open: false closes it. In Edit View, Edit › Info for Selection in a smart glyph opens this window when no smart component is selected; a smart glyph is one with properties, or one named `_smart.…` or `_part.…` (documented), so the first property can be added from this window; the component context menu's Show Smart Glyph Settings opens it for the clicked component's glyph."
+notes = "Documented, not yet observed. A window that blocks nothing; open: false closes it. In Edit View, Edit › Info for Selection in a smart glyph with nothing selected opens this window (M6.32); a smart glyph is one with properties, or one named `_smart.…` or `_part.…` (documented), so the first property can be added from this window; the component context menu's Show Smart Glyph Settings opens it for the clicked component's glyph."
 guesses = [
+  "Info for Selection in a smart glyph with nodes or other objects selected opens the Selection Info panel; trying it with a node selected in a smart glyph in the reference app settles it.",
   "With no glyph given, the window shows the edited glyph, else the first glyph selected in Font View; using Info for Selection in the reference app with nothing selected in a smart glyph settles it.",
   "CJK radical and Korean base glyphs, which the handbook also counts as smart glyphs, open the Selection Info window until they have a property; Info for Selection in such a glyph in the reference app settles it.",
 ]
@@ -1308,7 +1315,7 @@ milestone = "M6"
 summary = "With View › Show Bounding Box on, dragging a selected smart component's bounding box horizontally changes its property named Width and dragging vertically changes Height. A smart component with neither property cannot be resized through the bounding box at all."
 ref = "Reusing Shapes › Smart Components › Width & Height Properties"
 status = "handbook"
-notes = "Documented, not yet observed. M6.10: with exactly one smart component selected, a box knob runs smartComponent.setValue on `Width` for the horizontal extent and `Height` for the vertical one (both at once in one command.batch), reading the value off the line through the component's extent at the two ends of the range; an axis without the property does nothing, and rotating from outside the box still rotates (`crates/tools/src/bbox.rs`)."
+notes = "Documented, not yet observed. M6.10: with exactly one smart component selected, a box knob runs smartComponent.setValue on `Width` for the horizontal extent and `Height` for the vertical one (both at once in one command.batch), reading the value off the line through the component's extent at the two ends of the range; an axis without the property does nothing, and rotating from outside the box still rotates (`crates/tools/src/bbox.rs`). M6.32: the window draws the box and its knobs (`crates/ui/src/canvas/bounding_box.rs`) and gives the tool the extents, measured from the outline's nodes and handles as the box is (`canvas/smart.rs`)."
 guesses = [
   "A box drag sets the value whose extent matches the dragged box, read linearly between the extents at the property's two ends, unclamped and rounded like other box values; dragging a knob in the reference app settles it.",
   "With several objects selected, a smart component among them scales like any component; scaling a smart component together with a path in the reference app settles it.",
@@ -1325,7 +1332,7 @@ milestone = "M6"
 summary = "An anchor whose name equals a property name exactly (case included), present on every layer of the smart glyph and moved on the layers that affect that property, becomes a gray drag handle on selected components; dragging it changes that property's value. Properties without such anchors simply get no handle."
 ref = "Reusing Shapes › Smart Components › Smart Handles"
 status = "handbook"
-notes = "Documented, not yet observed. M6.10: Edit View draws each handle as a grey dot on selected smart components, and dragging it with the Select tool runs smartComponent.setValue in one interaction (`fontcraft_tools::SmartHandle`, `canvas/components.rs`). A handle exists when the anchor of the property's name moves between the property's two ends."
+notes = "Documented, not yet observed. M6.10: dragging a handle with the Select tool runs smartComponent.setValue in one interaction (`fontcraft_tools::SmartHandle`). M6.32: the window resolves the handles of the selected smart components of the foreground, at most 64 components and 32 properties each, once per revision and selection, and draws each as a grey dot (`crates/ui/src/canvas/smart.rs`); a locked component has none. A handle exists when the anchor of the property's name moves between the property's two ends."
 guesses = [
   "Dragging a handle sets the value whose interpolated anchor position is nearest the pointer, found by projecting the pointer on the line between the anchor's positions at the property's two poles, with no clamp; dragging a handle in the reference app settles it.",
 ]

@@ -59,7 +59,7 @@ const COMMANDS: &[UiCommand] = &[
         label: "Info for Selection",
         menu: &["Edit"],
         shortcut: Some("Cmd+Alt+I"),
-        params: "{open?: bool (default true)} show the Selection Info panel on the selected glyphs (without Font View: the shown glyph); false hides it. In Edit View with one global guide selected alone, open the guide's scope rules instead",
+        params: "{open?: bool (default true)} show the Selection Info panel on the selected glyphs (without Font View: the shown glyph); false hides it. In Edit View it opens the guide's scope rules instead with one global guide selected alone, the Smart Component settings with smart components selected, and the Smart Glyph Settings with nothing selected in a smart glyph",
     },
 ];
 
@@ -108,6 +108,9 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
                 let spec = crate::dialogs::find(crate::dialogs::guide_scope::DIALOG).ok_or("the guide scope dialog is missing")?;
                 return crate::dialogs::form::open(app, &spec, &given).map(|_| ());
             }
+            if open && let Some(id) = smart_settings(app) {
+                return super::commands::run(app, &CommandRef::new(id));
+            }
             let shown = app.view.workspace.layout.panel_state(&PanelId::SelectionInfo) != PanelState::Hidden;
             if open != shown {
                 dock::toggle(&mut app.view.workspace, PanelId::SelectionInfo);
@@ -137,6 +140,24 @@ fn global_guide_scope(app: &FontCraftApp) -> Option<Map<String, Value>> {
     given.insert("guide".into(), json!({"scope": r.scope.as_str(), "index": r.index}));
     given.insert("filter".into(), json!(g.filter.clone().unwrap_or_default()));
     Some(given)
+}
+
+/// The command Info for Selection stands for in Edit View's edit mode: Smart Component Settings with a smart component
+/// selected, Smart Glyph Settings with nothing selected in a smart glyph (one with properties, or named for one).
+fn smart_settings(app: &FontCraftApp) -> Option<&'static str> {
+    if app.view.tabs.font_view_shows() || crate::canvas::text::text_mode(&app.view) {
+        return None;
+    }
+    let font = app.session.font().ok()?;
+    let target = crate::canvas::tools::target(&app.session, &app.view)?;
+    let glyph = font.glyph(&target.glyph)?;
+    let layer = glyph.layers.iter().find(|l| l.id == target.layer)?;
+    let selection = &app.tools.selection;
+    if selection.is_empty() {
+        let named = ["_smart.", "_part."].iter().any(|prefix| glyph.name.starts_with(prefix));
+        return (named || !glyph.info.parts.is_empty()).then_some("smartGlyph.showSettings");
+    }
+    crate::canvas::smart::any_smart(font, layer.parts(target.side).shapes, &selection.shapes).then_some("smartComponent.showSettings")
 }
 
 fn select_entries(app: &mut FontCraftApp, p: &Value) -> Result<(), String> {

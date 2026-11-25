@@ -207,7 +207,7 @@ fn without_the_box_a_press_on_a_knob_is_an_ordinary_press() {
 }
 
 #[test]
-fn the_rotate_tool_turns_about_the_box_centre_or_the_clicked_point() {
+fn the_rotate_tool_turns_about_the_box_centre_or_the_placed_point() {
     let mut shell = Shell::new(square());
     let mut tool = RotateTool::default();
     shell.drag(&mut tool, (100.0, 50.0), (50.0, 100.0), NONE);
@@ -219,12 +219,12 @@ fn the_rotate_tool_turns_about_the_box_centre_or_the_clicked_point() {
     shell.pointer(&mut tool, Down, 10.0, 20.0, NONE);
     let out = shell.pointer(&mut tool, Up, 10.0, 20.0, NONE);
     assert_eq!(out.actions, vec![Action::Run { invocation: Invocation::new("transform.setOrigin", json!({"point": [10.0, 20.0]})) }]);
+    shell.settings.reference = Some(Point::new(10.0, 20.0));
     shell.drag(&mut tool, (110.0, 20.0), (10.0, 120.0), NONE);
     assert_eq!(shell.last_preview().params, square_targets(json!({"angle": 90.0, "origin": [10.0, 20.0]})));
 
-    // Shift: quarter turns. The shell's reference point wins over the tool's own.
+    // Shift: quarter turns. Once the shell has no point, the box's centre is the origin again.
     let mut shell = Shell::new(square());
-    shell.settings.reference = Some(Point::new(50.0, 50.0));
     shell.drag(&mut tool, (100.0, 50.0), (60.0, 100.0), Modifiers::SHIFT);
     assert_eq!(shell.last_preview().params, square_targets(json!({"angle": 90.0, "origin": [50.0, 50.0]})));
 }

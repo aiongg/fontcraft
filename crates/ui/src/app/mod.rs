@@ -400,6 +400,8 @@ impl FontCraftApp {
     /// Applies what was posted: the only place that runs engine commands. A failed command changes nothing and
     /// leaves its message in the status line.
     pub fn drain(&mut self) {
+        // Before the messages: the click that closed the field may have changed what is edited.
+        crate::canvas::anchor_editor::finish(self);
         let mut failed = Vec::new();
         for command in self.picks.poll(&self.host, &mut failed) {
             self.sent.push(FontCraftApp::route(command));
@@ -415,6 +417,7 @@ impl FontCraftApp {
         if let Some(last) = failed.pop() {
             self.status = last;
         }
+        crate::canvas::anchor_editor::drop_stale(self);
         // A shell command may have switched or closed the active document: its tab set shows before anything reads
         // the tabs, and again after a close the drain answered.
         crate::shell::tabs::follow_document(self);
@@ -463,8 +466,13 @@ impl FontCraftApp {
 
     /// Applies one message as `drain` does; the error names the command that failed.
     pub fn apply_msg(&mut self, msg: Msg) -> Result<(), String> {
+        self.apply_msg_reply(msg).map(drop)
+    }
+
+    /// [`Self::apply_msg`], with the command's reply.
+    pub(crate) fn apply_msg_reply(&mut self, msg: Msg) -> Result<Value, String> {
         let id = msg.command_id().map(str::to_owned);
-        self.apply(msg, true, Origin::Person).map(|_| ()).map_err(|error| with_command_id(id, error))
+        self.apply(msg, true, Origin::Person).map_err(|error| with_command_id(id, error))
     }
 
     /// Applies one message: the only code that runs `Session::execute`. Tool input runs the toolbox, whose answer
@@ -589,6 +597,7 @@ impl FontCraftApp {
     pub fn project(&mut self) {
         // First: the Info box reads whether the image is still selected.
         crate::canvas::images::refresh(self);
+        crate::canvas::bounding_box::refresh(self);
         let stamp = Stamp::of(&self.session, self.view_revision);
         let mut cx = ProjectCx { session: &mut self.session, view: &self.view };
         self.models.project(stamp, &mut cx);
