@@ -883,8 +883,8 @@ fn py_is_close(a: f64, b: f64) -> bool {
 }
 
 /// The width and height in percent an intermediate corner layer's name gives
-/// (`Width 150 Height 100`); a missing one is 100.
-fn size_percent(name: &str) -> Option<(f64, f64)> {
+/// (`Width 150 Height 100`); a missing one is 100, and `None` when it gives neither.
+pub fn layer_size(name: &str) -> Option<(f64, f64)> {
     let lower = name.to_ascii_lowercase();
     let words: Vec<&str> = lower.split(|c: char| c.is_whitespace() || matches!(c, ':' | ',' | '%' | '=')).filter(|w| !w.is_empty()).collect();
     let (mut w, mut h) = (None, None);
@@ -920,7 +920,7 @@ fn intermediate_paths(glyph: &Glyph, layer: &Layer, scale: Vec2) -> (Vec<Path>, 
         .iter()
         .filter(|l| l.master == layer.master && !l.is_master_layer())
         .filter_map(|l| {
-            let (w, h) = size_percent(l.info.name.as_deref()?)?;
+            let (w, h) = layer_size(l.info.name.as_deref()?)?;
             let paths = layer_paths(l);
             compatible(&paths).then_some((w, h, paths))
         })

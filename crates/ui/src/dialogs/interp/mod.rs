@@ -1,6 +1,7 @@
 //! The masters and interpolation dialogs: the Masters tab's dialogs ([`masters`]), Axis Location and Virtual Master
-//! ([`location`]), and the interpolation commands of the Path, Glyph and Font menus ([`variation`]). All are specs.
+//! ([`location`]), the size of a corner glyph's layer ([`corner_size`]), and the interpolation commands of the Path, Glyph and Font menus ([`variation`]). All are specs.
 
+pub mod corner_size;
 pub mod location;
 pub mod masters;
 #[cfg(test)]
@@ -14,6 +15,7 @@ use super::spec::DialogSpec;
 pub const SPECS: &[DialogSpec] = &[
     location::AXIS_LOCATION_DIALOG,
     location::VIRTUAL_MASTER_DIALOG,
+    corner_size::CORNER_LAYER_SIZE,
     masters::ADD_OTHER_FONT,
     masters::ICON_PICKER,
     masters::ADD_METRIC,

@@ -4,6 +4,7 @@
 use std::sync::Arc;
 
 use craft::host::Host;
+use craft::ui::runtime::commands::CommandRef;
 use fontcraft_engine::Session;
 use fontcraft_engine::model::Font;
 use serde_json::{Value, json};
@@ -148,4 +149,38 @@ fn the_metric_icon_and_variation_dialogs_give_the_font_their_commands_give() {
     assert_eq!(undo_steps(&app), steps + 1);
     assert_eq!(font(&app).masters.len(), 3);
     assert_eq!(font(&app).axes.len(), 2);
+}
+
+/// Intermediate on a corner glyph's layer asks a width and a height, and names the layer as the corner fitting reads
+/// it; the font needs no axes (`corner.scaleInterpolatesWithIntermediateLayers`).
+#[test]
+fn a_corner_glyph_s_layer_is_given_a_size() {
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    app.session.execute("glyph.newGlyph", &json!({"name": "_corner.s"})).unwrap();
+    app.session
+        .edit("setup", |font| {
+            let mut wide = font.glyph("_corner.s").unwrap().layers[0].clone();
+            wide.id = "wide".into();
+            font.glyph_mut("_corner.s")?.layers.push(wide);
+            Ok(())
+        })
+        .unwrap();
+    app.drain();
+    let edit = |app: &mut FontCraftApp| {
+        let command =
+            CommandRef::with_params("layers.editSpecialLayerSettings", json!({"glyph": "_corner.s", "layer": "wide", "part": "intermediate"}));
+        app.apply_msg(Msg::Shell(command)).unwrap();
+    };
+    edit(&mut app);
+    call(&mut app, "ui.dialog.set", json!({"field": "width", "value": 150}));
+    let done = call(&mut app, "ui.dialog.confirm", json!({}));
+    assert_eq!(done["params"]["name"], json!("Width 150 Height 100"), "{done}");
+    let name = |app: &FontCraftApp| font(app).glyph("_corner.s").unwrap().layers.iter().find(|l| l.id == "wide").unwrap().info.name.clone();
+    assert_eq!(name(&app).as_deref(), Some("Width 150 Height 100"));
+    edit(&mut app);
+    call(&mut app, "ui.dialog.set", json!({"field": "height", "value": 80}));
+    call(&mut app, "ui.dialog.confirm", json!({}));
+    assert_eq!(name(&app).as_deref(), Some("Width 150 Height 80"), "the fields start from the layer's size");
+    let master = font(&app).masters[0].id.clone();
+    assert!(open(&mut app, "popover.cornerLayerSize", json!({"glyph": "_corner.s", "layer": master})).is_err());
 }
