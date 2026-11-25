@@ -29,6 +29,24 @@ pub fn specs() -> Vec<CommandSpec> {
             has_doc,
             activate
         ),
+        cmd!(
+            "document.showNext",
+            "Show Next Document",
+            ["Window"],
+            Some("Cmd+`"),
+            "{} make the open document after the active one the active one; after the last comes the first → {title, index}",
+            has_doc,
+            show_next
+        ),
+        cmd!(
+            "document.showPrevious",
+            "Show Previous Document",
+            ["Window"],
+            Some("Cmd+Shift+`"),
+            "{} make the open document before the active one the active one; before the first comes the last → {title, index}",
+            has_doc,
+            show_previous
+        ),
     ]
 }
 
@@ -97,4 +115,26 @@ fn activate(s: &mut Session, p: &Value) -> Result<Value> {
     s.set_active(index).map_err(|_| p.bad(format!("there is no open document {index}")))?;
     let doc = s.doc()?;
     Ok(json!({ "title": doc.title, "index": index }))
+}
+
+fn show_next(s: &mut Session, p: &Value) -> Result<Value> {
+    let p = Params::new("document.showNext", p)?;
+    show_beside(s, &p, true)
+}
+
+fn show_previous(s: &mut Session, p: &Value) -> Result<Value> {
+    let p = Params::new("document.showPrevious", p)?;
+    show_beside(s, &p, false)
+}
+
+/// Makes the document after (`next`) or before the active one active, around the ends of the list.
+fn show_beside(s: &mut Session, p: &Params, next: bool) -> Result<Value> {
+    let active = s.doc()?.id;
+    let count = s.documents().len();
+    let at = s.documents().iter().position(|d| d.id == active).ok_or(crate::EngineError::NoDocument)?;
+    let step = if next { 1 } else { count.saturating_sub(1) };
+    // An active document is in the list, so `count` is at least 1.
+    let index = at.saturating_add(step).checked_rem(count).unwrap_or(at);
+    s.set_active(index).map_err(|_| p.bad(format!("there is no open document {index}")))?;
+    Ok(json!({ "title": s.doc()?.title, "index": index }))
 }

@@ -11,6 +11,7 @@ pub mod clipboard;
 pub mod close;
 pub mod console;
 pub mod context_menu;
+pub mod document_menu;
 pub mod dropped;
 pub mod files;
 pub mod font_view;
@@ -281,6 +282,8 @@ pub struct FontCraftApp {
     /// The graphics adapter the window draws with, for About FontCraft; `None` while the framework does not report it
     /// (and in tests).
     pub graphics: Option<crate::dialogs::about::Graphics>,
+    /// The recent files as File › Open Recent lists them (`document_menu`).
+    pub(crate) recent_files: document_menu::RecentFiles,
     /// The canvas overlays' switches, data and the text note being typed (`canvas::overlays`).
     pub overlays: crate::canvas::overlays::Overlays,
     /// The control channel: its listener, the window its input goes to, the replies waiting on frames.
@@ -336,6 +339,7 @@ impl FontCraftApp {
             context_menus: context_menu::ContextMenus::default(),
             clipboard: clipboard::Clipboard::default(),
             overlays: Default::default(),
+            recent_files: Default::default(),
             picks: Picks::default(),
             frame_hook: None,
             preview_host: None,
@@ -586,6 +590,7 @@ impl FontCraftApp {
             self.catalog.refresh(&self.session);
         }
         menus_dynamic::refresh(self);
+        document_menu::refresh(self);
         crate::shell::window::refresh_menu(self);
         menu_states::refresh(self);
     }
@@ -787,6 +792,7 @@ impl ShellApp for FontCraftApp {
         crate::shell::feature_work::logic(self, ctx);
         dropped::take(self, ctx);
         crate::shell::external_changes::on_focus(self, ctx);
+        document_menu::on_focus(self, ctx);
         crate::canvas::images::logic(self, ctx);
         crate::control::logic(self, ctx);
         open::take_dropped(self, ctx);

@@ -35,7 +35,7 @@ const COMMANDS: &[UiCommand] = &[
         label: "Select Project Instances",
         menu: &[],
         shortcut: None,
-        params: "{project: id, instances?: [index]} show the open project `project` in the Project panel and select these entries of its instance list (omitted: keep the selection); the fields at the right edit every selected entry, and an empty list selects the first",
+        params: "{project: id, instances?: [index], show?: bool} show the open project `project` in the Project panel and select these entries of its instance list (omitted: keep the selection); the fields at the right edit every selected entry, and an empty list selects the first; with show true the panel opens or comes to the front",
     },
     UiCommand {
         id: COPY,
@@ -126,12 +126,16 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
         }
         Some(_) => return Err("`instances` is a list of entry positions".into()),
     };
+    let front = super::params::flag(params, "show")?.unwrap_or(false);
     let view = &mut app.view.project;
     view.shown = Some(project);
     if let Some(picked) = instances {
         view.selected.insert(project, picked);
     }
     view.selected.retain(|id, _| app.session.projects().iter().any(|d| d.id == *id));
+    if front {
+        crate::shell::dock::show_window(&mut app.view.workspace, PanelId::Project, true, app.view.canvas.rect);
+    }
     Ok(())
 }
 

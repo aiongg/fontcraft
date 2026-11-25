@@ -139,14 +139,17 @@ pub struct EditTab {
     pub state: TabState,
 }
 
-/// The tab set of an open document that is not active. The live tab's state is in its tab; `master` is Font View's
-/// master when no tab was live.
+/// The tab set of an open document that is not active, with Font View's selected glyphs. The live tab's state is in
+/// its tab; `master` is Font View's master when no tab was live.
+#[derive(Default)]
 struct DocumentTabs {
     tabs: Vec<EditTab>,
     active: Option<u64>,
     live: Option<u64>,
     closed: Vec<(usize, EditTab)>,
     master: Option<String>,
+    selected: Vec<String>,
+    anchor: Option<String>,
 }
 
 /// The Edit View tabs of the active document, and the tab sets of the other open documents.
@@ -428,6 +431,8 @@ pub(crate) fn follow_document(app: &mut FontCraftApp) -> bool {
     }
     // The live tab's state goes back into its tab, so the set is whole while it is put away.
     let state = take_live(app);
+    let selected = std::mem::take(&mut app.view.font_view.selected);
+    let anchor = app.view.font_view.anchor.take();
     let tabs = &mut app.view.tabs;
     let live = tabs.live.and_then(|id| tabs.tabs.iter_mut().find(|t| t.id == id));
     let master = match live {
@@ -443,6 +448,8 @@ pub(crate) fn follow_document(app: &mut FontCraftApp) -> bool {
         live: tabs.live.take(),
         closed: std::mem::take(&mut tabs.closed),
         master,
+        selected,
+        anchor,
     };
     if let Some(shown) = shown
         && open.contains(&shown)
@@ -450,17 +457,13 @@ pub(crate) fn follow_document(app: &mut FontCraftApp) -> bool {
         tabs.others.insert(shown, kept);
     }
     // A document shown for the first time opens on Font View.
-    let back = active.and_then(|now| tabs.others.remove(&now)).unwrap_or(DocumentTabs {
-        tabs: Vec::new(),
-        active: None,
-        live: None,
-        closed: Vec::new(),
-        master: None,
-    });
+    let back = active.and_then(|now| tabs.others.remove(&now)).unwrap_or_default();
     tabs.tabs = back.tabs;
     tabs.active = back.active.filter(|id| tabs.tabs.iter().any(|t| t.id == *id));
     tabs.closed = back.closed;
     tabs.document = active;
+    app.view.font_view.selected = back.selected;
+    app.view.font_view.anchor = back.anchor;
     let incoming = back.live.and_then(|id| tabs.tabs.iter_mut().find(|t| t.id == id)).map(|t| (t.id, std::mem::take(&mut t.state)));
     match incoming {
         Some((id, state)) => {
