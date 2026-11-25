@@ -190,8 +190,7 @@ fn the_canvas_menu_posts_its_items() {
         s.fixture.frame(vec![egui::Event::PointerMoved(pos)]).frame(vec![button(true)]).frame(vec![button(false)]).settle();
         let row = s.fixture.by_label(item).unwrap_or_else(|| panic!("{item} in the menu"));
         s.fixture.click(&row).settle();
-        let posted = s.posted.borrow().clone();
-        posted
+        s.posted.borrow().clone()
     };
     assert!(pick(true, "Filled Ellipse").contains(&set(json!({"tool": "filledEllipse"}))));
     let strike = json!({"ppem": 12, "depth": 1});

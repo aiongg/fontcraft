@@ -281,11 +281,14 @@ fn stroke_model(scene: &fontcraft_tools::Scene<'_>, paths: &[usize], targets: Op
     m
 }
 
+/// What the models are projected from.
+type Seen = (Stamp, Selection, Option<Vec<usize>>, bool, Vec<fontcraft_tools::hoi::Knob>);
+
 /// The models of the Info box and the Palette sections.
 #[derive(Default)]
 pub struct PaletteModels {
     /// What the models were last projected from.
-    seen: Option<(Stamp, Selection, Option<Vec<usize>>, bool, Vec<fontcraft_tools::hoi::Knob>)>,
+    seen: Option<Seen>,
     pub info_box: Tracked<InfoBoxModel>,
     pub transform: Tracked<TransformModel>,
     pub fit_curve: Tracked<FitCurveModel>,

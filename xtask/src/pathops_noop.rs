@@ -172,7 +172,7 @@ pub fn run(root: &Path, args: &[&str]) -> Result<(), String> {
     }
     std::panic::set_hook(default_hook);
 
-    table.sort_by(|a, b| b.0.cmp(&a.0));
+    table.sort_by_key(|row| std::cmp::Reverse(row.0));
     let mut s = format!("sources {}, failed {}\nsaved by the reference: {}\n", sources.len(), detail.failed.len(), total.line());
     writeln!(s, "saved start of the paths whose start moved: {:?}", detail.starts).ok();
     writeln!(s, "saved order of the layers that were reordered: {:?}", detail.orders).ok();

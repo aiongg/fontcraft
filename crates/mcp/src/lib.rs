@@ -110,6 +110,9 @@ impl LogLevel {
     }
 }
 
+/// Sends one notification to the client.
+type Notify = Rc<dyn Fn(&Value)>;
+
 pub struct Server {
     backend: Box<dyn Backend>,
     policy: Policy,
@@ -123,7 +126,7 @@ pub struct Server {
     /// Notifications produced while answering the current request.
     pending: Vec<Value>,
     /// Sends a notification while a request runs; only a transport that can has one.
-    notify: Option<Rc<dyn Fn(&Value)>>,
+    notify: Option<Notify>,
     /// Cancels the next request handled; a transport that takes cancellations gives one.
     token: Option<Arc<Token>>,
 }

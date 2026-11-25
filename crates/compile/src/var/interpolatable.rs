@@ -345,7 +345,7 @@ impl Shared {
             let path = cubic.paths.first().map(|paths| reshaped(paths, &at_slot(&values))).unwrap_or_default();
             return Ok(if path.elements().is_empty() { Prepared::Empty } else { Prepared::Simple(path) });
         }
-        let pairs = |flat: Vec<f64>| -> Vec<(f64, f64)> { flat.chunks_exact(2).filter_map(|c| Some((*c.first()?, *c.get(1)?))).collect() };
+        let pairs = |flat: Vec<f64>| -> Vec<(f64, f64)> { flat.as_chunks().0.iter().map(|&[x, y]| (x, y)).collect() };
         Ok(match outline {
             Prepared::Empty => Prepared::Empty,
             Prepared::Composite(_) if own.is_some() => outline::composite(g)?,
@@ -458,11 +458,8 @@ fn coordinates(paths: &[BezPath]) -> Vec<f64> {
 
 /// `paths` as one path, with its coordinates replaced by `values` in drawing order.
 fn reshaped(paths: &[BezPath], values: &[f64]) -> BezPath {
-    let mut values = values.chunks_exact(2);
-    let mut next = |p: Point| match values.next() {
-        Some([x, y]) => Point::new(*x, *y),
-        _ => p,
-    };
+    let mut values = values.as_chunks().0.iter();
+    let mut next = |p: Point| values.next().map_or(p, |&[x, y]| Point::new(x, y));
     let mut out = BezPath::new();
     for el in paths.iter().flat_map(|p| p.elements()) {
         out.push(match *el {

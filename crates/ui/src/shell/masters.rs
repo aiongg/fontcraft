@@ -273,10 +273,7 @@ fn select_master(app: &mut FontCraftApp, params: &Value) -> Result<(), String> {
     };
     let id = master.id.clone();
     // The edited item keeps a layer of its own while the glyph has one in the master.
-    let own = match &app.view.layers.item {
-        Some((glyph, _)) => Some(font.glyph(glyph).is_some_and(|g| g.layer(&id).is_some())),
-        None => None,
-    };
+    let own = app.view.layers.item.as_ref().map(|(glyph, _)| font.glyph(glyph).is_some_and(|g| g.layer(&id).is_some()));
     let view = &mut app.view.layers;
     view.master = Some(id.clone());
     view.layers.clear();
