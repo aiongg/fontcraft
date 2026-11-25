@@ -2742,13 +2742,13 @@ label = "Preview Instance"
 menu = []
 shortcut = ""
 kind = "ui"
-params = "{target?: 'area'|'panel', instance: name|index|'master'|'all'}"
+params = "{target?: 'area'|'panel', instance: name|index|'master'|'all'|'location'}"
 area = "proofing"
 milestone = "M9"
 summary = "Chooses what the preview renders: a named instance (interpolated on the fly), the master used in Edit View (the dash entry), or all instances at once."
 ref = "Edit View › Previewing & Testing › Previewing Interpolated Instances"
 status = "handbook"
-notes = "Built in M9.20. `instance` names a static instance by name, `#n` or index from 0; a variable font setting is refused. The line at an instance is laid out in the document's instance view: the instance's widths and kerning, each glyph interpolated as its static instance would be (`preview.respectsInstanceData`). A glyph that cannot be interpolated is left out of the line. Documented, not yet observed."
+notes = "Built in M9.20. 'location' (ours) shows the location view.setLocation sets. `instance` names a static instance by name, `#n` or index from 0; a variable font setting is refused. The line at an instance is laid out in the document's instance view: the instance's widths and kerning, each glyph interpolated as its static instance would be (`preview.respectsInstanceData`). A glyph that cannot be interpolated is left out of the line. Documented, not yet observed."
 guesses = [
   "The Preview Area and the Preview Panel each keep their own instance choice, as they keep their own Invert and Flip; settle by choosing different instances in both in the reference app.",
   "Choosing an instance or the dash in the preview also makes it the TrueType Instructor's previewed instance (`hint.tt.showPixelPreview`); settle by switching the preview's instance in the reference app with the Instructor active.",

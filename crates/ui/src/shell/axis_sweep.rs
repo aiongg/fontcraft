@@ -5,6 +5,11 @@
 //! (`app::models::preview`), so there is never a step waiting behind another; a slow step skips the ones it took the
 //! time of. While the window is hidden the clock stands still and asks for no frame. The sweep ends when no view
 //! that follows it shows (the previews and the Glyph Sources panel) or its document is no longer the active one.
+//!
+//! `view.setLocation` sets the location the choice Location of a preview shows, which the sliders of the Glyph Sources
+//! panel move.
+
+use std::collections::BTreeMap;
 
 use craft::behavior::dock::PanelState;
 use craft::ui::runtime::commands::CommandRef;
@@ -12,6 +17,7 @@ use fontcraft_engine::interp::{AxisInfo, Designspace};
 use fontcraft_engine::model::Font;
 use fontcraft_engine::model::axes::design_value;
 use fontcraft_engine::prelude::*;
+use serde_json::Value;
 
 use super::commands::{Module, UiCommand};
 use super::dock::PanelId;
@@ -22,13 +28,22 @@ use crate::app::{FontCraftApp, ViewState};
 
 pub const MODULE: Module = Module { commands: COMMANDS, run };
 
-const COMMANDS: &[UiCommand] = &[UiCommand {
-    id: "view.animateAxis",
-    label: "Animate Axis",
-    menu: &["View"],
-    shortcut: None,
-    params: "{axis?: tag (default: the axis under way, else the first with a range), on?: bool} sweep the previews back and forth along one axis, from the location they show (omitted `on`: toggle). Opens the Preview Area when no preview and no Glyph Sources panel shows; closing the last of them ends the sweep",
-}];
+const COMMANDS: &[UiCommand] = &[
+    UiCommand {
+        id: "view.animateAxis",
+        label: "Animate Axis",
+        menu: &["View"],
+        shortcut: None,
+        params: "{axis?: tag (default: the axis under way, else the first with a range), on?: bool} sweep the previews back and forth along one axis, from the location they show (omitted `on`: toggle). Opens the Preview Area when no preview and no Glyph Sources panel shows; closing the last of them ends the sweep",
+    },
+    UiCommand {
+        id: "view.setLocation",
+        label: "Set Preview Location",
+        menu: &[],
+        shortcut: None,
+        params: "{location?: {tag: number}, reset?: bool | tag, target?: \"area\" | \"panel\" (default: the preview the Glyph Sources panel follows)} show a location in a preview and the views that follow it: external coordinates, held to each axis' range; the other axes stay where the preview is. `reset: true` puts every axis at its origin, a tag that axis, before `location` applies. The preview's choice becomes Location, and a sweep along an axis that is set ends",
+    },
+];
 
 /// Seconds from one end of the axis to the other.
 const SWEEP_SECONDS: f64 = 2.0;
@@ -90,18 +105,25 @@ pub fn has_range(axis: &AxisInfo) -> bool {
     (axis.internal.maximum - axis.internal.minimum).abs() > f64::EPSILON
 }
 
-/// The location a preview that shows `shows` is at, one internal coordinate per font axis: its instance's, else the
-/// current master's. While the sweep runs, its axis is where the sweep is.
+/// The location a preview that shows `shows` is at, one internal coordinate per font axis: its instance's, the
+/// location the sliders set, else the current master's. While the sweep runs, its axis is where the sweep is.
 pub fn location_of(font: &Font, designspace: &Designspace, view: &ViewState, shows: &Shows) -> Vec<f64> {
     let instance = match shows {
         Shows::Instance(key) => instance_index(font, key).filter(|i| is_static(font, *i)).and_then(|i| font.instances.get(i)),
-        Shows::Master | Shows::All => None,
+        Shows::Master | Shows::All | Shows::Location => None,
     };
     let base: &[f64] = match instance {
         Some(i) => &i.location,
         None => super::masters::current_master(font, &view.layers).map_or(&[], |m| &m.location),
     };
     let mut out: Vec<f64> = (0..font.axes.len()).map(|i| design_value(base, i)).collect();
+    if *shows == Shows::Location {
+        for axis in designspace.axes() {
+            if let Some(slot) = out.get_mut(axis.font_axis) {
+                *slot = view.preview.location.get(&axis.tag).copied().unwrap_or(axis.internal.default);
+            }
+        }
+    }
     if let Some(sweep) = &view.preview.sweep
         && let Some((_, axis)) = designspace.axis(&sweep.axis)
         && let Some(slot) = out.get_mut(axis.font_axis)
@@ -114,9 +136,13 @@ pub fn location_of(font: &Font, designspace: &Designspace, view: &ViewState, sho
 /// The location the previews show, for the views that follow them: the Preview Area's while it is open, else the
 /// Preview Panel's.
 pub fn previewed_location(font: &Font, designspace: &Designspace, view: &ViewState) -> Vec<f64> {
+    location_of(font, designspace, view, view.preview.shows(followed_target(view)))
+}
+
+/// The preview [`previewed_location`] reads.
+pub fn followed_target(view: &ViewState) -> Target {
     let panel = view.workspace.layout.panel_state(&PanelId::Preview) != PanelState::Hidden;
-    let target = if !view.preview.area_open && panel { Target::Panel } else { Target::Area };
-    location_of(font, designspace, view, view.preview.shows(target))
+    if !view.preview.area_open && panel { Target::Panel } else { Target::Area }
 }
 
 /// Whether a view that follows the sweep shows.
@@ -148,8 +174,65 @@ pub fn logic(app: &mut FontCraftApp, ctx: &egui::Context) {
 fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
     match command.id.as_str() {
         "view.animateAxis" => animate(app, command),
+        "view.setLocation" => set_location(app, command),
         other => Err(format!("no axis command `{other}`")),
     }
+}
+
+fn set_location(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
+    let p = &command.params;
+    let target = match string(p, "target")? {
+        None => followed_target(&app.view),
+        Some("area") => Target::Area,
+        Some("panel") => Target::Panel,
+        Some(other) => return Err(format!("`target` must be \"area\" or \"panel\", got `{other}`")),
+    };
+    let designspace = app.session.designspace()?;
+    let axis_of = |tag: &str| designspace.axis(tag).map(|(_, axis)| axis).ok_or_else(|| format!("the font has no axis `{tag}`"));
+    let font = app.session.font().map_err(|e| e.to_string())?;
+    let here = location_of(font, &designspace, &app.view, app.view.preview.shows(target));
+    let mut location: BTreeMap<String, f64> = designspace
+        .axes()
+        .iter()
+        .map(|a| (a.tag.clone(), here.get(a.font_axis).copied().filter(|v| v.is_finite()).unwrap_or(a.internal.default)))
+        .collect();
+    let mut set: Vec<String> = Vec::new();
+    match p.get("reset") {
+        None | Some(Value::Null) | Some(Value::Bool(false)) => {}
+        Some(Value::Bool(true)) => set.extend(location.keys().cloned()),
+        Some(Value::String(tag)) => set.push(axis_of(tag)?.tag.clone()),
+        Some(other) => return Err(format!("`reset` must be true, false or an axis tag, got {other}")),
+    }
+    for tag in &set {
+        location.insert(tag.clone(), axis_of(tag)?.internal.default);
+    }
+    match p.get("location") {
+        None | Some(Value::Null) => {}
+        Some(Value::Object(given)) => {
+            for (tag, v) in given {
+                let axis = axis_of(tag)?;
+                let v = v.as_f64().filter(|v| v.is_finite()).ok_or_else(|| format!("`location.{tag}` must be a number"))?;
+                let (lo, hi) = (axis.external.minimum.min(axis.external.maximum), axis.external.minimum.max(axis.external.maximum));
+                let internal = axis.map.to_design(v.max(lo).min(hi));
+                if !internal.is_finite() {
+                    return Err(format!("`location.{tag}` has no internal coordinate"));
+                }
+                location.insert(axis.tag.clone(), internal);
+                set.push(axis.tag.clone());
+            }
+        }
+        Some(other) => return Err(format!("`location` must be {{tag: number}}, got {other}")),
+    }
+    if set.is_empty() {
+        return Err("give `location` or `reset`".into());
+    }
+    let preview = &mut app.view.preview;
+    if preview.sweep.as_ref().is_some_and(|s| set.contains(&s.axis)) {
+        preview.sweep = None;
+    }
+    preview.location = location;
+    *preview.shows_mut(target) = Shows::Location;
+    Ok(())
 }
 
 fn animate(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {

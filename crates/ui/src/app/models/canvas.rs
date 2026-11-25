@@ -33,6 +33,9 @@ pub struct CanvasModel {
     /// The interpolation paths, while the Higher-Order Interpolation tool is the current one (`canvas::hoi`).
     #[plain_data(assume = "owned points, strings and numbers, no interior mutability")]
     pub hoi: Option<fontcraft_tools::hoi::HoiMarks>,
+    /// The edited glyph interpolated at the location the previews show, under `view.showOutlineAtLocation`.
+    #[plain_data(assume = "a kurbo path: owned points")]
+    pub at_location: Option<BezPath>,
 }
 
 /// The edited glyph in its active layer, in font units.
@@ -115,7 +118,28 @@ pub fn project(model: &mut Tracked<CanvasModel>, files: &mut crate::canvas::colo
         edited_glyph(font, data.as_deref(), glyph, layer, master, side)
     });
     let hoi = cx.session.font().ok().and_then(|font| super::hoi::marks(font, cx.view));
-    super::set(model, CanvasModel { glyph: edited, color: crate::canvas::color::project(cx, files), hoi });
+    let at_location = model.at_location.clone();
+    super::set(model, CanvasModel { glyph: edited, color: crate::canvas::color::project(cx, files), hoi, at_location });
+    project_location(model, cx);
+}
+
+/// Brings the outline at the previews' location up to date.
+pub fn project_location(model: &mut Tracked<CanvasModel>, cx: &mut ProjectCx<'_>) {
+    let shows = cx.view.display.outline_at_location && !cx.view.tabs.font_view_shows();
+    let outline = if shows { location_outline(cx) } else { None };
+    if model.at_location != outline {
+        model.edit(|m| m.at_location = outline);
+    }
+}
+
+fn location_outline(cx: &mut ProjectCx<'_>) -> Option<BezPath> {
+    let designspace = cx.session.designspace().ok()?;
+    let name = super::glyph::shown_glyph(cx)?;
+    let font = cx.session.font().ok()?;
+    let location = crate::shell::axis_sweep::previewed_location(font, &designspace, cx.view);
+    let there = cx.session.location_view(&location, std::slice::from_ref(&name)).ok()?;
+    let master = there.masters.first()?.id.clone();
+    there.outline(&name, &master).ok()
 }
 
 /// The canvas's picture of `glyph`'s layer `full`, editing its `side`, with the metric lines and zones of `master`.

@@ -25,6 +25,12 @@ pub struct GlyphSourcesModel {
     pub problem: Option<String>,
     /// The axes with a range.
     pub axes: Vec<AxisRow>,
+    /// The previewed location, internal coordinates by axis tag: where Add Source adds one.
+    pub location: Vec<(String, f64)>,
+    /// A source stands at the location already.
+    pub source_there: bool,
+    /// The outline at the location shows on the canvas.
+    pub outline_shows: bool,
     pub sources: Vec<SourceEntry>,
     /// Sources past [`MAX_ROWS`], left out.
     pub more: usize,
@@ -32,12 +38,19 @@ pub struct GlyphSourcesModel {
     pub missing: Vec<String>,
 }
 
-/// One axis and the previewed coordinate on it.
+/// One axis and the previewed coordinate on it. The slider and the field show the external one.
 #[derive(PlainData, Clone, Debug, Default, PartialEq)]
 pub struct AxisRow {
     pub tag: String,
     pub name: String,
+    /// The internal coordinate.
     pub value: f64,
+    /// The external coordinate and the axis' external range.
+    pub external: f64,
+    pub min: f64,
+    pub max: f64,
+    /// The axis is at its origin: there is nothing to reset.
+    pub at_origin: bool,
     /// The axis is being animated.
     pub animated: bool,
 }
@@ -56,6 +69,10 @@ pub struct SourceEntry {
     pub alternate: bool,
     /// Its share of the glyph at the previewed location.
     pub weight: f64,
+    /// It can be deleted: it is no master layer.
+    pub deletable: bool,
+    /// How it differs from the layers it should interpolate with; empty when it does not.
+    pub mismatch: String,
 }
 
 /// Projects the panel while it is open; closed, it holds nothing.
@@ -67,9 +84,13 @@ pub fn project(model: &mut Tracked<GlyphSourcesModel>, cx: &mut ProjectCx<'_>) {
 
 fn build(cx: &mut ProjectCx<'_>) -> Option<GlyphSourcesModel> {
     let designspace = cx.session.designspace();
+    // Which layers differ from the rest of their group, and how.
+    let shown = masters::shown_glyph(cx.session.font().ok()?, cx.view)?.name.clone();
+    let compat = if cx.session.compat_indicators() { cx.session.glyph_compat(&shown) } else { None };
     let font = cx.session.font().ok()?;
     let glyph = masters::shown_glyph(font, cx.view)?;
-    let mut model = GlyphSourcesModel { glyph: Some(glyph.name.clone()), ..GlyphSourcesModel::default() };
+    let outline_shows = cx.view.display.outline_at_location;
+    let mut model = GlyphSourcesModel { glyph: Some(glyph.name.clone()), outline_shows, ..GlyphSourcesModel::default() };
     let designspace = match designspace {
         Ok(d) => d,
         Err(e) => {
@@ -85,8 +106,18 @@ fn build(cx: &mut ProjectCx<'_>) -> Option<GlyphSourcesModel> {
         .iter()
         .zip(&at.0)
         .filter(|(a, _)| has_range(a))
-        .map(|(a, v)| AxisRow { tag: a.tag.clone(), name: a.name.clone(), value: *v, animated: animated == Some(a.tag.as_str()) })
+        .map(|(a, v)| AxisRow {
+            tag: a.tag.clone(),
+            name: a.name.clone(),
+            value: *v,
+            external: a.map.to_user(*v),
+            min: a.external.minimum.min(a.external.maximum),
+            max: a.external.minimum.max(a.external.maximum),
+            at_origin: near(*v, a.internal.default),
+            animated: animated == Some(a.tag.as_str()),
+        })
         .collect();
+    model.location = designspace.axes().iter().zip(&at.0).map(|(a, v)| (a.tag.clone(), *v)).collect();
     let found = match influence(font, &designspace, &glyph.name, &at) {
         Ok(found) => found,
         Err(e) => {
@@ -95,12 +126,20 @@ fn build(cx: &mut ProjectCx<'_>) -> Option<GlyphSourcesModel> {
         }
     };
     model.more = found.sources.len().saturating_sub(MAX_ROWS);
+    let there = |l: &Location| l.0.len() == at.0.len() && l.0.iter().zip(&at.0).all(|(a, b)| near(*a, *b));
+    model.source_there = found.sources.iter().any(|r| r.kind != SourceKind::Alternate && there(&r.location));
+    let mismatch = |layer: &str| {
+        let found = compat.iter().flat_map(|c| &c.first_mismatch).find(|m| m.layer_b == layer);
+        found.map(|m| m.describe(font)).unwrap_or_default()
+    };
     model.sources = found
         .sources
         .into_iter()
         .take(MAX_ROWS)
         .map(|r| SourceEntry {
             location: location_text(&designspace, &r.location),
+            mismatch: mismatch(&r.layer),
+            deletable: r.kind != SourceKind::Master,
             layer: r.layer,
             name: r.name,
             active: r.active,
@@ -116,6 +155,10 @@ fn build(cx: &mut ProjectCx<'_>) -> Option<GlyphSourcesModel> {
         .map(|id| font.masters.iter().find(|m| m.id == *id).map_or_else(|| id.clone(), |m| m.name.clone()))
         .collect();
     Some(model)
+}
+
+fn near(a: f64, b: f64) -> bool {
+    (a - b).abs() <= 1e-9 * (1.0 + b.abs())
 }
 
 /// `location` as `tag value` pairs.

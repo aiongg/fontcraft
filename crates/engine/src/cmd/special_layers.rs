@@ -11,7 +11,7 @@
 
 use fontcraft_hinting::Renumbered;
 use fontcraft_interp::instance::interpolate_layer;
-use fontcraft_interp::labels::special_label;
+use fontcraft_interp::labels::{layer_title, special_label};
 use fontcraft_interp::{Designspace, GlyphSources, InterpOptions, Location, ModelKind, Source};
 use fontcraft_model::{AxisRule, Font, Glyph, Layer, LayerSide, Shape};
 use serde_json::{Map, Value, json};
@@ -39,6 +39,15 @@ pub fn specs() -> Vec<CommandSpec> {
         )
         .targets(&[TargetKind::Layer])
         .context(&["layers.row"]),
+        cmd!(
+            "layers.addIntermediate",
+            "Add Source",
+            [],
+            None,
+            "{glyph: name, location: {tag: number}, master?: id (default: the nearest master the glyph has a layer for)} add an intermediate layer at a location in internal coordinates, drawn as the glyph interpolates there; an axis left out takes the master's coordinate. The location must lie within the range of the masters and virtual masters, and no other layer of the glyph may interpolate from it → {glyph, layer, master, coordinates: {tag: number}, label}",
+            has_doc,
+            add_intermediate
+        ),
         cmd!(
             "layers.clearIntermediate",
             "Remove Intermediate Status",
@@ -190,12 +199,7 @@ fn set_intermediate(s: &mut Session, value: &Value) -> Result<Value> {
         let i = font_axis(&p, font, "coordinates", tag)?;
         let value = opt_coordinate(&p, &what, Some(v))?;
         if let (Some(x), Some(d)) = (value, designspace_axis(&designspace, i)) {
-            let values = designspace.masters().iter().map(|m| &m.location).chain(designspace.virtual_masters().iter().map(|v| &v.location));
-            let (lo, hi) = values.filter_map(|l| l.0.get(d).copied()).fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), v| (lo.min(v), hi.max(v)));
-            let slack = RANGE_SLACK * (1.0 + x.abs());
-            if lo <= hi && (x < lo - slack || x > hi + slack) {
-                return Err(p.bad(format!("`{what}` is {x}, outside the range of the masters on that axis ({lo} to {hi})")));
-            }
+            within_masters(&p, &designspace, d, &what, x)?;
         }
         if let Some(slot) = coords.get_mut(i) {
             *slot = value;
@@ -204,6 +208,105 @@ fn set_intermediate(s: &mut Session, value: &Value) -> Result<Value> {
     let echo: Map<String, Value> = font.axes.iter().zip(&coords).map(|(a, c)| (a.tag.clone(), json!(c))).collect();
     let label = edit_attrs(s, &p, "Intermediate", &glyph, &id, |layer| layer.info.attrs.coordinates = coords)?;
     Ok(json!({"glyph": glyph, "layer": id, "coordinates": echo, "label": label}))
+}
+
+/// Refuses a coordinate `x` on designspace axis `d` beyond the masters and virtual masters.
+fn within_masters(p: &Params, designspace: &Designspace, d: usize, what: &str, x: f64) -> Result<()> {
+    let values = designspace.masters().iter().map(|m| &m.location).chain(designspace.virtual_masters().iter().map(|v| &v.location));
+    let (lo, hi) = values.filter_map(|l| l.0.get(d).copied()).fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), v| (lo.min(v), hi.max(v)));
+    let slack = RANGE_SLACK * (1.0 + x.abs());
+    if lo <= hi && (x < lo - slack || x > hi + slack) {
+        return Err(p.bad(format!("`{what}` is {x}, outside the range of the masters on that axis ({lo} to {hi})")));
+    }
+    Ok(())
+}
+
+fn add_intermediate(s: &mut Session, value: &Value) -> Result<Value> {
+    let p = Params::new("layers.addIntermediate", value)?;
+    let glyph = p.str("glyph")?.to_string();
+    let font = s.font()?;
+    if font.axes.is_empty() {
+        return Err(p.bad("the font has no axes: an intermediate layer needs at least one"));
+    }
+    let g = font.glyph(&glyph).ok_or_else(|| p.bad(format!("there is no glyph `{glyph}`")))?;
+    crate::check_unlocked(g)?;
+    if g.layers.len() >= super::layers::MAX_LAYERS {
+        return Err(p.bad(format!("glyph `{glyph}` has {} layers; at most {} are allowed", g.layers.len(), super::layers::MAX_LAYERS)));
+    }
+    let designspace = Designspace::new(font).map_err(|e| p.bad(format!("the font's axes and masters cannot interpolate: {e}")))?;
+    if !matches!(p.get("location"), Some(Value::Object(o)) if !o.is_empty()) {
+        return Err(p.bad("`location` is required: {tag: number}"));
+    }
+    let given = location_overrides(&p, font, &designspace)?;
+    for &(d, x) in &given {
+        let tag = designspace.axes().get(d).map_or("", |a| a.tag.as_str());
+        within_masters(&p, &designspace, d, &format!("location.{tag}"), x)?;
+    }
+    let at = |base: &Location| {
+        let mut location = base.clone();
+        for &(d, x) in &given {
+            if let Some(slot) = location.0.get_mut(d) {
+                *slot = x;
+            }
+        }
+        location
+    };
+    let drawn = |id: &str| g.layer(id).is_some();
+    let master = match p.opt_str("master")? {
+        Some(id) => {
+            let master = designspace.master(id).ok_or_else(|| p.bad(format!("there is no master `{id}` that interpolates")))?;
+            if !drawn(id) {
+                return Err(p.bad(format!("glyph `{glyph}` has no layer of master `{id}`")));
+            }
+            master
+        }
+        None => {
+            // How far the location is from each master, in normalized coordinates; the first of the nearest.
+            let distance = |base: &Location| -> Option<f64> {
+                let (a, b) = (designspace.to_normalized(base).ok()?, designspace.to_normalized(&at(base)).ok()?);
+                Some(a.0.iter().zip(&b.0).map(|(x, y)| (x - y) * (x - y)).sum())
+            };
+            let candidates = designspace.masters().iter().filter(|m| drawn(&m.id));
+            let nearest = candidates.filter_map(|m| Some((distance(&m.location)?, m))).min_by(|a, b| a.0.total_cmp(&b.0));
+            nearest.map(|(_, m)| m).ok_or_else(|| p.bad(format!("glyph `{glyph}` has no master layer to interpolate from")))?
+        }
+    };
+    let location = at(&master.location);
+    let sources = GlyphSources::of(font, &designspace, &glyph).map_err(|e| p.bad(format!("glyph `{glyph}` cannot interpolate: {e}")))?;
+    let same =
+        |l: &Location| l.0.len() == location.0.len() && l.0.iter().zip(&location.0).all(|(a, b)| (a - b).abs() <= RANGE_SLACK * (1.0 + b.abs()));
+    if let Some(source) = sources.main.iter().chain(&sources.inactive).find(|s| same(&s.location)) {
+        let title = g.layers.iter().find(|l| l.id == source.layer_id).map_or_else(|| source.layer_id.clone(), |l| layer_title(font, l));
+        return Err(p.bad(format!("glyph `{glyph}` already has a source there: {title}")));
+    }
+    let new = interpolate_layer(font, &sources, &location, &interp_options(font)).map_err(|e| p.bad(format!("glyph `{glyph}`: {e}")))?;
+    let seed = format!("{glyph}|intermediate|{:?}|{}", location.0, g.layers.len());
+    let id = super::layers::new_layer_id(&seed, |id| g.layers.iter().any(|l| l.id == id)).ok_or_else(|| p.bad("could not find a free layer id"))?;
+    let mut layer = Layer::new(master.id.as_str(), new.width);
+    layer.id.clone_from(&id);
+    layer.shapes = new.shapes;
+    layer.anchors = new.anchors;
+    layer.info.vert_width = new.info.vert_width;
+    layer.info.vert_origin = new.info.vert_origin;
+    let mut coords: Vec<Option<f64>> = vec![None; font.axes.len()];
+    for (axis, v) in designspace.axes().iter().zip(&location.0) {
+        if let Some(slot) = coords.get_mut(axis.font_axis) {
+            *slot = Some(*v);
+        }
+    }
+    let echo: Map<String, Value> = font.axes.iter().zip(&coords).filter_map(|(a, c)| c.map(|c| (a.tag.clone(), json!(c)))).collect();
+    layer.info.attrs.coordinates = coords;
+    let master = master.id.clone();
+    let label = special_label(font, &layer);
+    s.edit("Add Source", |font| {
+        {
+            let mut g = font.glyph_mut(&glyph)?;
+            let at = g.layers.iter().rposition(|l| l.master == master).map_or(g.layers.len(), |i| i.saturating_add(1));
+            g.layers.insert(at, layer);
+        }
+        sources_ok(font, &glyph).map_err(|reason| p.bad(format!("refused: glyph `{glyph}` could no longer interpolate: {reason}")))
+    })?;
+    Ok(json!({"glyph": glyph, "layer": id, "master": master, "coordinates": echo, "label": label}))
 }
 
 fn clear_intermediate(s: &mut Session, value: &Value) -> Result<Value> {

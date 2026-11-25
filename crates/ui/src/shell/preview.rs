@@ -2,6 +2,8 @@
 //! Their settings are view state ([`PreviewState`] in `ViewState::preview`); `app::models::preview` projects the
 //! lines they draw and `panels::preview` shows them.
 
+use std::collections::BTreeMap;
+
 use craft::behavior::dock::PanelState;
 use craft::ui::contract::PlainData;
 use craft::ui::runtime::commands::CommandRef;
@@ -61,6 +63,8 @@ pub enum Shows {
     Instance(String),
     /// The edited glyph once for each visible static instance.
     All,
+    /// The location the sliders set (`view.setLocation`).
+    Location,
 }
 
 /// Which preview a command changes.
@@ -92,6 +96,8 @@ pub struct PreviewState {
     pub panel_shows: Shows,
     /// The axis both previews sweep along (`view.animateAxis`); `None` while none is animated.
     pub sweep: Option<super::axis_sweep::AxisSweep>,
+    /// The location [`Shows::Location`] draws: internal coordinates by axis tag. An axis without one is at its origin.
+    pub location: BTreeMap<String, f64>,
 }
 
 impl PreviewState {
@@ -102,7 +108,7 @@ impl PreviewState {
         }
     }
 
-    fn shows_mut(&mut self, target: Target) -> &mut Shows {
+    pub(super) fn shows_mut(&mut self, target: Target) -> &mut Shows {
         match target {
             Target::Area => &mut self.area_shows,
             Target::Panel => &mut self.panel_shows,
@@ -194,7 +200,7 @@ const COMMANDS: &[UiCommand] = &[
         "Preview Instance",
         &[],
         None,
-        "{target?: \"area\" | \"panel\" (default area), instance: name | index | \"master\" | \"all\"} choose what the preview draws: a static instance (by name, `#n` or index from 0), interpolated as its static instance would be; \"master\" (the dash) for the current master, following each master switch; \"all\" for the edited glyph once per visible instance",
+        "{target?: \"area\" | \"panel\" (default area), instance: name | index | \"master\" | \"all\" | \"location\"} choose what the preview draws: a static instance (by name, `#n` or index from 0), interpolated as its static instance would be; \"master\" (the dash) for the current master, following each master switch; \"all\" for the edited glyph once per visible instance; \"location\" for the location view.setLocation sets. An instance of one of these names is given by index",
     ),
     command(
         "preview.showAllInstances",
@@ -261,9 +267,9 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
         "preview.setInstance" => {
             let target = target(p)?;
             let font = app.session.font().map_err(|e| e.to_string())?;
-            let given = p.get("instance").ok_or("give `instance`: a name, an index, \"master\" or \"all\"")?;
+            let given = p.get("instance").ok_or("give `instance`: a name, an index, \"master\", \"all\" or \"location\"")?;
             let index = match given {
-                Value::String(s) if s == "master" || s == "all" => None,
+                Value::String(s) if s == "master" || s == "all" || s == "location" => None,
                 Value::String(s) => Some(instance_index(font, s).ok_or_else(|| format!("the font has no instance `{s}`"))?),
                 Value::Number(n) => Some(
                     n.as_u64()
@@ -271,7 +277,7 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
                         .filter(|i| *i < font.instances.len())
                         .ok_or_else(|| format!("the font has {} instances; there is no instance {n}", font.instances.len()))?,
                 ),
-                _ => return Err("`instance` must be a name, an index, \"master\" or \"all\"".into()),
+                _ => return Err("`instance` must be a name, an index, \"master\", \"all\" or \"location\"".into()),
             };
             let shows = match (index, given.as_str()) {
                 (Some(i), _) if !is_static(font, i) => {
@@ -279,6 +285,7 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
                 }
                 (Some(i), _) => Shows::Instance(instance_key(font, i)),
                 (None, Some("all")) => Shows::All,
+                (None, Some("location")) => Shows::Location,
                 (None, _) => Shows::Master,
             };
             *app.view.preview.shows_mut(target) = shows;

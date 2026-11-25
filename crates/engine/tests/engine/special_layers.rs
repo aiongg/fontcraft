@@ -118,6 +118,36 @@ fn layers_set_alternate_and_clear_alternate() {
     refused(&mut s, "layers.clearAlternate", json!({"glyph": "e", "layer": "b"}));
 }
 
+/// A source added at a location is the interpolation there, so it changes no instance at that location; it is one undo
+/// step and cannot be added twice.
+#[test]
+fn layers_add_intermediate_draws_the_interpolation_and_changes_nothing_there() {
+    let mut s = two_masters();
+    let at = |s: &Session, w: f64| {
+        let font = s.font().unwrap();
+        let sources = GlyphSources::of(font, &Designspace::new(font).unwrap(), "e").unwrap();
+        interpolate_layer(font, &sources, &Location(vec![w]), &InterpOptions::default()).unwrap()
+    };
+    let (before, between) = (at(&s, 300.0), at(&s, 200.0));
+    let out = run(&mut s, "layers.addIntermediate", json!({"glyph": "e", "location": {"wght": 300}}));
+    assert_eq!((out["master"].as_str(), out["label"].as_str()), (Some("thin"), Some("{300}")), "the nearest master");
+    let added = e_layer(&s, out["layer"].as_str().unwrap());
+    assert_eq!((right_edge(&added), added.width), (right_edge(&before), before.width));
+    assert_eq!(added.info.attrs.coordinates, [Some(300.0)]);
+    assert!((right_edge(&at(&s, 300.0)) - right_edge(&before)).abs() < 1e-6, "nothing moves at the location");
+    assert!((right_edge(&at(&s, 200.0)) - right_edge(&between)).abs() < 1.0, "nor between it and the master");
+
+    let m = refused(&mut s, "layers.addIntermediate", json!({"glyph": "e", "location": {"wght": 300}}));
+    assert!(m.contains("already has a source there"), "{m}");
+    refused(&mut s, "layers.addIntermediate", json!({"glyph": "e", "location": {"wght": 100}}));
+    refused(&mut s, "layers.addIntermediate", json!({"glyph": "e", "location": {"wght": 2000}}));
+    refused(&mut s, "layers.addIntermediate", json!({"glyph": "e", "location": {"opsz": 12}}));
+    refused(&mut s, "layers.addIntermediate", json!({"glyph": "e", "location": {}}));
+    let count = s.font().unwrap().glyph("e").unwrap().layers.len();
+    run(&mut s, "edit.undo", json!({}));
+    assert_eq!(s.font().unwrap().glyph("e").unwrap().layers.len(), count - 1, "one undo step");
+}
+
 #[test]
 fn layers_re_interpolate_equals_the_interpolation_at_the_layer_location() {
     // A backup layer at weight 500: what the glyph interpolates to there.

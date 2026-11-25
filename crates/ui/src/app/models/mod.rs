@@ -275,6 +275,7 @@ impl Models {
         self.swept = step;
         preview::project_both(&mut self.preview_area, &mut self.preview_panel, cx);
         glyph_sources::project(&mut self.glyph_sources, cx);
+        canvas::project_location(&mut self.canvas, cx);
     }
 }
 

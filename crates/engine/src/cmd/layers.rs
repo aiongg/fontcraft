@@ -13,7 +13,7 @@ use crate::EngineError;
 use crate::params::{Params, TargetKind};
 
 /// Most layers one glyph may have; adding a backup beyond it is refused.
-const MAX_LAYERS: usize = 4096;
+pub(super) const MAX_LAYERS: usize = 4096;
 /// Most layer ids one `layers` list may hold.
 const MAX_LAYER_IDS: usize = 1024;
 /// Most bytes in a layer name.

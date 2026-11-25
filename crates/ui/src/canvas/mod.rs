@@ -57,6 +57,8 @@ pub struct Display {
     pub hints: bool,
     /// Every source layer of the edited glyph beside it (`view.showMasterCompatibility`).
     pub master_compatibility: bool,
+    /// The edited glyph interpolated at the location the previews show, behind the edited layer.
+    pub outline_at_location: bool,
     /// View › Show Image: placed images show (a side with no paths and no components shows its image regardless).
     pub image: bool,
     /// Edit › Keep Layer Selection in Sync: another master of a compatible glyph keeps the canvas selection.
@@ -82,6 +84,7 @@ impl Default for Display {
             info: true,
             hints: false,
             master_compatibility: false,
+            outline_at_location: false,
             image: true,
             keep_layer_selection_in_sync: false,
             match_when_editing: false,

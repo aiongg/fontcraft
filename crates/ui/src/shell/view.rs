@@ -87,6 +87,13 @@ const COMMANDS: &[UiCommand] = &[
         "{on?: bool} draw the images placed on glyph layers; a layer side with no paths and no components shows its image regardless (omitted: toggle)",
     ),
     command(
+        "view.showOutlineAtLocation",
+        "Show Outline at Location",
+        &["View"],
+        None,
+        "{on?: bool} draw the edited glyph as it interpolates at the location the previews show, behind the edited layer (omitted: toggle)",
+    ),
+    command(
         "path.editBackground",
         "Edit Background",
         &["Path"],
@@ -111,6 +118,7 @@ pub(crate) fn flag<'a>(display: &'a mut Display, id: &str) -> Option<&'a mut boo
         "view.showAnchors" => &mut display.anchors,
         "view.fillPreview" => &mut display.fill_preview,
         "view.showImage" => &mut display.image,
+        "view.showOutlineAtLocation" => &mut display.outline_at_location,
         _ => return None,
     })
 }
