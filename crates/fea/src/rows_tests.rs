@@ -1,8 +1,8 @@
 //! One test per `fea.*` row of `spec/inventory/12b-feature-language.toml`, with code from the
 //! row's section of the feature file specification, plus the guards of `check.rs`,
 //! `resolve.rs` and `provider.rs` and the hostile inputs of `docs/plans/M8.md` § 5. A test
-//! whose name ends in `_gap` pins a construct fea-rs does not support: it must fail with a
-//! message (or, where fea-rs drops it, compile without it), never panic.
+//! whose name ends in `_gap` pins a construct that is not supported: it must fail with a
+//! message, never panic.
 
 use std::collections::BTreeMap;
 
@@ -784,8 +784,13 @@ fn fea_gsub8_reverse() {
 }
 
 #[test]
-fn fea_gsub8_null_gap() {
-    fails("feature rclt { rsub a c' by NULL; } rclt;");
+fn fea_gsub8_null() {
+    // The specification lets `by NULL` delete the glyph; the lookup type cannot hold that, and
+    // feaLib refuses it too. AFDKO writes a lookup that matches nothing.
+    fails_with("feature rclt { rsub a c' by NULL; } rclt;", "cannot delete a glyph");
+    fails_with("feature rclt { rsub [a b]' c; } rclt;", "cannot delete a glyph");
+    let d = fails("# one line before\nfeature rclt { rsub a c' by NULL; } rclt;");
+    assert_eq!((d[0].file.as_str(), d[0].span.start), ("features.fea", 18 + "feature rclt { ".len()));
 }
 
 // ------------------------------------------------------------------------------------------
@@ -957,6 +962,58 @@ fn fea_aalt_grouping() {
     );
     // a has two alternates (an alternate lookup), b one (a single lookup).
     assert!(gsub(&c).contains(&3));
+    // The specification's example (§ 8.a), with a ligature that is not an alternate and a class
+    // in a context. feaLib writes the same: the explicit rule first, then the features in the
+    // order aalt names them, duplicates left out.
+    let c =
+        ok("feature aalt { feature salt; feature smcp; sub d by a.alt2; } aalt; feature smcp { sub [a-c] by [A.sc B.sc A]; sub f i by f_i; } smcp; \
+         feature salt { sub a from [a.alt a.alt2 b.alt]; sub e [c d e]' f by [c.alt B C]; sub b by b.alt; sub b by b.alt; } salt;");
+    let alternates = aalt_groups(c.gsub.as_deref().unwrap());
+    let want = [("a", "a.alt a.alt2 b.alt A.sc"), ("b", "b.alt B.sc"), ("c", "c.alt A"), ("d", "a.alt2 B"), ("e", "C")];
+    assert_eq!(alternates, want.map(|(g, alts)| (g.to_string(), alts.to_string())));
+}
+
+/// The glyphs the aalt lookups (the first ones, one single and one alternate substitution)
+/// replace, each with its alternates.
+fn aalt_groups(gsub: &[u8]) -> Vec<(String, String)> {
+    use write_fonts_052::read::tables::gsub::{Gsub, SingleSubst, SubstitutionSubtables};
+    use write_fonts_052::read::{FontData, FontRead};
+    let names: Vec<&str> = NAMES.split_whitespace().collect();
+    let name = |g: GlyphId16| names[usize::from(g.to_u16())].to_string();
+    let table = Gsub::read(FontData::new(gsub)).unwrap();
+    let mut out = Vec::new();
+    for lookup in table.lookup_list().unwrap().lookups().iter().take(2) {
+        match lookup.unwrap().subtables().unwrap() {
+            SubstitutionSubtables::Single(all) => {
+                for sub in all.iter() {
+                    match sub.unwrap() {
+                        SingleSubst::Format1(s) => {
+                            for g in s.coverage().unwrap().iter() {
+                                let to = i32::from(g.to_u16()) + i32::from(s.delta_glyph_id());
+                                out.push((name(g), name(GlyphId16::new(to as u16))));
+                            }
+                        }
+                        SingleSubst::Format2(s) => {
+                            let to = s.substitute_glyph_ids().iter().map(|g| name(g.get()));
+                            out.extend(s.coverage().unwrap().iter().map(name).zip(to));
+                        }
+                    }
+                }
+            }
+            SubstitutionSubtables::Alternate(all) => {
+                for sub in all.iter() {
+                    let sub = sub.unwrap();
+                    for (g, set) in sub.coverage().unwrap().iter().zip(sub.alternate_sets().iter()) {
+                        let alts: Vec<String> = set.unwrap().alternate_glyph_ids().iter().map(|g| name(g.get())).collect();
+                        out.push((name(g), alts.join(" ")));
+                    }
+                }
+            }
+            _ => panic!("not an aalt lookup"),
+        }
+    }
+    out.sort();
+    out
 }
 
 #[test]
@@ -1026,13 +1083,48 @@ fn fea_table_base_script_list() {
     fails("table BASE { HorizAxis.BaseTagList ideo romn; HorizAxis.BaseScriptList latn romn -120; } BASE;");
 }
 
+/// The records of a MinMax table: its own extents under the empty tag, then each feature's.
+fn min_max(table: &write_fonts_052::tables::base::MinMax) -> Vec<(String, i16, i16)> {
+    use write_fonts_052::tables::base::BaseCoord;
+    let value = |c: Option<&BaseCoord>| match c {
+        Some(BaseCoord::Format1(c)) => c.coordinate,
+        other => panic!("{other:?}"),
+    };
+    let own = (String::new(), value(table.min_coord.as_ref()), value(table.max_coord.as_ref()));
+    let features =
+        table.feat_min_max_records.iter().map(|r| (r.feature_table_tag.to_string(), value(r.min_coord.as_ref()), value(r.max_coord.as_ref())));
+    std::iter::once(own).chain(features).collect()
+}
+
 #[test]
-fn fea_table_base_min_max_gap() {
-    // Parsed and accepted; fea-rs does not write the MinMax record.
-    assert!(
-        run("table BASE { HorizAxis.BaseTagList ideo romn; HorizAxis.BaseScriptList latn romn -120 0; HorizAxis.MinMax latn dflt -200, 800; } BASE;")
-            .is_ok()
-    );
+fn fea_table_base_min_max() {
+    use write_fonts_052::read::{FontData, FontRead};
+    use write_fonts_052::tables::base::Base;
+    let read = |c: &Compiled| Base::read(FontData::new(c.base.as_deref().unwrap())).unwrap();
+    let lists = "HorizAxis.BaseTagList ideo romn; HorizAxis.BaseScriptList latn romn -120 0;";
+    // As feaLib writes the extents: the default's, then the languages in tag order.
+    let c = ok(&format!(
+        "table BASE {{ {lists} HorizAxis.MinMax latn TRK -210, 800; HorizAxis.MinMax latn dflt -1, 2; HorizAxis.MinMax latn AZE -3, 800; }} BASE;"
+    ));
+    assert!(c.warnings.is_empty(), "{:?}", c.warnings);
+    let base = read(&c);
+    let script = &base.horiz_axis.as_ref().unwrap().base_script_list.base_script_records[0].base_script;
+    assert_eq!(min_max(script.default_min_max.as_ref().unwrap()), [(String::new(), -1, 2)]);
+    let languages: Vec<String> = script.base_lang_sys_records.iter().map(|r| r.base_lang_sys_tag.to_string()).collect();
+    assert_eq!(languages, ["AZE ", "TRK "]);
+    assert_eq!(min_max(&script.base_lang_sys_records[1].min_max), [(String::new(), -210, 800)]);
+    // Per-feature extents, sorted by tag and added up over the statements of a language.
+    let c = ok(&format!(
+        "table BASE {{ {lists} HorizAxis.MinMax latn dflt -200, 800, liga -300, 900, calt -301, 901; HorizAxis.MinMax latn TRK -1, 1, smcp -2, 2; \
+         HorizAxis.MinMax latn TRK -5, 5, dlig -6, 6; HorizAxis.MinMax grek dflt 0, 1; }} BASE;"
+    ));
+    let base = read(&c);
+    let script = &base.horiz_axis.as_ref().unwrap().base_script_list.base_script_records[0].base_script;
+    let want = |v: &[(&str, i16, i16)]| v.iter().map(|(t, a, b)| (t.to_string(), *a, *b)).collect::<Vec<_>>();
+    assert_eq!(min_max(script.default_min_max.as_ref().unwrap()), want(&[("", -200, 800), ("calt", -301, 901), ("liga", -300, 900)]));
+    assert_eq!(script.base_lang_sys_records.len(), 1);
+    assert_eq!(min_max(&script.base_lang_sys_records[0].min_max), want(&[("", -5, 5), ("dlig", -6, 6), ("smcp", -2, 2)]));
+    assert!(warns(&c, "the script `grek` was left out"));
 }
 
 #[test]
@@ -1059,9 +1151,34 @@ fn fea_table_gdef_ligature_caret_by_index() {
 }
 
 #[test]
-fn fea_table_gdef_ligature_caret_by_dev_gap() {
-    // Parsed and dropped: no caret list is written.
-    assert!(run("table GDEF { LigatureCaretByDev f_i <device 11 -1> ; } GDEF;").is_ok());
+fn fea_table_gdef_ligature_caret_by_dev() {
+    use write_fonts_052::read::{FontData, FontRead};
+    use write_fonts_052::tables::gdef::{CaretValue, Gdef};
+    use write_fonts_052::tables::layout::DeviceOrVariationIndex;
+    let c = ok(
+        "@L = [f_f_i f_l]; table GDEF { LigatureCaretByDev @L 600 <device NULL> 300 <device 11 -1, 13 2>; LigatureCaretByPos f_i 250 -32768; } GDEF;",
+    );
+    let gdef = Gdef::read(FontData::new(c.gdef.as_deref().unwrap())).unwrap();
+    let carets = |glyph: usize| -> Vec<(i16, Option<DeviceOrVariationIndex>)> {
+        let list = gdef.lig_caret_list.as_ref().unwrap();
+        list.lig_glyphs[glyph]
+            .caret_values
+            .iter()
+            .map(|c| match &**c {
+                CaretValue::Format1(c) => (c.coordinate, None),
+                CaretValue::Format3(c) => (c.coordinate, Some((*c.device).clone())),
+                other => panic!("{other:?}"),
+            })
+            .collect()
+    };
+    // The glyphs in glyph order: f_i, f_f_i, f_l. The sizes 11, 12 and 13, as feaLib fills a device.
+    assert_eq!(carets(0), [(-32768, None), (250, None)]);
+    for glyph in [1, 2] {
+        assert_eq!(carets(glyph), [(300, Some(DeviceOrVariationIndex::device(11, 13, &[-1, 0, 2]))), (600, None)]);
+    }
+    for bad in ["f_i <device 11 -1>", "f_i 300", "f_i", "", "f_i 300 <device 11>", "f_i 300 <device 11 200>", "f_i 300 <device 1 1, 9000 1>"] {
+        fails_with(&format!("table GDEF {{ LigatureCaretByDev {bad}; }} GDEF;"), if bad.contains("9000") { "4096 sizes" } else { "evice" });
+    }
 }
 
 #[test]
@@ -1077,8 +1194,20 @@ fn fea_table_head_font_revision() {
 #[test]
 fn fea_table_hhea() {
     let c = ok("table hhea { CaretOffset -10; Ascender 900; Descender -200; LineGap 50; } hhea;");
-    assert_eq!(c.hhea, MetricsValues { caret_offset: Some(-10), ascender: Some(900), descender: Some(-200), line_gap: Some(50) });
-    fails("table hhea { CaretSlopeRise 1; } hhea;");
+    assert_eq!(
+        c.hhea,
+        MetricsValues { caret_offset: Some(-10), ascender: Some(900), descender: Some(-200), line_gap: Some(50), ..Default::default() }
+    );
+    // As AFDKO compiles the caret fields; a later statement counts.
+    let c = ok("table hhea { CaretSlopeRise 5; CaretSlopeRise 1;\n CaretSlopeRun -2; CaretOffset 3; } hhea;");
+    let want = MetricsValues { caret_slope_rise: Some(1), caret_slope_run: Some(-2), caret_offset: Some(3), ..Default::default() };
+    assert_eq!((c.hhea, c.vhea), (want, MetricsValues::default()));
+    fails_with("table hhea { CaretSlopeRise 40000; } hhea;", "outside -32768 to 32767");
+    fails_with("table hhea { CaretSlopeRise; } hhea;", "one whole number");
+    fails("table hhea { SubscriptXSize 1; } hhea;");
+    // A message about the rest of the block keeps its place.
+    let code = "table hhea { CaretSlopeRise 1; Nonsense 2; } hhea;";
+    assert!(fails(code).iter().any(|d| d.span.start >= code.find("Nonsense").unwrap()));
 }
 
 #[test]
@@ -1161,15 +1290,27 @@ fn fea_table_os2_optical_size() {
 }
 
 #[test]
-fn fea_table_os2_script_and_strikeout_gap() {
-    fails("table OS/2 { SubscriptXSize 650; } OS/2;");
+fn fea_table_os2_script_and_strikeout() {
+    let c = ok("table OS/2 { SubscriptXSize 650; SubscriptXOffset 10; SubscriptYSize 600; SubscriptYOffset -75; \
+        SuperscriptXSize 651; SuperscriptXOffset 11; SuperscriptYSize 601; SuperscriptYOffset 350; \
+        StrikeoutSize 50; StrikeoutPosition 260; WeightClass 700; } OS/2;");
+    let o = c.os2;
+    assert_eq!((o.subscript_x_size, o.subscript_x_offset, o.subscript_y_size, o.subscript_y_offset), (Some(650), Some(10), Some(600), Some(-75)));
+    assert_eq!(
+        (o.superscript_x_size, o.superscript_x_offset, o.superscript_y_size, o.superscript_y_offset),
+        (Some(651), Some(11), Some(601), Some(350))
+    );
+    assert_eq!((o.strikeout_size, o.strikeout_position, o.weight_class), (Some(50), Some(260), Some(700)));
+    assert_eq!(ok("table OS/2 { StrikeoutSize 9; } OS/2;").os2, Os2Values { strikeout_size: Some(9), ..Default::default() });
 }
 
 #[test]
 fn fea_table_vhea() {
     let c = ok("table vhea { VertTypoAscender 500; VertTypoDescender -500; VertTypoLineGap 0; } vhea;");
-    assert_eq!(c.vhea, MetricsValues { caret_offset: None, ascender: Some(500), descender: Some(-500), line_gap: Some(0) });
-    fails("table vhea { CaretOffset 0; } vhea;");
+    assert_eq!(c.vhea, MetricsValues { ascender: Some(500), descender: Some(-500), line_gap: Some(0), ..Default::default() });
+    let c = ok("table vhea { CaretOffset 0; CaretSlopeRise 2; CaretSlopeRun 1; } vhea;");
+    let want = MetricsValues { caret_offset: Some(0), caret_slope_rise: Some(2), caret_slope_run: Some(1), ..Default::default() };
+    assert_eq!((c.vhea, c.hhea), (want, MetricsValues::default()));
 }
 
 #[test]
@@ -1214,11 +1355,33 @@ fn fea_table_stat_location_formats() {
 fn fea_anonymous() {
     let c = ok("anon sbit {\n  this is not feature syntax { ;\n} sbit;\nfeature ss01 { sub a by b; } ss01;");
     assert_eq!(tags(&c), ["ss01"]);
+    let block = AnonymousBlock { tag: "sbit".into(), text: "  this is not feature syntax { ;\n".into() };
+    assert_eq!(c.anonymous, [block]);
+    assert!(warns(&c, "`sbit` is not compiled") && warns(&c, "this is not feature syntax { ;"));
+    // Text fea-rs's lexer would stumble over.
+    let c = ok("anonymous odd {\n\"one quote # and } odd\n} odd ; # end\nfeature ss01 { sub a by b; } ss01;");
+    assert_eq!((c.anonymous[0].text.as_str(), tags(&c)), ("\"one quote # and } odd\n", vec!["ss01".to_string()]));
+    fails("anon sbit { sub a by b;");
 }
 
 #[test]
-fn fea_legacy_except_gap() {
-    fails("feature calt { except x sub a' by b; } calt;");
+fn fea_legacy_except() {
+    // Each as AFDKO's feature compiler reads it.
+    let same = |old: &str, new: &str| {
+        let (old, new) = (ok(&format!("feature calt {{ {old} }} calt;")), ok(&format!("feature calt {{ {new} }} calt;")));
+        assert_eq!(old.gsub, new.gsub);
+        assert!(warns(&old, "`except` is the form"));
+    };
+    same("except a b sub a by a.alt;", "ignore sub a' b; sub a' by a.alt;");
+    same("except x a', [y z] a' substitute a' by b;", "ignore sub x a', [y z] a'; sub a' by b;");
+    same("except f i sub f i by f_i;", "ignore sub f' i; sub f' i' by f_i;");
+    same("except x' a sub y a' b by b; sub c' d by e;", "ignore sub x' a; sub y a' b by b; sub c' d by e;");
+    same("except x a' rsub a' b by b;", "ignore sub x a'; rsub a' b by b;");
+    fails("feature kern { except x a pos a 5; } kern;");
+    // A message about the rule is placed where the rule was written.
+    let code = "feature calt { except x a sub a by nothere; } calt;";
+    let d = fails(code);
+    assert!(d.iter().any(|d| d.is_error() && code.get(d.span.clone()) == Some("nothere")), "{d:#?}");
 }
 
 #[test]

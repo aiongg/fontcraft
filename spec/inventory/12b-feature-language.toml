@@ -771,6 +771,7 @@ milestone = "M8"
 summary = "The standard allows `by NULL`, or no `by` clause, in a reverse substitution to delete the glyph. fea-rs: no (rsub_null is an expected parse error)."
 ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §5.h"
 status = "docs"
+notes = "FontCraft refuses it with a message, as feaLib does (Reverse chaining substitutions do not support glyph deletion): GSUB lookup type 8 gives every covered glyph one replacement. makeotf 5.x writes a lookup with an empty coverage, which changes nothing."
 
 # ----------------------------------------------------------------------------
 # GPOS rules
@@ -1004,7 +1005,7 @@ status = "docs"
 id = "fea.aalt.grouping"
 area = "features"
 milestone = "M8"
-summary = "Per target glyph, duplicates are removed; one alternate yields a single substitution and several yield an alternate substitution, ordered by the order the source features are named in aalt. fea-rs: partial (the fontTools spec8a_2 comparison is on its ignore list)."
+summary = "Per target glyph, duplicates are removed; one alternate yields a single substitution and several yield an alternate substitution, ordered by the order the source features are named in aalt. fea-rs: yes (its GSUB for fontTools' spec8a_2 test equals feaLib's, though fea-rs keeps that comparison on its ignore list)."
 ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §8.a step 3"
 status = "docs"
 
@@ -1100,9 +1101,11 @@ status = "docs"
 id = "fea.table.base.minMax"
 area = "features"
 milestone = "M8"
-summary = "`HorizAxis.MinMax` and `VertAxis.MinMax` give min and max extents for a script and language, optionally followed by per-feature overrides. Adobe does not implement them, nor base coordinate formats B (with glyph and point) and C (with device). fea-rs: partial, parsed and accepted, the MinMax record is not written (test in crates/fea)."
+summary = "`HorizAxis.MinMax` and `VertAxis.MinMax` give min and max extents for a script and language, optionally followed by per-feature overrides. Adobe does not implement them, nor base coordinate formats B (with glyph and point) and C (with device). fea-rs: partial, the extents of a language system are written, the per-feature ones are parsed and dropped (test in crates/fea)."
 ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §9.a"
 status = "docs"
+notes = "FontCraft writes the per-feature extents too, as FeatMinMax records. feaLib writes the extents and refuses a feature tag; AFDKO has not implemented the statement. A statement for a script the axis's BaseScriptList does not list is left out with a warning."
+guesses = ["Statements for the same script and language go into one MinMax table: the later extents count and the feature records add up.", "The feature part may be repeated in one statement."]
 
 [[behavior]]
 id = "fea.table.gdef.glyphClassDef"
@@ -1140,9 +1143,11 @@ status = "docs"
 id = "fea.table.gdef.ligatureCaretByDev"
 area = "features"
 milestone = "M8"
-summary = "A caret form with device tables is reserved in the grammar but not specified in detail or implemented by Adobe. fea-rs: no (the statement is parsed and discarded)."
+summary = "A caret form with device tables is reserved in the grammar but not specified in detail or implemented by Adobe. fea-rs: no (the statement is parsed and discarded). FontCraft reads `LigatureCaretByDev <glyph|glyphclass> (<position> <device>)+;` and writes format 3 carets; any other form is an error."
 ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §9.b"
 status = "docs"
+notes = "feaLib and AFDKO refuse the statement, so no reference output exists; the device table is filled as feaLib fills one (sizes between the given ones change nothing)."
+guesses = ["The form is a position followed by a device table for each caret, as base coordinate format C is written."]
 
 [[behavior]]
 id = "fea.table.gdef.derivedClasses"
@@ -1168,6 +1173,7 @@ milestone = "M8"
 summary = "The hhea block accepts CaretOffset, CaretSlopeRise, CaretSlopeRun, Ascender, Descender and LineGap, each with one metric. fea-rs: partial (CaretOffset, Ascender, Descender and LineGap only; the caret slope keywords are not in its grammar)."
 ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §9.d"
 status = "docs"
+notes = "FontCraft compiles all six: the caret slope statements are taken out before fea-rs parses the code and applied to the table. Checked against makeotf; feaLib refuses the caret slope keywords. A variable value is refused there."
 
 [[behavior]]
 id = "fea.table.name.nameid"
@@ -1281,6 +1287,7 @@ milestone = "M8"
 summary = "Version 1.27 adds SubscriptXSize, SubscriptXOffset, SubscriptYSize, SubscriptYOffset, the four Superscript equivalents, StrikeoutSize and StrikeoutPosition, each taking one metric. fea-rs: no (these keywords do not appear in its grammar)."
 ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §9.f"
 status = "docs"
+notes = "FontCraft compiles all ten, checked against makeotf: each is taken out before fea-rs parses the code and applied to the table."
 
 [[behavior]]
 id = "fea.table.vhea"
@@ -1289,6 +1296,7 @@ milestone = "M8"
 summary = "The vhea block accepts VertTypoAscender, VertTypoDescender and VertTypoLineGap, plus CaretOffset, CaretSlopeRise and CaretSlopeRun. fea-rs: partial, the three VertTypo fields; CaretOffset is a parse error (test in crates/fea)."
 ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §9.g"
 status = "docs"
+notes = "FontCraft compiles all six (the three caret statements as in `fea.table.hhea`). feaLib refuses the caret keywords."
 
 [[behavior]]
 id = "fea.table.vmtx"
@@ -1338,14 +1346,16 @@ milestone = "M8"
 summary = "`anonymous TAG { ... } TAG;` (or `anon`) carries raw text that the compiler does not parse and hands to its caller with the tag. The closing brace, tag and semicolon must share one line, and include is not processed inside. fea-rs: partial (the block is parsed and skipped, spec10 test; handing the content to a caller is not shown)."
 ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §10"
 status = "docs"
+notes = "FontCraft takes the block out before fea-rs parses the code, so its text may hold anything, and gives the text back with its tag in a warning of the compile (cut at 2,000 bytes there) and in the compile result."
 
 [[behavior]]
 id = "fea.legacy.except"
 area = "features"
 milestone = "M8"
-summary = "Files older than v1.2 may use `except <sequences> sub ...` instead of `ignore sub`; Adobe still reads it with a notice. FontCraft may reject it with a hint to rewrite. fea-rs: no (no such keyword)."
+summary = "Files older than v1.2 may use `except <sequences> sub ...` instead of `ignore sub`; Adobe still reads it with a notice. FontCraft reads it as AFDKO does, with a warning that shows the form to write. fea-rs: no (no such keyword)."
 ref = "AFDKO OpenTypeFeatureFileSpecification.md v1.27 §11 v1.2"
 status = "docs"
+notes = "Checked against makeotf: each sequence becomes an `ignore sub` (the first glyph marked when none is), then the rule, whose glyphs are marked when none is and it has a `by` clause. A rule with `from` stays unmarked and so gets a lookup of its own, as in makeotf."
 
 [[behavior]]
 id = "fea.legacy.bareValueRecord"

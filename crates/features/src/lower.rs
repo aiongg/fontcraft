@@ -31,6 +31,8 @@
 //! lowering closes and reopens that block, so it needs the tag. Outside every block `standalone`
 //! is redundant (a prefix's lookups) and is dropped.
 //!
+//! An anonymous block's text passes through as it is, whatever its braces and quotes.
+//!
 //! A one-member class is only known when its definition is in the same text; a class defined in
 //! another entry reaches the compiler as it is.
 
@@ -204,6 +206,21 @@ fn directive(comment: &str) -> Option<Directive<'_>> {
         "endif" => Some(Directive::Endif),
         _ => None,
     }
+}
+
+/// Where the anonymous block starting at `tok` ends: its text is not feature code and passes
+/// through as it is. `tried` is set when a block has no end, so the code is searched once.
+fn anonymous_end(code: &str, tok: Tok, tried: &mut bool) -> Option<usize> {
+    if *tried || tok.kind != Kind::Word || !matches!(code.get(tok.range()), Some("anon" | "anonymous")) {
+        return None;
+    }
+    // A label of that name after a block's closing brace.
+    if code.get(tok.end..).is_some_and(|rest| rest.trim_start().starts_with(';')) {
+        return None;
+    }
+    let end = fontcraft_fea::anonymous_block(code, tok.start).map(|span| span.end);
+    *tried = end.is_none();
+    end
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -414,12 +431,18 @@ impl<'a> Lowering<'a> {
 
     fn run(mut self) -> Result<(String, OffsetMap), Vec<Diagnostic>> {
         let mut lexer = Lexer::new(self.code);
+        let mut no_anonymous = false;
         while !self.fatal {
             let Some(tok) = lexer.next_tok() else { break };
             if tok.start < self.skip_until {
                 continue;
             }
-            if tok.kind == Kind::Comment {
+            if self.stmt_start
+                && self.stack.is_empty()
+                && let Some(end) = anonymous_end(self.code, tok, &mut no_anonymous)
+            {
+                lexer.reset(end);
+            } else if tok.kind == Kind::Comment {
                 self.comment(tok, &mut lexer);
             } else {
                 self.significant(tok, &lexer);
@@ -860,7 +883,15 @@ fn split_languages(text: &str) -> Result<Option<(String, OffsetMap)>, Vec<Diagno
     let mut feature_pending = false;
     let mut section: Option<LanguageSection> = None;
     let mut grown = text.len();
+    let mut no_anonymous = false;
     while let Some(tok) = lexer.next_significant() {
+        if stmt_start
+            && stack.is_empty()
+            && let Some(end) = anonymous_end(text, tok, &mut no_anonymous)
+        {
+            lexer.reset(end);
+            continue;
+        }
         let in_feature = stack.last() == Some(&true);
         match tok.kind {
             Kind::Punct(b';') => {
