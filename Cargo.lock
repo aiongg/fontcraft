@@ -2626,12 +2626,15 @@ name = "fontcraft"
 version = "0.0.1"
 dependencies = [
  "clipboard-win",
+ "craft",
  "eframe",
  "fontcraft-engine",
  "fontcraft-ui",
  "objc2-app-kit 0.3.2",
  "objc2-foundation 0.3.2",
+ "serde",
  "serde_json",
+ "toml",
  "ureq",
 ]
 
@@ -2736,6 +2739,7 @@ name = "fontcraft-craft-ext"
 version = "0.0.1"
 dependencies = [
  "craft",
+ "eframe",
  "egui",
  "web-sys",
 ]
@@ -3181,6 +3185,7 @@ dependencies = [
  "fontcraft-textlayout",
  "fontcraft-tools",
  "log",
+ "serde",
  "serde_json",
 ]
 
