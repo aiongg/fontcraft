@@ -12,7 +12,7 @@ use fontcraft_engine::components::align::{AlignMode, component_alignment};
 use fontcraft_engine::model::glyphdata::GlyphData;
 use fontcraft_engine::model::shown_metrics::{ShownMetric, shown_metrics};
 use fontcraft_engine::model::{Font, Glyph, Layer, LayerSide, Master, MetricDef, Shape, metric};
-use fontcraft_geom::{BezPath, Point};
+use fontcraft_geom::BezPath;
 
 use super::ProjectCx;
 use crate::shell::masters;
@@ -78,6 +78,8 @@ pub struct EditedGlyph {
 /// One component of the edited side.
 #[derive(PlainData, Clone, Debug, PartialEq)]
 pub struct ComponentMark {
+    /// Its index among the edited side's shapes.
+    pub shape: usize,
     pub base: String,
     pub state: State,
     /// Its outline in the edited glyph's units; empty for a placeholder.
@@ -309,21 +311,11 @@ fn component_mark(font: &Font, glyph: &str, layer: &Layer, shape: usize) -> Opti
     let state = state(font, glyph, layer, shape)?;
     let base = component.glyph.clone();
     if let State::Placeholder(_) = state {
-        // A box as wide as the base glyph's advance (half an em without one) and half an em tall.
-        let em = f64::from(font.units_per_em);
-        let advance = font.glyph(&base).and_then(|g| g.layer(&layer.master)).map_or(0.0, |l| l.width);
-        let w = if advance.is_finite() && advance > 0.0 { advance } else { em / 2.0 };
-        let h = em / 2.0;
-        let affine = component.affine();
-        let corner = |x: f64, y: f64| {
-            let p = affine * Point::new(x, y);
-            [p.x, p.y]
-        };
-        let placeholder = Some([corner(0.0, 0.0), corner(w, 0.0), corner(w, h), corner(0.0, h)]);
-        return Some(ComponentMark { base, state, outline: BezPath::new(), placeholder });
+        let placeholder = Some(fontcraft_tools::placeholder_box(font, component, &layer.master).map(|p| [p.x, p.y]));
+        return Some(ComponentMark { shape, base, state, outline: BezPath::new(), placeholder });
     }
     let outline = font.component_outline(component, &layer.master).ok()?;
-    Some(ComponentMark { base, state, outline, placeholder: None })
+    Some(ComponentMark { shape, base, state, outline, placeholder: None })
 }
 
 /// Where the paths of `layer` cross one another or themselves, away from their nodes: Extra Nodes.

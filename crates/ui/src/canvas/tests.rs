@@ -59,7 +59,7 @@ fn painted(app: &FontCraftApp, layer: fn(&PaintCx<'_>) -> Vec<Shape>) -> Vec<Sha
         camera: Camera::new(view, top),
         model: &app.models.canvas,
         tokens: &app.models.canvas_tokens,
-        display: app.view.display,
+        display: super::text::display(&app.view),
         edit_background: app.view.edit_background,
         words: &words,
         tools: &app.tools.view,
@@ -132,6 +132,61 @@ fn components_and_anchors_draw_by_state() {
     let marks = &app.models.canvas.glyph.as_ref().unwrap().components;
     assert_eq!(marks.last().map(|m| m.state), Some(State::Placeholder(Placeholder::Empty)));
     assert_eq!(count(&painted(&app, paint::components::shapes), t.component_placeholder), 3, "box and cross");
+}
+
+/// The names of the labels among `shapes`.
+fn labels(shapes: &[Shape]) -> Vec<String> {
+    shapes.iter().filter_map(|s| if let Shape::Text(t) = s { Some(t.galley.text().to_string()) } else { None }).collect()
+}
+
+/// Selected components draw a wider outline in the selection colour, selected anchors a ring and their name; Escape, which
+/// enters text mode, draws none of it.
+#[test]
+fn the_selection_marks_components_and_anchors() {
+    let mut app = components_app();
+    run(&mut app, "glyph.addComponent", json!({"glyph": "A", "component": "base"}));
+    run(&mut app, "component.move", json!({"glyph": "A", "components": [3], "dx": 1000, "dy": 0}));
+    let t = app.models.canvas_tokens.clone();
+    let selection = super::tools::tokens::ToolTokens::standard().selection;
+    let wide = |app: &FontCraftApp| {
+        painted(app, paint::components::shapes)
+            .iter()
+            .filter(|s| matches!(s, Shape::Path(p) if p.stroke.color == ColorMode::Solid(selection) && p.stroke.width == t.component_selected_width))
+            .count()
+    };
+    let fills = |app: &FontCraftApp| painted(app, paint::components::shapes).iter().filter(|s| matches!(s, Shape::Mesh(_))).count();
+    assert_eq!((wide(&app), fills(&app)), (0, 3), "each component is filled lightly");
+    assert!(labels(&painted(&app, paint::anchors::shapes)).is_empty(), "an unselected anchor shows no name");
+
+    shell(&mut app, "selection.set", json!({"shapes": [1, 3], "anchors": ["top"]}));
+    assert_eq!(wide(&app), 2);
+    assert_eq!(count(&painted(&app, paint::components::shapes), t.component_manual), 1, "the third keeps its state's colour");
+    let anchors = painted(&app, paint::anchors::shapes);
+    assert_eq!(labels(&anchors), ["top"]);
+    assert_eq!(count(&anchors, selection), 1, "one ring");
+
+    crate::control::dispatch(&mut app, "ui.key", &json!({"key": "Escape"})).unwrap();
+    app.drain();
+    assert_eq!((wide(&app), fills(&app)), (0, 0), "text mode marks nothing");
+    assert!(labels(&painted(&app, paint::anchors::shapes)).is_empty());
+}
+
+/// A click inside a placeholder selects its component, so the Info box names the base glyph.
+#[test]
+fn a_click_on_a_placeholder_selects_its_component() {
+    let mut app = components_app();
+    run(&mut app, "glyph.addComponent", json!({"glyph": "A", "component": "empty"}));
+    run(&mut app, "component.move", json!({"glyph": "A", "components": [3], "dx": 0, "dy": -600}));
+    app.view.canvas = CanvasView::new(RECT, Point::new(400.0, 400.0), 1.0);
+    let box_corner = app.models.canvas.glyph.as_ref().unwrap().components.last().unwrap().placeholder.unwrap()[0];
+    let at = [box_corner[0] + 30.0, box_corner[1] + 200.0];
+    let events = json!([{"kind": "down", "x": at[0], "y": at[1]}, {"kind": "up", "x": at[0], "y": at[1]}]);
+    crate::control::dispatch(&mut app, "ui.pointer", &json!({ "events": events })).unwrap();
+    app.drain();
+    assert!(app.tools.selection.shapes.contains(&3), "{:?}", app.tools.selection);
+    assert_eq!(app.models.palette.info_box.component.as_ref().map(|c| c.base.as_str()), Some("empty"));
+    let selection = super::tools::tokens::ToolTokens::standard().selection;
+    assert_eq!(count(&painted(&app, paint::components::shapes), selection), 3, "its box and cross are in the selection colour");
 }
 
 #[test]

@@ -2408,7 +2408,13 @@ milestone = "M6"
 summary = "An anchor is selected by clicking its orange dot, several by Shift-clicking, the next or previous one with Tab or Shift+Tab. Only selected anchors show their name."
 ref = "Edit View › Adding, Editing, & Removing Anchors"
 status = "handbook"
-notes = "Documented, not yet observed. M6.10: a click and a Shift-click select through the Select tool's hit test, Tab and Shift+Tab are selection.selectNext and selection.selectPrevious, and only selected anchors are drawn with their name."
+notes = "Documented, not yet observed. M6.10: a click and a Shift-click select through the Select tool's hit test, Tab and Shift+Tab are selection.selectNext and selection.selectPrevious. M6.30: a selected anchor is drawn with a ring and its name, an unselected one without a name (`crates/ui/src/canvas/paint/anchors.rs`)."
+guesses = [
+  "A selected anchor has a ring in the selection colour and its name at the top right; a selected anchor in the reference app settles the look.",
+]
+observe = [
+  "Select one anchor and note how its dot and its name look.",
+]
 
 [[behavior]]
 id = "anchors.moveLikeNodes"

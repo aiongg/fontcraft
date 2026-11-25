@@ -163,7 +163,7 @@ fn hit(scene: &Scene, view: &View, pos: Point, tolerance: f64, corners: bool) ->
         return Some(hit);
     }
 
-    // The frontmost component is the one drawn last.
+    // The frontmost component is the one drawn last; a component without an outline is hit in its placeholder's box.
     for c in scene.components().iter().rev() {
         if scene.shape_editable(c.shape) && c.contains(pos) {
             let locked = scene.locked || c.locked;

@@ -84,6 +84,10 @@ pub struct Tokens {
     pub metric_highlight_size: f32,
     pub extra_node_radius: f32,
     pub component_outline_width: f32,
+    /// The outline of a selected component.
+    pub component_selected_width: f32,
+    /// How opaque the fill of a component in its state's colour is, from 0 to 1.
+    pub component_fill_opacity: f32,
     /// Width and height of an anchor marker.
     pub anchor_size: f32,
     /// Width of the band along a corner or cap component.
@@ -223,6 +227,8 @@ impl Tokens {
             metric_highlight_size: 18.0,
             extra_node_radius: 2.5,
             component_outline_width: 2.0,
+            component_selected_width: 3.0,
+            component_fill_opacity: 0.14,
             anchor_size: 9.0,
             attachment_band_width: 10.0,
             label_size: 10.0,

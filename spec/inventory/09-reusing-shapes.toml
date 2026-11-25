@@ -521,7 +521,13 @@ milestone = "M6"
 summary = "Clicking a component with the Select tool selects it; one or more selected components bring up the component Info box next to the glyph Info box."
 ref = "Reusing Shapes › Components › Editing Components"
 status = "handbook"
-notes = "Documented, not yet observed. M6.10: a click inside a component's outline selects it (`fontcraft_tools::hit`) and a Shift-click toggles it; the component Info box is M6.11."
+notes = "Documented, not yet observed. M6.10: a click inside a component's outline selects it (`fontcraft_tools::hit`) and a Shift-click toggles it; the component Info box is M6.11. M6.30: a selected component's outline is wider and in the selection colour, in the background too while it is edited (`crates/ui/src/canvas/paint/components.rs`)."
+guesses = [
+  "A selected component is drawn with a wider outline in the selection colour, its fill unchanged; a selected component in the reference app settles the look.",
+]
+observe = [
+  "Select one of two overlapping components and note what marks it.",
+]
 
 [[behavior]]
 id = "components.rubberBandIgnoresComponents"
@@ -629,7 +635,7 @@ milestone = "M6"
 summary = "A component whose base glyph exists but has an empty layer is drawn as an empty-base placeholder. The remedies are to delete the component or to draw something on that layer."
 ref = "Reusing Shapes › Components › Component Placeholders"
 status = "handbook"
-notes = "Documented, not yet observed. M6.10: the three placeholders are drawn as a crossed box as wide as the base glyph's advance (half an em when it has none) and half an em tall, placed by the component's transform and labelled with the base glyph's name and the problem (`canvas/components.rs`)."
+notes = "Documented, not yet observed. M6.10: the three placeholders are drawn as a crossed box as wide as the base glyph's advance (half an em when it has none) and half an em tall, placed by the component's transform and labelled with the base glyph's name and the problem (`crates/ui/src/canvas/paint/components.rs`). M6.30: a click inside the box selects the component, so the Info box names its base glyph."
 guesses = [
   "A placeholder is a crossed box the width of the base glyph's advance and half an em tall, labelled with the problem; seeing the three placeholders in the reference app settles their look.",
 ]
@@ -644,7 +650,7 @@ milestone = "M6"
 summary = "A component that names a glyph absent from the font is drawn as a no-base-glyph placeholder. Clicking it still shows the referenced name in the Info box, and it resolves when the component is removed or a glyph of that name is added."
 ref = "Reusing Shapes › Components › Component Placeholders"
 status = "handbook"
-notes = "Documented, not yet observed. M6.10: drawn as the crossed box of `components.placeholderEmptyBase`, labelled `no such glyph`. It has no outline to click, so Tab and Select All select it until the Info box lands (M6.11)."
+notes = "Documented, not yet observed. M6.10: drawn as the crossed box of `components.placeholderEmptyBase`, labelled `no such glyph`. M6.30: a click inside the box selects the component (`fontcraft_tools::placeholder_box`), and the Info box names the missing glyph."
 observe = [
   "Add a component, delete its base glyph, and note the placeholder and whether a click selects it.",
 ]
@@ -671,9 +677,9 @@ milestone = "M6"
 summary = "While a node, anchor or other element is being dragged, the nodes inside components on the layer are revealed as snap targets, and the dragged element snaps to one when it comes close."
 ref = "Reusing Shapes › Components › Combining Paths and Components"
 status = "handbook"
-notes = "Documented, not yet observed. M6.10: while a pointer tool drags, Edit View draws the on-curve points of every component as small rings, and `fontcraft_tools::snap` snaps the dragged point to the nodes and handles of components."
+notes = "Documented, not yet observed. While a pointer tool drags, the on-curve points of components near the dragged point show as faint dots (`fontcraft_tools::snap::component_markers`), and `fontcraft_tools::snap` snaps the dragged point to the nodes and handles of components."
 guesses = [
-  "The nodes inside components show for as long as any drag of a pointer tool lasts, and not while the pointer only hovers; dragging a node next to a component in the reference app settles it.",
+  "The nodes inside components near the dragged point show for as long as any drag of a pointer tool lasts, and not while the pointer only hovers; dragging a node next to a component in the reference app settles it.",
 ]
 observe = [
   "Drag a node next to a component and note when the component's nodes appear and which of them the node snaps to.",
@@ -844,9 +850,9 @@ milestone = "M6"
 summary = "Component fill colour signals alignment state in Edit View: green for auto-aligned, gray for manually placed, blue for the vertically shiftable single-number case."
 ref = "Reusing Shapes › Components › Automatic Alignment"
 status = "handbook"
-notes = "Documented, not yet observed. M6.10: Edit View draws each component's outline over the glyph in green, grey or blue by `fontcraft_components::align::component_alignment` (`crates/ui/src/canvas/paint/components.rs`); a selected component is drawn in the selection colour."
+notes = "Documented, not yet observed. M6.10: Edit View draws each component's outline over the glyph in green, grey or blue by `fontcraft_components::align::component_alignment` (`crates/ui/src/canvas/paint/components.rs`). M6.30: each component also has a light fill in the same colour, left out in text mode and under Fill Preview's fill; a selected component keeps the fill and takes the selection colour for its outline."
 guesses = [
-  "Components are shown by their outline drawn in the state colour, not filled; a composite in the reference app's Edit View settles it.",
+  "Components are shown by their outline and a light fill, both in the state colour; a composite in the reference app's Edit View settles how strong the fill is and whether the outline is coloured.",
   "Every component aligned horizontally only is blue, the single Number component and a component set to horizontal alignment alike; a component set to horizontal alignment in the reference app settles it.",
 ]
 observe = [
