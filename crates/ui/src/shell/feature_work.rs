@@ -6,8 +6,9 @@
 //!   desktop; at once on the web and in tests with inline jobs), with the font of the revision shown then. One check
 //!   runs at a time; a check whose draft is no longer the one typed when it lands is dropped, and the newest draft is
 //!   checked next. The answer goes to the view state (`FeaturesView::checked`), which the code editor underlines.
-//! - **Compile.** After `font.features.setCode`, `update` or `updateEntry`, the current master is compiled in the
-//!   background once the document has stood still for [`CHECK_PAUSE`] seconds, and at once when the tab's Compile button
+//! - **Compile.** After a command that changes the feature entries, and when they changed in another way (undo, a macro),
+//!   the current master is compiled in the background, and the code checked for every other master, instance and the
+//!   variable font, once the document has stood still for [`CHECK_PAUSE`] seconds, and at once when the tab's Compile button
 //!   asks ([`ask`]; the button is busy meanwhile). The job runs all of `font.features.compile` but the keeping of its
 //!   result (`fontcraft_engine::feature_state::compile_ahead`). When it lands on the revision it read,
 //!   `font.features.compile` runs on the window's thread and takes that result; an edit in between starts it again.
@@ -21,6 +22,7 @@ use std::sync::{Arc, Mutex};
 use craft::behavior::dock::PanelState;
 use fontcraft_engine::cmd::features_check::{CheckContext, check_context, check_font, compile_instance};
 use fontcraft_engine::feature_state::{AheadCompile, SessionFeaturesExt as _, compile_ahead};
+use fontcraft_engine::model::{Features, Snippet};
 use serde_json::{Value, json};
 
 use crate::app::{FontCraftApp, Msg};
@@ -54,6 +56,8 @@ pub struct FeatureWork {
     check: Option<(FeatureDraft, Landing<Result<Value, String>>)>,
     /// New code waits for a compile.
     compile_wanted: bool,
+    /// The active document and its feature entries as last seen.
+    entries: Option<(u64, Arc<Features>)>,
     /// The document revision last seen while a compile waits, and the time it was first seen.
     still: Option<((u64, u64), f64)>,
     /// The compile under way.
@@ -82,11 +86,39 @@ impl FeatureWork {
     }
 }
 
+/// The commands of the feature entries that change no code.
+const KEEP_CODE: [&str; 3] = ["font.features.compile", "font.features.setNotes", "font.features.showSnippetFolder"];
+
 /// After a run of `id`: code that changed is compiled in the background.
 pub fn after_run(app: &mut FontCraftApp, id: &str) {
-    if matches!(id, "font.features.setCode" | "font.features.update" | "font.features.updateEntry") {
+    let changes = id.starts_with("font.features.") && !KEEP_CODE.contains(&id) && fontcraft_engine::find_command(id).is_some_and(|c| !c.query);
+    if changes {
         app.feature_work.compile_wanted = true;
     }
+}
+
+/// Whether the two sets of entries hold the same code under the same names.
+fn same_code(a: &Features, b: &Features) -> bool {
+    let same = |a: &[Snippet], b: &[Snippet]| {
+        let one = |e: &Snippet| (e.name.clone(), e.disabled, e.labels.clone());
+        a.len() == b.len() && a.iter().zip(b).all(|(a, b)| a.code == b.code && one(a) == one(b))
+    };
+    same(&a.prefixes, &b.prefixes) && same(&a.classes, &b.classes) && same(&a.features, &b.features)
+}
+
+/// Feature entries of the document that changed since the last look are compiled in the background, however they
+/// changed: an undo, a macro or an agent's command. A document looked at for the first time is left as it is.
+fn watch_entries(app: &mut FontCraftApp) {
+    let now = app.session.active().map(|d| (d.id, Arc::clone(&d.font.features)));
+    let work = &mut app.feature_work;
+    let changed = match (&work.entries, &now) {
+        (Some((seen, before)), Some((id, entries))) if seen == id => !Arc::ptr_eq(before, entries) && !same_code(before, entries),
+        _ => false,
+    };
+    if changed {
+        work.compile_wanted = true;
+    }
+    work.entries = now;
 }
 
 /// Compiles the active document's current master in the background now: the Features tab's Compile button. A compile
@@ -125,6 +157,7 @@ pub fn logic(app: &mut FontCraftApp, ctx: &egui::Context) {
 
 /// [`logic`] at time `now`, in seconds; returns how many seconds until a frame should look again.
 pub fn step(app: &mut FontCraftApp, now: f64) -> Option<f64> {
+    watch_entries(app);
     let waits = [step_check(app, now), step_compile(app, now), step_instance(app, now)];
     show_busy(app);
     waits.into_iter().flatten().reduce(f64::min)
@@ -253,10 +286,14 @@ fn step_compile(app: &mut FontCraftApp, now: f64) -> Option<f64> {
 /// Keeps the compile that landed on the revision it read: `font.features.compile` takes it and only maps the
 /// diagnostics. A compile that failed has no result; the command then says why.
 fn land_compile(app: &mut FontCraftApp, (doc, _, master): CompileKey, result: Option<AheadCompile>) {
-    if let Some(compile) = result {
-        app.session.keep_ahead_compile(compile);
-    }
-    let params = json!({ "master": master });
+    let params = match result {
+        Some(compile) => {
+            app.session.keep_ahead_compile(compile);
+            json!({ "master": master, "targets": "all" })
+        }
+        // The command fails as the job did, before it checks the other targets here on the window's thread.
+        None => json!({ "master": master }),
+    };
     if app.feature_work.asked.as_ref().is_some_and(|(d, m)| *d == doc && *m == master) {
         app.feature_work.asked = None;
         if let Err(error) = app.apply_msg(Msg::run("font.features.compile", params)) {
@@ -285,7 +322,7 @@ fn start_compile(app: &mut FontCraftApp) {
     let key: CompileKey = (id, revision, master);
     let job_master = key.2.clone();
     let job = move || {
-        let result = fontcraft_engine::guard::catch_panic(|| compile_ahead(&font, id, revision, &job_master, &cx, previous, &builds));
+        let result = fontcraft_engine::guard::catch_panic(|| compile_ahead(&font, id, revision, &job_master, &cx, previous, &builds, true));
         if let Ok(mut slot) = out.lock() {
             *slot = Some(result.ok().flatten());
         }

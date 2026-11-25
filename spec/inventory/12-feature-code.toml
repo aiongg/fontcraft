@@ -370,7 +370,7 @@ milestone = "M8"
 summary = "With several masters the inserted number is interpolated for the instance being built."
 ref = "Feature Code › Number Value Tokens"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. A token that fails at one instance is reported for that instance when the code is checked for every target (M8.51)."
 
 [[behavior]]
 id = "token.numberValue.arithmetic"
@@ -688,6 +688,7 @@ milestone = "M9"
 summary = "Lines between `#ifdef VARIABLE` and `#endif` are kept only when a variable font is being built."
 ref = "Feature Code › Conditional Feature Code"
 status = "handbook"
+notes = "Font Info checks the variable font's code with the other targets' (M8.51)."
 
 [[behavior]]
 id = "featureCode.ifndefVariable"
@@ -696,6 +697,7 @@ milestone = "M9"
 summary = "Lines between `#ifndef VARIABLE` and `#endif` are kept only when a static font is being built."
 ref = "Feature Code › Conditional Feature Code"
 status = "handbook"
+notes = "Font Info checks the variable font's code with the other targets' (M8.51)."
 
 [[behavior]]
 id = "featureCode.ifdefOtherSymbols"

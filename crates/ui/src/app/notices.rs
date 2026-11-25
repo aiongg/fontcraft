@@ -4,6 +4,8 @@
 //! |---|---|
 //! | `glyph.matchMasters`, `glyph.relocateStartPoints`: `skipped` | the label, then each skipped glyph with its reason |
 //! | `color.generateDarkPalette`: `palette`, `name` | the new palette's number and name |
+//! | `font.features.compile`: `errors`, `warnings`, `targetErrors`, `targetWarnings` | how many errors and warnings the code has |
+//! | `font.features.update`: `added`, `updated`, `removed` | how many entries it added, changed and removed |
 //! | any command: `formatWarnings` (what a UFO, UFOZ or designspace save would lose), else the command's own `warnings` | the first warning, and how many follow |
 //!
 //! The notices of the Font View commands (`font_view::incompatible_notice`) come first.
@@ -20,6 +22,16 @@ craft::ui::words! {
         skipped: "fontcraftNotice.skipped" = "skipped";
         /// Before the new palette's number.
         dark_palette: "fontcraftNotice.darkPalette" = "Added dark palette";
+        error: "fontcraftNotice.error" = "error";
+        errors: "fontcraftNotice.errors" = "errors";
+        warning: "fontcraftNotice.warning" = "warning";
+        warnings: "fontcraftNotice.warnings" = "warnings";
+        no_errors: "fontcraftNotice.noErrors" = "no errors";
+        /// After the number of feature entries Update added, changed or removed.
+        added: "fontcraftNotice.entriesAdded" = "added";
+        changed: "fontcraftNotice.entriesChanged" = "changed";
+        removed: "fontcraftNotice.entriesRemoved" = "removed";
+        nothing_to_update: "fontcraftNotice.nothingToUpdate" = "every automatic entry is up to date";
         /// After the first warning, before how many follow.
         more_warnings: "fontcraftNotice.moreWarnings" = "more warnings";
     }
@@ -32,6 +44,12 @@ const REPORTS_SKIPPED: [&str; 2] = ["glyph.matchMasters", "glyph.relocateStartPo
 pub fn notice(id: &str, reply: &Value) -> Option<String> {
     if REPORTS_SKIPPED.contains(&id) {
         return skipped(id, reply).or_else(|| format_warning(reply));
+    }
+    if id == "font.features.compile" {
+        return Some(compiled(reply));
+    }
+    if id == "font.features.update" {
+        return Some(updated(reply));
     }
     if id == "color.generateDarkPalette" {
         return dark_palette(reply);
@@ -64,6 +82,39 @@ fn skipped(id: &str, reply: &Value) -> Option<String> {
         named.push("…".into());
     }
     Some(format!("{}: {} {}", label(id), ReplyNoticeWords::english().skipped.as_str(), named.join(", ")))
+}
+
+/// `Compile: 2 errors, 1 warning`, over the compiled master and the other targets.
+fn compiled(reply: &Value) -> String {
+    let words = ReplyNoticeWords::english();
+    let sum = |a: &str, b: &str| [a, b].iter().filter_map(|key| reply.get(key)?.as_u64()).fold(0u64, u64::saturating_add);
+    let (errors, warnings) = (sum("errors", "targetErrors"), sum("warnings", "targetWarnings"));
+    let count = |n: u64, one: &str, many: &str| format!("{n} {}", if n == 1 { one } else { many });
+    let mut parts = Vec::new();
+    if errors > 0 {
+        parts.push(count(errors, words.error.as_str(), words.errors.as_str()));
+    }
+    if warnings > 0 {
+        parts.push(count(warnings, words.warning.as_str(), words.warnings.as_str()));
+    }
+    if parts.is_empty() {
+        parts.push(words.no_errors.as_str().to_string());
+    }
+    format!("{}: {}", label("font.features.compile"), parts.join(", "))
+}
+
+/// `Update: 2 entries added, 3 changed, 1 removed`.
+fn updated(reply: &Value) -> String {
+    let words = ReplyNoticeWords::english();
+    let count = |key: &str| reply.get(key).and_then(Value::as_array).map_or(0, Vec::len);
+    let parts: Vec<String> = [("added", &words.added), ("updated", &words.changed), ("removed", &words.removed)]
+        .into_iter()
+        .map(|(key, word)| (count(key), word))
+        .filter(|(n, _)| *n > 0)
+        .map(|(n, word)| format!("{n} {}", word.as_str()))
+        .collect();
+    let text = if parts.is_empty() { words.nothing_to_update.as_str().to_string() } else { parts.join(", ") };
+    format!("{}: {text}", label("font.features.update"))
 }
 
 /// `Added dark palette 2: Dark`.

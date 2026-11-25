@@ -40,6 +40,11 @@ pub struct FeaturesModel {
     pub notes_height: Option<f32>,
     /// The compile the Compile button asked for is under way.
     pub compiling: bool,
+    /// The code changed since the last compile, or was never compiled while there is some.
+    pub stale: bool,
+    /// What the last compile found outside the entries: in generated features, the glyph order or the preview font, or
+    /// in code an instance's parameter writes.
+    pub unplaced: Vec<DiagnosticModel>,
     pub snippets: SnippetsModel,
 }
 
@@ -161,6 +166,7 @@ pub struct CompletionItem {
 /// One error or warning of the last compile in the shown entry.
 #[derive(PlainData, Clone, Debug, Default, PartialEq)]
 pub struct DiagnosticModel {
+    /// Its id in `font.features.listErrors`; meaningless without fixes.
     pub id: u64,
     pub error: bool,
     pub message: String,
@@ -188,6 +194,8 @@ pub fn project(cx: &mut ProjectCx<'_>) -> FeaturesModel {
     let f = &font.features;
     let compiled = errors.as_ref().and_then(|r| r.get("current")).and_then(Value::as_bool).unwrap_or(false);
     let diagnostics = diagnostics(errors.as_ref());
+    let unplaced = diagnostics.iter().filter(|(entry, _)| entry.is_none()).map(|(_, d)| d.clone()).take(MAX_SHOWN_ERRORS).collect();
+    let stale = !compiled && !f.is_empty();
     let with_errors: HashSet<(EntryKind, usize)> =
         diagnostics.iter().filter(|(_, d)| d.error).filter_map(|(e, _)| e.as_ref().map(|e| (e.kind, e.index))).collect();
     let filter = cx.view.font_info.features.filter.trim().to_lowercase();
@@ -241,7 +249,17 @@ pub fn project(cx: &mut ProjectCx<'_>) -> FeaturesModel {
         let check = view.checked.as_ref().filter(|c| c.draft.key == e.key).map(|c| (c.draft.code.clone(), c.diagnostics.clone()));
         EntryPane { spec_url, completion, caret, jump, compiled, draft, check, preview, find, ..e }
     });
-    FeaturesModel { groups, selected, entry, filter: view.filter.clone(), notes_height: view.notes_height, compiling: view.compiling, snippets }
+    FeaturesModel {
+        groups,
+        selected,
+        entry,
+        filter: view.filter.clone(),
+        notes_height: view.notes_height,
+        compiling: view.compiling,
+        stale,
+        unplaced,
+        snippets,
+    }
 }
 
 /// Whether the sidebar lists the entry `e` under the filter text `filter`, in lower case: its name as shown or its code
@@ -296,31 +314,53 @@ fn pane(font: &Font, key: &EntryKey, diagnostics: &[(Option<EntryKey>, Diagnosti
     })
 }
 
-/// The diagnostics of a `font.features.listErrors` result with the entry each is in; none once the font changed since
-/// the compile.
+/// The diagnostics of a `font.features.listErrors` result with the entry each is in, those of the other targets after
+/// the compiled master's; none once the font changed since the compile.
 fn diagnostics(result: Option<&Value>) -> Vec<(Option<EntryKey>, DiagnosticModel)> {
     let Some(r) = result else { return Vec::new() };
     if !r.get("current").and_then(Value::as_bool).unwrap_or(false) {
         return Vec::new();
     }
-    diagnostic_list(r)
+    let mut out = diagnostic_list(r, "diagnostics");
+    out.extend(diagnostic_list(r, "targetDiagnostics"));
+    if let Some(message) = r.get("previewMessage").and_then(Value::as_str) {
+        out.push((None, DiagnosticModel { id: u64::MAX, error: true, message: message.to_string(), ..DiagnosticModel::default() }));
+    }
+    out
+}
+
+/// Most target names a message lists.
+const MAX_NAMED_TARGETS: usize = 5;
+
+/// A diagnostic's message, with the names of the targets it is limited to.
+fn message(d: &Value) -> String {
+    let text = d.get("message").and_then(Value::as_str).unwrap_or_default();
+    let names = strings(d.get("targets"));
+    if names.is_empty() {
+        return text.to_string();
+    }
+    let mut shown = names.iter().take(MAX_NAMED_TARGETS).map(String::as_str).collect::<Vec<_>>().join(", ");
+    if names.len() > MAX_NAMED_TARGETS {
+        shown.push_str(", …");
+    }
+    format!("{text} ({shown})")
 }
 
 /// The diagnostics of a `font.features.check` result that are in the checked entry, `key`.
 pub fn checked(result: &Value, key: &EntryKey) -> Vec<DiagnosticModel> {
-    diagnostic_list(result).into_iter().filter(|(k, _)| k.as_ref() == Some(key)).map(|(_, d)| d).take(MAX_SHOWN_ERRORS).collect()
+    diagnostic_list(result, "diagnostics").into_iter().filter(|(k, _)| k.as_ref() == Some(key)).map(|(_, d)| d).take(MAX_SHOWN_ERRORS).collect()
 }
 
-/// The `diagnostics` of a `listErrors` or `check` result with the entry each is in.
-fn diagnostic_list(r: &Value) -> Vec<(Option<EntryKey>, DiagnosticModel)> {
-    let list = r.get("diagnostics").and_then(Value::as_array).map(Vec::as_slice).unwrap_or_default();
+/// The diagnostics under `key` of a `listErrors` or `check` result with the entry each is in.
+fn diagnostic_list(r: &Value, key: &str) -> Vec<(Option<EntryKey>, DiagnosticModel)> {
+    let list = r.get(key).and_then(Value::as_array).map(Vec::as_slice).unwrap_or_default();
     list.iter()
         .take(MAX_DIAGNOSTICS)
         .filter_map(|d| {
             let model = DiagnosticModel {
-                id: d.get("id")?.as_u64()?,
+                id: d.get("id").and_then(Value::as_u64).unwrap_or(u64::MAX),
                 error: d.get("severity").and_then(Value::as_str) == Some("error"),
-                message: d.get("message").and_then(Value::as_str).unwrap_or_default().to_string(),
+                message: message(d),
                 line: d.get("line").and_then(Value::as_u64).unwrap_or(0),
                 range: byte_range(d.get("range")),
                 fixes: strings(d.get("fixes")).into_iter().take(MAX_FIXES).collect(),

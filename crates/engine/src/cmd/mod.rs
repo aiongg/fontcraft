@@ -46,6 +46,7 @@ pub(crate) mod features_compile;
 mod features_entries;
 mod features_find;
 mod features_io;
+pub mod features_targets;
 mod file;
 pub mod filter;
 pub mod fit_curve;

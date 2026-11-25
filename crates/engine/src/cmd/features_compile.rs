@@ -17,6 +17,9 @@
 //! overflows, a glyph set the export refuses), the code is compiled on its own for its
 //! diagnostics and Edit View's font is built without `GPOS`, as far as it can be.
 //!
+//! `targets` also checks the code of every other build (`super::features_targets`); a check of all of them is kept
+//! beside the state, and `listErrors` gives what it found beyond the master's compile.
+//!
 //! A diagnostic's id is its index in the last compile. `listErrors`, `jumpToError` and
 //! `showErrorDetails` return the data the Features tab draws (inline markers, sidebar icons,
 //! the expanded message); `applyFix` changes the font, one undo step. Ranges are byte ranges of
@@ -43,6 +46,7 @@ use fontcraft_model::{Features, Font, Snippet};
 use serde_json::{Value, json};
 
 use super::features_check::CheckContext;
+use super::features_targets::{TargetDiagnostic, all_targets, check_targets, count, names_json, targets_json, targets_param};
 use super::*;
 use crate::feature_state::{AheadCompile, FeatureState, PreviewBuilds, SharedBuild};
 use crate::params::Params;
@@ -74,7 +78,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Compile",
             [],
             None,
-            "{master?: id|name (default: the first master; the Features tab passes the master of the active Edit View tab), instance?: index|id|name (compile the code as that instance exports it: its Add, Replace and Remove feature parameters applied; nothing is kept, and a diagnostic in code a parameter wrote names it as param: {name, index}; the answer adds instance and refused: [{param, message}] for parameter values that cannot be applied), force?: bool (compile even when the code, glyph order and master are those of the last compile, or a preview build of this revision is kept; default false)} compiles the feature code of one master so Edit View can preview it, and keeps the result as the document's feature state (no undo step, never saved). Feature code with errors is not a failure: the errors come back → {master, ok: bool (no errors), cached: bool (the last compile's result, reused), errors: n, warnings: n, features: [{tag, table: \"GSUB\"|\"GPOS\", languageSystems: [[script, language]], lookups: n}], diagnostics: [as font.features.listErrors], preview: bool (the preview font was built), previewMessage?: string}",
+            "{master?: id|name (default: the first master; the Features tab passes the master of the active Edit View tab), targets?: \"all\"|\"variable\"|[{master: id|name}|{instance: index|id|name}|\"variable\"] (also check the code of these builds, the code on its own: an instance's parameters applied, tokens with its values, the variable font's `#ifdef VARIABLE` blocks and variable syntax; targets whose assembled code is the same text are compiled once; \"all\" is every master, every exported instance and the variable font, and is kept for font.features.listErrors), instance?: index|id|name (compile the code as that instance exports it: its Add, Replace and Remove feature parameters applied; nothing is kept, and a diagnostic in code a parameter wrote names it as param: {name, index}; the answer adds instance and refused: [{param, message}] for parameter values that cannot be applied), force?: bool (compile even when the code, glyph order and master are those of the last compile, or a preview build of this revision is kept; default false)} compiles the feature code of one master so Edit View can preview it, and keeps the result as the document's feature state (no undo step, never saved). Feature code with errors is not a failure: the errors come back → {master, ok: bool (no errors, in the targets either), cached: bool (the last compile's result, reused), errors: n, warnings: n, features: [{tag, table: \"GSUB\"|\"GPOS\", languageSystems: [[script, language]], lookups: n}], diagnostics: [as font.features.listErrors], preview: bool (the preview font was built), previewMessage?: string, with targets also targets: [name], targetsCompiled: n (compiles run), skippedTargets: n (past the limit of 256), targetErrors: n, targetWarnings: n and targetDiagnostics as font.features.listErrors}",
             has_doc,
             compile
         ),
@@ -83,7 +87,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "List Feature Errors",
             [],
             None,
-            "{kind?: \"prefix\"|\"class\"|\"feature\", name?: string, index?: position in the group (with kind and name: that entry's only)} the errors and warnings of the last compile → {compiled: bool, current: bool (the font has not changed since), master?, errors: n, warnings: n, diagnostics: [{id, severity: \"error\"|\"warning\", message, entry: {kind, name, index}|null (null: about no entry), range: [start, end]|null (bytes of the entry's code), line, column (from 1, columns in characters), fixes: [label] (the wrench; empty when the font changed since)}]}",
+            "{kind?: \"prefix\"|\"class\"|\"feature\", name?: string, index?: position in the group (with kind and name: that entry's only)} the errors and warnings of the last compile → {compiled: bool, current: bool (the font has not changed since), master?, errors: n, warnings: n, diagnostics: [{id, severity: \"error\"|\"warning\", message, entry: {kind, name, index}|null (null: about no entry), range: [start, end]|null (bytes of the entry's code), line, column (from 1, columns in characters), fixes: [label] (the wrench; empty when the font changed since), targets?: [name] (the builds it occurs in, when the last compile of every target found it in some only)}], previewMessage?: string (why the preview font could not be built), targets?: [name] (the builds the last compile of every target checked, while that check is current), targetDiagnostics: [{severity, message, entry, range, line, column, targets: [name]}] (what that check found beyond `diagnostics`)}",
             has_doc,
             list_errors
         ),
@@ -101,7 +105,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Jump to Error",
             [],
             None,
-            "{kind: \"prefix\"|\"class\"|\"feature\", name: string, index?: position in the group, error?: id (default: the entry's first error, else its first warning)} where the editor goes when the error icon of an entry is clicked in the sidebar → {id, severity, message, entry: {kind, name, index}, range: [start, end], line, column, fixes}",
+            "{kind: \"prefix\"|\"class\"|\"feature\", name: string, index?: position in the group, error?: id (default: the entry's first error, else its first warning)} where the editor goes when the error icon of an entry is clicked in the sidebar → {id, severity, message, entry: {kind, name, index}, range: [start, end], line, column, fixes}, or for an error only another target has {severity, message, entry, range, line, column, targets: [name]}",
             has_doc,
             jump_to_error
         ),
@@ -498,15 +502,20 @@ fn compile(s: &mut Session, raw: &Value) -> Result<Value> {
     let (doc_id, revision) = (doc.id, doc.revision);
     let font = s.font()?;
     let master = master_id(&p, font, p.opt_str("master")?)?;
+    let targets = targets_param(&p, font)?;
     let ahead = s.ahead_compile_of(doc_id).filter(|a| !force && a.revision == revision && a.state.master == master);
+    let check = targets.map(|(targets, all)| match ahead.as_ref().and_then(|a| a.targets.clone()).filter(|_| all) {
+        Some(check) => (check, all),
+        None => (Arc::new(check_targets(font, &font.features, &cx, targets)), all),
+    });
     let compiled = match ahead {
         Some(ahead) => ahead.as_ref().clone(),
         None => {
-            let of = CompileOf { doc: doc_id, revision, master: &master, force };
+            let of = CompileOf { doc: doc_id, revision, master: &master, force, targets: false };
             compile_state(&p, font, &of, &cx, s.feature_state_of(doc_id), &s.preview_builds())?
         }
     };
-    let AheadCompile { state, cached, preview_message, .. } = compiled;
+    let AheadCompile { state, cached, .. } = compiled;
     let fixes = fix_labels(font, &state, true);
     let diagnostics: Vec<Value> = diagnostics_json(&font.features, &state, None, &fixes);
     let features: Vec<Value> = state
@@ -532,10 +541,24 @@ fn compile(s: &mut Session, raw: &Value) -> Result<Value> {
         "diagnostics": diagnostics,
         "preview": state.preview.is_some(),
     });
-    if let (Some(message), Some(obj)) = (preview_message, out.as_object_mut()) {
-        obj.insert("previewMessage".into(), Value::String(message));
+    if let (Some(message), Some(obj)) = (&state.preview_message, out.as_object_mut()) {
+        obj.insert("previewMessage".into(), json!(message));
+    }
+    if let (Some((check, _)), Some(obj)) = (&check, out.as_object_mut()) {
+        let beyond = || check.beyond(&state.diagnostics);
+        let (target_errors, target_warnings) = count(beyond());
+        obj.insert("ok".into(), json!(errors == 0 && target_errors == 0));
+        obj.insert("targets".into(), names_json(check));
+        obj.insert("targetsCompiled".into(), json!(check.compiled));
+        obj.insert("skippedTargets".into(), json!(check.skipped));
+        obj.insert("targetErrors".into(), json!(target_errors));
+        obj.insert("targetWarnings".into(), json!(target_warnings));
+        obj.insert("targetDiagnostics".into(), json!(targets_json(&font.features, check, beyond())));
     }
     s.set_feature_state(doc_id, state);
+    if let Some((check, true)) = check {
+        s.keep_target_check(check);
+    }
     Ok(out)
 }
 
@@ -546,12 +569,15 @@ struct CompileOf<'a> {
     master: &'a str,
     /// Compile even when the last result still holds.
     force: bool,
+    /// Also check the code for every target.
+    targets: bool,
 }
 
 /// `font.features.compile` of a document's current revision, done without the session and changing nothing, for a
 /// worker thread: the result goes to the session with `keep_ahead_compile`, where the command of the same revision and
 /// master takes it. `previous` is the document's last compile and `builds` the session's preview builds. `None` when
 /// the compile fails: the command then reports why.
+#[allow(clippy::too_many_arguments, reason = "what a compile reads, without the session")]
 pub(crate) fn compile_ahead(
     font: &Font,
     doc: u64,
@@ -560,10 +586,11 @@ pub(crate) fn compile_ahead(
     cx: &CheckContext,
     previous: Option<Arc<FeatureState>>,
     builds: &PreviewBuilds,
+    targets: bool,
 ) -> Option<AheadCompile> {
     let raw = json!({});
     let p = Params::new("font.features.compile", &raw).ok()?;
-    compile_state(&p, font, &CompileOf { doc, revision, master, force: false }, cx, previous, builds).ok()
+    compile_state(&p, font, &CompileOf { doc, revision, master, force: false, targets }, cx, previous, builds).ok()
 }
 
 /// The compile of `of`, as [`FeatureState`] keeps it.
@@ -587,20 +614,12 @@ fn compile_state(
 
     let mut cached = false;
     let mut preview_message = None;
-    let state = match prepare(font, &font.features, master, cx.include_dir.as_deref(), &values) {
-        Err(FeatureError::Code(diagnostics)) => {
-            FeatureState { revision, master: master.to_string(), preview: None, features: Vec::new(), diagnostics, source_hash: 0, code_hash: 0 }
-        }
+    let mut state = match prepare(font, &font.features, master, cx.include_dir.as_deref(), &values) {
+        Err(FeatureError::Code(diagnostics)) => FeatureState { revision, master: master.to_string(), diagnostics, ..FeatureState::default() },
         Err(e @ (FeatureError::NotYetImplemented(_) | FeatureError::Unsupported(_))) => return Err(feature_error(p, e)),
-        Err(other) => FeatureState {
-            revision,
-            master: master.to_string(),
-            preview: None,
-            features: Vec::new(),
-            diagnostics: vec![request_diagnostic(other.to_string())],
-            source_hash: 0,
-            code_hash: 0,
-        },
+        Err(other) => {
+            FeatureState { revision, master: master.to_string(), diagnostics: vec![request_diagnostic(other.to_string())], ..FeatureState::default() }
+        }
         Ok(Prepared { map, files, hash, code_hash, includes, keyed: includes_keyed }) => {
             let names = glyph_order(font);
             let key = BuildKey { doc: of.doc, revision, master: of.master, hash, includes, keyed: includes_keyed, force: of.force };
@@ -616,6 +635,7 @@ fn compile_state(
                     let preview = if diagnostics.iter().any(|d| d.diagnostic.is_error()) {
                         None
                     } else if prev.revision == revision {
+                        preview_message.clone_from(&prev.preview_message);
                         prev.preview.clone()
                     } else {
                         match shared_build(font, &preview_options, builds, &key) {
@@ -629,11 +649,10 @@ fn compile_state(
                     Err(d) => FeatureState {
                         revision,
                         master: master.to_string(),
-                        preview: None,
-                        features: Vec::new(),
                         diagnostics: vec![EntryDiagnostic { place: None, diagnostic: d }],
                         source_hash: hash,
                         code_hash,
+                        ..FeatureState::default()
                     },
                     Ok(order) => {
                         let built = shared_build(font, &preview_options, builds, &key);
@@ -654,13 +673,24 @@ fn compile_state(
                                 (preview, features, diagnostics)
                             }
                         };
-                        FeatureState { revision, master: master.to_string(), preview, features, diagnostics, source_hash: hash, code_hash }
+                        FeatureState {
+                            revision,
+                            master: master.to_string(),
+                            preview,
+                            features,
+                            diagnostics,
+                            preview_message: None,
+                            source_hash: hash,
+                            code_hash,
+                        }
                     }
                 },
             }
         }
     };
-    Ok(AheadCompile { doc: of.doc, revision, state, cached, preview_message })
+    state.preview_message = preview_message;
+    let targets = of.targets.then(|| Arc::new(check_targets(font, &font.features, cx, all_targets(font))));
+    Ok(AheadCompile { doc: of.doc, revision, state, cached, targets })
 }
 
 pub(super) fn counts(state: &FeatureState) -> (usize, usize) {
@@ -886,20 +916,45 @@ fn list_errors(s: &mut Session, raw: &Value) -> Result<Value> {
     let font = s.font()?;
     let entry = entry_param(&p, &font.features, false)?;
     let Some(state) = s.feature_state() else {
-        return Ok(json!({ "compiled": false, "current": false, "errors": 0, "warnings": 0, "diagnostics": [] }));
+        return Ok(json!({ "compiled": false, "current": false, "errors": 0, "warnings": 0, "diagnostics": [], "targetDiagnostics": [] }));
     };
     let current = state.is_current(s, s.doc()?);
     let fixes = fix_labels(font, &state, current);
-    let diagnostics = diagnostics_json(&font.features, &state, entry, &fixes);
+    let mut diagnostics = diagnostics_json(&font.features, &state, entry, &fixes);
     let (errors, warnings) = counts(&state);
-    Ok(json!({
+    let check = s.target_check();
+    let mut beyond = Vec::new();
+    if let Some(check) = &check {
+        for value in &mut diagnostics {
+            let id = value.get("id").and_then(Value::as_u64).and_then(|id| usize::try_from(id).ok());
+            let limited = id.and_then(|id| state.diagnostics.get(id)).and_then(|d| check.limited_to(d));
+            if let (Some(names), Some(object)) = (limited, value.as_object_mut()) {
+                object.insert("targets".into(), json!(names));
+            }
+        }
+        // A compile the font has moved on from knows nothing of the code as it is.
+        let known: &[EntryDiagnostic] = if current { &state.diagnostics } else { &[] };
+        let in_entry = |d: &&TargetDiagnostic| entry.is_none() || d.found.place.as_ref().map(|p| p.entry) == entry;
+        beyond = targets_json(&font.features, check, check.beyond(known).filter(in_entry));
+    }
+    let mut out = json!({
         "compiled": true,
         "current": current,
         "master": state.master,
         "errors": errors,
         "warnings": warnings,
         "diagnostics": diagnostics,
-    }))
+        "targetDiagnostics": beyond,
+    });
+    if let Some(object) = out.as_object_mut() {
+        if let Some(message) = &state.preview_message {
+            object.insert("previewMessage".into(), json!(message));
+        }
+        if let Some(check) = &check {
+            object.insert("targets".into(), names_json(check));
+        }
+    }
+    Ok(out)
 }
 
 /// One diagnostic as data, with its position and fixes.
@@ -933,8 +988,23 @@ fn jump_to_error(s: &mut Session, raw: &Value) -> Result<Value> {
             .iter()
             .position(|d| in_entry(d) && d.diagnostic.is_error())
             .or_else(|| state.diagnostics.iter().position(in_entry))
-            .ok_or_else(|| p.bad(format!("the last compile found nothing in this {}", kind_name(entry.kind))))?,
+            .unwrap_or(usize::MAX),
     };
+    let base_error = state.diagnostics.get(id).is_some_and(|d| d.diagnostic.is_error());
+    if p.get("error").is_none() && !base_error {
+        // An error only some other target has comes before a warning of this one.
+        let check = s.target_check();
+        let found = check.as_deref().and_then(|check| {
+            let mine = || check.found.iter().filter(|f| in_entry(&f.found));
+            let found = mine().find(|f| f.found.diagnostic.is_error()).or_else(|| mine().next().filter(|_| id == usize::MAX))?;
+            targets_json(&font.features, check, std::iter::once(found)).pop()
+        });
+        match found {
+            Some(found) => return Ok(found),
+            None if id == usize::MAX => return Err(p.bad(format!("the last compile found nothing in this {}", kind_name(entry.kind)))),
+            None => {}
+        }
+    }
     Ok(one_json(font, &state, id, current))
 }
 

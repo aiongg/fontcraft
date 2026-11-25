@@ -315,6 +315,24 @@ fn phantoms(advance: f64) -> [(f64, f64); gvar::PHANTOM_POINTS] {
     [(0.0, 0.0), (ot_round(advance), 0.0), (0.0, 0.0), (0.0, 0.0)]
 }
 
+/// The origin master's id, and the axes and masters feature code is compiled with, in the variable font of the whole
+/// designspace: for checking the code on its own. Refused where [`compile_variable`] refuses the designspace.
+pub fn feature_layout(font: &Font) -> Result<(String, VarLayout), CompileError> {
+    let designspace = fontcraft_interp::Designspace::new(font)?;
+    if !designspace.axes().iter().any(|a| a.external.minimum < a.external.maximum) || designspace.masters().len() < 2 {
+        return Err(CompileError::Table { table: "fvar", message: "a variable font needs two masters and an axis with a range".into() });
+    }
+    designspace.check_variable_origin()?;
+    let origin = designspace.origin().cloned().ok_or(CompileError::NotYetImplemented("a designspace without an origin"))?;
+    let axes: Vec<Tag> = VarAxes::from_designspace(&designspace)?.axes.into_iter().map(|a| a.tag).collect();
+    let mut masters = vec![VarMaster { id: origin.id.clone(), location: vec![0.0; axes.len()] }];
+    for m in designspace.masters().iter().filter(|m| m.id != origin.id) {
+        masters.push(VarMaster { id: m.id.clone(), location: designspace.to_normalized(&m.location)?.0 });
+    }
+    let layout = VarLayout::new(axes, masters).map_err(|e| CompileError::Table { table: "GPOS", message: e.to_string() })?;
+    Ok((origin.id, layout))
+}
+
 /// Compiles the variable font of `setting` (an index into `Font::instances`; `None` for the
 /// whole designspace). Refuses incompatible glyphs, a designspace without a usable origin, and
 /// everything the static compile refuses.

@@ -2565,7 +2565,7 @@ milestone = "M8"
 summary = "The Features menu lists compiled features only. A newly written feature appears after the feature code has been recompiled in Font Info > Features."
 ref = "Edit View › Previewing & Testing › Previewing OpenType Features"
 status = "handbook"
-notes = "Documented, not yet observed. The feature list is the one of the document's last `font.features.compile` (its feature state), not of the current code."
+notes = "Documented, not yet observed. The feature list is the one of the document's last `font.features.compile` (its feature state), not of the current code. While the code changed since that compile the menu says so over its features, and the Features tab says so under Compile (M8.51). In the window every change of the entries compiles in the background, so the note shows until that compile lands."
 
 [[behavior]]
 id = "features.previewScope"

@@ -31,6 +31,8 @@ craft::ui::words! {
         localized: "fontcraftFeatures.localized" = "Localized Forms";
         /// Shown at the top while the document has no feature compile.
         compile_first: "fontcraftFeatures.compileFirst" = "Compile the features in Font Info to list them here.";
+        /// Over the features of a compile the font has moved on from.
+        compile_again: "fontcraftFeatures.compileAgain" = "Changed since the last compile";
         /// Why a script and language entry is off.
         localized_off: "fontcraftFeatures.localizedOff" = "Turn Localized Forms on first";
     }
@@ -71,6 +73,8 @@ fn entries(model: &FeaturesModel, words: &FeaturesWords) -> Vec<Entry<Pick>> {
     let mut out = Vec::new();
     if !model.compiled {
         out.push(Entry::heading(words.compile_first.clone()));
+    } else if !model.current {
+        out.push(Entry::heading(words.compile_again.clone()));
     }
     out.push(Entry::new(Pick::Clear, words.clear.clone()));
     for (tag, _) in &model.features {

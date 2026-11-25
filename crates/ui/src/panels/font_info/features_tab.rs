@@ -85,6 +85,8 @@ craft::ui::words! {
         update: "fontcraftFeatures.update" = "Update";
         update_tip: "fontcraftFeatures.updateTip" = "Regenerate every automatic prefix, class and feature, and add the ones the glyph names call for";
         compile: "fontcraftFeatures.compile" = "Compile";
+        changed_since: "fontcraftFeatures.changedSince" = "Changed since the last compile";
+        more_problems: "fontcraftFeatures.moreProblems" = "more problems outside the entries";
         compile_tip: "fontcraftFeatures.compileTip" = "Compile the feature code to preview it in Edit View";
         empty: "fontcraftFeatures.empty" = "Add a prefix, class or feature with a plus button, or press Update.";
         automatic: "fontcraftFeatures.automatic" = "Generate Feature Automatically";
@@ -226,6 +228,7 @@ pub fn view(ui: &mut Ui, model: &FeaturesModel, sent: &mut Vec<Msg>) {
         Stack::new().id_salt("fontcraftFeatures.entry").scroll(Scroll::vertical()).fill().show_at(ui, pane, |ui, _| match &model.entry {
             Some(entry) => entry_pane(ui, model, entry, pane.height(), &words, &mut entry_sent),
             None => {
+                unplaced(ui, model, &words);
                 Text::new(words.empty.clone()).shade(Shade::Muted).show(ui);
             }
         });
@@ -454,6 +457,23 @@ fn bottom_buttons(ui: &mut Ui, model: &FeaturesModel, words: &FeaturesWords, sen
             sent.push(Msg::Shell(CommandRef::new(COMPILE)));
         }
     });
+    if model.stale && !model.compiling {
+        Text::new(words.changed_since.clone()).role(TypeRole::Caption).shade(Shade::Muted).show(ui);
+    }
+}
+
+/// Most problems outside the entries listed over the code.
+const MAX_UNPLACED: usize = 5;
+
+/// What the last compile found outside the entries, each with its targets, over the code.
+fn unplaced(ui: &mut Ui, model: &FeaturesModel, words: &FeaturesWords) {
+    for d in model.unplaced.iter().take(MAX_UNPLACED) {
+        Text::new(d.message.clone()).tone(if d.error { Tone::Bad } else { Tone::Warn }).show(ui);
+    }
+    let more = model.unplaced.len().saturating_sub(MAX_UNPLACED);
+    if more > 0 {
+        Text::new(format!("{more} {}", words.more_problems.as_str())).shade(Shade::Muted).show(ui);
+    }
 }
 
 /// What the entry pane keeps between passes: the height of what stands under the code, and the notes field's height when
@@ -465,7 +485,7 @@ struct PaneMemory {
 }
 
 /// The shown entry in a pane `height` points tall: its title and Spec button, the automatic check box, the stylistic set
-/// names, the code with its diagnostics in the height the rest leaves, the notes and the snippets menu.
+/// names, what the compile found outside the entries, the code with its diagnostics in the height the rest leaves, the notes and the snippets menu.
 fn entry_pane(ui: &mut Ui, model: &FeaturesModel, entry: &EntryPane, height: f32, words: &FeaturesWords, sent: &mut Vec<Msg>) {
     let key = &entry.key;
     let top = ui.cursor().min.y;
@@ -492,6 +512,7 @@ fn entry_pane(ui: &mut Ui, model: &FeaturesModel, entry: &EntryPane, height: f32
     if entry.stylistic_set {
         label_rows(ui, entry, words, sent);
     }
+    unplaced(ui, model, words);
     let gap = Env::of(ui).tokens.space.gap.row;
     let under = if memory.under > 0.0 { memory.under } else { (NOTES_LINES + 4.0) * line };
     let code = code_editor::view(ui, entry, code_editor::Room { top, height: height - gap, under });

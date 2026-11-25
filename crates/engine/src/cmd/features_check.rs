@@ -8,6 +8,8 @@
 //! [`check_font`] runs on a font and a [`CheckContext`] without the session, so the Features tab runs it on a worker
 //! thread with the font of the revision the draft was typed against.
 //!
+//! With `targets` the draft is checked for each build named (`super::features_targets`).
+//!
 //! [`compile_instance`] answers `font.features.compile` with `instance` (M8.31) the same way: the font's code with the
 //! instance's Add, Replace and Remove parameters applied, as export applies them, compiled on its own and stored
 //! nowhere, each diagnostic in code a parameter added or replaced naming that parameter.
@@ -32,6 +34,7 @@ use serde_json::{Value, json};
 use super::features_compile::{
     Prepared, counts, diagnostics_json, entry_param, feature_error, glyph_order, group, group_mut, master_id, prepare, request_diagnostic,
 };
+use super::features_targets::{check_targets, count, names_json, targets_json, targets_param};
 use super::*;
 use crate::feature_state::FeatureState;
 use crate::params::Params;
@@ -46,7 +49,7 @@ pub fn specs() -> Vec<CommandSpec> {
         "Check Feature Code",
         [],
         None,
-        "{kind: \"prefix\"|\"class\"|\"feature\", name: string, index?: position in the group, code: string (the draft that stands in for the entry's stored code; at most 1 MB), master?: id|name (default: the first master; the Features tab passes the master of the active Edit View tab)} compiles the font's feature code with the entry's code replaced by the draft, without generated kerning or marks, and changes nothing → {master, ok: bool (no errors), errors: n, warnings: n, diagnostics: [{id, severity, message, entry: {kind, name, index}|null, range: [start, end]|null (bytes of the draft for the checked entry, of the stored code for the others), line, column, fixes: [] }]}",
+        "{kind: \"prefix\"|\"class\"|\"feature\", name: string, index?: position in the group, code: string (the draft that stands in for the entry's stored code; at most 1 MB), master?: id|name (default: the first master; the Features tab passes the master of the active Edit View tab), targets?: \"all\"|\"variable\"|[{master: id|name}|{instance: index|id|name}|\"variable\"] (check the code of these builds in place of the master's; each diagnostic then has `targets`, the names of the builds it occurs in, in place of `id` and `fixes`, and the answer has `targets`, the names of all of them, in place of `master`)} compiles the font's feature code with the entry's code replaced by the draft, without generated kerning or marks, and changes nothing → {master, ok: bool (no errors), errors: n, warnings: n, diagnostics: [{id, severity, message, entry: {kind, name, index}|null, range: [start, end]|null (bytes of the draft for the checked entry, of the stored code for the others), line, column, fixes: [] }]}",
         has_doc,
         check
     )]
@@ -85,6 +88,18 @@ pub fn check_font(font: &Font, cx: &CheckContext, raw: &Value) -> Result<Value> 
         return Err(p.bad("the entry is gone"));
     };
     snippet.code = code.to_string();
+    if let Some((targets, _)) = targets_param(&p, font)? {
+        let check = check_targets(font, &features, cx, targets);
+        let (errors, warnings) = count(check.found.iter());
+        return Ok(json!({
+            "targets": names_json(&check),
+            "skippedTargets": check.skipped,
+            "ok": errors == 0,
+            "errors": errors,
+            "warnings": warnings,
+            "diagnostics": targets_json(&features, &check, check.found.iter()),
+        }));
+    }
     let diagnostics: Vec<EntryDiagnostic> = match prepare(font, &features, &master, cx.include_dir.as_deref(), &values) {
         Err(FeatureError::Code(found)) => found,
         Err(e @ (FeatureError::NotYetImplemented(_) | FeatureError::Unsupported(_))) => return Err(feature_error(&p, e)),
@@ -97,7 +112,7 @@ pub fn check_font(font: &Font, cx: &CheckContext, raw: &Value) -> Result<Value> 
             },
         },
     };
-    let state = FeatureState { revision: 0, master: master.clone(), preview: None, features: Vec::new(), diagnostics, source_hash: 0, code_hash: 0 };
+    let state = FeatureState { master: master.clone(), diagnostics, ..FeatureState::default() };
     let (errors, warnings) = counts(&state);
     Ok(json!({
         "master": master,
@@ -190,7 +205,7 @@ pub fn compile_instance(font: &Font, cx: &CheckContext, raw: &Value) -> Result<V
         }
     }
     let diagnostics = compile_entries(font, &features, &master, cx, &values, p)?;
-    let state = FeatureState { revision: 0, master: master.clone(), preview: None, features: Vec::new(), diagnostics, source_hash: 0, code_hash: 0 };
+    let state = FeatureState { master: master.clone(), diagnostics, ..FeatureState::default() };
     let (errors, warnings) = counts(&state);
     let mut list = diagnostics_json(&features, &state, None, &BTreeMap::new());
     for d in &mut list {

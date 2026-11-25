@@ -168,6 +168,10 @@ fn a_draft_is_checked_after_the_pause_and_stored_code_compiles_in_the_background
     app.sent.push(Msg::run("font.features.addFeature", json!({ "tag": "liga", "automatic": false, "code": "sub a by b;" })));
     app.sent.push(shell("font.info", json!({ "tab": "features" })));
     app.drain();
+    for now in [1.0, 1.6, 1.7] {
+        step(&mut app, now);
+    }
+    let compiled = app.session.feature_state().expect("the added feature is compiled");
     let font = Arc::clone(&app.session.doc().expect("a document").font);
     let draft = FeatureDraft { key: key(EntryKind::Feature, "liga", 0), code: "sub a by b;\nsub c by qq;".into() };
     app.sent.push(Msg::View(ViewMsg::FeatureDraft(Some(draft.clone()))));
@@ -182,7 +186,7 @@ fn a_draft_is_checked_after_the_pause_and_stored_code_compiles_in_the_background
     assert_eq!(code, draft.code);
     assert_eq!(found.iter().map(|d| (d.error, d.line, d.range)).collect::<Vec<_>>(), vec![(true, 2, Some((21, 23)))]);
     assert!(Arc::ptr_eq(&font, &app.session.doc().expect("a document").font), "the check changes nothing");
-    assert!(app.session.feature_state().is_none(), "nor compiles");
+    assert!(app.session.feature_state().is_some_and(|state| Arc::ptr_eq(&state, &compiled)), "nor compiles");
 
     app.sent.push(Msg::run("font.features.setCode", json!({ "kind": "feature", "name": "liga", "code": draft.code })));
     app.drain();
@@ -1103,4 +1107,77 @@ fn a_frame_with_2000_entries_takes_under_16_ms() {
     if !cfg!(debug_assertions) {
         assert!(times[2] < std::time::Duration::from_millis(16), "{:?}", times[2]);
     }
+}
+
+/// Every command that changes feature entries, and an undo, starts the background compile once the document stands still;
+/// the notes do not.
+#[test]
+fn each_change_of_the_entries_starts_a_compile() {
+    use crate::shell::feature_work::step;
+    use fontcraft_engine::feature_state::SessionFeaturesExt as _;
+    let host = Host::builder(APP).jobs(Arc::new(craft::host::InlineJobs)).build();
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(host));
+    let liga = || json!({ "kind": "feature", "name": "liga", "index": 0 });
+    let changes = [
+        Msg::run("font.features.addFeature", json!({ "tag": "liga", "automatic": false, "code": "sub a by b;" })),
+        Msg::run("font.features.addClass", json!({ "name": "Some", "code": "a b" })),
+        Msg::run("font.features.setCode", json!({ "kind": "feature", "name": "liga", "code": "sub a by c;" })),
+        Msg::run("font.features.setDisabled", json!({ "entries": [liga()], "disabled": true })),
+        Msg::run("edit.undo", json!({})),
+        Msg::run("font.features.remove", json!({ "entries": [liga()] })),
+    ];
+    let mut now = 10.0;
+    step(&mut app, now);
+    for change in changes {
+        app.sent.push(change.clone());
+        app.drain();
+        app.session.active().map(|d| d.id).into_iter().for_each(|id| app.session.clear_feature_state(id));
+        for pause in [0.0, 0.6, 0.7] {
+            step(&mut app, now + pause);
+        }
+        now += 10.0;
+        assert!(app.session.feature_state().is_some(), "{change:?} starts a compile");
+        assert!(app.session.target_check().is_some(), "{change:?} checks every target");
+    }
+    app.sent.push(Msg::run("font.features.addPrefix", json!({})));
+    app.drain();
+    for pause in [0.0, 0.6, 0.7] {
+        step(&mut app, now + pause);
+    }
+    let before = app.session.feature_state().expect("compiled");
+    app.sent.push(Msg::run("font.features.setNotes", json!({ "kind": "class", "name": "Some", "notes": "x" })));
+    app.drain();
+    now += 10.0;
+    for pause in [0.0, 0.6, 0.7] {
+        step(&mut app, now + pause);
+    }
+    assert!(app.session.feature_state().is_some_and(|state| Arc::ptr_eq(&state, &before)));
+}
+
+/// What a compile found outside the entries shows over the code with its targets, the sidebar says that the code changed
+/// since, and Compile and Update report in the status line.
+#[test]
+fn problems_outside_the_entries_show_and_compile_and_update_give_a_notice() {
+    let mut model = features_model();
+    model.features.stale = true;
+    model.features.unplaced =
+        vec![DiagnosticModel { id: u64::MAX, error: true, message: "mark lookup is broken (variable font)".into(), ..DiagnosticModel::default() }];
+    let (mut fixture, _) = panel(model);
+    let painted: Vec<String> = fixture
+        .frame_shapes()
+        .iter()
+        .filter_map(|shape| if let egui::Shape::Text(t) = shape { Some(t.galley.job.text.clone()) } else { None })
+        .collect();
+    for text in ["mark lookup is broken (variable font)", "Changed since the last compile"] {
+        assert!(painted.iter().any(|p| p == text), "{text}: {painted:?}");
+    }
+
+    let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
+    app.sent.push(Msg::run("font.features.addFeature", json!({ "tag": "liga", "automatic": false, "code": "sub a by nonesuch;" })));
+    app.sent.push(Msg::run("font.features.compile", json!({})));
+    app.drain();
+    assert_eq!(app.status, "Compile: 1 error");
+    app.sent.push(Msg::run("font.features.update", json!({})));
+    app.drain();
+    assert!(app.status.starts_with("Update: "), "{}", app.status);
 }

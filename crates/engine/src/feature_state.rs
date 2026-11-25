@@ -27,11 +27,12 @@ use fontcraft_fea::FeatureSummary;
 use fontcraft_features::EntryDiagnostic;
 use fontcraft_model::Font;
 
+use crate::cmd::features_targets::{TargetCheck, targets_key};
 use crate::cmd::registry::SlotInit;
 use crate::{DocState, Session};
 
 /// The result of one `font.features.compile`.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct FeatureState {
     /// The document revision ([`DocState::revision`]) the compile read.
     pub revision: u64,
@@ -44,6 +45,8 @@ pub struct FeatureState {
     /// Errors and warnings, mapped to the entries. A diagnostic's index here is its id in
     /// `font.features.listErrors` and `applyFix`.
     pub diagnostics: Vec<EntryDiagnostic>,
+    /// Why the preview font could not be built, when the code itself compiles.
+    pub preview_message: Option<String>,
     /// The hash of the compiler's input: the assembled files, the glyph order with the code
     /// points, the master and the include folder.
     pub source_hash: u64,
@@ -141,15 +144,15 @@ pub struct AheadCompile {
     pub state: FeatureState,
     /// The compile reused the document's last one.
     pub cached: bool,
-    /// Why the preview font could not be built, when the code itself compiles.
-    pub preview_message: Option<String>,
+    /// The check of every target, when the compile was asked to make it.
+    pub targets: Option<Arc<TargetCheck>>,
 }
 
 /// Compiles `font`, document `doc` at `revision`, for `master` as `font.features.compile` does, on any thread and
 /// without the session: the Features tab runs it on a worker and hands the result to
 /// [`SessionFeaturesExt::keep_ahead_compile`]. `cx` is `crate::cmd::features_check::check_context`'s, `previous` the
-/// document's last compile, `builds` the session's preview builds, which Text Preview reads too. Nothing is changed
-/// besides `builds`. `None` when the compile fails; the command then says why.
+/// document's last compile, `builds` the session's preview builds, which Text Preview reads too. `targets` also checks
+/// the code for every target, as the command's `targets: "all"` does. Nothing is changed besides `builds`. `None` when the compile fails; the command then says why.
 pub fn compile_ahead(
     font: &Font,
     doc: u64,
@@ -158,14 +161,29 @@ pub fn compile_ahead(
     cx: &crate::cmd::features_check::CheckContext,
     previous: Option<Arc<FeatureState>>,
     builds: &PreviewBuilds,
+    targets: bool,
 ) -> Option<AheadCompile> {
-    crate::cmd::features_compile::compile_ahead(font, doc, revision, master, cx, previous, builds)
+    crate::cmd::features_compile::compile_ahead(font, doc, revision, master, cx, previous, builds, targets)
+}
+
+/// The last check of a document's code for every target.
+#[derive(Clone, Debug)]
+struct KeptTargets {
+    /// The document revision the check read.
+    revision: u64,
+    /// `targets_key` of the font it read.
+    key: Option<u64>,
+    check: Arc<TargetCheck>,
 }
 
 /// The features area's session slot.
 #[derive(Default)]
 struct FeaturesSlot {
     states: HashMap<u64, Arc<FeatureState>>,
+    /// The last check of every target of each document.
+    targets: HashMap<u64, KeptTargets>,
+    /// Whether a document's check still describes it, by document id: for (revision checked, revision asked about).
+    target_answers: Arc<Mutex<HashMap<u64, ((u64, u64), bool)>>>,
     /// The last compile done ahead of `font.features.compile`.
     ahead: Option<Arc<AheadCompile>>,
     preview_builds: PreviewBuilds,
@@ -202,6 +220,13 @@ pub trait SessionFeaturesExt {
 
     /// Forgets the document's last compile.
     fn clear_feature_state(&mut self, doc_id: u64);
+
+    /// Keeps `check` as the active document's check of every target, made on its font as it is.
+    fn keep_target_check(&mut self, check: Arc<TargetCheck>);
+
+    /// The active document's last check of every target, while it describes the document: it read this revision, or the
+    /// code reads no tokens and nothing else it depends on changed.
+    fn target_check(&self) -> Option<Arc<TargetCheck>>;
 }
 
 impl SessionFeaturesExt for Session {
@@ -241,7 +266,44 @@ impl SessionFeaturesExt for Session {
     }
 
     fn clear_feature_state(&mut self, doc_id: u64) {
-        self.slot_mut::<FeaturesSlot>().states.remove(&doc_id);
+        let slot = self.slot_mut::<FeaturesSlot>();
+        slot.states.remove(&doc_id);
+        slot.targets.remove(&doc_id);
+    }
+
+    fn keep_target_check(&mut self, check: Arc<TargetCheck>) {
+        let Some(doc) = self.active() else { return };
+        let (id, kept) = (doc.id, KeptTargets { revision: doc.revision, key: targets_key(&doc.font), check });
+        let open: Vec<u64> = self.documents().iter().map(|d| d.id).collect();
+        let slot = self.slot_mut::<FeaturesSlot>();
+        slot.targets.retain(|id, _| open.contains(id));
+        if let Ok(mut answers) = slot.target_answers.lock() {
+            answers.retain(|id, _| open.contains(id));
+        }
+        slot.targets.insert(id, kept);
+    }
+
+    fn target_check(&self) -> Option<Arc<TargetCheck>> {
+        let doc = self.active()?;
+        let slot = self.slot::<FeaturesSlot>()?;
+        let kept = slot.targets.get(&doc.id)?;
+        if kept.revision == doc.revision {
+            return Some(Arc::clone(&kept.check));
+        }
+        let wanted = kept.key?;
+        let asked = (kept.revision, doc.revision);
+        let known = slot.target_answers.lock().ok().and_then(|a| a.get(&doc.id).filter(|(k, _)| *k == asked).map(|(_, same)| *same));
+        let same = match known {
+            Some(same) => same,
+            None => {
+                let same = targets_key(&doc.font) == Some(wanted);
+                if let Ok(mut answers) = slot.target_answers.lock() {
+                    answers.insert(doc.id, (asked, same));
+                }
+                same
+            }
+        };
+        same.then(|| Arc::clone(&kept.check))
     }
 }
 
@@ -262,6 +324,7 @@ mod tests {
                 preview: None,
                 features: Vec::new(),
                 diagnostics: Vec::new(),
+                preview_message: None,
                 source_hash: 0,
                 code_hash: 0,
             },
