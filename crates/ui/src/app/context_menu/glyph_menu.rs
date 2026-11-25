@@ -6,7 +6,8 @@
 //! More Tags… when the font has more tags than [`MAX_MENU_TAGS`], and the Copy Glyph Names submenu, whose text goes to
 //! the system clipboard (`app::clipboard`). When the font defines statuses, the Status submenu lists them with their
 //! colours, a check on the status every glyph is in and a dash on one some are in, and ends with No Status
-//! (`glyph.setStatus`).
+//! (`glyph.setStatus`). The Hinting submenu runs the hint commands on glyphs ([`HINTING`]) on the layer of
+//! [`crate::canvas::hinting::glyphs_layer`].
 
 use std::collections::{BTreeSet, HashMap};
 
@@ -16,6 +17,7 @@ use fontcraft_engine::model::Font;
 use serde_json::{Map, Value, json};
 
 use crate::app::{FontCraftApp, Msg};
+use crate::canvas::hinting::glyphs_layer;
 use crate::shell::masters;
 
 /// Most tags the Tags submenu lists; past this it ends with More Tags….
@@ -32,6 +34,9 @@ pub const COPY_FORMATS: [(&str, &str); 6] = [
     ("pythonList", "Python List"),
     ("unicodes", "Unicodes"),
 ];
+
+/// The Hinting submenu's commands, in order.
+pub const HINTING: [&str; 4] = ["hint.tt.autohintGlyph", "hint.tt.removeHints", "hint.ps.autohintGlyph", "hint.ps.clearGlyphHints"];
 
 /// How many of the menu's glyphs carry a tag, or export: all, some or none.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -72,6 +77,8 @@ pub struct GlyphMenu {
     pub alt: bool,
     /// The font's statuses, in order, with how many of `glyphs` are in each. Empty: no Status submenu.
     pub statuses: Vec<StatusItem>,
+    /// The main master, where the Hinting submenu's commands hint several glyphs.
+    pub main_master: Option<String>,
 }
 
 /// A status of the Status submenu.
@@ -101,6 +108,8 @@ pub enum GlyphAction {
     CopyNames(&'static str),
     /// A status of the Status submenu, by its code, or No Status (`None`).
     Status(Option<i64>),
+    /// A command of the Hinting submenu.
+    Hinting(&'static str),
 }
 
 /// The glyph menu for `glyphs`, opening at `screen`. Names the font lacks are left out.
@@ -125,6 +134,7 @@ pub fn open(app: &FontCraftApp, glyphs: &[String], screen: [f32; 2]) -> GlyphMen
         screen,
         layer: menu_layer(app, font, &glyphs),
         statuses: status_items(font, &glyphs),
+        main_master: glyphs_layer(font, "hint.tt.autohintGlyph"),
         glyphs,
         alt: false,
     }
@@ -186,6 +196,14 @@ pub fn steps(menu: &GlyphMenu, action: &GlyphAction) -> Vec<Msg> {
         GlyphAction::Status(code) => {
             let status = code.map_or(Value::Null, |c| json!(c));
             vec![Msg::run("glyph.setStatus", json!({"glyphs": menu.glyphs, "status": status}))]
+        }
+        GlyphAction::Hinting(id) => {
+            let mut m = Map::new();
+            m.insert("glyphs".into(), json!(menu.glyphs));
+            if let Some(layer) = menu.main_master.as_ref().filter(|_| *id != "hint.ps.clearGlyphHints") {
+                m.insert("layer".into(), json!(layer));
+            }
+            vec![Msg::run(*id, Value::Object(m))]
         }
     }
 }

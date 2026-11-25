@@ -117,6 +117,31 @@ fn get_ps_zones_and_stems_replace_the_list_and_instructions_follow_by_name() {
     refused(&mut s, "hint.tt.getPsZones", json!({"master": "nope"}));
 }
 
+/// `family: true` edits the font's TTFZones: a list of its own, without deltas and filters, which leaves the masters'
+/// zones and the instructions alone.
+#[test]
+fn family_zones_are_edited_on_the_font() {
+    let (mut s, _) = session(&[snap(1, 0)]);
+    let masters = settings(&s, "m01").tt_zones;
+    let out = run(&mut s, "hint.tt.getPsZones", json!({"family": true}));
+    assert_eq!(names(&out, "zones"), masters.iter().map(|z| z.name.clone()).collect::<Vec<_>>());
+    assert_eq!((&out["family"], out.get("master")), (&json!(true), None));
+    run(&mut s, "hint.tt.setZone", json!({"family": true, "zone": "xHeight", "name": "x", "position": 510, "size": 14}));
+    run(&mut s, "hint.tt.setZone", json!({"family": true, "zone": "capHeight", "align": "x"}));
+    let out = run(&mut s, "hint.tt.addZone", json!({"family": true, "position": 600, "size": 12}));
+    assert_eq!(names(&out, "zones").last().map(String::as_str), Some("zone 6"));
+    run(&mut s, "hint.tt.removeZone", json!({"family": true, "zone": "x"}));
+    let family = fontcraft_hinting::settings::family_tt_zones(font(&s)).unwrap();
+    assert_eq!(family.len(), masters.len());
+    assert!(family.iter().all(|z| z.align.is_none() && z.name != "x"), "{family:?}");
+    assert_eq!(settings(&s, "m01").tt_zones, masters, "the masters keep their zones");
+    assert_eq!(tt(&s)[0], TtKind::Snap { zone: ZoneRef::Index(1) });
+
+    refused(&mut s, "hint.tt.setZone", json!({"family": true, "zone": "capHeight", "filter": "category == \"Letter\""}));
+    refused(&mut s, "hint.tt.setZone", json!({"family": true, "master": "m01", "zone": "capHeight", "size": 3}));
+    refused(&mut s, "hint.tt.removeZone", json!({"family": true, "zone": "x"}));
+}
+
 #[test]
 fn add_rename_and_remove_keep_names_unique_and_follow_every_master_and_instruction() {
     let (mut s, second) =

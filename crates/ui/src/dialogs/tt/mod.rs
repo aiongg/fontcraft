@@ -23,7 +23,7 @@ use serde_json::Value;
 
 use self::debugger::{DebuggerDialog, DebuggerState};
 use self::instructions::{InstructionsDialog, Program, Request};
-use self::zones::{DefinitionsDialog, Kind, List};
+use self::zones::{DefinitionsDialog, Kind, List, Place};
 use crate::app::FontCraftApp;
 use crate::shell::commands::{Module, UiCommand};
 
@@ -44,8 +44,8 @@ pub struct TtState {
 pub enum Ask {
     Instructions(Request),
     CloseInstructions,
-    /// The editor of a master's TT zones or TT stems; the master's id.
-    Definitions(Kind, String),
+    /// The editor of a master's TT zones or TT stems, or of the family TT zones.
+    Definitions(Kind, Place),
 }
 
 /// The shell commands of the hinting dialogs.
@@ -71,7 +71,7 @@ const COMMANDS: &[UiCommand] = &[
         label: "Edit TT Zones…",
         menu: &[],
         shortcut: None,
-        params: "{master?: id, name or index (default the main master)} opens the TTFZones editor on the master's TT zones",
+        params: "{master?: id, name or index (default the main master), family?: bool (instead of `master`: the font's TTFZones, the family zones)} opens the TTFZones editor on the master's TT zones",
     },
     UiCommand {
         id: "window.ttfStems",
@@ -113,6 +113,13 @@ fn shell(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
         "window.ttfZones" | "window.ttfStems" => {
             let kind = if command.id == "window.ttfZones" { Kind::Zones } else { Kind::Stems };
             let font = app.session.font().map_err(|e| e.to_string())?;
+            if params.get("family").and_then(Value::as_bool) == Some(true) && kind == Kind::Zones {
+                if params.get("master").is_some_and(|m| !m.is_null()) {
+                    return Err("give `master` or `family`, not both".into());
+                }
+                app.tt.asks.push(Ask::Definitions(kind, Place::Family));
+                return Ok(());
+            }
             let master = match params.get("master") {
                 None | Some(Value::Null) => main_master(font).to_string(),
                 Some(Value::String(master)) => match font.master(master) {
@@ -126,7 +133,7 @@ fn shell(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
                     .map(|m| m.id.clone())
                     .ok_or_else(|| format!("no master {index}: give a master id, name or index"))?,
             };
-            app.tt.asks.push(Ask::Definitions(kind, master));
+            app.tt.asks.push(Ask::Definitions(kind, Place::Master(master)));
             Ok(())
         }
         crate::app::models::hinting::SCALE_COMMAND => crate::app::models::hinting::set_scale(&mut app.models.hinting_waterfall, &params),
@@ -154,7 +161,7 @@ pub fn run(host: &mut DialogHost, app: &mut FontCraftApp) {
                     dialog.closing = true;
                 }
             }
-            Ask::Definitions(kind, master) => _ = host.open(DefinitionsDialog::new(kind, master)),
+            Ask::Definitions(kind, place) => _ = host.open(DefinitionsDialog::new(kind, place)),
         }
         app.tt.read_at = None;
     }
@@ -176,7 +183,7 @@ pub fn run(host: &mut DialogHost, app: &mut FontCraftApp) {
     }
     if let Some(dialog) = host.get_mut::<DefinitionsDialog>() {
         if moved {
-            dialog.list = app.session.font().ok().and_then(|font| List::read(font, dialog.kind, &dialog.master).ok());
+            dialog.list = app.session.font().ok().and_then(|font| List::at(font, dialog.kind, &dialog.place).ok());
         }
         app.sent.append(&mut dialog.outbox);
     }
@@ -223,7 +230,10 @@ mod tests {
         app.sent.push(Msg::Shell(CommandRef::with_params("window.ttfStems", json!({"master": "no such master"}))));
         app.drain();
         let master = app.session.font().map(|f| main_master(f).to_string()).unwrap_or_default();
-        assert_eq!(app.tt.asks, vec![Ask::Instructions(Request { target: json!("fpgm"), master: None }), Ask::Definitions(Kind::Zones, master)]);
+        assert_eq!(
+            app.tt.asks,
+            vec![Ask::Instructions(Request { target: json!("fpgm"), master: None }), Ask::Definitions(Kind::Zones, Place::Master(master))]
+        );
         assert!(app.status.contains("window.ttfStems"), "the refused master reaches the status line: {}", app.status);
     }
 
@@ -235,7 +245,7 @@ mod tests {
         app.sent.push(Msg::Shell(CommandRef::with_params("window.ttfStems", json!({"master": 0}))));
         app.sent.push(Msg::Shell(CommandRef::with_params("window.ttfZones", json!({"master": 99}))));
         app.drain();
-        assert_eq!(app.tt.asks, vec![Ask::Definitions(Kind::Stems, first)]);
+        assert_eq!(app.tt.asks, vec![Ask::Definitions(Kind::Stems, Place::Master(first))]);
         assert!(app.status.contains("no master 99"), "{}", app.status);
     }
 

@@ -129,12 +129,13 @@ pub fn specs() -> Vec<CommandSpec> {
         cmd!(
             "hint.ps.clearGlyphHints",
             "Remove PostScript Hints",
-            [],
+            ["Glyph", "PostScript Hinting"],
             None,
             "{glyphs?: [names] (default: every glyph; locked glyphs are then skipped), layers?: [layer id] | \"all\" (default all)} remove every PostScript hint from those layers of the glyphs, so the export autohints them again once no master layer of a glyph has any; a named glyph that is locked is refused → {cleared: [{glyph, layer}], skipped: [glyph]}",
             has_doc,
             clear
-        ),
+        )
+        .targets(&[TargetKind::Glyphs]),
         cmd!(
             query "hint.ps.listHints",
             "List PostScript Hints",

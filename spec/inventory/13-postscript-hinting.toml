@@ -325,7 +325,7 @@ notes = "`hinted: false` renders the same text without hints, for comparison; `f
 [[command]]
 id = "hint.ps.autohintGlyph"
 label = "Autohint"
-menu = []
+menu = ["Glyph", "PostScript Hinting"]
 shortcut = ""
 kind = "engine"
 params = "{glyphs: [names], layer?: id}"
@@ -334,11 +334,11 @@ milestone = "M10"
 summary = "Edit View context-menu item. Runs the autohinter on the current layer and stores its result as editable glyph-level hints, identical to what export would have generated. From then on the glyph counts as manually hinted and is skipped by autohinting at export."
 ref = "PostScript Hinting › Manual hinting"
 status = "handbook"
-guesses = [
+guesses = ["The hint commands on glyphs are also in the Glyph menu and in Font View's glyph menu, where the reference app documents none; its menus would settle it.", 
   "Autohint replaces any hints the layer already has and acts on every glyph selected in Edit View or Font View; the reference app would settle both.",
   "Only the stems are stored (an export rebuilds the hint masks from them; counter masks and flex stay export-only), each edge linked to the layer's first on-curve node at that position, else stored as a number; a reference glyph autohinted from the context menu and read back would show which nodes it links.",
 ]
-notes = "`layer` names a master (default the first); the glyph is hinted as a CFF export of that master hints it, against the zones and stems of the Private dict that export writes. The Edit View canvas menu runs it on the edited glyph in the master of the edited layer (menu_params in crates/tools/src/hint_drag.rs)."
+notes = "`layer` names a master (default the first); the glyph is hinted as a CFF export of that master hints it, against the zones and stems of the Private dict that export writes. The Edit View canvas menu runs it on the edited glyph in the master of the edited layer (menu_params in crates/tools/src/hint_drag.rs). M10.50, crates/ui/src/canvas/hinting (GLYPH_COMMANDS): fired from a menu or a key it acts on the glyphs selected in Font View, in text mode on those of the text selection, both in the main master, else on the edited glyph in the master of the edited layer; with no glyph chosen it says to select one. It sits in the Hinting submenu of Font View's glyph menu and in the Glyph menu. The glyphs it could not hint are named with the reasons in the status line."
 observe = [
   "T1: give n two manual hints and choose Autohint from the context menu; note whether the old hints are replaced or kept. Then select n, m and o and choose Autohint again; note whether only one glyph or all three get hints.",
 ]
@@ -478,7 +478,7 @@ notes = "M10.4: crates/engine/src/cmd/hint_ps.rs. No default shortcut of its own
 [[command]]
 id = "hint.ps.clearGlyphHints"
 label = "Remove PostScript Hints"
-menu = []
+menu = ["Glyph", "PostScript Hinting"]
 shortcut = ""
 kind = "engine"
 params = "{glyphs?: [names], layers?: [layerId] | 'all'}"
@@ -488,7 +488,7 @@ summary = "Removes every PostScript hint from the given layers so that the glyph
 ref = "PostScript Hinting › Manual hinting"
 status = "inferred"
 own = true
-notes = "M10.4: without `glyphs` it acts on every glyph and skips locked ones; a named locked glyph is refused. `layers` defaults to every layer of each glyph, since the export takes hints from any master layer when the main master has none."
+notes = "M10.4: without `glyphs` it acts on every glyph and skips locked ones; a named locked glyph is refused. `layers` defaults to every layer of each glyph, since the export takes hints from any master layer when the main master has none. M10.50: from Font View's selection and the text selection it clears every layer of the glyphs, from the canvas the edited layer."
 
 [[command]]
 id = "hint.ps.listHints"

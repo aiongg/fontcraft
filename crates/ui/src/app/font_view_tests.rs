@@ -120,6 +120,43 @@ fn fired_commands_take_the_font_view_selection() {
     assert!(hidden.params.is_null(), "{}", hidden.params);
 }
 
+/// The hint commands on glyphs act on Font View's selection (on the main master's layers) and on the glyphs selected
+/// in text, else on the edited glyph's layer; with nothing chosen they refuse. The selection is hinted in one undo step.
+#[test]
+fn hint_commands_take_the_selected_glyphs() {
+    use crate::canvas::hinting::GLYPH_COMMANDS;
+    let mut app = app();
+    for id in GLYPH_COMMANDS {
+        let refused = fired_on(&mut app, id);
+        assert!(refused.as_ref().is_err_and(|e| e.ends_with("select a glyph first")), "{id}: {refused:?}");
+    }
+    let main = fontcraft_engine::hinting::settings::main_master(app.session.font().unwrap());
+    shell(&mut app, "fontView.setSelection", json!({"glyphs": ["A", "B"]}));
+    for id in GLYPH_COMMANDS {
+        let fired: serde_json::Value = serde_json::from_str(&fired_on(&mut app, id).unwrap()).unwrap();
+        assert_eq!(fired["glyphs"], json!(["A", "B"]), "{id}");
+        assert_eq!(fired.get("layer").cloned(), (id != "hint.ps.clearGlyphHints").then(|| json!(main)), "{id}");
+    }
+
+    for glyph in ["A", "B"] {
+        app.session.execute("path.addRectangle", &json!({"glyph": glyph, "x": 100, "y": 100, "width": 100, "height": 100})).unwrap();
+    }
+    let before = app.session.font().unwrap().clone();
+    app.sent.clear();
+    app.fire(CommandRef::new("hint.tt.autohintGlyph"));
+    app.drain();
+    assert!(!app.session.font().unwrap().same_as(&before), "{}", app.status);
+    app.session.execute("edit.undo", &json!({})).unwrap();
+    assert!(app.session.font().unwrap().same_as(&before), "one undo step");
+
+    shell(&mut app, "view.editSelectedGlyphs", json!({"glyphs": ["B"]}));
+    shell(&mut app, "fontView.setSelection", json!({"glyphs": []}));
+    for id in GLYPH_COMMANDS {
+        let shown = fired_on(&mut app, id);
+        assert!(shown.as_ref().is_ok_and(|p| p.contains("\"glyphs\":[\"B\"]")), "{id}: {shown:?}");
+    }
+}
+
 /// A new glyph becomes the selection; a removed one leaves it.
 #[test]
 fn a_new_glyph_is_selected_and_a_removed_one_deselected() {

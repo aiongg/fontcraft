@@ -303,8 +303,8 @@ milestone = "M10"
 summary = "Editor that opens from the value field of a master's TTFZones custom parameter in Font Info › Masters. It lists the master's TT zones for editing; the delta and filter buttons are meaningful on the main master only."
 ref = "TrueType Hinting › TrueType Zones"
 status = "handbook"
-notes = "M10.28, crates/ui/src/dialogs/tt/zones.rs: opens from the value field of a master's TTFZones parameter in Font Info › Masters, on the master the tab shows; the font's TTFZones (family zones) keeps the plain value field. Each control runs its hint.tt.* command at once. The delta and globe buttons show on the main master only, drawn pressed when the zone has a delta or a filter; the Delta table's columns are the masters, plus any stored column that names no master. The globe opens the Smart Filter rule editor, and OK stores its rules as a glyph predicate. Documented, not yet observed. M10.41, crates/ui/src/dialogs/tt/wire_tests.rs: the filter sheet's Cancel posts nothing and leaves the font pointer-equal."
-guesses = [
+notes = "M10.28, crates/ui/src/dialogs/tt/zones.rs: opens from the value field of a master's TTFZones parameter in Font Info › Masters, on the master the tab shows. Each control runs its hint.tt.* command at once. The delta and globe buttons show on the main master only, drawn pressed when the zone has a delta or a filter; the Delta table's columns are the masters, plus any stored column that names no master. The globe opens the Smart Filter rule editor, and OK stores its rules as a glyph predicate. Documented, not yet observed. M10.41, crates/ui/src/dialogs/tt/wire_tests.rs: the filter sheet's Cancel posts nothing and leaves the font pointer-equal. X.fix120: the Font tab's TTFZones parameter opens it on the family zones, without delta and filter buttons; under the title it says whether they apply (as many as the main master has zones, and a TTFFamilyZonesThreshold)."
+guesses = ["The editor of the font's TTFZones has no delta and filter buttons and compares its length with the main master's list; the reference app's sheet would settle both.", 
   "Each edit takes effect at once as its own undo step, and Done closes the editor; the reference app's sheet would show whether its edits wait until it closes.",
   "The plus button adds `zone N` at position 0, 16 units per 1000 units per em high, to every master; the reference app would show what a new zone holds.",
   "A row is selected by a click on its number; the reference app would show how its list selects a row.",
@@ -321,13 +321,13 @@ label = "Edit TT Zones…"
 menu = []
 shortcut = ""
 kind = "ui"
-params = "{master?: id | name | index}"
+params = "{master?: id | name | index, family?: bool}"
 area = "hinting-tt"
 milestone = "M10"
 summary = "Opens the TTFZones editor (`dialog.ttfZones`) on a master's TT zones; without a master, on the main master."
 ref = "TrueType Hinting › TrueType Zones"
 status = "inferred"
-notes = "The reference app opens the editor from the value field of the master's TTFZones custom parameter in Font Info › Masters; in `crates/ui` that field's Edit button runs this command with the master's index, and scripts and agents run it with a master id. An unknown master or an index past the last master is refused with a message in the status line."
+notes = "The reference app opens the editor from the value field of the master's TTFZones custom parameter in Font Info › Masters; in `crates/ui` that field's Edit button runs this command with the master's index, and scripts and agents run it with a master id. An unknown master or an index past the last master is refused with a message in the status line. X.fix120: with `family` it opens on the font's TTFZones, the family zones; the Font tab's TTFZones field runs it so."
 guesses = [
   "Our own command so scripts and agents open the TT zones editor on a master, defaulting to the main master; the reference app opens it only from the parameter's value field, so there is nothing to settle.",
 ]
@@ -405,14 +405,14 @@ label = "Get PS zones"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{master: id}"
+params = "{master: id | family: true}"
 area = "hinting-tt"
 milestone = "M10"
 summary = "Actions-menu item of the TTFZones editor: fills the master's TT zone list from its PostScript alignment zones. Whether it replaces or appends to existing TT zones, and how the imported zones are named, is not stated."
 ref = "TrueType Hinting › TrueType Zones"
 status = "handbook"
 notes = "M10.5 (crates/engine/src/cmd/hint_tt_defs.rs): writes the master's TTFZones parameter with the zones a master without one uses. Documented, not yet observed."
-guesses = ["Get PS zones replaces the TT zone list with the master's alignment zones, named after their metrics (xHeight for the x-height metric so that it gets the x-height rounding, else the metric's name, else zone 1, zone 2…); the reference app would settle replace or append and the names.", "On the main master, Snap instructions keep their zone by name after Get PS zones, and those whose zone is gone turn to Auto; the reference app would settle it with a Snap on a custom zone."]
+guesses = ["On the family zones Get PS zones takes the main master's alignment zones; the reference app's editor of the font's TTFZones would settle it.", "Get PS zones replaces the TT zone list with the master's alignment zones, named after their metrics (xHeight for the x-height metric so that it gets the x-height rounding, else the metric's name, else zone 1, zone 2…); the reference app would settle replace or append and the names.", "On the main master, Snap instructions keep their zone by name after Get PS zones, and those whose zone is gone turn to Auto; the reference app would settle it with a Snap on a custom zone."]
 observe = ["T3: on a master that already has two TT zones, choose Get PS zones; note whether the existing zones are replaced or kept, and which names the new zones get."]
 
 [[command]]
@@ -421,7 +421,7 @@ label = "Add Zone"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{master: id, name?: string, position: number, size: number, align?: zoneName}"
+params = "{master: id | family: true, name?: string, position: number, size: number, align?: zoneName}"
 area = "hinting-tt"
 milestone = "M10"
 summary = "Plus button of the TTFZones editor: appends a zone to the master's TT zone list. Names must stay unique. To keep masters in step the command should offer to add the zone to every master."
@@ -436,7 +436,7 @@ label = "Remove Zone"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{master: id, zone: zoneName}"
+params = "{master: id | family: true, zone: zoneName}"
 area = "hinting-tt"
 milestone = "M10"
 summary = "Minus button of the TTFZones editor: deletes the selected zone. What happens to Snap instructions and zone alignments that refer to the removed zone is not stated."
@@ -452,7 +452,7 @@ label = "Edit Zone"
 menu = []
 shortcut = ""
 kind = "engine"
-params = "{master: id, zone: zoneName, name?: string, position?: number, size?: number, align?: zoneName | null, deltas?: {masterId: {ppm: 'up'|'down'|'none'}}, filter?: smartFilterRules | null}"
+params = "{master: id | family: true, zone: zoneName, name?: string, position?: number, size?: number, align?: zoneName | null, deltas?: {masterId: {ppm: 'up'|'down'|'none'}}, filter?: smartFilterRules | null}"
 area = "hinting-tt"
 milestone = "M10"
 summary = "Changes any property of a TT zone: name, position, size, alignment target, per-master per-PPM deltas, glyph filter. Deltas and filter are accepted only for the main master's zones. Headless form of editing the zone list rows."
@@ -1169,22 +1169,22 @@ observe = ["T3: add a Delta instruction; note its badge colour and the icons of 
 [[command]]
 id = "hint.tt.autohintGlyph"
 label = "Autohint"
-menu = []
+menu = ["Glyph", "TrueType Hinting"]
 shortcut = "Cmd+Ctrl+Alt+Shift+I"
 kind = "engine"
-params = "{glyphs?: [names], layer?: id}"
+params = "{glyphs: [names], layer?: id}"
 area = "hinting-tt"
 milestone = "M10"
 summary = "Context-menu item of the TrueType Instructor that generates editable instructions for the glyph as a starting point: Snap and Stem instructions only, never Shift, Interpolate or Delta. The shortcut acts on all glyphs selected in Edit View and can be reassigned in the Commands section of the settings. For a glyph it cannot handle it reports 'There was a problem compiling TrueType instructions'."
 ref = "TrueType Hinting › Instructions"
 status = "handbook"
-notes = "M10.21, crates/engine/src/cmd/autohint_tt.rs: the built-in autohinter on the layer of the named master (default the main master), with the TT zones and stems that apply to the glyph; a glyph it cannot hint is listed under skipped, an unknown glyph or master refuses the run. Documented, not yet observed. M10.34, crates/ui/src/app/context_menu: while the Instructor is active, the glyph section of the canvas context menu offers it on the edited glyph, for the master of the edited layer."
-guesses = ["The Instructor's Autohint writes vertical Snap on every extreme in a TT zone and vertical Stem for each horizontal stem the PostScript stem analysis finds, and nothing horizontal, as ttfautohint hints heights only; a glyph hinted by the reference app would show which points and directions it picks."]
+notes = "M10.21, crates/engine/src/cmd/autohint_tt.rs: the built-in autohinter on the layer of the named master (default the main master), with the TT zones and stems that apply to the glyph; a glyph it cannot hint is listed under skipped, an unknown glyph or master refuses the run. Documented, not yet observed. M10.34, crates/ui/src/app/context_menu: while the Instructor is active, the glyph section of the canvas context menu offers it on the edited glyph, for the master of the edited layer. M10.50, crates/ui/src/canvas/hinting (GLYPH_COMMANDS): fired from a menu or a key it acts on the glyphs selected in Font View, in text mode on those of the text selection, both in the main master, else on the edited glyph in the master of the edited layer; with no glyph chosen it says to select one. It sits in the Hinting submenu of Font View's glyph menu and in the Glyph menu. The glyphs it could not hint are named with the reasons in the status line."
+guesses = ["With several glyphs selected, Autohint in the Instructor writes to the main master's layers, the ones an export reads, whatever master is shown; the reference app would settle the layer.", "The Instructor's Autohint writes vertical Snap on every extreme in a TT zone and vertical Stem for each horizontal stem the PostScript stem analysis finds, and nothing horizontal, as ttfautohint hints heights only; a glyph hinted by the reference app would show which points and directions it picks."]
 
 [[command]]
 id = "hint.tt.removeHints"
 label = "Remove Hints"
-menu = []
+menu = ["Glyph", "TrueType Hinting"]
 shortcut = ""
 kind = "engine"
 params = "{glyphs: [names] | glyph: name, layer?: id}"
@@ -1194,7 +1194,7 @@ summary = "Context-menu item of the TrueType Instructor that deletes every glyph
 ref = "TrueType Hinting › Instructions"
 status = "handbook"
 guesses = ["Remove Hints in the TrueType Instructor removes TrueType instructions only and leaves PostScript hints, since the handbook names it in the TrueType section; running it on a glyph with both in the reference app would settle it."]
-notes = "M10.7, crates/engine/src/cmd/hint_tt_more.rs: deletes every TrueType instruction of the layer (default the main master's) of each named glyph, in one undo step, and reports the glyphs that had some; PostScript hints and other stored hints stay. Documented, not yet observed. M10.34, crates/ui/src/app/context_menu: while the Instructor is active, the glyph section of the canvas context menu offers it on the edited glyph's edited layer, in the danger tone."
+notes = "M10.7, crates/engine/src/cmd/hint_tt_more.rs: deletes every TrueType instruction of the layer (default the main master's) of each named glyph, in one undo step, and reports the glyphs that had some; PostScript hints and other stored hints stay. Documented, not yet observed. M10.34, crates/ui/src/app/context_menu: while the Instructor is active, the glyph section of the canvas context menu offers it on the edited glyph's edited layer, in the danger tone. M10.50, crates/ui/src/canvas/hinting (GLYPH_COMMANDS): fired from a menu or a key it acts on the glyphs selected in Font View, in text mode on those of the text selection, both in the main master, else on the edited glyph on the edited layer; with no glyph chosen it says to select one. It sits in the Hinting submenu of Font View's glyph menu and in the Glyph menu."
 
 [[command]]
 id = "hint.tt.deleteInstructions"

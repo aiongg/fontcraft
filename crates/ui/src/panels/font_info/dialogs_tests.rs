@@ -20,7 +20,7 @@ use crate::app::models::font_info::{Editor, RowDialog, RowModel, RowSort};
 use crate::app::{APP, FontCraftApp, Msg};
 use crate::dialogs::os2_bits::{numbers, stored_value};
 use crate::dialogs::tt::Ask;
-use crate::dialogs::tt::zones::Kind;
+use crate::dialogs::tt::zones::{Kind, Place};
 use crate::shell::font_info::{InfoDialog, Target, open_params};
 
 const ROOM: egui::Vec2 = egui::vec2(1120.0, 900.0);
@@ -105,13 +105,18 @@ fn the_panose_dialog_posts_the_ten_digits() {
     same_as_the_command(&app, app_with("panose", stored), "panose", digits);
 }
 
-/// A master's TTFStems and TTFZones rows open their editors on that master.
+/// A master's TTFStems and TTFZones rows open their editors on that master; the font's TTFZones row opens the family
+/// zones.
 #[test]
 fn the_ttf_rows_open_their_editors() {
     let mut app = FontCraftApp::with_edit_tab(Session::with_document(), Arc::new(Host::builder(APP).build()));
     let first = app.session.font().ok().and_then(|f| f.masters.first()).map(|m| m.id.clone()).expect("a master");
-    let target = Target { scope: Scope::Master, indices: vec![0] };
-    for (key, dialog) in [("TTFStems", RowDialog::TtfStems), ("TTFZones", RowDialog::TtfZones)] {
+    let master = Target { scope: Scope::Master, indices: vec![0] };
+    let font = Target { scope: Scope::Font, indices: Vec::new() };
+    for (target, key, dialog) in
+        [(&master, "TTFStems", RowDialog::TtfStems), (&master, "TTFZones", RowDialog::TtfZones), (&font, "TTFZones", RowDialog::TtfZones)]
+    {
+        assert_eq!(crate::app::models::font_info::row_dialog(key, target.scope), Some(dialog));
         let row = RowModel {
             sort: RowSort::Param,
             key: key.into(),
@@ -121,9 +126,16 @@ fn the_ttf_rows_open_their_editors() {
             editor: Editor::Dialog { summary: String::new(), dialog },
             ..RowModel::default()
         };
-        app.sent.extend(rows::commands(&target, &row, &RowAction::Edit(Edit::Dialog(dialog))));
+        app.sent.extend(rows::commands(target, &row, &RowAction::Edit(Edit::Dialog(dialog))));
     }
     app.drain();
     assert!(app.status.is_empty(), "{}", app.status);
-    assert_eq!(app.tt.asks, vec![Ask::Definitions(Kind::Stems, first.clone()), Ask::Definitions(Kind::Zones, first)]);
+    assert_eq!(
+        app.tt.asks,
+        vec![
+            Ask::Definitions(Kind::Stems, Place::Master(first.clone())),
+            Ask::Definitions(Kind::Zones, Place::Master(first)),
+            Ask::Definitions(Kind::Zones, Place::Family)
+        ]
+    );
 }

@@ -23,7 +23,7 @@ use fontcraft_model::{Font, Target};
 use serde_json::{Value, json};
 
 use super::*;
-use crate::params::Params;
+use crate::params::{Params, TargetKind};
 
 /// Most glyphs one run hints. The autohinter bounds the work per glyph by its node limit
 /// (`fontcraft_hinting::tt_auto::MAX_AUTOHINT_NODES`).
@@ -43,12 +43,13 @@ pub fn specs() -> Vec<CommandSpec> {
         cmd!(
             "hint.tt.autohintGlyph",
             "Autohint",
-            [],
+            ["Glyph", "TrueType Hinting"],
             Some("Cmd+Ctrl+Alt+Shift+I"),
             "{glyphs: [names], layer?: master id (default: the main master)} generate Snap and Stem instructions for each glyph's layer of that master as a starting point, replacing the instructions it has; one undo step → {hinted: [{glyph, instructions}], skipped: [{glyph, reason}], ignoredOptions: [names], warnings}",
             has_doc,
             autohint_glyph_cmd
-        ),
+        )
+        .targets(&[TargetKind::Glyphs]),
     ]
 }
 

@@ -17,7 +17,7 @@ use craft::ui::runtime::env::{Env, Label};
 use craft_ext::ui::menu::{EntryMark, MarkedEntry, entry_rows as marked_entry_rows};
 use egui::{Response, Ui};
 
-use crate::app::context_menu::glyph_menu::{COPY_FORMATS, GlyphMenu, Mark};
+use crate::app::context_menu::glyph_menu::{COPY_FORMATS, GlyphMenu, HINTING, Mark};
 use crate::app::context_menu::{CANVAS, CanvasMenu, ContextItem, DESTRUCTIVE};
 use crate::app::models::font_view::COLOR_LABEL_NAMES;
 
@@ -49,6 +49,12 @@ craft::ui::words! {
         slashed: "fontcraftContextMenu.slashed" = "Slashed";
         python_list: "fontcraftContextMenu.pythonList" = "Python List";
         unicodes: "fontcraftContextMenu.unicodes" = "Unicodes";
+        /// The Hinting submenu and its items.
+        hinting: "fontcraftContextMenu.hinting" = "Hinting";
+        autohint_tt: "fontcraftContextMenu.autohintTrueType" = "Autohint TrueType";
+        remove_tt: "fontcraftContextMenu.removeTrueTypeHints" = "Remove TrueType Hints";
+        autohint_ps: "fontcraftContextMenu.autohintPostScript" = "Autohint PostScript";
+        remove_ps: "fontcraftContextMenu.removePostScriptHints" = "Remove PostScript Hints";
     }
 }
 
@@ -95,6 +101,8 @@ pub enum Pick {
     MoreTags,
     /// A status of the Status submenu by its code, or No Status (`None`).
     Status(Option<i64>),
+    /// A command of the Hinting submenu.
+    Hinting(&'static str),
     /// A format of Copy Glyph Names, by its `glyph.copyGlyphNames` name.
     CopyNames(&'static str),
 }
@@ -209,6 +217,7 @@ pub fn glyph_menu(ui: &mut Ui, opener: &Response, menu: &GlyphMenu) -> Answer {
             if !menu.statuses.is_empty() {
                 picked = picked.or(statuses(ui, menu, &words));
             }
+            picked = picked.or(hinting(ui, &words));
             picked.or(copy_names(ui, &words))
         });
     let picked = shown.inner.flatten();
@@ -233,6 +242,20 @@ fn statuses(ui: &mut Ui, menu: &GlyphMenu, words: &ContextMenuWords) -> Option<P
         entries.push(Entry::new(None, words.no_status.clone()).into());
         if let Some(i) = marked_entry_rows(ui, &entries) {
             picked = entries.get(i).and_then(MarkedEntry::value).map(|code| Pick::Status(*code));
+        }
+    });
+    picked
+}
+
+/// The Hinting submenu.
+fn hinting(ui: &mut Ui, words: &ContextMenuWords) -> Option<Pick> {
+    let labels = [&words.autohint_tt, &words.remove_tt, &words.autohint_ps, &words.remove_ps];
+    let mut picked = None;
+    let _ = Menu::submenu_row(ui, words.hinting.clone(), |ui, _| {
+        let entries: Vec<MarkedEntry<&'static str>> =
+            HINTING.iter().zip(labels).map(|(id, label)| MarkedEntry::new(Entry::new(*id, label.clone())).danger(DESTRUCTIVE.contains(id))).collect();
+        if let Some(i) = marked_entry_rows(ui, &entries) {
+            picked = entries.get(i).and_then(MarkedEntry::value).map(|id| Pick::Hinting(id));
         }
     });
     picked

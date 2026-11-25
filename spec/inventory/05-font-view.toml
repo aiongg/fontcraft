@@ -1163,7 +1163,7 @@ milestone = "M4"
 summary = "Menu shown by Ctrl-click or right-click on a glyph cell or on a multi-glyph selection, giving quick access to some glyph properties. Only the entries named in this chapter are listed; the menu has more."
 ref = "Font View › Glyph Properties; Copy Glyph Names"
 status = "handbook"
-notes = "Documented, not yet observed."
+notes = "Documented, not yet observed. M10.50: a Hinting submenu with Autohint and Remove Hints for TrueType and PostScript, on the main master's layers of the selected glyphs."
 guesses = [
   "A right-click on a glyph that is not selected selects it alone first; on a selected glyph the menu acts on the whole selection. Settled by observation.",
   "The items come in this order: the colour swatches under a caption (Glyph Color, or Layer Color with Alt), then Tags, then Copy Glyph Names. Settled by observation.",

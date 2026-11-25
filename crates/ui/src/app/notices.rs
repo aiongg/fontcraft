@@ -2,7 +2,7 @@
 //!
 //! | Reply | Notice |
 //! |---|---|
-//! | `glyph.matchMasters`, `glyph.relocateStartPoints`: `skipped` | the label, then each skipped glyph with its reason |
+//! | `glyph.matchMasters`, `glyph.relocateStartPoints`, the two hinting Autohints: `skipped` | the label, then each skipped glyph with its reason |
 //! | `color.generateDarkPalette`: `palette`, `name` | the new palette's number and name |
 //! | any command: `formatWarnings` (what a UFO, UFOZ or designspace save would lose), else the command's own `warnings` | the first warning, and how many follow |
 //!
@@ -16,7 +16,7 @@ use super::font_view::MAX_NOTICE_NAMES;
 craft::ui::words! {
     /// The status notices the app layer writes from a command's reply.
     pub struct ReplyNoticeWords {
-        /// Before the glyphs Match Masters or Relocate Start Points left alone.
+        /// Before the glyphs Match Masters, Relocate Start Points or Autohint left alone.
         skipped: "fontcraftNotice.skipped" = "skipped";
         /// Before the new palette's number.
         dark_palette: "fontcraftNotice.darkPalette" = "Added dark palette";
@@ -26,7 +26,7 @@ craft::ui::words! {
 }
 
 /// The commands whose reply lists, under `skipped`, the glyphs or layers they left alone.
-const REPORTS_SKIPPED: [&str; 2] = ["glyph.matchMasters", "glyph.relocateStartPoints"];
+const REPORTS_SKIPPED: [&str; 4] = ["glyph.matchMasters", "glyph.relocateStartPoints", "hint.tt.autohintGlyph", "hint.ps.autohintGlyph"];
 
 /// The notice for `reply` of command `id`, or `None` when it has nothing to say.
 pub fn notice(id: &str, reply: &Value) -> Option<String> {
@@ -112,6 +112,8 @@ mod tests {
             Some("UFO drops x (+1 more warnings)")
         );
         assert_eq!(notice("glyph.newGlyph", &json!({"name": "a"})), None);
+        let reply = json!({"hinted": [], "skipped": [{"glyph": "l", "reason": "no stems"}], "warnings": []});
+        assert_eq!(notice("hint.tt.autohintGlyph", &reply).as_deref(), Some("Autohint: skipped l (no stems)"));
     }
 
     /// Generate Dark Palette from its Font menu row adds a palette and says so in the status line.

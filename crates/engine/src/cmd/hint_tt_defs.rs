@@ -32,6 +32,10 @@
 //! name. Rewriting an entry changes only the keys whose meaning changed, so unknown keys and the
 //! source's spellings (`pos`, `size` for a stem's width, a delta of 8) survive.
 //!
+//! Family zones. With `family: true` in place of `master` the zone commands edit the TTFZones
+//! parameter of the font (`hinting.tt.param.ttfFamilyZonesThreshold`): a list of its own, which no
+//! master shares and no instruction names. It takes no deltas and no filters.
+//!
 //! For the TTFZones and TTFStems editors: read a master's list with
 //! `HintSettings::for_master(font, master)?.tt_zones` (or `.tt_stems`); show the delta and filter
 //! buttons when the master is `fontcraft_hinting::settings::main_master(font)`. Every command
@@ -43,7 +47,7 @@
 use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 
-use fontcraft_hinting::settings::{TTF_STEMS, TTF_ZONES, derived_tt_stems, derived_tt_zones, main_master};
+use fontcraft_hinting::settings::{TTF_STEMS, TTF_ZONES, derived_tt_stems, derived_tt_zones, family_tt_zones, main_master};
 use fontcraft_hinting::{
     DeltaDir, Deltas, Direction, HintSettings, MAX_DELTA_COLUMNS, MAX_DELTA_PPM, MAX_TT_STEMS, MAX_TT_ZONES, StemRef, TtInstruction, TtKind, TtStem,
     TtZone, ZoneRef, set_tt_instructions, tt_instructions,
@@ -64,7 +68,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Get PS zones",
             [],
             None,
-            "{master: id} replace the master's TT zones with its alignment zones, named after their metrics (xHeight, capHeight, ascender, baseline, descender, a named metric's name; other zones zone 1, zone 2…). On the main master, instructions keep their zone by name, else turn to Auto → {master, zones: [zone], instructions: count}",
+            "{master: id | family: true} replace the master's TT zones with its alignment zones (family: the font's TTFZones, the family zones, with the main master's alignment zones), named after their metrics (xHeight, capHeight, ascender, baseline, descender, a named metric's name; other zones zone 1, zone 2…). On the main master, instructions keep their zone by name, else turn to Auto → {master (family: true for the family zones), zones: [zone], instructions: count}",
             has_doc,
             get_ps_zones
         ),
@@ -73,7 +77,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Add Zone",
             [],
             None,
-            "{master: id, name?: string (default: `zone N`, N one past the list's length, or the next free number), position: number, size: number (positive: top zone; negative: bottom zone), align?: TT zone name} add a TT zone at the end of every master's list, with the same values; names are unique, and `auto` and `none` are refused → {master, zones: [zone], instructions: count}",
+            "{master: id | family: true, name?: string (default: `zone N`, N one past the list's length, or the next free number), position: number, size: number (positive: top zone; negative: bottom zone), align?: TT zone name} add a TT zone at the end of every master's list, with the same values (family: of the font's TTFZones only); names are unique, and `auto` and `none` are refused → {master (family: true for the family zones), zones: [zone], instructions: count}",
             has_doc,
             add_zone
         ),
@@ -82,7 +86,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Remove Zone",
             [],
             None,
-            "{master: id, zone: TT zone name} remove the zone from every master. Snap instructions that name it turn to Auto, and zones aligned to it lose their alignment → {master, zones: [zone], instructions: count}",
+            "{master: id | family: true, zone: TT zone name} remove the zone from every master (family: from the font's TTFZones only, no instruction changes). Snap instructions that name it turn to Auto, and zones aligned to it lose their alignment → {master (family: true for the family zones), zones: [zone], instructions: count}",
             has_doc,
             remove_zone
         ),
@@ -91,7 +95,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Edit Zone",
             [],
             None,
-            "{master: id, zone: TT zone name, name?: string, position?: number, size?: number, align?: TT zone name | null, deltas?: {column: {ppm: \"up\" | \"down\" | \"none\"}}, filter?: glyph predicate | null} change a TT zone. A new name applies in every master and must be unique; position, size and alignment belong to `master`; an alignment must not lead back to the zone. Deltas (a column is a master id or an instance name, PPM 1 to 255) and the filter are accepted on the main master only → {master, zones: [zone], instructions: count}",
+            "{master: id | family: true (the font's TTFZones, without deltas and filter), zone: TT zone name, name?: string, position?: number, size?: number, align?: TT zone name | null, deltas?: {column: {ppm: \"up\" | \"down\" | \"none\"}}, filter?: glyph predicate | null} change a TT zone. A new name applies in every master and must be unique; position, size and alignment belong to `master`; an alignment must not lead back to the zone. Deltas (a column is a master id or an instance name, PPM 1 to 255) and the filter are accepted on the main master only → {master (family: true for the family zones), zones: [zone], instructions: count}",
             has_doc,
             set_zone
         ),
@@ -549,7 +553,7 @@ fn new_name<T: Def>(p: &Params, list: &List<T>) -> Result<String> {
         }
     };
     if taken.contains(&name) {
-        return Err(p.bad(format!("the master already has a TT {} named `{name}`; names are unique", T::WHAT)));
+        return Err(p.bad(format!("there is already a TT {} named `{name}`; names are unique", T::WHAT)));
     }
     Ok(name)
 }
@@ -747,7 +751,7 @@ fn rename<T: Def>(p: &Params, lists: &mut [List<T>], master: &str, old: &str) ->
         return Ok(new);
     }
     if of(p, lists, master)?.position(&new).is_some() {
-        return Err(p.bad(format!("the master already has a TT {} named `{new}`; names are unique", T::WHAT)));
+        return Err(p.bad(format!("there is already a TT {} named `{new}`; names are unique", T::WHAT)));
     }
     for list in lists.iter_mut() {
         for slot in &mut list.slots {
@@ -764,6 +768,9 @@ fn rename<T: Def>(p: &Params, lists: &mut [List<T>], master: &str, old: &str) ->
 // ── the commands ────────────────────────────────────────────────────────────────────────────────
 
 fn get_ps_zones(s: &mut Session, v: &Value) -> Result<Value> {
+    if is_family(&Params::new("hint.tt.getPsZones", v)?)? {
+        return family_get_ps(s, v);
+    }
     get_ps::<TtZone>(s, v, "hint.tt.getPsZones", "Get PS zones")
 }
 
@@ -772,6 +779,9 @@ fn get_ps_stems(s: &mut Session, v: &Value) -> Result<Value> {
 }
 
 fn remove_zone(s: &mut Session, v: &Value) -> Result<Value> {
+    if is_family(&Params::new("hint.tt.removeZone", v)?)? {
+        return family_remove(s, v);
+    }
     remove::<TtZone>(s, v, "hint.tt.removeZone", "Remove Zone")
 }
 
@@ -781,16 +791,28 @@ fn remove_stem(s: &mut Session, v: &Value) -> Result<Value> {
 
 fn add_zone(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("hint.tt.addZone", v)?;
-    let master = p.str("master")?;
+    let family = is_family(&p)?;
+    let master = if family { "" } else { p.str("master")? };
     let position = coordinate(&p, "position")?.ok_or_else(|| p.bad("`position` is required"))?;
     let size = coordinate(&p, "size")?.ok_or_else(|| p.bad("`size` is required"))?;
     let align = p.opt_str("align")?.map(str::trim).filter(|a| !a.is_empty());
     let def = TtZone { position, size, align: align.map(str::to_string), ..TtZone::default() };
+    let check = |list: &List<TtZone>| match align {
+        Some(a) if list.position(a).is_none() => Err(p.bad(format!("`align`: there is no TT zone named `{a}`"))),
+        _ => Ok(()),
+    };
     s.edit("Add Zone", |font| {
-        add(&p, font, master, def, |list| match align {
-            Some(a) if list.position(a).is_none() => Err(p.bad(format!("`align`: the master has no TT zone named `{a}`"))),
-            _ => Ok(()),
-        })
+        if !family {
+            return add(&p, font, master, def, check);
+        }
+        let mut list = family_load(&p, font)?;
+        if list.slots.len() >= MAX_TT_ZONES {
+            return Err(p.bad(format!("a font has at most {MAX_TT_ZONES} family TT zones")));
+        }
+        let name = new_name(&p, &list)?;
+        check(&list)?;
+        list.slots.push(Slot { stored: None, def: TtZone { name, ..def } });
+        family_store(&p, font, list)
     })
 }
 
@@ -801,6 +823,62 @@ fn add_stem(s: &mut Session, v: &Value) -> Result<Value> {
     let size = stem_size(&p)?.ok_or_else(|| p.bad("`size` is required"))?;
     let def = TtStem { horizontal, size, ..TtStem::default() };
     s.edit("Add Stem", |font| add(&p, font, master, def, |_| Ok(())))
+}
+
+// ── family zones ────────────────────────────────────────────────────────────────────────────────
+
+/// Whether the command edits the family zones (`family`) rather than a master's.
+fn is_family(p: &Params) -> Result<bool> {
+    let family = p.bool_or("family", false)?;
+    if family && p.get("master").is_some_and(|m| !m.is_null()) {
+        return Err(p.bad("give `master` or `family`, not both"));
+    }
+    Ok(family)
+}
+
+/// The font's TTFZones as a list of no master; its stored deltas and filters are kept.
+fn family_load(p: &Params, font: &Font) -> Result<List<TtZone>> {
+    let zones = family_tt_zones(font).map_err(|e| p.bad(e.to_string()))?;
+    let array = font.info.params.get(TTF_ZONES).and_then(PValue::as_array).cloned();
+    let stored = array.iter().flat_map(|a| a.items.iter()).map(|v| v.as_dict().cloned()).chain(std::iter::repeat(None));
+    let slots = zones.into_iter().zip(stored).map(|(def, stored)| Slot { stored, def }).collect();
+    Ok(List { master: String::new(), main: true, slots, extras: Vec::new(), array })
+}
+
+/// Writes the font's TTFZones and gives the command's result.
+fn family_store(p: &Params, font: &mut Font, list: List<TtZone>) -> Result<Value> {
+    let mut array = list.array.unwrap_or_default();
+    array.items = list.slots.into_iter().map(|s| PValue::Dict(merge(s.stored, s.def.fields()))).collect();
+    Arc::make_mut(&mut font.info).params.set(TTF_ZONES, PValue::Array(array));
+    let zones = family_tt_zones(font).map_err(|e| p.bad(e.to_string()))?;
+    Ok(json!({"family": true, "zones": zones.iter().map(Def::json).collect::<Vec<_>>(), "instructions": 0}))
+}
+
+fn family_get_ps(s: &mut Session, v: &Value) -> Result<Value> {
+    let p = Params::new("hint.tt.getPsZones", v)?;
+    s.edit("Get PS zones", |font| {
+        let main = main_master(font);
+        let zones = derived_tt_zones(font, font.master(&main).map_err(|_| no_master(&p, &main))?);
+        if zones.len() > MAX_TT_ZONES {
+            return Err(p.bad(format!("the main master has more than {MAX_TT_ZONES} PS zones")));
+        }
+        let slots = zones.into_iter().map(|z| Slot { stored: None, def: TtZone { filter: None, ..z } }).collect();
+        family_store(&p, font, List { master: String::new(), main: true, slots, extras: Vec::new(), array: None })
+    })
+}
+
+fn family_remove(s: &mut Session, v: &Value) -> Result<Value> {
+    let p = Params::new("hint.tt.removeZone", v)?;
+    let name = p.str("zone")?;
+    s.edit("Remove Zone", |font| {
+        let mut list = family_load(&p, font)?;
+        let k = list.position(name).ok_or_else(|| p.bad(format!("there is no family TT zone named `{name}`")))?;
+        list.slots.remove(k);
+        for slot in &mut list.slots {
+            slot.def.removed(name);
+        }
+        family_store(&p, font, list)
+    })
 }
 
 /// Refuses an alignment of zone `k` that leads back to it.
@@ -820,26 +898,34 @@ fn check_alignment(p: &Params, list: &List<TtZone>, k: usize) -> Result<()> {
 
 fn set_zone(s: &mut Session, v: &Value) -> Result<Value> {
     let p = Params::new("hint.tt.setZone", v)?;
-    let master = p.str("master")?;
+    let family = is_family(&p)?;
+    let master = if family { "" } else { p.str("master")? };
     let zone = p.str("zone")?;
     let position = coordinate(&p, "position")?;
     let size = coordinate(&p, "size")?;
     let align = if cleared(v, "align") { Some(None) } else { p.opt_str("align")?.map(|a| Some(a.trim().to_string())) };
     let renaming = p.opt_str("name")?.is_some();
     s.edit("Edit Zone", |font| {
-        let main_only_wanted = main_only(&p, v, font, master)?;
+        let main_only_wanted = !family && main_only(&p, v, font, master)?;
+        if family && (p.get("deltas").is_some() || p.get("filter").is_some()) {
+            return Err(p.bad("family TT zones have no deltas and no filter"));
+        }
         if !renaming && position.is_none() && size.is_none() && align.is_none() && !main_only_wanted {
             return Err(p.bad("give at least one of `name`, `position`, `size`, `align`, `deltas` and `filter`"));
         }
-        let mut lists = if renaming { load_all::<TtZone>(&p, font, master)? } else { vec![load::<TtZone>(&p, font, master)?] };
-        of(&p, &mut lists, master)?.position(zone).ok_or_else(|| p.bad(format!("the master has no TT zone named `{zone}`")))?;
+        let mut lists = match (family, renaming) {
+            (true, _) => vec![family_load(&p, font)?],
+            (false, true) => load_all::<TtZone>(&p, font, master)?,
+            (false, false) => vec![load::<TtZone>(&p, font, master)?],
+        };
+        of(&p, &mut lists, master)?.position(zone).ok_or_else(|| p.bad(format!("there is no TT zone named `{zone}`")))?;
         let name = rename(&p, &mut lists, master, zone)?;
         let target = of(&p, &mut lists, master)?;
-        let k = target.position(&name).ok_or_else(|| p.bad(format!("the master has no TT zone named `{name}`")))?;
+        let k = target.position(&name).ok_or_else(|| p.bad(format!("there is no TT zone named `{name}`")))?;
         if let Some(Some(a)) = &align
             && (a == &name || target.position(a).is_none())
         {
-            return Err(p.bad(format!("`align`: `{a}` is not another TT zone of the master")));
+            return Err(p.bad(format!("`align`: `{a}` is not another TT zone of the list")));
         }
         let slot = target.slots.get_mut(k).ok_or_else(|| p.bad("the zone went missing"))?;
         if let Some(x) = position {
@@ -853,6 +939,10 @@ fn set_zone(s: &mut Session, v: &Value) -> Result<Value> {
         }
         apply_main_only(&p, v, font, &mut slot.def)?;
         check_alignment(&p, target, k)?;
+        if family {
+            let list = lists.pop().ok_or_else(|| p.bad("the family zones went missing"))?;
+            return family_store(&p, font, list);
+        }
         store_all(&p, font, lists)?;
         result::<TtZone>(&p, font, master, 0)
     })
