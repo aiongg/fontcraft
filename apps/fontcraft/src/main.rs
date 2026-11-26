@@ -19,6 +19,8 @@
 #![forbid(unsafe_code)]
 
 #[cfg(not(target_arch = "wasm32"))]
+mod app_icon;
+#[cfg(not(target_arch = "wasm32"))]
 mod clipboard;
 #[cfg(not(target_arch = "wasm32"))]
 mod external_preview;
@@ -202,6 +204,7 @@ fn desktop(options: fontcraft_ui::Options) -> fontcraft_ui::Options {
         fetch: Some(net::fetch),
         settings_dir: user_files::settings_dir(),
         clock: Some(fontcraft_engine::clock::system_clock()),
+        icon: Some(app_icon::viewport_icon(std::env::current_exe().ok().as_deref())),
         ..options
     }
 }

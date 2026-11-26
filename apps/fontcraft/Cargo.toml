@@ -32,3 +32,7 @@ objc2-foundation = { version = "0.3", default-features = false, features = ["std
 # The clipboard's PDF for a paste on the canvas, in the version the clipboard crate of eframe already pulls in.
 [target.'cfg(windows)'.dependencies]
 clipboard-win = { version = "5.4", features = ["std"] }
+
+[build-dependencies]
+# Icon and VERSIONINFO for fontcraft.exe; build.rs uses it only when targeting Windows.
+winresource = "0.1"

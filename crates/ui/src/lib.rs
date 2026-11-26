@@ -64,6 +64,8 @@ pub struct Options {
     pub clock: Option<fontcraft_engine::Clock>,
     /// The file or URL named on the command line, opened in place of the Start Window or a new font.
     pub launch: Option<app::startup::Launch>,
+    /// The window's title-bar, taskbar and Dock icon; `None` leaves the platform's default.
+    pub icon: Option<egui::IconData>,
 }
 
 /// Opens the desktop window where it was last and runs it until it closes.
@@ -79,7 +81,8 @@ pub fn run(options: Options) -> Result<(), String> {
     const WINDOW_MIN: [f32; 2] = [640.0, 480.0];
     let placement = Arc::new(Mutex::new(window_store(options.settings_dir.as_deref())));
     let spec = AppSpec::new("fontcraft", "FontCraft", Defaults::new(WINDOW, WINDOW_MIN)).placement(Arc::clone(&placement));
-    let ran = craft_ext::ui::shell::app::run(spec, move |ctx| open_window(ctx, options)).map_err(|e| e.to_string());
+    let icon = options.icon.clone();
+    let ran = craft_ext::ui::shell::app::run(spec, icon, move |ctx| open_window(ctx, options)).map_err(|e| e.to_string());
     // The runtime writes the placement once a second; this writes what moved since.
     if let Err(e) = placement.lock().unwrap_or_else(PoisonError::into_inner).save() {
         log::warn!("the window's place was not saved: {e}");

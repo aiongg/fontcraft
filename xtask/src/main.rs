@@ -12,6 +12,7 @@ mod glyphdata;
 mod glyphdata_check;
 mod glyphsets;
 mod guesses;
+mod ico;
 mod layers;
 mod observe;
 mod offset;
@@ -83,6 +84,8 @@ commands:
   pathops-noop [--out DIR] [--match TEXT]
                   run Correct Path Direction and Add Extremes on every master layer of the corpus's .glyphs
                   sources and report what they change (the full lists go to DIR/summary.txt)
+  ico <out.ico> <in.png>...
+                  pack square PNGs (<= 256 px) into a Windows .ico (see packaging/icons.sh)
   testfonts [--out DIR]
                   build the synthetic test fonts for the checks in the reference app and write them
                   as .glyphs files with a README (default DIR: plan/local/testfonts/)
@@ -111,6 +114,7 @@ fn main() -> ExitCode {
         Some("offset") => offset::run(&root(), &rest),
         Some("overlap") => overlap::run(&root(), &rest),
         Some("pathops-noop") => pathops_noop::run(&root(), &rest),
+        Some("ico") => ico::run(&rest),
         Some("testfonts") => testfonts::run(&root(), &rest),
         Some("-h" | "--help" | "help") | None => {
             print!("{USAGE}");

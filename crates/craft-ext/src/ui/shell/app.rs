@@ -32,10 +32,13 @@ const LIST_AGAIN: Duration = Duration::from_secs(2);
 /// Largest window side asked for, in pixels.
 const MAX_SIDE_PX: f32 = 32_768.0;
 
-/// Opens the root window and runs `make`'s app until it closes, as craft's `app::run` does, with the connected monitors
-/// known.
-pub fn run<A: ShellApp + 'static>(spec: AppSpec, make: impl FnOnce(&Context) -> A + 'static) -> eframe::Result {
-    let options = native_options(&spec);
+/// Opens the root window with `icon` and runs `make`'s app until it closes, as craft's `app::run` does, with the
+/// connected monitors known.
+pub fn run<A: ShellApp + 'static>(spec: AppSpec, icon: Option<egui::IconData>, make: impl FnOnce(&Context) -> A + 'static) -> eframe::Result {
+    let mut options = native_options(&spec);
+    if let Some(icon) = icon {
+        options.viewport = options.viewport.with_icon(icon);
+    }
     let title = spec.app_id.clone();
     eframe::run_native(&title, options, Box::new(create(spec, make)))
 }
