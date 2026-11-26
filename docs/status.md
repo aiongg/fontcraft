@@ -2277,3 +2277,9 @@ Append one terse entry per session: what landed, numbers, what is still open.
   - A Palette section collapses with the panels tabbed in its dock group (a guess).
   - The unused `[patch.crates-io]` egui entries stay, mirroring `craft::egui_fork::PACKAGES`.
   Open: build and gate `w-UI.51`; the smaller follow-ups in "Where to start" item 2.
+- **2026-11-26, app icon.** The icon (an engraved ibis) is in `assets/app-icon/` with
+  `packaging/icons.sh` to regenerate it and `cargo xtask ico` to pack the `.ico`. The window sets it at
+  runtime (`apps/fontcraft/src/app_icon.rs`, through `Options::icon`), and `build.rs` embeds the
+  `.ico` in the Windows exe. Seen in the macOS Dock on an unbundled run. Still open: no `.desktop` file
+  or app bundle yet; Wayland docks show the icon only with a `.desktop` file named after the app id
+  (`fontcraft`).
