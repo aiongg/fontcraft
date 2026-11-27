@@ -72,7 +72,7 @@ pub struct SearchCache {
 pub fn project(model: &mut Tracked<GlyphInfoModel>, cache: &mut SearchCache, cx: &mut ProjectCx<'_>) {
     let state = &cx.view.glyph_info;
     let has_font = cx.session.font().is_ok();
-    if cx.view.workspace.layout.panel_state(&PanelId::GlyphInfo) == PanelState::Hidden {
+    if cx.view.workspace.layout().panel_state(&PanelId::GlyphInfo) == PanelState::Hidden {
         super::set(model, GlyphInfoModel { query: state.query.clone(), sort_by: state.sort_by, has_font, ..GlyphInfoModel::default() });
         return;
     }

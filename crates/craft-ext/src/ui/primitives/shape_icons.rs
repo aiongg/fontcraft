@@ -26,7 +26,7 @@ const FIRST: [f32; 4] = [0.1, 0.1, 0.62, 0.62];
 const SECOND: [f32; 4] = [0.38, 0.38, 0.9, 0.9];
 
 /// A shape-operation icon.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, craft::ui::contract::MemoProps)]
 #[non_exhaustive]
 pub enum ShapeIcon {
     /// Two squares merged into one shape.

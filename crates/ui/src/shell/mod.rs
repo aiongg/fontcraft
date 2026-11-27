@@ -59,8 +59,10 @@ pub mod url;
 pub mod view;
 pub mod window;
 
+use std::borrow::Cow;
+
 use craft::menu::MenuBarUi;
-use craft::ui::contract::BodyCx;
+use craft::ui::contract::{BodyCx, Tracked};
 use craft::ui::runtime::env::{Env, WindowKey};
 use craft::ui::shell::{AppShell, ShellDialogsCx as _, Slot, SlotSize, Title, TitleBar};
 use egui::Ui;
@@ -133,9 +135,15 @@ fn title_bar(ui: &mut Ui, _: &mut BodyCx<'_>, app: &mut FontCraftApp) {
         }
         None => Title::new("FontCraft"),
     };
-    let menu = craft_ext::menu::held_alternate_labels(ui, &app.catalog.menu, |command| {
+    let held = craft_ext::menu::held_alternate_labels(ui, &app.catalog.menu, |command| {
         crate::app::menu_alternates::alternate_label(&command.id).map(str::to_string)
     });
+    // While a held modifier relabels rows the bar is a value of this pass alone; otherwise the catalog's own.
+    let relabelled = match held {
+        Cow::Owned(bar) => Some(Tracked::new(bar)),
+        Cow::Borrowed(_) => None,
+    };
+    let menu = relabelled.as_ref().unwrap_or(&app.catalog.menu);
     let documents = crate::app::document_menu::open_documents(&app.session);
     let several = documents.len() > 1;
     let mut button = None;
@@ -144,7 +152,7 @@ fn title_bar(ui: &mut Ui, _: &mut BodyCx<'_>, app: &mut FontCraftApp) {
         ui,
         title,
         |ui, _| {
-            MenuBarUi::new(&menu).show(ui);
+            MenuBarUi::new(menu).show(ui);
         },
         move |ui, _| {
             if several {

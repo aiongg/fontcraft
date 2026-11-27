@@ -5,6 +5,7 @@
 //! and does not run.
 
 use craft::ui::contract::{Bind, BodyCx};
+use craft::ui::menu::search::{SearchIndex, SearchWords, Synonyms};
 use craft::ui::patterns::panels::CommandPalette;
 use craft::ui::runtime::commands::{ClipItem, Commands as _};
 use craft::ui::runtime::env::Env;
@@ -29,8 +30,14 @@ pub fn show(ui: &mut Ui, cx: &mut BodyCx<'_>, app: &mut FontCraftApp) {
     if !surfaces.palette_open {
         return;
     }
-    let words = Env::of(ui).words::<PaletteWords>();
-    let out = CommandPalette::new(words.title.clone(), &surfaces.palette, Bind::given(true)).show(ui);
+    let env = Env::of(ui);
+    let words = env.words::<PaletteWords>();
+    let entries = &surfaces.palette;
+    let index = surfaces.palette_index.get_or_insert_with(|| {
+        let view = env.view();
+        SearchIndex::new(&view, entries, &Synonyms::of(&view.words::<SearchWords>()))
+    });
+    let out = CommandPalette::new(words.title.clone(), entries, index, Bind::given(true)).show(ui);
     if out.closed.is_some() {
         surfaces.palette_open = false;
     }

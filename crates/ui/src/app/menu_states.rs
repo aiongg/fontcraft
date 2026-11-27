@@ -172,7 +172,7 @@ fn checked(app: &FontCraftApp, display: &mut Display, switches: &mut Switches, i
     if let Some(on) = crate::shell::overlays::switch(switches, id) {
         return Some(*on);
     }
-    let shows = |panel: PanelId| app.view.workspace.layout.panel_state(&panel) != PanelState::Hidden;
+    let shows = |panel: PanelId| app.view.workspace.layout().panel_state(&panel) != PanelState::Hidden;
     Some(match id {
         "view.showMasterCompatibility" => app.view.display.master_compatibility,
         "edit.keepLayerSelectionInSync" => app.view.display.keep_layer_selection_in_sync,

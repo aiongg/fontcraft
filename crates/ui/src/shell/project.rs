@@ -146,7 +146,7 @@ pub fn after_run(app: &mut FontCraftApp, command: &str, reply: &Value) {
     }
     let Some(id) = reply.get("project").and_then(|p| p.get("id")).and_then(Value::as_u64) else { return };
     app.view.project.shown = Some(id);
-    if app.view.workspace.layout.panel_state(&PanelId::Project) == PanelState::Hidden {
+    if app.view.workspace.layout().panel_state(&PanelId::Project) == PanelState::Hidden {
         crate::shell::dock::show_window(&mut app.view.workspace, PanelId::Project, true, app.view.canvas.rect);
     }
     app.view_changed();

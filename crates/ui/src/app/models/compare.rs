@@ -14,7 +14,7 @@ const MAX_SHOWN_CHARS: usize = 200;
 const MAX_ROWS: usize = 100_000;
 
 fn shows(cx: &ProjectCx<'_>, panel: PanelId) -> bool {
-    cx.view.workspace.layout.panel_state(&panel) != craft::behavior::dock::PanelState::Hidden
+    cx.view.workspace.layout().panel_state(&panel) != craft::behavior::dock::PanelState::Hidden
 }
 
 fn clip(s: String) -> String {

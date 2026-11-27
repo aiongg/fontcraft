@@ -70,5 +70,5 @@ fn inspect(app: &mut FontCraftApp, _: &Value) -> Result<Value, String> {
 
 /// Whether `panel` shows in the dock.
 pub(super) fn shown(app: &FontCraftApp, panel: PanelId) -> bool {
-    app.view.workspace.layout.panel_state(&panel) != craft::behavior::dock::PanelState::Hidden
+    app.view.workspace.layout().panel_state(&panel) != craft::behavior::dock::PanelState::Hidden
 }

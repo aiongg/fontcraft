@@ -113,7 +113,7 @@ pub struct SpaceCenterModel {
 }
 
 pub fn project(model: &mut Tracked<SpaceCenterModel>, files: &mut ColorFiles, cx: &mut ProjectCx<'_>) {
-    if cx.view.workspace.layout.panel_state(&PanelId::SpaceCenter) == craft::behavior::dock::PanelState::Hidden {
+    if cx.view.workspace.layout().panel_state(&PanelId::SpaceCenter) == craft::behavior::dock::PanelState::Hidden {
         return;
     }
     let state = cx.view.space_center.clone();

@@ -85,7 +85,7 @@ impl Default for CompareFamilyState {
 
 /// Whether the Compare Family panel shows.
 pub fn shows(app: &FontCraftApp) -> bool {
-    app.view.workspace.layout.panel_state(&PanelId::CompareFamily) != craft::behavior::dock::PanelState::Hidden
+    app.view.workspace.layout().panel_state(&PanelId::CompareFamily) != craft::behavior::dock::PanelState::Hidden
 }
 
 fn one_of(p: &Value, key: &str, ids: &[&str]) -> Result<String, String> {

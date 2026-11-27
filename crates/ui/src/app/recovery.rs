@@ -18,7 +18,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use craft::ui::dialog::{DialogHost, DialogResult, RecoveredDocument, RecoveryAnswer, RecoveryDialog};
+use craft::ui::dialog::{DialogHost, DialogResult, RecoveredDocument, RecoveryAnswer, RecoveryChoice, RecoveryDialog};
 use craft::ui::runtime::commands::CommandRef;
 use fontcraft_engine::model::Font;
 use serde_json::{Map, Value, json};
@@ -269,8 +269,8 @@ fn recover(app: &mut FontCraftApp, leftover: &Leftover) -> Result<(), String> {
 pub fn run_dialog(host: &mut DialogHost, app: &mut FontCraftApp) {
     if let Some(result) = host.take::<RecoveryDialog>() {
         let answer = match result {
-            DialogResult::Ok(RecoveryAnswer::Recover) => "recover",
-            DialogResult::Ok(RecoveryAnswer::Discard) => "discard",
+            DialogResult::Ok(RecoveryChoice { answer: RecoveryAnswer::Recover, .. }) => "recover",
+            DialogResult::Ok(RecoveryChoice { answer: RecoveryAnswer::Discard, .. }) => "discard",
             _ => "later",
         };
         // A copy the control channel answered for meanwhile is no longer pending.

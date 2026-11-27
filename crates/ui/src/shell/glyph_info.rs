@@ -117,7 +117,7 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
     {
         return Err(format!("`{}` is not among the search results", quoted(bad)));
     }
-    let shown = app.view.workspace.layout.panel_state(&PanelId::GlyphInfo) != PanelState::Hidden;
+    let shown = app.view.workspace.layout().panel_state(&PanelId::GlyphInfo) != PanelState::Hidden;
     if shown != open {
         super::dock::toggle(&mut app.view.workspace, PanelId::GlyphInfo);
     }

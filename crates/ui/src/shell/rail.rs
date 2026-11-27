@@ -2,6 +2,7 @@
 //! shows the one used last and opens a flyout of the others. Picking a tool fires its `tool.<id>` command, which the
 //! app layer turns into `ViewMsg::SelectTool`; that makes it the toolbox's tool (`canvas::tools`).
 
+use craft::ui::contract::Tracked;
 use craft::ui::rails::{LastUsed, ToolRail, ToolSlot};
 use craft::ui::runtime::env::Env;
 use egui::Ui;
@@ -11,9 +12,9 @@ use crate::app::{Msg, ViewMsg};
 
 /// What the rail reads and sends.
 pub struct RailProps<'a> {
-    pub slots: &'a [ToolSlot<&'static str>],
+    pub slots: &'a Tracked<Vec<ToolSlot<&'static str>>>,
     pub current: &'a &'static str,
-    pub last_used: &'a LastUsed<&'static str>,
+    pub last_used: &'a Tracked<LastUsed<&'static str>>,
     pub sent: &'a mut Vec<Msg>,
 }
 

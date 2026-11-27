@@ -58,7 +58,7 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
 
 /// `ui.inspect`'s `shapeOrder`: whether the panel shows, its glyph and each layer's shapes in order.
 pub fn inspect(app: &FontCraftApp, state: &mut Map<String, Value>) {
-    let open = app.view.workspace.layout.panel_state(&PanelId::ShapeOrder) != craft::behavior::dock::PanelState::Hidden;
+    let open = app.view.workspace.layout().panel_state(&PanelId::ShapeOrder) != craft::behavior::dock::PanelState::Hidden;
     let model = &app.models.shape_order;
     let layers: Vec<Value> = model
         .columns

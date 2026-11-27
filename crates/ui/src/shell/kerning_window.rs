@@ -384,7 +384,7 @@ pub fn listed_master(app: &FontCraftApp) -> Option<String> {
 
 /// Whether the Kerning window shows.
 pub fn shows(app: &FontCraftApp) -> bool {
-    app.view.workspace.layout.panel_state(&PanelId::KerningWindow) != craft::behavior::dock::PanelState::Hidden
+    app.view.workspace.layout().panel_state(&PanelId::KerningWindow) != craft::behavior::dock::PanelState::Hidden
 }
 
 fn quoted(s: &str) -> String {

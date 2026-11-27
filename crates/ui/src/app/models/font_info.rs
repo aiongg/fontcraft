@@ -244,7 +244,7 @@ impl Default for Editor {
 }
 
 /// One entry of a dictionary value.
-#[derive(PlainData, Clone, Debug, Default, PartialEq)]
+#[derive(PlainData, Clone, Debug, Default, PartialEq, craft::ui::contract::MemoProps)]
 pub struct DictEntry {
     pub key: String,
     /// The text of a text or number entry; `None` for an entry no field edits.

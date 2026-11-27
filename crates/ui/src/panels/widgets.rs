@@ -267,8 +267,8 @@ pub fn box_point(ui: &mut Ui, label: Label, point: Option<&str>) -> Option<&'sta
     let index = point.and_then(|p| BOX_POINTS.iter().position(|n| *n == p));
     let current = index.and_then(|i| Anchor9::ALL.get(i).copied());
     let shown = current.unwrap_or(Anchor9::Centre);
-    let edit = ReferencePoint::new(label, Bind::given(shown)).show(ui);
-    let picked = *edit.events.committed()?;
+    let edit = ReferencePoint::new(label, Bind::given(Some(shown))).show(ui);
+    let picked = (*edit.events.committed()?)?;
     if Some(picked) == current {
         return None;
     }

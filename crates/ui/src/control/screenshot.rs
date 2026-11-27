@@ -22,18 +22,20 @@ pub fn path(params: &Value) -> Result<Option<String>, String> {
 }
 
 /// Answers finished captures: the PNG written or inline under `png`, with the window's pixels per point.
-pub fn finish(finished: Vec<Finished>, pixels_per_point: f32) {
+pub fn finish(finished: Vec<Finished>) {
     let mut write = |path: &str, bytes: &[u8]| fontcraft_engine::extensions::write_file(std::path::Path::new(path), bytes);
     for shot in finished {
         let reply = match shot.result {
             Ok(image) => {
-                let mut reply = screenshot_reply(shot.token, image, shot.path.as_deref(), &mut write);
+                let mut reply = screenshot_reply(shot.token, image, shot.region, shot.geometry, shot.path.as_deref(), &mut write);
                 if let Some(result) = reply.get_mut("result").and_then(Value::as_object_mut) {
                     if let Some(png) = result.remove("base64") {
                         result.insert("png".into(), png);
                     }
                     result.remove("mime");
-                    result.insert("pixelsPerPoint".into(), json!(pixels_per_point));
+                    if let Some(scale) = result.remove("pixels_per_point") {
+                        result.insert("pixelsPerPoint".into(), scale);
+                    }
                 }
                 reply
             }

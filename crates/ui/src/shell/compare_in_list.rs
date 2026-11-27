@@ -41,7 +41,7 @@ impl Default for CompareInListState {
 
 /// Whether the Compare Fonts in List panel shows.
 pub fn shows(app: &FontCraftApp) -> bool {
-    app.view.workspace.layout.panel_state(&PanelId::CompareInList) != craft::behavior::dock::PanelState::Hidden
+    app.view.workspace.layout().panel_state(&PanelId::CompareInList) != craft::behavior::dock::PanelState::Hidden
 }
 
 fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {

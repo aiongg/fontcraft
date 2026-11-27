@@ -216,7 +216,7 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
 
 /// Whether the Table Viewer shows.
 pub fn shows(app: &FontCraftApp) -> bool {
-    app.view.workspace.layout.panel_state(&PanelId::TableViewer) != craft::behavior::dock::PanelState::Hidden
+    app.view.workspace.layout().panel_state(&PanelId::TableViewer) != craft::behavior::dock::PanelState::Hidden
 }
 
 // ---------- the command ----------

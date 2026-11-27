@@ -152,7 +152,7 @@ fn tab_strip(ui: &mut Ui, shown: FontInfoTab, words: &FontInfoWords) -> Option<F
     let source = keyed(&labels, |(tab, _)| *tab).with_text(|(_, label)| Cow::Borrowed(label.as_str()));
     let out = TabStrip::new(words.tabs.clone()).kind(TabKind::Text).shown(shown).show_items(ui, &source, &mut |tab, _| Tab::new(tab.label(words)));
     let picked = out.response.events.iter().rev().find_map(|event| match event {
-        CollectionEvent::Selection(SelectionChange::Set(keys)) => keys.last().copied(),
+        CollectionEvent::Selection { change: SelectionChange::Set(keys), .. } => keys.last().copied(),
         _ => None,
     });
     picked.or(out.picked).filter(|tab| *tab != shown)

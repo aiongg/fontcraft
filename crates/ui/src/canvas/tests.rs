@@ -576,7 +576,7 @@ fn box_knobs_set_the_size_properties() {
 fn info_for_selection_opens_the_smart_settings() {
     let mut app = smart_app();
     let panel = |app: &FontCraftApp| {
-        app.view.workspace.layout.panel_state(&crate::shell::dock::PanelId::SelectionInfo) != craft::behavior::dock::PanelState::Hidden
+        app.view.workspace.layout().panel_state(&crate::shell::dock::PanelId::SelectionInfo) != craft::behavior::dock::PanelState::Hidden
     };
     shell(&mut app, "edit.infoForSelection", json!({"open": false}));
     shell(&mut app, "selection.set", json!({"shapes": [1]}));

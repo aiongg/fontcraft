@@ -162,7 +162,7 @@ fn location(item: &Item, masters: &HashMap<String, String>) -> Vec<LocationPart>
 }
 
 pub fn project(model: &mut Tracked<FontAuditModel>, cx: &mut ProjectCx<'_>) {
-    if cx.view.workspace.layout.panel_state(&PanelId::FontAudit) == craft::behavior::dock::PanelState::Hidden {
+    if cx.view.workspace.layout().panel_state(&PanelId::FontAudit) == craft::behavior::dock::PanelState::Hidden {
         return;
     }
     let st = &cx.view.font_audit;

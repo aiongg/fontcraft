@@ -24,7 +24,7 @@ use craft::ui::pickers::Select;
 use craft::ui::runtime::commands::CommandRef;
 use craft::ui::runtime::env::Env;
 use craft::ui::text::NumberField;
-use craft::ui::tile_grid::{CaptionPlace, Tile, TileGrid};
+use craft::ui::tile_grid::{CaptionPlace, GridZoom, Tile, TileGrid};
 use egui::Ui;
 use serde_json::{Value, json};
 
@@ -143,7 +143,7 @@ fn pair_grid(ui: &mut Ui, words: &PairsPreviewWords, model: &PairsPreviewModel, 
     let upm = model.units_per_em;
     let mut grid = TileGrid::<usize>::new(words.pairs.clone())
         .empty(words.empty.clone())
-        .zoom(zoom_for(ui, model.size))
+        .zoom(GridZoom::Fixed(f64::from(zoom_for(ui, model.size))))
         .caption(CaptionPlace::Below)
         .type_ahead(true)
         .select(SelectMode::Single)
@@ -235,7 +235,7 @@ fn combinations(ui: &mut Ui, words: &PairsPreviewWords, model: &PairsPreviewMode
     let mut picked = Selection::default();
     let upm = model.units_per_em;
     let _ = TileGrid::<usize>::new(title)
-        .zoom(zoom_for(ui, model.size) * 0.75)
+        .zoom(GridZoom::Fixed(f64::from(zoom_for(ui, model.size) * 0.75)))
         .caption(CaptionPlace::Below)
         .select(SelectMode::Single)
         .selection(Bind::bound(&mut picked))

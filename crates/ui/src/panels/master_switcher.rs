@@ -35,7 +35,7 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
     let os = craft::ui::runtime::windows::os_of(ui.ctx());
     Row::new().show(ui, |ui, _| {
         for (index, master) in masters.iter().enumerate() {
-            let glyph = MasterGlyph(&master.icon);
+            let glyph = MasterGlyph(master.icon.clone());
             let on = current == Some(master.id.as_str());
             let select = CommandRef::with_params("view.selectMaster", json!({ "master": index }));
             let tip = match craft::ui::runtime::commands::resolve(ui.ctx(), select).chord {

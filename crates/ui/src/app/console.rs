@@ -8,7 +8,7 @@
 //! Console input is untrusted: a line holds at most [`MAX_LINE_BYTES`], the history [`MAX_HISTORY`] lines and
 //! [`MAX_HISTORY_BYTES`] in all, and a run-style line [`MAX_LINE_COMMANDS`] commands.
 
-use craft::ui::menu::search::HelpEntry;
+use craft::ui::menu::search::{HelpEntry, SearchIndex};
 use fontcraft_engine::log::CommandLog;
 use serde_json::{Value, json};
 
@@ -42,6 +42,8 @@ pub struct CommandSurfaces {
     pub palette_open: bool,
     /// The palette's entries, made when it opens.
     pub palette: Vec<HelpEntry>,
+    /// The search index over `palette`, made the first time the palette shows.
+    pub palette_index: Option<SearchIndex>,
     pub about: About,
 }
 

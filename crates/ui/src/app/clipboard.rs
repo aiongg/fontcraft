@@ -230,7 +230,7 @@ pub fn to_focused_list(app: &mut FontCraftApp, command: &CommandRef, by_key: boo
 fn info_rows_show(app: &FontCraftApp) -> bool {
     use craft::behavior::dock::PanelState;
     let panel = crate::shell::dock::PanelId::FontInfo;
-    app.view.workspace.layout.panel_state(&panel) != PanelState::Hidden && app.models.font_info.shown_rows().is_some()
+    app.view.workspace.layout().panel_state(&panel) != PanelState::Hidden && app.models.font_info.shown_rows().is_some()
 }
 
 /// Whether clipboard text holds Font Info rows: ours, or the property list the reference app copies.

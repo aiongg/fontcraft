@@ -6,6 +6,14 @@ _Updated: 2026-11-25: round C (the packages of the third planning pass and the f
 
 ## State of the tree
 
+- **X.craft: craft-libs at main `a5f2a11`, egui fork at `b977090`.** Brings craft-libs#3639, the `place_footer` clamp
+  that crashed the Fit Curve panel. Adapted to the new craft API: the dock's specs are a `Tracked<DockSpecs>`
+  (`shell/dock.rs`), the menu bar, tool slots and last-used tools are `Tracked`, the workspace is read through
+  `layout()`/`hidden()`, Bind checks take their inputs with `check_with`, and glyph icons own their data (`Glyph` is
+  `'static` and memo props). Every `craft_ext` piece stays staged: none has an equivalent upstream yet. Not yet looked at
+  in the running app: the Fit Curve panel, the command palette (its search index is built once, when it first shows),
+  the print panel's destination and Collate box.
+
 - **Round C (25 branches merged): where it stands.** What each package does is in `ROADMAP.md`, Shipped so far, third planning pass.
   - No measure is run and nothing has been looked at in the running app. Look first at: the Features tab's two scrolling
     panes; Font Info rows (a click on the canvas must take the keyboard, or Cmd+C there copies rows); the anchor name field;
@@ -674,8 +682,8 @@ _Updated: 2026-11-25: round C (the packages of the third planning pass and the f
   tests, not in the app. Built and run on Linux x86-64 and on macOS 15 (Apple Silicon:
   the window builds with no changes and opens; a font opens). Windows was not compiled. Still to check on the Mac:
   the quit prompt with unsaved work, the Open chooser and drop, X.pdf3's pasteboard PDF.
-- **The window.** `apps/fontcraft` on `crates/ui`, built on the Craft suite's craft-next framework (pinned at
-  `4bd0107`; egui 0.37 from the suite's fork). Its parts have headless tests only, and none has been tried in the
+- **The window.** `apps/fontcraft` on `crates/ui`, built on the Craft suite's craft framework (pinned at
+  `a5f2a11`, craft-libs main; egui 0.37 from the suite's fork). Its parts have headless tests only, and none has been tried in the
   running window. Conventions for writing it are in `docs/ui.md`. UI.49 (on `w-UI.49`, not yet built) removes
   `crates/ui-egui`, its desktop app and the vendored egui-winit 0.36, and points `cargo xtask parity` at the
   window's shell commands.

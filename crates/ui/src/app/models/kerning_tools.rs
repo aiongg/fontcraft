@@ -251,7 +251,7 @@ fn add_art<'a>(art: &mut BTreeMap<String, Arc<CellArt>>, font: &Font, master: &s
 }
 
 fn shows(cx: &ProjectCx<'_>, panel: PanelId) -> bool {
-    cx.view.workspace.layout.panel_state(&panel) != PanelState::Hidden
+    cx.view.workspace.layout().panel_state(&panel) != PanelState::Hidden
 }
 
 /// Lists the pairs again while the preview shows and the document or its options moved.

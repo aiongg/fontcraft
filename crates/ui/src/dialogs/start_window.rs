@@ -172,7 +172,7 @@ fn recent_body(ui: &mut Ui, model: &StartModel, sent: &mut Vec<Msg>, words: &Sta
     for event in &out.events {
         match event {
             CollectionEvent::Activate(path) => sent.push(shell("file.openRecent", json!({ "path": path }))),
-            CollectionEvent::Selection(change) => {
+            CollectionEvent::Selection { change, .. } => {
                 if let Some(path) = last_key(change) {
                     sent.push(shell("window.startWindow", json!({ "selected": path })));
                 }
@@ -217,7 +217,7 @@ fn chooser_body(ui: &mut Ui, model: &StartModel, sent: &mut Vec<Msg>, words: &St
             for event in &out.events {
                 let picked = match event {
                     CollectionEvent::Activate(id) => Some(id.clone()),
-                    CollectionEvent::Selection(change) => last_key(change).cloned(),
+                    CollectionEvent::Selection { change, .. } => last_key(change).cloned(),
                     _ => None,
                 };
                 if let Some(id) = picked {

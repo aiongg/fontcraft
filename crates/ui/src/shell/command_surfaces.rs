@@ -80,7 +80,7 @@ fn console_command(app: &mut FontCraftApp, params: &Value) -> Result<(), String>
     let copy = flag(params, "copy")?.unwrap_or(false);
     let only_open = line.is_none() && input.is_none() && !clear && !copy;
     if let Some(open) = open.or(only_open.then_some(true)) {
-        let shown = app.view.workspace.layout.panel_state(&PanelId::CommandConsole) != PanelState::Hidden;
+        let shown = app.view.workspace.layout().panel_state(&PanelId::CommandConsole) != PanelState::Hidden;
         if shown != open {
             dock::toggle(&mut app.view.workspace, PanelId::CommandConsole);
         }

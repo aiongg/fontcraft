@@ -24,11 +24,12 @@ const ARCH_STEPS: usize = 16;
 const GLYPH_LINE: f32 = 1.0 / 24.0;
 
 /// A master's icon, painted in the colour of the control that shows it.
-pub struct MasterGlyph<'a>(pub &'a MasterIcon);
+#[derive(craft::ui::contract::MemoProps)]
+pub struct MasterGlyph(pub MasterIcon);
 
-impl Glyph for MasterGlyph<'_> {
+impl Glyph for MasterGlyph {
     fn paint(&self, painter: &Painter, _: &UiTokens, rect: Rect, color: Color32, _: bool) {
-        paint_icon(painter, rect, color, self.0);
+        paint_icon(painter, rect, color, &self.0);
     }
 }
 

@@ -169,7 +169,7 @@ fn set_instance_lays_the_line_out_at_the_instance_and_the_panel_keeps_its_own_ch
     // The panel is blank while hidden and keeps a choice of its own.
     assert!(!app.models.preview_panel.shown);
     run(&mut app, shell("window.previewPanel", json!({}))).unwrap();
-    assert_ne!(app.view.workspace.layout.panel_state(&PanelId::Preview), PanelState::Hidden);
+    assert_ne!(app.view.workspace.layout().panel_state(&PanelId::Preview), PanelState::Hidden);
     run(&mut app, shell("preview.setInstance", json!({"target": "panel", "instance": "Light"}))).unwrap();
     assert_eq!(app.models.preview_panel.instance_label.as_deref(), Some("Light"));
     assert!(app.models.preview_area.master_chosen);

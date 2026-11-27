@@ -397,7 +397,7 @@ const MAX_INSPECTED: usize = 1_000;
 /// groups: [{name, count}], group, members, view, master, stacked: {aligned, glyphs: [{name, offset}]}, proposal,
 /// maxDifference}`.
 pub fn inspect(app: &FontCraftApp, state: &mut Map<String, Value>) {
-    let shows = |panel: PanelId| app.view.workspace.layout.panel_state(&panel) != craft::behavior::dock::PanelState::Hidden;
+    let shows = |panel: PanelId| app.view.workspace.layout().panel_state(&panel) != craft::behavior::dock::PanelState::Hidden;
     let pv = &app.models.kerning_pairs_preview;
     let pair = |(l, r): &(String, String)| json!({"left": l, "right": r});
     let rows: Vec<Value> = pv

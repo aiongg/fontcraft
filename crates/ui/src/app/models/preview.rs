@@ -118,7 +118,7 @@ pub struct LineCx<'a> {
 /// Projects the Preview Area's line while it is open and the Preview Panel's while the panel shows; a hidden preview
 /// holds nothing.
 pub fn project_both(area: &mut Tracked<PreviewModel>, panel: &mut Tracked<PreviewModel>, with: &mut LineCx<'_>, cx: &mut ProjectCx<'_>) {
-    let panel_shows = cx.view.workspace.layout.panel_state(&PanelId::Preview) != PanelState::Hidden;
+    let panel_shows = cx.view.workspace.layout().panel_state(&PanelId::Preview) != PanelState::Hidden;
     for (model, target, shown) in [(area, Target::Area, cx.view.preview.area_open), (panel, Target::Panel, panel_shows)] {
         let value = if shown { build(cx.session, cx.view, target, with).unwrap_or_default() } else { PreviewModel::default() };
         super::set(model, value);

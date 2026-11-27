@@ -17,7 +17,7 @@ use craft::behavior::{ColumnKey, DisplayOrder, ItemSource};
 use craft::ui::contract::{Bind, CollectionEvent, DropAt, DropKind, DropPlace, OsFiles, Props as _, ShowCollection as _};
 use craft::ui::list::ThumbAspect;
 use craft::ui::runtime::env::Env;
-use craft::ui::tile_grid::{CaptionPlace, Tile, TileGrid};
+use craft::ui::tile_grid::{CaptionPlace, GridZoom, Tile, TileGrid};
 use egui::Ui;
 
 use super::{FontViewWords, cells, keys, marks};
@@ -93,7 +93,7 @@ pub fn show(ui: &mut Ui, model: &FontViewModel, images: &CellImages, sent: &mut 
     };
     let out = grid
         .empty(words.no_glyphs.clone())
-        .zoom(zoom)
+        .zoom(GridZoom::Fixed(f64::from(zoom)))
         .caption(caption)
         .type_ahead(true)
         .deletable(true)

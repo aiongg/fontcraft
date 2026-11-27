@@ -262,7 +262,7 @@ impl Default for FontAuditView {
 
 /// Whether the Font Audit panel shows.
 pub fn shows(app: &FontCraftApp) -> bool {
-    app.view.workspace.layout.panel_state(&PanelId::FontAudit) != craft::behavior::dock::PanelState::Hidden
+    app.view.workspace.layout().panel_state(&PanelId::FontAudit) != craft::behavior::dock::PanelState::Hidden
 }
 
 /// Once a frame, before the drain: a run in steps goes on by one step while the panel shows, and asks for the next

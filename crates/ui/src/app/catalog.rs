@@ -12,7 +12,8 @@ use std::sync::Arc;
 
 use craft::keymap::keymap::Overrides;
 use craft::menu::{ItemKind, MenuBar, Row};
-use craft::ui::runtime::commands::{AppCatalog, Binding, CommandDef, CommandInput, CommandKind, CommandRef, CommandState, Scope};
+use craft::ui::contract::Tracked;
+use craft::ui::runtime::commands::{AppCatalog, Binding, CommandDef, CommandInput, CommandKind, CommandRef, CommandState, CommandStates, Scope};
 use fontcraft_engine::Session;
 use fontcraft_engine::cmd::CommandSpec;
 use fontcraft_engine::shortcuts::Custom;
@@ -64,8 +65,8 @@ pub struct Catalog {
     overrides: Arc<Overrides>,
     /// The settings revision they were read at.
     shortcuts_at: Option<u64>,
-    /// The menu bar with each row's enabled state.
-    pub menu: MenuBar,
+    /// The menu bar with each row's enabled state. Its revision moves only when a rebuild changes it.
+    pub menu: Tracked<MenuBar>,
     /// Why the catalog could not be built.
     pub error: Option<String>,
     generation: u64,
@@ -107,7 +108,7 @@ impl Catalog {
             custom: Custom::default(),
             overrides: Arc::default(),
             shortcuts_at: None,
-            menu: menu(|_| true, &MenuStates::default(), &[], &[]),
+            menu: Tracked::new(menu(|_| true, &MenuStates::default(), &[], &[])),
             error,
             generation,
             enabled: Vec::new(),
@@ -135,12 +136,12 @@ impl Catalog {
     pub fn refresh(&mut self, session: &Session) {
         let specs = fontcraft_engine::cmd::command_specs();
         let enabled: Vec<bool> = specs.iter().map(|spec| (spec.enabled)(session).is_ok()).collect();
-        let mut input = self.app.clone().map_or_else(CommandInput::new, |app| CommandInput::new().catalog(app));
-        input = input.overrides(Arc::clone(&self.overrides));
+        let input = self.app.clone().map_or_else(CommandInput::new, |app| CommandInput::new().catalog(app));
+        let mut states = CommandStates::new();
         for (spec, on) in specs.iter().zip(&enabled) {
-            input = input.state(CommandRef::new(spec.id), CommandState::new().enabled(*on));
+            states.set(CommandRef::new(spec.id), CommandState::new().enabled(*on));
         }
-        self.input = input;
+        self.input = input.overrides(Arc::clone(&self.overrides)).states(&Tracked::new(states));
         self.enabled = enabled;
         self.rebuild_menu();
     }
@@ -259,7 +260,10 @@ impl Catalog {
         let enabled = &self.enabled;
         let extra: Vec<Row> = self.dynamic.iter().chain(&self.panels).chain(&self.documents).cloned().collect();
         let states = MenuStates { checks: &self.checks, greyed: &self.greyed };
-        self.menu = menu(|at| enabled.get(at).copied().unwrap_or(true), &states, &self.recent, &extra);
+        let rebuilt = menu(|at| enabled.get(at).copied().unwrap_or(true), &states, &self.recent, &extra);
+        if *self.menu != rebuilt {
+            *self.menu = rebuilt;
+        }
     }
 
     /// The catalog's generation: it changes only when the definitions do.

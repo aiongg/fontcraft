@@ -44,7 +44,7 @@ pub struct ConsoleModel {
 
 /// Refreshes `model` when what it shows moved, while the console panel shows.
 pub fn project(model: &mut Tracked<ConsoleModel>, cx: &mut ProjectCx<'_>) {
-    if cx.view.workspace.layout.panel_state(&PanelId::CommandConsole) == PanelState::Hidden {
+    if cx.view.workspace.layout().panel_state(&PanelId::CommandConsole) == PanelState::Hidden {
         return;
     }
     let state = &cx.view.commands.console;

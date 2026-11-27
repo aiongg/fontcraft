@@ -85,7 +85,7 @@ pub struct TableViewerModel {
 
 /// Copies the viewer's state while the panel shows and the state moved.
 pub fn project(model: &mut Tracked<TableViewerModel>, cx: &mut ProjectCx<'_>) {
-    if cx.view.workspace.layout.panel_state(&PanelId::TableViewer) == craft::behavior::dock::PanelState::Hidden {
+    if cx.view.workspace.layout().panel_state(&PanelId::TableViewer) == craft::behavior::dock::PanelState::Hidden {
         return;
     }
     let st = &cx.view.table_viewer;

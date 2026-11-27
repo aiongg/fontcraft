@@ -228,7 +228,7 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
         }
         "window.previewPanel" => {
             let workspace = &mut app.view.workspace;
-            let shown = workspace.layout.panel_state(&PanelId::Preview) != PanelState::Hidden;
+            let shown = workspace.layout().panel_state(&PanelId::Preview) != PanelState::Hidden;
             let on = flag(p, "on")?.unwrap_or(!shown);
             if on != shown {
                 workspace.set_visible(PanelId::Preview, on, None, false, |p| p.permissions()).map_err(|e| format!("{e:?}"))?;

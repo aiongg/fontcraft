@@ -57,7 +57,7 @@ fn shown(v: &Value) -> Option<String> {
 
 /// Builds the table while the panel shows and what it was built from has moved.
 pub fn project(model: &mut Tracked<CompareListModel>, cx: &mut ProjectCx<'_>) {
-    if cx.view.workspace.layout.panel_state(&PanelId::CompareInList) == craft::behavior::dock::PanelState::Hidden {
+    if cx.view.workspace.layout().panel_state(&PanelId::CompareInList) == craft::behavior::dock::PanelState::Hidden {
         return;
     }
     let st = &cx.view.compare_in_list;

@@ -224,7 +224,7 @@ fn the_glyph_menu_marks_exports_and_tags_and_its_items_run_their_commands() {
     for msg in glyph_menu::steps(&menu, &GlyphAction::MoreTags) {
         many.run_now(msg, false).unwrap();
     }
-    assert_ne!(many.view.workspace.layout.panel_state(&crate::shell::dock::PanelId::Sidebar), craft::behavior::dock::PanelState::Hidden);
+    assert_ne!(many.view.workspace.layout().panel_state(&crate::shell::dock::PanelId::Sidebar), craft::behavior::dock::PanelState::Hidden);
 }
 
 /// The Status submenu marks the status the glyphs are in (the default one for a glyph without its own), and its items

@@ -262,6 +262,6 @@ fn font_info_shows_the_panel_on_a_tab() {
     assert!(app.status.is_empty(), "{}", app.status);
     assert!(app.models.font_info.open);
     assert_eq!(app.models.font_info.tab, FontInfoTab::Other);
-    assert_ne!(app.view.workspace.layout.panel_state(&PanelId::FontInfo), craft::behavior::dock::PanelState::Hidden);
+    assert_ne!(app.view.workspace.layout().panel_state(&PanelId::FontInfo), craft::behavior::dock::PanelState::Hidden);
     assert!(app.models.font_info.other.numbers.iter().any(|(k, _)| k == "gridSpacing"));
 }

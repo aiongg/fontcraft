@@ -74,10 +74,10 @@ fn the_inspector_and_selection_info_follow_the_selection() {
 
     assert!(app.models.selection_info.glyphs.is_empty(), "nothing is projected while the panel is hidden");
     shell(&mut app, "edit.infoForSelection", json!({}));
-    assert_ne!(app.view.workspace.layout.panel_state(&PanelId::SelectionInfo), PanelState::Hidden);
+    assert_ne!(app.view.workspace.layout().panel_state(&PanelId::SelectionInfo), PanelState::Hidden);
     assert_eq!(app.models.selection_info.glyphs, vec!["A".to_string(), "B".to_string()]);
     shell(&mut app, "edit.infoForSelection", json!({ "open": false }));
-    assert_eq!(app.view.workspace.layout.panel_state(&PanelId::SelectionInfo), PanelState::Hidden);
+    assert_eq!(app.view.workspace.layout().panel_state(&PanelId::SelectionInfo), PanelState::Hidden);
 }
 
 /// A typed vertical origin in the inspector reaches the engine as `spacing.setVerticalOrigin` and the field then

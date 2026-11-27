@@ -5,8 +5,10 @@
 
 use craft::behavior::Axis;
 use craft::behavior::dock::{Action, Column, DockEdge, Group, Layout, Node, PanelState, Permissions, SplitSize, Target, Workspace};
-use craft::ui::contract::{Bind, BodyCx, ShowContainer as _};
-use craft::ui::docking::{DockConfig, DockPanels, GroupAt, PanelSpec};
+use std::sync::Arc;
+
+use craft::ui::contract::{Bind, BodyCx, PlainData, ShowContainer as _, Tracked};
+use craft::ui::docking::{DockConfig, DockPanels, GroupAt, PanelSpec, PanelSpecs};
 use craft::ui::layout_components::Stack;
 use craft::ui::patterns::dock::DockArea;
 use craft::ui::runtime::env::{Env, Label};
@@ -300,7 +302,7 @@ const WINDOW_SIZE: egui::Vec2 = egui::vec2(820.0, 600.0);
 /// group they would get a few hundred points of height. A panel that shows already, or that was shown before and has a place recorded, goes there.
 pub fn show_window(workspace: &mut Workspace<PanelId>, panel: PanelId, open: bool, area: egui::Rect) {
     let permissions = |p: &PanelId| p.permissions();
-    let known = workspace.layout.contains(&panel) || workspace.hidden.iter().any(|(p, _)| *p == panel);
+    let known = workspace.layout().contains(&panel) || workspace.hidden().iter().any(|(p, _)| *p == panel);
     if !open || known {
         // A refused move (the layout has no room) leaves the panel where it was.
         let _ = workspace.set_visible(panel, open, None, false, permissions);
@@ -321,9 +323,35 @@ pub fn show_window(workspace: &mut Workspace<PanelId>, panel: PanelId, open: boo
 
 /// Shows `panel` when it is hidden, hides it when it shows.
 pub fn toggle(workspace: &mut Workspace<PanelId>, panel: PanelId) {
-    let shown = workspace.layout.panel_state(&panel) != PanelState::Hidden;
+    let shown = workspace.layout().panel_state(&panel) != PanelState::Hidden;
     // A refused move (a protected panel) leaves the layout as it was.
     let _ = workspace.set_visible(panel, !shown, None, false, |p| p.permissions());
+}
+
+/// What the dock reads of each panel: its title and whether it is the document canvas, and its permissions.
+#[derive(PlainData)]
+pub struct DockSpecs {
+    #[plain_data(assume = "the window's panel words are made once per language and only read")]
+    words: Arc<PanelWords>,
+}
+
+impl PanelSpecs<PanelId> for DockSpecs {
+    fn spec(&self, panel: &PanelId) -> PanelSpec {
+        let spec = PanelSpec::new(panel.title(&self.words));
+        if *panel == PanelId::Document { spec.canvas() } else { spec }
+    }
+
+    fn permissions(&self, panel: &PanelId) -> Permissions {
+        panel.permissions()
+    }
+}
+
+/// The dock's specs over `words`, kept in `held` across passes so the dock reads them again only when the words change.
+fn dock_specs<'a>(held: &'a mut Option<Tracked<DockSpecs>>, words: &Arc<PanelWords>) -> &'a Tracked<DockSpecs> {
+    if !held.as_ref().is_some_and(|specs| Arc::ptr_eq(&specs.words, words)) {
+        *held = Some(Tracked::new(DockSpecs { words: Arc::clone(words) }));
+    }
+    held.get_or_insert_with(|| Tracked::new(DockSpecs { words: Arc::clone(words) }))
 }
 
 /// What the dock reads for each panel.
@@ -335,21 +363,11 @@ struct Panels<'a> {
     /// The Bitmap Glyph Editor's pixel canvas: its view and pointer tool.
     bitmap_canvas: &'a mut crate::shell::bitmap_editor::BitmapCanvas,
     sent: &'a mut Vec<Msg>,
-    words: std::sync::Arc<PanelWords>,
     /// The Preview Area's height while it shows under the edit view.
     preview_area: Option<f32>,
 }
 
 impl DockPanels<PanelId> for Panels<'_> {
-    fn spec(&self, panel: &PanelId) -> PanelSpec {
-        let spec = PanelSpec::new(panel.title(&self.words));
-        if *panel == PanelId::Document { spec.canvas() } else { spec }
-    }
-
-    fn permissions(&self, panel: &PanelId) -> Permissions {
-        panel.permissions()
-    }
-
     fn body(&mut self, panel: &PanelId, ui: &mut Ui, _: &mut BodyCx<'_>) {
         match panel {
             PanelId::GlyphMetrics => {
@@ -537,10 +555,11 @@ fn preview_area_height(view: &crate::app::ViewState) -> Option<f32> {
 /// Shows the dock and applies what the user did to it.
 pub fn show(ui: &mut Ui, app: &mut FontCraftApp) {
     let words = Env::of(ui).words::<PanelWords>();
-    let FontCraftApp { view, models, sent, status, active_tool, space_preview, bitmap_canvas, tools, overlays, .. } = app;
+    let FontCraftApp { view, models, sent, status, active_tool, space_preview, bitmap_canvas, tools, overlays, dock_specs: held, .. } = app;
     let hinting = canvas::hinting::HintPaint { model: &models.hint_canvas, view: &view.hinting, tokens: &models.hint_tokens };
-    let given = view.workspace.clone();
+    let given = Arc::new(view.workspace.clone());
     let label = words.dock.clone();
+    let specs = dock_specs(held, &words);
     let preview_area = preview_area_height(view);
     let display = canvas::text::display(view);
     let mut panels = Panels {
@@ -563,10 +582,10 @@ pub fn show(ui: &mut Ui, app: &mut FontCraftApp) {
         space_preview,
         bitmap_canvas,
         sent,
-        words,
         preview_area,
     };
-    let out = DockArea::new(label, Bind::given(given), &mut panels, DockConfig::default().native_windows(cfg!(not(target_arch = "wasm32")))).show(ui);
+    let out = DockArea::new(label, Bind::given(given), specs, &mut panels, DockConfig::default().native_windows(cfg!(not(target_arch = "wasm32"))))
+        .show(ui);
     let actions: Vec<_> = out.actions.into_iter().chain(out.requested).collect();
     if !actions.is_empty()
         && let Err(error) = view.workspace.apply_all(actions, false, |p| p.permissions())

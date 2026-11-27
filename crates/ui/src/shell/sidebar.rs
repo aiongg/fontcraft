@@ -111,7 +111,7 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
             if open && let Some(id) = smart_settings(app) {
                 return super::commands::run(app, &CommandRef::new(id));
             }
-            let shown = app.view.workspace.layout.panel_state(&PanelId::SelectionInfo) != PanelState::Hidden;
+            let shown = app.view.workspace.layout().panel_state(&PanelId::SelectionInfo) != PanelState::Hidden;
             if open != shown {
                 dock::toggle(&mut app.view.workspace, PanelId::SelectionInfo);
             }

@@ -182,7 +182,7 @@ fn instance_list(ui: &mut Ui, p: &ShownProject, words: &ProjectWords, exports: &
     let out = List::<usize>::new(exports.list.clone())
         .header(false)
         .natural_height(true)
-        .reorder(ReorderRule::new().copy_with_alt())
+        .reorder(ReorderRule::new().copy_with(craft::behavior::CopyKeys::Alt))
         .selection(Bind::bound(&mut after))
         .show_items(ui, &source, &mut |at, icx| {
             let Some(e) = entries.get(*at) else { return ListRow::new(Label::Empty) };

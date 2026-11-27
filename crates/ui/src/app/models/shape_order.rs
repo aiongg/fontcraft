@@ -89,7 +89,7 @@ pub fn shown_glyph<'f>(font: &'f Font, view: &ViewState) -> Option<&'f Glyph> {
 }
 
 pub fn project(model: &mut Tracked<ShapeOrderModel>, cx: &mut ProjectCx<'_>) {
-    if cx.view.workspace.layout.panel_state(&PanelId::ShapeOrder) == PanelState::Hidden {
+    if cx.view.workspace.layout().panel_state(&PanelId::ShapeOrder) == PanelState::Hidden {
         return;
     }
     let value = cx.session.font().ok().map(|font| shape_order(font, cx.view)).unwrap_or_default();

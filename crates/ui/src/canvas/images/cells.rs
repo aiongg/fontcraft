@@ -218,7 +218,7 @@ pub type SpaceKey = (Option<(u64, u64)>, Vec<(String, String)>, u64, u32);
 /// window's size. iColor and svg layers draw their image as their colour drawing instead. Runs after the projections,
 /// only while the option is on and the window shows a font.
 pub fn space_center(app: &mut FontCraftApp) {
-    let hidden = app.view.workspace.layout.panel_state(&crate::shell::dock::PanelId::SpaceCenter) == craft::behavior::dock::PanelState::Hidden;
+    let hidden = app.view.workspace.layout().panel_state(&crate::shell::dock::PanelId::SpaceCenter) == craft::behavior::dock::PanelState::Hidden;
     let model = &app.models.space_center;
     if hidden || !model.has_font || !model.state.display.images || model.art.is_empty() {
         app.images.space_seen = None;

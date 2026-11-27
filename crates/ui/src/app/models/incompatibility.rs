@@ -84,7 +84,7 @@ impl Scan {
 /// Before the projections: checks part of the font for Font View, the sidebar and its filters, whichever show. When the
 /// last answer of several passes is in, the models are projected again.
 pub fn scan(app: &mut FontCraftApp) {
-    let sidebar = app.view.workspace.layout.panel_state(&PanelId::Sidebar) != PanelState::Hidden;
+    let sidebar = app.view.workspace.layout().panel_state(&PanelId::Sidebar) != PanelState::Hidden;
     let cells = std::mem::take(&mut app.models.compat_scan.cells);
     let waited = app.models.compat_scan.waiting;
     let waiting = (sidebar || app.font_view_shows()) && app.session.check_some_compat(&cells, true, WORK_PER_PASS);

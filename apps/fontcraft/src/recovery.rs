@@ -223,6 +223,8 @@ fn write(store: &RecoveryStore, snapshot: &Snapshot) -> Result<(), String> {
         original: snapshot.original.clone().filter(|p| p.to_str().is_some()),
         extension: recovery::EXTENSION.into(),
         revision: snapshot.revision,
+        // FontCraft's copies open without a password.
+        protected: false,
     };
     store.write(snapshot.document, &meta, &bytes).map_err(|e| e.to_string())
 }

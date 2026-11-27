@@ -6,7 +6,7 @@ organisation.
 ## Context
 
 The window (`crates/ui`) is built on the craft framework from craft-libs, pinned to one commit
-(`4bd0107`). The port keeps finding pieces the framework does not have: a strikethrough list row, edit
+(`a5f2a11`). The port keeps finding pieces the framework does not have: a strikethrough list row, edit
 commands (copy, paste) reaching a focused list, a highlight hook and caret access on text fields, an
 Up/Down stepper on number fields, open-URL and reveal-in-file-manager calls,
 alternate menu rows, an app-level paste event, modifiers on context-menu requests, a mixed mark on menu

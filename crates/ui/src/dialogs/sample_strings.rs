@@ -310,7 +310,7 @@ impl StackDialog for SampleStringsDialog {
                     });
                 let by_keys = out.events.iter().any(|e| matches!(e, CollectionEvent::LeadMoved { by: LeadSource::Keys, .. }));
                 for event in &out.events {
-                    if let CollectionEvent::Selection(SelectionChange::Set(keys)) = event
+                    if let CollectionEvent::Selection { change: SelectionChange::Set(keys), .. } = event
                         && let Some(&at) = keys.last()
                         && Some(at) != before
                     {

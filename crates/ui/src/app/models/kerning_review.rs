@@ -51,7 +51,7 @@ pub struct PairsModel {
 pub fn project(model: &mut Tracked<PairsModel>, cx: &mut ProjectCx<'_>) {
     let state = &cx.view.kerning_review;
     let has_font = cx.session.font().is_ok();
-    if !has_font || cx.view.workspace.layout.panel_state(&PanelId::PairsAndPhrases) == PanelState::Hidden {
+    if !has_font || cx.view.workspace.layout().panel_state(&PanelId::PairsAndPhrases) == PanelState::Hidden {
         super::set(
             model,
             PairsModel { has_font, mode: state.mode, pairs: state.shows_pairs(crate::canvas::text::text_mode(cx.view)), ..PairsModel::default() },

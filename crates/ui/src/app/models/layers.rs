@@ -184,7 +184,7 @@ pub struct MasterEntry {
 }
 
 /// A master's icon (`font.master.setIcon`).
-#[derive(PlainData, Clone, Debug, PartialEq)]
+#[derive(PlainData, Clone, Debug, PartialEq, craft::ui::contract::MemoProps)]
 pub enum MasterIcon {
     /// A built-in icon: a lowercase n at a weight row and a width column of the 5 by 5 grid.
     Builtin { weight: u8, width: u8 },

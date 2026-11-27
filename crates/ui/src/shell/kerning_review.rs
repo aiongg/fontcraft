@@ -190,7 +190,7 @@ fn load(app: &mut FontCraftApp, p: &Value) -> Result<(), String> {
         (None, None, true) => (builtin(pairs), None),
         (None, None, false) => {
             let workspace = &mut app.view.workspace;
-            if workspace.layout.panel_state(&PanelId::PairsAndPhrases) == craft::behavior::dock::PanelState::Hidden {
+            if workspace.layout().panel_state(&PanelId::PairsAndPhrases) == craft::behavior::dock::PanelState::Hidden {
                 dock::toggle(workspace, PanelId::PairsAndPhrases);
             }
             return Ok(());

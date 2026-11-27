@@ -14,7 +14,7 @@ use craft::behavior::CanvasView;
 use craft::behavior::kurbo::{Point, Size};
 use craft::ui::buttons::Button;
 use craft::ui::canvas::{Canvas, ToolHost, canvas_space, tool_pass};
-use craft::ui::choice::{Checkbox, Segmented, SwatchTable};
+use craft::ui::choice::{CellMarks, Checkbox, Segmented, SwatchTable};
 use craft::ui::contract::overlay::Anchor;
 use craft::ui::contract::{Bind, Entry, Props as _, Show as _, ShowContainer as _, Tracked};
 use craft::ui::display::{Shade, Text};
@@ -210,7 +210,7 @@ fn shades(ui: &mut Ui, words: &BitmapEditorWords, model: &BitmapEditorModel, sen
     let level = usize::from(model.level);
     let out = SwatchTable::new(words.shades.clone(), &cells)
         .per_row(cells.len().min(SHADES_PER_ROW))
-        .marked(move |at: &usize| *at == level)
+        .marks(move |at: &usize| CellMarks::default().edge(*at == level))
         .tips(true)
         .show_all(ui);
     if let Some(picked) = out.selected.filter(|at| *at != level) {

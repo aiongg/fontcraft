@@ -290,7 +290,7 @@ mod window_tests {
                 t.ok("engine.execute", json!({"command": "window.bitmapEditor", "params": {"glyph": "A"}}));
             }
             t.frames(2);
-            let layout = &t.app.view.workspace.layout;
+            let layout = t.app.view.workspace.layout();
             let window = layout.floating.iter().find(|w| w.contains(&panel)).expect("the panel floats");
             assert!(window.rect.height() >= 400.0, "{command}: {:?}", window.rect);
             assert!(!window.panels().any(|p| *p == PanelId::GlyphMetrics), "{command} floats alone");

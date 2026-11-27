@@ -924,7 +924,7 @@ mod tests {
     use std::sync::mpsc::{Receiver, channel};
 
     use craft::host::Host;
-    use craft::print::ui::{Printer, Settings, Submission};
+    use craft::print::ui::{Destination, Printer, Settings, Submission};
     use craft::ui::testing::Fixture;
     use fontcraft_engine::Session;
 
@@ -1059,7 +1059,7 @@ mod tests {
         let jobs = fake.jobs.lock().unwrap();
         assert_eq!(jobs.len(), 1);
         assert_eq!(jobs[0].0, *pdf, "the pages shown are the pages printed");
-        assert_eq!((jobs[0].1.printer.as_str(), jobs[0].1.copies), ("Office", 1));
+        assert_eq!((&jobs[0].1.destination, jobs[0].1.copies), (&Destination::Printer("Office".into()), 1));
         drop(jobs);
         f.settle();
         assert!(shows(&f, "Sent to the printer"), "the receipt shows");

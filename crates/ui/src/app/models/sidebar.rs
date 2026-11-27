@@ -95,7 +95,7 @@ impl SidebarModel {
 }
 
 pub fn project(model: &mut Tracked<SidebarModel>, cx: &mut ProjectCx<'_>) {
-    let shows = cx.view.workspace.layout.panel_state(&PanelId::Sidebar) != PanelState::Hidden;
+    let shows = cx.view.workspace.layout().panel_state(&PanelId::Sidebar) != PanelState::Hidden;
     let Ok(font) = cx.session.font() else {
         super::set(model, SidebarModel::default());
         return;

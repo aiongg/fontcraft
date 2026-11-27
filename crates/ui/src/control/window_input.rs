@@ -284,7 +284,7 @@ fn wheel(app: &mut FontCraftApp, params: &Value) -> Result<Value, String> {
     let mods = host_mods(modifiers(M, params)?);
     let host = window(app, M)?;
     let (viewport, at) = land(&host, at);
-    host.inject_wheel(viewport, at, delta * scale, mods);
+    host.inject_wheel(viewport, at, delta * scale, egui::MouseWheelUnit::Point, mods);
     Ok(queued(app, 2, viewport))
 }
 

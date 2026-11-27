@@ -26,7 +26,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use craft::automation::control::{ControlChannel, ControlRequest, REPLY_DEADLINE, Reply, expired_error};
-use craft::automation::screenshot::settle_ms;
+use craft::automation::screenshot::{ScreenshotParams, settle_ms};
 use craft::ui::runtime::motion;
 use craft::ui::runtime::windows::WindowHost;
 use egui::ViewportId;
@@ -307,7 +307,7 @@ pub fn logic(app: &mut FontCraftApp, ctx: &egui::Context) {
     let host = WindowHost::of(ctx);
     server.channel.captures.note_windows(&host, None);
     let finished = server.channel.captures.drain(motion::now(), None);
-    screenshot::finish(finished, pixels_per_point(&host));
+    screenshot::finish(finished);
     answer_elements(app, &mut server);
     let mut answered = 0;
     while answered < FRAME_REQUESTS
@@ -332,7 +332,9 @@ pub fn logic(app: &mut FontCraftApp, ctx: &egui::Context) {
             Answer::Screenshot(path) => {
                 server.next_token = server.next_token.wrapping_add(1);
                 let settle = settle_ms(ctx.global_style().animation_time);
-                server.channel.settle(incoming.request, Reply::screenshot(server.next_token, path, ViewportId::ROOT), None, settle);
+                let mut params = ScreenshotParams::default();
+                params.path = path;
+                server.channel.settle(incoming.request, Reply::screenshot(server.next_token, params, ViewportId::ROOT), None, settle);
             }
             Answer::Wait(wait) => {
                 let token = Arc::clone(&incoming.token);
@@ -401,7 +403,7 @@ pub fn after_ui(app: &mut FontCraftApp, ctx: &egui::Context) {
     let host = WindowHost::of(ctx);
     server.channel.captures.note_pass();
     let finished = server.channel.captures.issue(&host, motion::now(), None);
-    screenshot::finish(finished, pixels_per_point(&host));
+    screenshot::finish(finished);
     if !server.after_input.is_empty() {
         if host.take_injected_withdrawn() {
             for (to, _) in server.after_input.drain(..) {
@@ -439,8 +441,4 @@ pub fn after_ui(app: &mut FontCraftApp, ctx: &egui::Context) {
     if server.waiting() {
         ctx.request_repaint();
     }
-}
-
-fn pixels_per_point(host: &WindowHost) -> f32 {
-    host.screenshot_facts(ViewportId::ROOT).map_or(1.0, |facts| facts.pixels_per_point)
 }

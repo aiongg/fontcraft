@@ -235,7 +235,7 @@ pub fn view(ui: &mut Ui, v: &FormView, rows: &mut DialogFields) -> Shown {
                 .shown(*active)
                 .show_items(ui, &Labels(labels), &mut |key, _| Tab::new(Label::from(labels.get(*key).cloned().unwrap_or_default())));
             for event in strip.response.events {
-                if let CollectionEvent::Selection(SelectionChange::Set(keys)) = event
+                if let CollectionEvent::Selection { change: SelectionChange::Set(keys), .. } = event
                     && let Some(key) = keys.into_iter().last()
                     && key != *active
                 {

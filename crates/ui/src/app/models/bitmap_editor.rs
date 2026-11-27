@@ -70,7 +70,7 @@ pub fn draw_level(view: &ViewState, strike: &BitmapStrike) -> u8 {
 }
 
 pub fn project(model: &mut Tracked<BitmapEditorModel>, cx: &mut ProjectCx<'_>) {
-    if cx.view.workspace.layout.panel_state(&PanelId::BitmapEditor) == PanelState::Hidden {
+    if cx.view.workspace.layout().panel_state(&PanelId::BitmapEditor) == PanelState::Hidden {
         return;
     }
     let value = cx.session.font().ok().map(|font| editor(font, cx.view)).unwrap_or_default();

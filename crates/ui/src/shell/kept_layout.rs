@@ -39,18 +39,19 @@ pub fn restore(value: &Value) -> Result<(Workspace<PanelId>, ClosedPalette), Str
         }
     }
     let mut workspace = Workspace::<PanelId>::deserialize(&known).map_err(unreadable)?;
-    let floating: Vec<PanelId> = workspace.layout.floating.iter().flat_map(|window| window.column.panels()).copied().collect();
+    let floating: Vec<PanelId> = workspace.layout().floating.iter().flat_map(|window| window.column.panels()).copied().collect();
     for panel in floating {
         workspace.set_visible(panel, false, None, false, |p| p.permissions()).map_err(|e| format!("the kept window layout cannot be used: {e:?}"))?;
     }
-    workspace.hidden.retain(|(_, place)| place.floating.is_none());
-    if workspace.validate().is_err() || !workspace.layout.contains(&PanelId::Document) {
+    let floated: Vec<PanelId> = workspace.hidden().iter().filter(|(_, place)| place.floating.is_some()).map(|(panel, _)| *panel).collect();
+    workspace.forget_hidden(|panel| floated.contains(panel));
+    if workspace.validate().is_err() || !workspace.layout().contains(&PanelId::Document) {
         return Err("the kept window layout cannot be used".into());
     }
     let closed = value.get("palette").and_then(Value::as_array).map(Vec::as_slice).unwrap_or_default();
     let mut palette = ClosedPalette::new();
     for (panel, front) in closed.iter().take(PanelId::ALL.len()).filter_map(|entry| <(PanelId, bool)>::deserialize(entry).ok()) {
-        if panel != PanelId::Document && !workspace.layout.contains(&panel) && palette.iter().all(|(p, _)| *p != panel) {
+        if panel != PanelId::Document && !workspace.layout().contains(&panel) && palette.iter().all(|(p, _)| *p != panel) {
             palette.push((panel, front));
         }
     }
@@ -105,8 +106,9 @@ mod tests {
         drag_divider(&mut t, Axis::Y, 800.0, 1, 60.0);
         drag_divider(&mut t, Axis::X, 800.0, 0, -50.0);
         let kept = to_value(&t.app.view.workspace, &[]).unwrap();
-        let (mut workspace, _) = restore(&kept).unwrap();
-        let root = workspace.layout.root.as_mut().unwrap();
+        let (workspace, _) = restore(&kept).unwrap();
+        let mut layout = workspace.layout().clone();
+        let root = layout.root.as_mut().unwrap();
         let sidebar = columns(root, DockEdge::Start).unwrap()[0].width;
         let end = &columns(root, DockEdge::End).unwrap()[0];
         let layers = end.groups.iter().find(|group| group.panels.contains(&PanelId::Layers)).unwrap().height;
@@ -119,32 +121,35 @@ mod tests {
     #[test]
     fn the_layout_is_kept_and_a_floating_panel_is_not() {
         let mut t = TestApp::new();
-        let layout = &mut t.app.view.workspace.layout;
+        let mut layout = t.app.view.workspace.layout().clone();
         let root = layout.root.as_mut().unwrap();
         columns(root, DockEdge::Start).unwrap()[0].width = Some(333.0);
         let end = columns(root, DockEdge::End).unwrap();
         end[0].width = Some(401.0);
         end[0].groups[1].height = Some(260.0);
+        let (hidden, floated) = (t.app.view.workspace.hidden().to_vec(), t.app.view.workspace.floated().to_vec());
+        t.app.view.workspace.replace(Workspace::from_parts(layout, hidden, floated));
         let float = egui::Rect::from_min_size(egui::pos2(9000.0, 9000.0), egui::vec2(300.0, 200.0));
         let actions = [Action::open(PanelId::FontInfo, None), Action::move_panel(PanelId::FontInfo, Target::float(float))];
         t.app.view.workspace.apply_all(actions, false, |p| p.permissions()).unwrap();
 
         let mut kept = to_value(&t.app.view.workspace, &t.app.view.palette.hidden).unwrap();
         let text = kept.to_string().replace("\"sidebar\"", "\"a panel of another version\"");
-        let (mut workspace, _) = restore(&kept).unwrap();
-        let root = workspace.layout.root.as_mut().unwrap();
+        let (workspace, _) = restore(&kept).unwrap();
+        let mut layout = workspace.layout().clone();
+        let root = layout.root.as_mut().unwrap();
         assert_eq!(columns(root, DockEdge::Start).unwrap()[0].width, Some(333.0));
         let end = columns(root, DockEdge::End).unwrap();
         assert_eq!((end[0].width, end[0].groups[1].height), (Some(401.0), Some(260.0)));
-        assert_eq!(workspace.layout.panel_state(&PanelId::FontInfo), PanelState::Hidden, "a floating panel is closed");
-        assert!(workspace.hidden.iter().all(|(p, _)| *p != PanelId::FontInfo), "and opens at its usual place");
+        assert_eq!(workspace.layout().panel_state(&PanelId::FontInfo), PanelState::Hidden, "a floating panel is closed");
+        assert!(workspace.hidden().iter().all(|(p, _)| *p != PanelId::FontInfo), "and opens at its usual place");
 
         let (workspace, _) = restore(&serde_json::from_str(&text).unwrap()).unwrap();
-        assert_ne!(workspace.layout.panel_state(&PanelId::Layers), PanelState::Hidden);
-        assert_ne!(workspace.layout.panel_state(&PanelId::Document), PanelState::Hidden);
+        assert_ne!(workspace.layout().panel_state(&PanelId::Layers), PanelState::Hidden);
+        assert_ne!(workspace.layout().panel_state(&PanelId::Document), PanelState::Hidden);
 
         // Font Info opened in front of the Glyph Metrics and the Info box; moved out, it left the Info box in front.
-        assert_eq!(t.app.view.workspace.layout.panel_state(&PanelId::InfoBox), PanelState::Front);
+        assert_eq!(t.app.view.workspace.layout().panel_state(&PanelId::InfoBox), PanelState::Front);
         t.app.fire(CommandRef::new("window.palette"));
         t.frame();
         kept = to_value(&t.app.view.workspace, &t.app.view.palette.hidden).unwrap();
@@ -154,10 +159,11 @@ mod tests {
         assert!(!crate::shell::window::palette_shows(&next.app), "a hidden Palette stays hidden");
         next.app.fire(CommandRef::new("window.palette"));
         next.frame();
-        let layout = &next.app.view.workspace.layout;
+        let layout = next.app.view.workspace.layout();
         assert_eq!(layout.panel_state(&PanelId::InfoBox), PanelState::Front, "the same tab is in front");
         assert_eq!(layout.panel_state(&PanelId::GlyphMetrics), PanelState::Open);
-        let root = next.app.view.workspace.layout.root.as_mut().unwrap();
+        let mut layout = next.app.view.workspace.layout().clone();
+        let root = layout.root.as_mut().unwrap();
         assert_eq!(columns(root, DockEdge::End).unwrap()[0].width, Some(401.0), "at its width");
 
         for broken in [json!(null), json!({}), json!({"workspace": 3}), json!({"workspace": {"layout": {"root": 1, "floating": []}}})] {

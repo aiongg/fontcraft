@@ -1071,7 +1071,7 @@ milestone's rows as due a planning pass before they are built (`docs/execution-p
      claims for a dialog, a panel or a focused component, and (UI.47b) clicks and drags on a painted picture. Taken
      from craft itself (UI.39): the Stroke palette's click-and-hold Cap Axis menu (a menu opened by `Trigger::Hold`)
      and paste outside a text field (`craft::platform::clipboard`, which reads the system clipboard on the desktop;
-     the browser build still waits for a paste event that craft drops). The craft pin stays at `4bd0107`.
+     the browser build still waits for a paste event that craft drops). The craft pin is at `a5f2a11` (craft-libs main).
    - Parity audit gaps (old window against new, by how much a person would miss them):
      1. Done (UI.40, UI.47c, UI.48a, UI.48b): the multi-tab Edit View, with a tab set per document (switching documents
         shows each one's tabs, closing a document drops them); a window and each new document open on Font View; File ›

@@ -272,7 +272,7 @@ fn icon_row(ui: &mut Ui, model: &MastersTabModel, words: &MastersWords, sent: &m
     let Some(icon) = &model.icon else { return };
     Field::new(words.icon.clone()).show(ui, |ui, _| {
         Row::new().show(ui, |ui, _| {
-            let glyph = MasterGlyph(icon);
+            let glyph = MasterGlyph(icon.clone());
             let out = ToggleButton::new(words.icon.clone(), Bind::given(false))
                 .icon(IconSpec::glyph(&glyph))
                 .icon_only()

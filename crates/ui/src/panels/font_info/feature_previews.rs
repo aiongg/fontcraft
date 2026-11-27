@@ -23,7 +23,7 @@ use craft::ui::popover::Popover;
 use craft::ui::runtime::commands::CommandRef;
 use craft::ui::runtime::env::Env;
 use craft::ui::style::TypeRole;
-use craft::ui::tile_grid::{CaptionPlace, Tile, TileGrid};
+use craft::ui::tile_grid::{CaptionPlace, GridZoom, Tile, TileGrid};
 use craft_ext::ui::text::field_layout;
 use egui::text::CCursor;
 use egui::{Rect, Response, Ui, vec2};
@@ -192,7 +192,7 @@ fn drawings(ui: &mut Ui, p: &PreviewModel, words: &PreviewWords) -> Option<Strin
     boxed(ui, "fontcraftFeaturePreview.glyphs", height, false, |ui| {
         let out = TileGrid::<usize>::new(words.drawn.clone())
             .empty(words.no_glyphs.clone())
-            .zoom(zoom)
+            .zoom(GridZoom::Fixed(f64::from(zoom)))
             .caption(CaptionPlace::Below)
             .type_ahead(true)
             .select(SelectMode::Single)

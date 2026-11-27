@@ -302,7 +302,7 @@ pub fn band(font: &Font, master: &str, cut: &CutOff) -> (f64, f64) {
 }
 
 pub fn shows(app: &FontCraftApp) -> bool {
-    app.view.workspace.layout.panel_state(&PanelId::SpaceCenter) != craft::behavior::dock::PanelState::Hidden
+    app.view.workspace.layout().panel_state(&PanelId::SpaceCenter) != craft::behavior::dock::PanelState::Hidden
 }
 
 fn text_arg(p: &Value, key: &str) -> Result<Option<String>, String> {

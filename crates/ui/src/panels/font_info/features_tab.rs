@@ -359,7 +359,7 @@ fn sidebar_group(ui: &mut Ui, model: &FeaturesModel, group: &GroupModel, words: 
                 _ => {}
             }
         }
-        let toggled = out.events.iter().any(|e| matches!(e, CollectionEvent::Selection(SelectionChange::Toggle(_))));
+        let toggled = out.events.iter().any(|e| matches!(e, CollectionEvent::Selection { change: SelectionChange::Toggle(_), .. }));
         if after.items != before.items || after.lead != before.lead {
             let mut picked: Vec<usize> = after.items.clone();
             if let Some(lead) = after.lead

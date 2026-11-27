@@ -79,7 +79,7 @@ fn the_window_command_shows_each_layers_shapes_and_follows_the_edited_glyph() {
     assert_eq!(inspected(&mut app)["open"], false);
 
     shell(&mut app, json!({})).unwrap();
-    assert_ne!(app.view.workspace.layout.panel_state(&PanelId::ShapeOrder), craft::behavior::dock::PanelState::Hidden);
+    assert_ne!(app.view.workspace.layout().panel_state(&PanelId::ShapeOrder), craft::behavior::dock::PanelState::Hidden);
     let shown = inspected(&mut app);
     assert_eq!(shown["glyph"], "o.test", "{shown}");
     let layers = shown["layers"].as_array().unwrap();

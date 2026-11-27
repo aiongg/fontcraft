@@ -43,6 +43,7 @@ use craft::behavior::CanvasView;
 use craft::behavior::dock::Workspace;
 use craft::behavior::kurbo::Point;
 use craft::host::{AppInfo, Host};
+use craft::ui::contract::Tracked;
 use craft::ui::rails::{LastUsed, RailTool, ToolSlot};
 use craft::ui::runtime::commands::{CommandRef, FirePhase, FireSource};
 use craft::ui::runtime::env::RootEnv;
@@ -77,7 +78,7 @@ pub struct ViewState {
     /// The current tool's id (`fontcraft_tools::TOOLS`).
     pub tool: &'static str,
     /// The tool each rail slot showed last.
-    pub tools_last_used: LastUsed<&'static str>,
+    pub tools_last_used: Tracked<LastUsed<&'static str>>,
     /// The glyph the glyph panels show; `None` shows the font's first glyph. This field and `canvas`, `text`'s text,
     /// `layers`' master and picked layers and `edit_background` belong to the live Edit View tab (`tabs`).
     pub glyph: Option<String>,
@@ -175,7 +176,7 @@ impl Default for ViewState {
     fn default() -> Self {
         ViewState {
             tool: "select",
-            tools_last_used: LastUsed::default(),
+            tools_last_used: Tracked::default(),
             glyph: None,
             tabs: Default::default(),
             workspace: dock::default_workspace(),
@@ -233,7 +234,9 @@ pub struct FontCraftApp {
     root: RootEnv,
     pub catalog: Catalog,
     /// The tool rail's slots, one per tool group of `fontcraft_tools::TOOLS`.
-    pub tool_slots: Vec<ToolSlot<&'static str>>,
+    pub tool_slots: Tracked<Vec<ToolSlot<&'static str>>>,
+    /// What the dock reads of each panel, made at the first pass (`shell::dock`).
+    pub dock_specs: Option<Tracked<dock::DockSpecs>>,
     pub view: ViewState,
     /// The canvas's active-tool slot.
     pub active_tool: Box<dyn crate::canvas::ActiveTool>,
@@ -350,7 +353,8 @@ impl FontCraftApp {
             host,
             root: appearance::root(),
             catalog: Catalog::build(),
-            tool_slots: tool_slots(),
+            tool_slots: Tracked::new(tool_slots()),
+            dock_specs: None,
             view: ViewState::default(),
             active_tool: Box::new(crate::canvas::tools::bridge::ToolBridge::default()),
             space_preview: Default::default(),
@@ -692,7 +696,11 @@ impl FontCraftApp {
                 self.view.tool = tool;
                 return crate::canvas::tools::apply::select_tool(self, tool);
             }
-            ViewMsg::ToolsLastUsed(last_used) => self.view.tools_last_used = last_used,
+            ViewMsg::ToolsLastUsed(last_used) => {
+                if *self.view.tools_last_used != last_used {
+                    *self.view.tools_last_used = last_used;
+                }
+            }
             ViewMsg::SelectGlyph(glyph) => self.view.glyph = Some(glyph),
             ViewMsg::TogglePanel(panel) => dock::toggle(&mut self.view.workspace, panel),
             ViewMsg::LayerMenu(row) => self.view.layers.menu_row = row,

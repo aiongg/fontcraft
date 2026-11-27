@@ -115,7 +115,7 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
             Ok(())
         }
         SHOW_TAGS => {
-            if app.view.workspace.layout.panel_state(&PanelId::Sidebar) == craft::behavior::dock::PanelState::Hidden {
+            if app.view.workspace.layout().panel_state(&PanelId::Sidebar) == craft::behavior::dock::PanelState::Hidden {
                 dock::toggle(&mut app.view.workspace, PanelId::Sidebar);
             }
             Ok(())

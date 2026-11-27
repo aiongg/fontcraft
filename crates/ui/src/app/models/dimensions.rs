@@ -30,7 +30,7 @@ pub struct DimensionsModel {
 }
 
 pub fn project(model: &mut Tracked<DimensionsModel>, cx: &mut ProjectCx<'_>) {
-    if cx.view.workspace.layout.panel_state(&PanelId::Dimensions) == PanelState::Hidden {
+    if cx.view.workspace.layout().panel_state(&PanelId::Dimensions) == PanelState::Hidden {
         return;
     }
     let master = cx.session.font().ok().and_then(|font| crate::shell::masters::panel_master(font, cx.view).map(|m| m.id.clone()));

@@ -141,13 +141,13 @@ pub fn previewed_location(font: &Font, designspace: &Designspace, view: &ViewSta
 
 /// The preview [`previewed_location`] reads.
 pub fn followed_target(view: &ViewState) -> Target {
-    let panel = view.workspace.layout.panel_state(&PanelId::Preview) != PanelState::Hidden;
+    let panel = view.workspace.layout().panel_state(&PanelId::Preview) != PanelState::Hidden;
     if !view.preview.area_open && panel { Target::Panel } else { Target::Area }
 }
 
 /// Whether a view that follows the sweep shows.
 fn followed(view: &ViewState) -> bool {
-    let front = |panel| view.workspace.layout.panel_state(&panel) == PanelState::Front;
+    let front = |panel| view.workspace.layout().panel_state(&panel) == PanelState::Front;
     (view.preview.area_open && !view.tabs.font_view_shows()) || front(PanelId::Preview) || front(PanelId::GlyphSources)
 }
 

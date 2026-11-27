@@ -379,7 +379,7 @@ pub fn expand_target(font: &Font, layers: &crate::shell::masters::LayersView, pi
 
 /// What the Features tab's expanded-code view needs, while it shows.
 fn wanted_expansion(app: &FontCraftApp) -> Option<ExpandKey> {
-    if app.view.font_info.tab != FontInfoTab::Features || app.view.workspace.layout.panel_state(&PanelId::FontInfo) == PanelState::Hidden {
+    if app.view.font_info.tab != FontInfoTab::Features || app.view.workspace.layout().panel_state(&PanelId::FontInfo) == PanelState::Hidden {
         return None;
     }
     let shown = app.view.font_info.features.expanded.as_ref()?;
@@ -467,7 +467,7 @@ fn start_expand(app: &mut FontCraftApp, key: ExpandKey) {
 
 /// Font Info shows its Exports tab.
 pub fn exports_tab_shows(app: &FontCraftApp) -> bool {
-    app.view.font_info.tab == FontInfoTab::Exports && app.view.workspace.layout.panel_state(&PanelId::FontInfo) != PanelState::Hidden
+    app.view.font_info.tab == FontInfoTab::Exports && app.view.workspace.layout().panel_state(&PanelId::FontInfo) != PanelState::Hidden
 }
 
 /// The one instance the Exports tab shows while Font Info shows that tab.

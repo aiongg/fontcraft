@@ -509,7 +509,7 @@ pub fn shown_master(font: &Font, view: &ViewState) -> Option<String> {
 
 /// Whether the Text Preview panel shows.
 pub fn shows(view: &ViewState) -> bool {
-    view.workspace.layout.panel_state(&PanelId::TextPreview) != craft::behavior::dock::PanelState::Hidden
+    view.workspace.layout().panel_state(&PanelId::TextPreview) != craft::behavior::dock::PanelState::Hidden
 }
 
 /// `n` with a comma between groups of three digits.

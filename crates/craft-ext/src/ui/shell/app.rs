@@ -22,7 +22,7 @@ use craft::ui::runtime::motion;
 use craft::ui::shell::app::{AppSpec, ShellApp, native_options};
 use craft::ui::shell::embed;
 use craft::window::restore::MAIN;
-use craft::window::system::WindowSystem;
+use craft::window::system::{HeldButtons, WindowSystem};
 use egui::Context;
 
 /// Most monitors listed.
@@ -72,8 +72,12 @@ impl WindowSystem for ListedMonitors {
         self.inner.desktop_pointer()
     }
 
-    fn primary_held(&self) -> Option<bool> {
-        self.inner.primary_held()
+    fn buttons_held(&self) -> Option<HeldButtons> {
+        self.inner.buttons_held()
+    }
+
+    fn discard_marked_text(&self) -> bool {
+        self.inner.discard_marked_text()
     }
 
     fn command_held(&self) -> Option<bool> {

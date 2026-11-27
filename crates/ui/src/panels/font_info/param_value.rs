@@ -62,7 +62,7 @@ pub fn editor(ui: &mut Ui, row: &RowModel, masters: &[(String, String)], languag
         Editor::Number(value) => {
             let shown = if mixed { None } else { *value };
             let check = param.then_some(name);
-            let bind = Bind::given(shown).check(move |v: &Option<f64>| v.map_or(Validity::Ok, |n| validity(check, &number_json(n))));
+            let bind = Bind::given(shown).check_with(check, |check, v: &Option<f64>| v.map_or(Validity::Ok, |n| validity(*check, &number_json(n))));
             let out = NumberField::new(label, bind).show(ui);
             let Some(Some(n)) = out.edit.events.committed() else { return None };
             let typed = number_json(*n);
@@ -74,7 +74,7 @@ pub fn editor(ui: &mut Ui, row: &RowModel, masters: &[(String, String)], languag
         Editor::Lines(text) => {
             let shown = if mixed { String::new() } else { text.clone() };
             let check = param.then_some(name);
-            let bind = Bind::given(shown).check(move |t: &String| validity(check, &Json::String(t.clone())));
+            let bind = Bind::given(shown).check_with(check, |check, t: &String| validity(*check, &Json::String(t.clone())));
             let out = TextField::new(label, bind).lines(LIST_LINES).show(ui);
             let typed = out.events.committed()?;
             (check.is_none_or(|n| refusal(n, &Json::String(typed.clone())).is_none())).then(|| Edit::Value(Json::String(typed.clone())))
@@ -124,7 +124,7 @@ pub fn editor(ui: &mut Ui, row: &RowModel, masters: &[(String, String)], languag
         Editor::Code { text, problem } => {
             let shown = if mixed { String::new() } else { text.clone() };
             let check = param.then_some(name);
-            let bind = Bind::given(shown).check(move |t: &String| validity(check, &Json::String(t.clone())));
+            let bind = Bind::given(shown).check_with(check, |check, t: &String| validity(*check, &Json::String(t.clone())));
             let out = TextField::new(label, bind).mono().lines(CODE_LINES).limit(None).id_salt((name, row.occurrence, "code")).show(ui);
             let env = Env::of(ui);
             out.highlight_text(ui, |t| super::code_editor::code_runs(t, &env.tokens));
@@ -157,7 +157,7 @@ fn code_problem(ui: &mut Ui, line: u64, message: &str, words: &FontInfoWords) {
 
 /// A one-line text field; with a parameter `check`, the value goes through the command's check first.
 fn text_field(ui: &mut Ui, label: Label, shown: &str, check: Option<&str>, mixed: bool, multiple: &Label) -> Option<String> {
-    let bind = Bind::given(shown.to_string()).check(move |t: &String| validity(check, &Json::String(t.clone())));
+    let bind = Bind::given(shown.to_string()).check_with(check, |check, t: &String| validity(*check, &Json::String(t.clone())));
     let mut field = TextField::new(label, bind);
     if mixed {
         field = field.placeholder(multiple.clone());
@@ -205,7 +205,8 @@ fn dict(ui: &mut Ui, name: &str, entries: &[DictEntry], mixed: bool, words: &Fon
         for (at, entry) in entries.iter().enumerate() {
             match &entry.text {
                 Some(text) => {
-                    let bind = Bind::given(text.clone()).check(move |t: &String| validity(Some(name), &dict_value(entries, at, t)));
+                    let bind = Bind::given(text.clone())
+                        .check_with((name, entries, at), |(name, entries, at), t: &String| validity(Some(*name), &dict_value(entries, *at, t)));
                     let out = TextField::new(entry.key.clone(), bind).id_salt((name, "entry", at)).show(ui);
                     if let Some(typed) = out.events.committed() {
                         changed = Some(dict_value(entries, at, typed));
@@ -246,7 +247,8 @@ fn localized(ui: &mut Ui, name: &str, entries: &[(String, String)], mixed: bool,
     let mut changed = None;
     Stack::new().show(ui, |ui, _| {
         for (at, (language, text)) in entries.iter().enumerate() {
-            let bind = Bind::given(text.clone()).check(move |t: &String| validity(Some(name), &localized_value(entries, at, t)));
+            let bind = Bind::given(text.clone())
+                .check_with((name, entries, at), |(name, entries, at), t: &String| validity(Some(*name), &localized_value(entries, *at, t)));
             let out = TextField::new(language.clone(), bind).id_salt((name, "language", at)).show(ui);
             if let Some(typed) = out.events.committed() {
                 changed = Some(localized_value(entries, at, typed));

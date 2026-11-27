@@ -78,7 +78,7 @@ pub fn set_scale(model: &mut Tracked<Waterfall>, params: &Value) -> Result<(), S
 
 pub fn project(model: &mut Tracked<Waterfall>, cx: &mut ProjectCx<'_>) {
     let scale = model.scale;
-    let shows = cx.view.workspace.layout.panel_state(&PanelId::HintingWaterfall) != PanelState::Hidden;
+    let shows = cx.view.workspace.layout().panel_state(&PanelId::HintingWaterfall) != PanelState::Hidden;
     let glyph = super::glyph::shown_glyph(cx);
     let (Some(glyph), true) = (glyph, shows) else {
         super::set(model, Waterfall { scale, ..Waterfall::default() });

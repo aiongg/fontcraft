@@ -28,7 +28,7 @@ pub fn options(ui: &mut Ui, mut props: OptionsProps<'_>) {
 
 fn options_view(props: &mut OptionsProps<'_>, ui: &mut Ui) {
     let words = Env::of(ui).words::<ChromeWords>();
-    let tool = commands::resolve(ui.ctx(), CommandRef::new(format!("{TOOL_PREFIX}{}", props.tool))).label;
+    let tool = commands::resolve(ui.ctx(), CommandRef::new(format!("{TOOL_PREFIX}{}", props.tool))).label.clone();
     let palette = props.palette;
     // The end group runs in its own closure beside the body's, so it posts into its own list.
     let mut end_sent = Vec::new();

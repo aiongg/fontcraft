@@ -8,7 +8,7 @@
 
 use std::sync::mpsc::{Receiver, channel};
 
-use craft::print::ui::{Duplex, Printer, Settings, Submission};
+use craft::print::ui::{Destination, Duplex, Printer, Settings, Submission};
 use craft::print::{Job, Scaling};
 use fontcraft_ui::app::print_host::PrintHost;
 
@@ -55,9 +55,12 @@ fn job(settings: &Settings) -> Job {
         _ => None,
     };
     Job {
-        printer: Some(settings.printer.clone()).filter(|name| !name.is_empty()),
+        printer: match &settings.destination {
+            Destination::Printer(name) => Some(name.clone()).filter(|name| !name.is_empty()),
+            _ => None,
+        },
         copies: settings.copies,
-        collate: true,
+        collate: settings.collate,
         duplex,
         scaling: Scaling::ShrinkToFit,
         grayscale: settings.grayscale,
@@ -75,7 +78,7 @@ mod tests {
     #[allow(clippy::field_reassign_with_default)]
     fn the_panels_choices_become_the_jobs() {
         let mut settings = Settings::default();
-        settings.printer = "-o raw".into();
+        settings.destination = Destination::Printer("-o raw".into());
         settings.copies = 3;
         settings.duplex = Some(Duplex::LongEdge);
         settings.grayscale = true;

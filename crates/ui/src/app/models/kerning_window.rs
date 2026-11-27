@@ -270,7 +270,7 @@ fn count(font: &Font, direction: Direction, master: &str) -> usize {
 /// Brings the list up to date while the window shows; the selection keeps the rows still listed. A hidden window holds
 /// no list: what it listed may belong to another document by the time a command reads it.
 pub fn project(model: &mut Tracked<KerningWindowModel>, cx: &mut ProjectCx<'_>) {
-    if cx.view.workspace.layout.panel_state(&PanelId::KerningWindow) == craft::behavior::dock::PanelState::Hidden {
+    if cx.view.workspace.layout().panel_state(&PanelId::KerningWindow) == craft::behavior::dock::PanelState::Hidden {
         super::set(model, KerningWindowModel::default());
         return;
     }

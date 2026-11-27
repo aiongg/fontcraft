@@ -20,7 +20,7 @@ pub const MAX_MEASUREMENT_ROWS: usize = 64;
 pub const MAX_STORED_ROWS: usize = 256;
 
 fn shows(cx: &ProjectCx<'_>, panel: PanelId) -> bool {
-    cx.view.workspace.layout.panel_state(&panel) != PanelState::Hidden
+    cx.view.workspace.layout().panel_state(&panel) != PanelState::Hidden
 }
 
 /// The layer the glyph panels show ([`masters::panel_layer`]).

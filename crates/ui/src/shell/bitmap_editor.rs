@@ -322,7 +322,7 @@ fn level_at(bitmap: &StrikeGlyph, depth: u8, (x, y): (i32, i32)) -> u8 {
 
 /// `ui.inspect`'s `bitmapEditor`.
 pub fn inspect(app: &FontCraftApp, state: &mut Map<String, Value>) {
-    let open = app.view.workspace.layout.panel_state(&PanelId::BitmapEditor) != PanelState::Hidden;
+    let open = app.view.workspace.layout().panel_state(&PanelId::BitmapEditor) != PanelState::Hidden;
     let view = &app.view.bitmap_editor;
     let shown = app.session.font().ok().and_then(|font| shown(font, &app.view));
     let bitmap = shown

@@ -72,7 +72,7 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
             Ok(())
         }
         "window.palette" => {
-            let shown = palette_panels(&app.view.workspace.layout);
+            let shown = palette_panels(app.view.workspace.layout());
             let on = match command.params.get("on") {
                 None | Some(Value::Null) => shown.is_empty(),
                 Some(Value::Bool(on)) => *on,
@@ -94,7 +94,7 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
 fn toggle_section(app: &mut FontCraftApp, params: &Value) -> Result<(), String> {
     let id = super::params::string(params, "section")?.ok_or("`section` (a panel id) is required")?;
     let panel = PanelId::from_id(id).filter(|p| *p != PanelId::Document).ok_or_else(|| format!("no Palette section `{id}`"))?;
-    let layout = &app.view.workspace.layout;
+    let layout = app.view.workspace.layout();
     let place = layout.place(&panel).filter(|_| layout.panel_state(&panel) != PanelState::Hidden);
     let place = place.ok_or_else(|| format!("the {id} section is not open (Window › Panels shows it)"))?;
     let minimized = layout.group(&place).map(|g| g.minimized).ok_or_else(|| format!("the {id} section is not in a panel group"))?;
@@ -111,7 +111,7 @@ fn toggle_section(app: &mut FontCraftApp, params: &Value) -> Result<(), String> 
 
 /// Whether the Palette shows: a panel is docked at the window's end edge.
 pub(crate) fn palette_shows(app: &FontCraftApp) -> bool {
-    !palette_panels(&app.view.workspace.layout).is_empty()
+    !palette_panels(app.view.workspace.layout()).is_empty()
 }
 
 /// The panels docked at the window's end edge, in layout order.
@@ -126,7 +126,7 @@ fn hide_palette(app: &mut FontCraftApp, shown: Vec<PanelId>) {
     if shown.is_empty() {
         return;
     }
-    let layout = &app.view.workspace.layout;
+    let layout = app.view.workspace.layout();
     let hidden: Vec<(PanelId, bool)> = shown.into_iter().map(|panel| (panel, layout.panel_state(&panel) == PanelState::Front)).collect();
     for (panel, _) in &hidden {
         // A refused close (a protected panel) leaves that panel open.
@@ -140,12 +140,12 @@ fn hide_palette(app: &mut FontCraftApp, shown: Vec<PanelId>) {
 fn show_palette(app: &mut FontCraftApp) {
     let mut wanted = std::mem::take(&mut app.view.palette.hidden);
     if wanted.is_empty() {
-        wanted = palette_panels(&dock::default_workspace().layout).into_iter().map(|panel| (panel, false)).collect();
+        wanted = palette_panels(dock::default_workspace().layout()).into_iter().map(|panel| (panel, false)).collect();
     }
     let mut first = None;
     for (panel, _) in &wanted {
         // Opening a panel can open the hidden panels of its group with it.
-        if app.view.workspace.layout.panel_state(panel) != PanelState::Hidden {
+        if app.view.workspace.layout().panel_state(panel) != PanelState::Hidden {
             continue;
         }
         // A panel with no recorded place opens beside the first one opened.
@@ -163,7 +163,7 @@ fn show_palette(app: &mut FontCraftApp) {
 
 /// Rebuilds the Window menu's panel rows when a panel opened or closed.
 pub fn refresh_menu(app: &mut FontCraftApp) {
-    let layout = &app.view.workspace.layout;
+    let layout = app.view.workspace.layout();
     let open: Vec<bool> = PanelId::ALL.iter().map(|panel| layout.panel_state(panel) != PanelState::Hidden).collect();
     let mut h = DefaultHasher::new();
     open.hash(&mut h);
@@ -212,7 +212,7 @@ mod tests {
     }
 
     fn state(t: &TestApp, panel: PanelId) -> PanelState {
-        t.app.view.workspace.layout.panel_state(&panel)
+        t.app.view.workspace.layout().panel_state(&panel)
     }
 
     #[test]
@@ -246,7 +246,7 @@ mod tests {
 
     /// Whether the dock group that holds `panel` shows only its tab strip.
     fn minimized(t: &TestApp, panel: PanelId) -> bool {
-        let layout = &t.app.view.workspace.layout;
+        let layout = t.app.view.workspace.layout();
         layout.place(&panel).and_then(|place| layout.group(&place)).unwrap().minimized
     }
 

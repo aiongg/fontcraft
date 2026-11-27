@@ -256,7 +256,7 @@ fn view(props: &mut Props<'_>, ui: &mut Ui) {
         let mut menu_row = model.menu_row.clone();
         for event in &out.events {
             match event {
-                CollectionEvent::Selection(change) => sent.extend(select(change)),
+                CollectionEvent::Selection { change, .. } => sent.extend(select(change)),
                 CollectionEvent::Toggle(edit) => {
                     if let Some(cell) = done(edit)
                         && cell.column == EYE

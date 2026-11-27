@@ -74,7 +74,7 @@ fn run(app: &mut FontCraftApp, command: &CommandRef) -> Result<(), String> {
 
 /// Whether the Compare Fonts panel shows.
 pub fn shows(app: &FontCraftApp) -> bool {
-    app.view.workspace.layout.panel_state(&PanelId::CompareFonts) != craft::behavior::dock::PanelState::Hidden
+    app.view.workspace.layout().panel_state(&PanelId::CompareFonts) != craft::behavior::dock::PanelState::Hidden
 }
 
 /// The position of the open document `document` (a session id).

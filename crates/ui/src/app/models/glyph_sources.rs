@@ -77,7 +77,7 @@ pub struct SourceEntry {
 
 /// Projects the panel while it is open; closed, it holds nothing.
 pub fn project(model: &mut Tracked<GlyphSourcesModel>, cx: &mut ProjectCx<'_>) {
-    let shown = cx.view.workspace.layout.panel_state(&PanelId::GlyphSources) != PanelState::Hidden;
+    let shown = cx.view.workspace.layout().panel_state(&PanelId::GlyphSources) != PanelState::Hidden;
     let value = if shown { build(cx).unwrap_or_default() } else { GlyphSourcesModel::default() };
     super::set(model, value);
 }
